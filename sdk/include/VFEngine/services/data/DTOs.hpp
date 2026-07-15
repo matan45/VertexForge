@@ -191,6 +191,8 @@ namespace services
         float pitch = 1.0f;
         bool loop = false;
         std::string busName = "Music";
+        // VK-1513: lower = more important (0 = critical, 255 = least, 128 = neutral).
+        uint8_t priority = 128;
     };
 
     struct AudioSource3DData
@@ -213,6 +215,8 @@ namespace services
         float outerConeGain = 0.0f;
         bool showDebugCone = false;
         std::string busName = "SFX";
+        // VK-1513: lower = more important (0 = critical, 255 = least, 128 = neutral).
+        uint8_t priority = 128;
     };
 
     struct ReverbZoneData

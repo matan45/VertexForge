@@ -182,6 +182,19 @@ namespace core::audio
         return 1.0f;
     }
 
+    float AudioBusManager::getBusEffectiveVolume(const std::string& name) const
+    {
+        std::shared_lock lock(busMutex);
+        auto it = nameToId.find(name);
+        if (it == nameToId.end()) return 1.0f;
+
+        for (const auto& bus : buses)
+        {
+            if (bus.id == it->second) return bus.effectiveVolume;
+        }
+        return 1.0f;
+    }
+
     bool AudioBusManager::isBusMuted(const std::string& name) const
     {
         std::shared_lock lock(busMutex);

@@ -34,6 +34,13 @@ namespace services {
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
 
         std::string busName = "Master";
+
+        // VK-1513: voice-budget arbitration weight. LOWER = MORE IMPORTANT (0 = critical,
+        // 255 = least); 128 is exactly neutral, so an un-authored sound ranks purely on
+        // audibility. Appended at the tail on purpose: this struct crosses the plugin ABI
+        // by reference (PluginContext::playSound3D), so the field must not slot into an
+        // existing padding hole where sizeof would stay unchanged. Plugin API v19.
+        uint8_t priority = 128;
     };
 
     class IAudioService {

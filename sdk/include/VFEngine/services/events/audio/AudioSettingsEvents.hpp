@@ -23,6 +23,12 @@ namespace events::audio
         std::string_view getName() const override { return "GetHrtfStatus"; }
     };
 
+    // VK-1513: live voice-budget occupancy for the editor's "Real voices: N / M" readout.
+    struct GetVoiceCountQuery : ::events::IQuery<types::AudioVoiceStats>
+    {
+        std::string_view getName() const override { return "GetVoiceCount"; }
+    };
+
     // VK-1506: broadcast when audio settings are applied so main-thread consumers
     // (AudioSceneUpdater's doppler teleport guard) can cache the value instead of
     // querying the full settings struct every frame.

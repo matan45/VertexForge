@@ -67,6 +67,7 @@ namespace services {
                 params.minDistance = cmd.minDistance;
                 params.maxDistance = cmd.maxDistance;
                 params.busName = cmd.busName;
+                params.priority = cmd.priority;
                 return audioProvider->playSound3D(cmd.path, cmd.position, params);
             });
 
@@ -78,6 +79,7 @@ namespace services {
                 params.pitch = cmd.pitch;
                 params.loop = cmd.loop;
                 params.busName = cmd.busName;
+                params.priority = cmd.priority;
                 return audioProvider->playStreamingSound(cmd.path, params);
             });
 
@@ -176,6 +178,12 @@ namespace services {
         dispatcher.registerQueryHandler<events::audio::GetHrtfStatusQuery>(
             [this](const auto&) {
                 return audioProvider->getHrtfStatus();
+            });
+
+        // VK-1513: report real-voice budget occupancy for the editor's voice readout.
+        dispatcher.registerQueryHandler<events::audio::GetVoiceCountQuery>(
+            [this](const auto&) {
+                return audioProvider->getVoiceStats();
             });
 
         // Audio Bus Commands
@@ -355,6 +363,7 @@ namespace services {
         playParams.outerConeGain = params.outerConeGain;
         playParams.direction = params.direction;
         playParams.busName = params.busName;
+        playParams.priority = params.priority;
         return playParams;
     }
 

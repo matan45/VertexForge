@@ -3,8 +3,21 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 
+#include <algorithm>
+
 namespace serialization
 {
+    namespace
+    {
+        // VK-1513. Absent in scenes saved before the voice cap, so the struct default
+        // (128 == neutral) applies — no migration needed. Clamped because the field is a
+        // uint8_t and a hand-edited scene must not wrap around.
+        void readVoicePriority(const json& j, uint8_t& priority)
+        {
+            if (auto it = j.find("priority"); it != j.end() && it->is_number_integer())
+                priority = static_cast<uint8_t>(std::clamp(it->get<int>(), 0, 255));
+        }
+    }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
@@ -14,6 +27,7 @@ namespace serialization
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
         j["busName"] = audioSource.busName;
+        j["priority"] = audioSource.priority;
         return j;
     }
 
@@ -36,6 +50,7 @@ namespace serialization
         {
             audioSource.busName = it->get<std::string>();
         }
+        readVoicePriority(j, audioSource.priority);
         // Reset runtime state
         audioSource.activeHandle = 0;
         audioSource.isPlaying = false;
@@ -60,6 +75,7 @@ namespace serialization
         j["outerConeGain"] = audioSource.outerConeGain;
         j["showDebugCone"] = audioSource.showDebugCone;
         j["busName"] = audioSource.busName;
+        j["priority"] = audioSource.priority;
         return j;
     }
 
@@ -101,6 +117,7 @@ namespace serialization
                 audioSource.showDebugCone = it->get<bool>();
             if (auto it = j.find("busName"); it != j.end() && it->is_string())
                 audioSource.busName = it->get<std::string>();
+            readVoicePriority(j, audioSource.priority);
         }
     } // anonymous namespace
 

@@ -283,7 +283,13 @@ namespace core::audio
     types::AudioSettings AudioController::getCurrentSettings() const
     {
         if (!initialized) return types::AudioSettings::createDefault();
-        // Settings are cached on main thread (not modified by audio thread)
+        // NOTE: this comment used to claim the settings are "cached on main thread (not
+        // modified by audio thread)". That is false — ApplySettingsCmd runs applySettings()
+        // on the AUDIO thread, which writes the scalar fields (AudioSystem.cpp). So this is
+        // an unsynchronized read of scalars written elsewhere. Pre-existing across every
+        // field here and out of scope for VK-1513, which does not worsen it: VoicePolicy
+        // reads maxRealVoices on the audio thread, the same thread that writes it. See
+        // AudioSystem's hrtfStatus for the pattern a proper fix should follow.
         return audioSystem->getCurrentSettings();
     }
 
@@ -293,6 +299,19 @@ namespace core::audio
         // thread), so this main-thread read never touches the OpenAL device/context.
         if (!initialized) return types::AudioHrtfStatus::Unsupported;
         return audioSystem->getHrtfStatus();
+    }
+
+    types::AudioVoiceStats AudioController::getVoiceStats() const
+    {
+        // VK-1513: both values are std::atomics on AudioThread (written there, read here),
+        // following the hrtfStatus precedent above — deliberately not routed through the
+        // state snapshot, which getSnapshot() returns by value and would deep-copy a map on
+        // every editor poll.
+        types::AudioVoiceStats stats;
+        if (!initialized || !audioThread) return stats;
+        stats.realVoices = audioThread->getRealVoiceCount();
+        stats.maxRealVoices = audioThread->getMaxRealVoices();
+        return stats;
     }
 
     // === Audio Buses ===

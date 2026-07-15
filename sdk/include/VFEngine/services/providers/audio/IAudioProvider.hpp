@@ -33,6 +33,9 @@ namespace services {
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
 
         std::string busName = "Master";
+
+        // VK-1513: see services::AudioParams::priority. Lower = more important.
+        uint8_t priority = 128;
     };
 
     class IAudioProvider {
@@ -74,6 +77,8 @@ namespace services {
         virtual void applySettings(const types::AudioSettings& settings) = 0;
         virtual types::AudioSettings getCurrentSettings() const = 0;
         virtual types::AudioHrtfStatus getHrtfStatus() const = 0;
+        // VK-1513: live real-voice count vs the configured budget.
+        virtual types::AudioVoiceStats getVoiceStats() const = 0;
 
         // === Audio Buses ===
         virtual void createBus(const std::string& busName, const std::string& parentName = "Master") = 0;

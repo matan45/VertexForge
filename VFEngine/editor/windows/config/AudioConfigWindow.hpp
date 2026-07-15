@@ -13,6 +13,7 @@ namespace windows
         bool isDirty = false;
 
         void drawListenerSection();
+        void drawVoiceManagementSection();
         void drawDistanceModelSection();
         void drawDistanceFilterSection();
 

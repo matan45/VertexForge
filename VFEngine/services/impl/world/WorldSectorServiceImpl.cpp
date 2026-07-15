@@ -215,6 +215,9 @@ namespace services
                             playCmd.minDistance = audioComp.minDistance;
                             playCmd.maxDistance = audioComp.maxDistance;
                             playCmd.busName = snap.busName;
+                            // VK-1513: sourced from the live component, like the distances
+                            // above — the component outlives the sector's audio playback.
+                            playCmd.priority = audioComp.priority;
                             newHandle = disp.execute(playCmd);
 
                             audioComp.activeHandle = newHandle;
@@ -230,6 +233,7 @@ namespace services
                             playCmd.pitch = snap.pitch;
                             playCmd.loop = snap.loop;
                             playCmd.busName = snap.busName;
+                            playCmd.priority = audioComp.priority; // VK-1513
                             newHandle = disp.execute(playCmd);
 
                             audioComp.activeHandle = newHandle;

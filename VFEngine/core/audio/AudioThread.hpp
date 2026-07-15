@@ -9,10 +9,12 @@
 #include "AudioListener.hpp"
 #include "AudioSystem.hpp"
 #include "ReverbZoneManager.hpp"
+#include "VoicePolicy.hpp"
 #include <thread>
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <chrono>
 
 namespace core::audio
@@ -54,10 +56,38 @@ namespace core::audio
 
         AudioStateSnapshot getSnapshot() const;
 
+        // VK-1513: live count of pooled (non-streaming) voices, for the editor's
+        // "Real voices: N / M" readout. Written on the audio thread, read on the main
+        // thread — an atomic rather than a snapshot field because getSnapshot() returns
+        // by value and would deep-copy a map on every poll. Mirrors AudioSystem's
+        // hrtfStatus (VK-1508).
+        int getRealVoiceCount() const { return realVoiceCount.load(std::memory_order_relaxed); }
+        int getMaxRealVoices() const { return maxRealVoices.load(std::memory_order_relaxed); }
+
     private:
         void threadLoop();
         void processCommand(AudioCommand& cmd);
         void publishSnapshot();
+
+        // VK-1513 voice limiting.
+        // What the pooled path retains about a playing voice. OpenAL has no priority
+        // concept and stores no asset/bus identity, so the arbitration inputs have to be
+        // mirrored CPU-side. Streaming voices are deliberately absent: they never draw
+        // from the source pool this budget governs (see the PlaySoundCmd branch).
+        struct VoiceRecord
+        {
+            AudioHandle internal = InvalidAudioHandle;
+            uint8_t priority = 128;
+            bool is3D = false;
+            glm::vec3 position{0.0f};
+            AttenuationParams atten{};
+        };
+
+        std::vector<VoiceCandidate> gatherLiveVoices() const;
+        VoiceCandidate makeCandidate(const PlaySoundCmd& command) const;
+        // Hard-stops a voice and drops every trace of it. Used for steal victims.
+        void releaseVoice(AudioHandle externalHandle);
+        void forgetVoice(AudioHandle externalHandle);
 
         AudioCommandQueue& commandQueue;
         Dependencies deps;
@@ -78,6 +108,13 @@ namespace core::audio
         // Map pre-assigned (external) handles to internal handles from source/streaming managers
         std::unordered_map<AudioHandle, AudioHandle> externalToInternal;
         AudioHandle resolveHandle(AudioHandle externalHandle) const;
+
+        // VK-1513: arbitration state for pooled voices, keyed by external handle.
+        std::unordered_map<AudioHandle, VoiceRecord> voiceRecords;
+        std::atomic<int> maxRealVoices{kDefaultMaxRealVoices}; // <= 0 disables the cap
+        std::atomic<int> realVoiceCount{0};
+        // Audio-thread-only; refreshed by ApplySettingsCmd. Matches AudioSettings' default.
+        types::AudioDistanceModel distanceModel = types::AudioDistanceModel::InverseDistanceClamped;
 
         std::chrono::steady_clock::time_point lastUpdateTime;
     };

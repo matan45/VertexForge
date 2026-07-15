@@ -82,6 +82,8 @@ namespace core::audio {
         void applySettings(const types::AudioSettings& settings);
         types::AudioSettings getCurrentSettings() const;
         types::AudioHrtfStatus getHrtfStatus() const;
+        // VK-1513: live real-voice count vs the configured budget, for the editor readout.
+        types::AudioVoiceStats getVoiceStats() const;
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master");

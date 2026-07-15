@@ -75,6 +75,11 @@ namespace core::audio
         void setBusMuted(const std::string& name, bool muted);
         void setBusSoloed(const std::string& name, bool soloed);
         float getBusVolume(const std::string& name) const;
+        // VK-1513: the bus's volume with the whole parent chain and mute/solo already
+        // folded in — i.e. the multiplier that flushDirtyVolumes() pushes into AL_GAIN.
+        // Lets the voice policy score an incoming sound on the same footing as live ones,
+        // whose AL_GAIN already carries it. Returns 1.0 for an unknown bus.
+        float getBusEffectiveVolume(const std::string& name) const;
         bool isBusMuted(const std::string& name) const;
         bool isBusSoloed(const std::string& name) const;
 

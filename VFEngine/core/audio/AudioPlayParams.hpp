@@ -31,6 +31,13 @@ namespace core::audio
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
 
         std::string busName = "Master";
+
+        // VK-1513: voice-budget arbitration weight. LOWER = MORE IMPORTANT (0 = critical,
+        // 255 = least); 128 is exactly neutral. Consumed by VoicePolicy at play time and
+        // retained in AudioThread's voice record — deliberately NOT forwarded into
+        // AudioSourceConfig, which exists only to be mapped onto OpenAL, and OpenAL has no
+        // priority concept.
+        uint8_t priority = 128;
     };
     #pragma warning(pop)
 }

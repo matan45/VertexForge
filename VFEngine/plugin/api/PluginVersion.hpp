@@ -26,6 +26,10 @@ namespace plugin {
     //      2D texture as a generic UI image source (bind any plugin/GPU texture to a
     //      UIImageComponent by key; used for a smooth minimap fog-of-war overlay).
     // v18: VFXPreviewParams appends loopDuration for finite-burst loop previews.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 18;
+    // v19: services::AudioParams appends priority (voice-budget arbitration weight;
+    //      lower = more important). It crosses the boundary by reference in
+    //      PluginContext::playSound3D/playStreamingSound, so a plugin built against v18
+    //      would construct a shorter object and the engine would read past its end.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 19;
 
 }

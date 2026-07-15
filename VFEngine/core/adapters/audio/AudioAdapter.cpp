@@ -69,6 +69,7 @@ namespace core {
         coreParams.outerConeGain = params.outerConeGain;
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
+        coreParams.priority = params.priority;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -94,6 +95,7 @@ namespace core {
         coreParams.outerConeGain = params.outerConeGain;
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
+        coreParams.priority = params.priority;
 
         return audioController->playStreamingSound(path, coreParams);
     }
@@ -158,6 +160,10 @@ namespace core {
 
     types::AudioHrtfStatus AudioAdapter::getHrtfStatus() const {
         return audioController->getHrtfStatus();
+    }
+
+    types::AudioVoiceStats AudioAdapter::getVoiceStats() const {
+        return audioController->getVoiceStats();
     }
 
     void AudioAdapter::createBus(const std::string& busName, const std::string& parentName) {

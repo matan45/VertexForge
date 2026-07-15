@@ -277,6 +277,17 @@ namespace serialization
                 settings.enableHrtf = listener["enableHrtf"].get<bool>();
         }
 
+        // VK-1513. Absent in scenes saved before the voice cap existed, so the struct
+        // default (64) applies — no migration needed.
+        void deserializeAudioVoices(const json& j, types::AudioSettings& settings)
+        {
+            if (!j.contains("voices") || !j["voices"].is_object())
+                return;
+            const auto& voices = j["voices"];
+            if (voices.contains("maxRealVoices") && voices["maxRealVoices"].is_number_integer())
+                settings.maxRealVoices = voices["maxRealVoices"].get<int>();
+        }
+
         void deserializeAudioDistModel(const json& j, types::AudioSettings& settings)
         {
             if (!j.contains("distanceModel") || !j["distanceModel"].is_object())
@@ -383,6 +394,10 @@ namespace serialization
             {"enableHrtf", settings.enableHrtf}
         };
 
+        j["voices"] = {
+            {"maxRealVoices", settings.maxRealVoices}
+        };
+
         j["distanceModel"] = {
             {"model", audioDistanceModelToString(settings.distanceModel)},
             {"defaultRolloffFactor", settings.defaultRolloffFactor}
@@ -404,6 +419,7 @@ namespace serialization
     void SceneSerialization::deserializeAudioSettings(const json& j, types::AudioSettings& settings)
     {
         deserializeAudioListener(j, settings);
+        deserializeAudioVoices(j, settings);
         deserializeAudioDistModel(j, settings);
         deserializeAudioDistFilter(j, settings);
         deserializeAudioBuses(j, settings);

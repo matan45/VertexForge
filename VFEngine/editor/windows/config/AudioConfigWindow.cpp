@@ -48,6 +48,8 @@ namespace windows
 
         drawListenerSection();
         ImGui::Spacing();
+        drawVoiceManagementSection();
+        ImGui::Spacing();
         drawDistanceModelSection();
         ImGui::Spacing();
         drawDistanceFilterSection();
@@ -175,6 +177,62 @@ namespace windows
                 ImGui::TextUnformatted(types::audioHrtfStatusToString(hrtfStatus));
                 break;
             }
+
+            ImGui::Unindent();
+        }
+    }
+
+    // VK-1513: the scene's real-voice budget, plus a live occupancy readout. The readout is
+    // the instrument this feature is verified with — without it, "the count clamps" is only
+    // observable from a debugger.
+    void AudioConfigWindow::drawVoiceManagementSection()
+    {
+        if (ImGui::CollapsingHeader("Voice Management", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            ImGui::Text("Max Real Voices");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragInt("##MaxRealVoices", &settings.maxRealVoices, 1.0f, 1, 256))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Sounds beyond the budget steal the least important voice, or are dropped");
+            ImGui::TextDisabled("Takes effect for newly started sounds; live voices are never cut off");
+
+            ImGui::Spacing();
+
+            types::AudioVoiceStats voiceStats;
+            try
+            {
+                voiceStats = events::EventDispatcher::instance().query(events::audio::GetVoiceCountQuery{});
+            }
+            catch (...)
+            {
+                voiceStats = types::AudioVoiceStats{};
+            }
+
+            ImGui::Text("Real voices:");
+            ImGui::SameLine();
+            if (voiceStats.maxRealVoices <= 0)
+            {
+                ImGui::TextDisabled("%d / unlimited (cap disabled)", voiceStats.realVoices);
+            }
+            else
+            {
+                // Amber as the budget fills, red once it binds and sounds start being
+                // stolen or dropped — that transition is the thing worth noticing.
+                const float load = static_cast<float>(voiceStats.realVoices) /
+                                   static_cast<float>(voiceStats.maxRealVoices);
+                ImVec4 colour(0.3f, 1.0f, 0.3f, 1.0f);
+                if (load >= 1.0f)
+                    colour = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+                else if (load >= 0.8f)
+                    colour = ImVec4(1.0f, 0.63f, 0.0f, 1.0f);
+                ImGui::TextColored(colour, "%d / %d", voiceStats.realVoices, voiceStats.maxRealVoices);
+            }
+            ImGui::TextDisabled("Streaming sounds are exempt: they never draw from the source pool");
 
             ImGui::Unindent();
         }

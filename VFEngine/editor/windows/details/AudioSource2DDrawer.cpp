@@ -8,6 +8,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <fstream>
 
 namespace windows::details
@@ -203,6 +204,20 @@ namespace windows::details
                 }
                 ImGui::EndCombo();
             }
+        }
+
+        // VK-1513: arbitration weight when the scene's real-voice budget is full. Lower wins.
+        // An int temp because the field is a uint8_t and DragInt needs an int*.
+        int priority = static_cast<int>(audioData.priority);
+        if (ImGui::DragInt("Priority##2D", &priority, 1.0f, 0, 255))
+        {
+            audioData.priority = static_cast<uint8_t>(std::clamp(priority, 0, 255));
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Lower = more important (0 = critical, 128 = normal, 255 = least).\n"
+                              "When the voice budget is full, the least important sound is stolen.");
         }
 
         return changed;

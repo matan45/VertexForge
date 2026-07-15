@@ -47,6 +47,14 @@ namespace types
         return "Not supported";
     }
 
+    // VK-1513: live occupancy of the real-voice budget, reported by the audio thread for
+    // the editor's readout. `maxRealVoices` <= 0 means the cap is disabled.
+    struct AudioVoiceStats
+    {
+        int realVoices = 0;
+        int maxRealVoices = 0;
+    };
+
     struct AudioBusDefinition
     {
         std::string name;
@@ -76,6 +84,13 @@ namespace types
         // VK-1508: request binaural HRTF rendering on the OpenAL device (headphones).
         bool enableHrtf = false;
 
+        // VK-1513: scene-wide budget of simultaneously playing (real) voices. When it is
+        // full, an incoming sound either steals the slot of the least-important live voice
+        // or is denied outright — see core/audio/VoicePolicy.hpp. <= 0 disables the cap.
+        // Takes effect for newly started sounds; live voices are never cut off, and the
+        // source pool is never shrunk.
+        int maxRealVoices = 64;
+
         bool enableDistanceFilter = true;
         float defaultFilterStartDistance = 10.0f;
         float defaultFilterMaxDistance = 100.0f;
@@ -94,6 +109,7 @@ namespace types
             settings.distanceModel = AudioDistanceModel::InverseDistanceClamped;
             settings.defaultRolloffFactor = 1.0f;
             settings.enableHrtf = false;
+            settings.maxRealVoices = 64;
             settings.enableDistanceFilter = true;
             settings.defaultFilterStartDistance = 10.0f;
             settings.defaultFilterMaxDistance = 100.0f;

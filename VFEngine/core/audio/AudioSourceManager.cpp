@@ -23,14 +23,18 @@ namespace core::audio {
     }
 
     void AudioSourceManager::growPool(size_t additionalSources) {
-        size_t startIndex = sourcePool.size();
         sourcePool.reserve(sourcePool.size() + additionalSources);
 
         for (size_t i = 0; i < additionalSources; ++i) {
             auto source = std::make_unique<AudioSource>();
             if (source->isValid()) {
                 sourcePool.push_back(std::move(source));
-                freeIndices.push_back(startIndex + i);
+                // Drive-by (VK-1513): this used to push `startIndex + i`. If any
+                // alGenSources failed mid-loop, the loop counter and the real slot index
+                // desynchronized — every later index was off by the number of failures,
+                // permanently leaking a slot and pushing an out-of-range index that
+                // startFadeOut would then dereference unchecked. Derive it from the vector.
+                freeIndices.push_back(sourcePool.size() - 1);
             } else {
                 vfLogWarning("Failed to create audio source in pool");
             }
@@ -43,7 +47,17 @@ namespace core::audio {
 
     AudioHandle AudioSourceManager::acquireSource() {
         if (freeIndices.empty()) {
-            growPool(16);
+            // VK-1513: growth is now bounded by the voice cap. This used to grow by 16
+            // unconditionally and forever, with the only backstop being OpenAL itself
+            // refusing alGenSources (~256) — at which point playback silently failed.
+            // VoicePolicy decides admission before we ever get here, so with the cap on,
+            // reaching this is a belt-and-braces path rather than the routine one.
+            const bool capped = maxVoices > 0;
+            if (!capped || sourcePool.size() < static_cast<size_t>(maxVoices)) {
+                const size_t room = capped ? static_cast<size_t>(maxVoices) - sourcePool.size()
+                                           : 16;
+                growPool(std::min<size_t>(16, room));
+            }
         }
 
         if (freeIndices.empty()) {
@@ -138,6 +152,14 @@ namespace core::audio {
             return;
 
         size_t index = it->second;
+        // Drive-by (VK-1513): this dereferenced sourcePool[index] unchecked, unlike
+        // updateFades below which bounds-checks the same index. Harmless once growPool's
+        // index desync is fixed, but the asymmetry was an oversight.
+        if (index >= sourcePool.size()) {
+            activeHandles.erase(it);
+            return;
+        }
+
         auto* source = sourcePool[index].get();
         float currentVolume = source->getVolume();
 

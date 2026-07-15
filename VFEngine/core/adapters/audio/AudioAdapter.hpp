@@ -57,6 +57,7 @@ namespace core
         void applySettings(const types::AudioSettings& settings) override;
         types::AudioSettings getCurrentSettings() const override;
         types::AudioHrtfStatus getHrtfStatus() const override;
+        types::AudioVoiceStats getVoiceStats() const override;
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master") override;

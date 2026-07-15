@@ -99,6 +99,12 @@ namespace components
 
         std::string busName = "Music";
 
+        // VK-1513: arbitration weight when the scene's real-voice budget is full.
+        // LOWER = MORE IMPORTANT (0 = critical, 255 = least, 128 = neutral), matching
+        // VFXComponent::priority and Unity. Note ReverbZoneComponent::priority below uses
+        // the opposite convention — that one is zone override, not budget eviction.
+        uint8_t priority = 128;
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
     };
@@ -124,6 +130,9 @@ namespace components
         bool showDebugCone = false;
 
         std::string busName = "SFX";
+
+        // VK-1513: see AudioSource2DComponent::priority. Lower = more important.
+        uint8_t priority = 128;
 
         uint64_t activeHandle = 0;
         bool isPlaying = false;

@@ -80,6 +80,7 @@ namespace core::api
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = false;
                     cmd.params.busName = audioComp.busName;
+                    cmd.params.priority = audioComp.priority;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -140,6 +141,7 @@ namespace core::api
                     }
 
                     cmd.params.busName = audioComp.busName;
+                    cmd.params.priority = audioComp.priority;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
