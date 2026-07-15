@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <glm/glm.hpp>
 #include "AudioEffectTypes.hpp"
 
 namespace types
@@ -53,6 +54,54 @@ namespace types
     {
         int realVoices = 0;
         int maxRealVoices = 0;
+        // VK-1515: voices kept alive on a simulated clock after losing the budget. Not
+        // capped by maxRealVoices — they hold no AL source (see kDefaultMaxVirtualVoices).
+        int virtualVoices = 0;
+    };
+
+    // VK-1515: what the editor's active-sounds overlay shows for one live voice.
+    //
+    // Deliberately NOT folded into the audio thread's AudioStateSnapshot: that is returned
+    // by value and isPlaying()/getPlaybackPosition()/getDuration() each call it, so two
+    // std::strings per voice would be deep-copied on every one of those hot main-thread
+    // calls. This travels on its own gated channel, published only while the overlay is
+    // open — the same reasoning that kept AudioVoiceStats out of the snapshot.
+    enum class AudioVoiceKind : uint8_t
+    {
+        Sound2D = 0, // pooled, AL_SOURCE_RELATIVE at the origin — never attenuates
+        Sound3D = 1, // pooled, positional
+        Stream = 2,  // streaming (music/ambience); exempt from the real-voice budget
+        Virtual = 3  // holds no AL source; advancing a clock until it is revived
+    };
+
+    inline const char* audioVoiceKindToString(AudioVoiceKind kind)
+    {
+        switch (kind)
+        {
+        case AudioVoiceKind::Sound2D: return "2D";
+        case AudioVoiceKind::Sound3D: return "3D";
+        case AudioVoiceKind::Stream:  return "Stream";
+        case AudioVoiceKind::Virtual: return "Virtual";
+        }
+        return "?";
+    }
+
+    struct AudioVoiceRow
+    {
+        uint64_t handle = 0;
+        std::string path;
+        std::string busName;
+        AudioVoiceKind kind = AudioVoiceKind::Sound2D;
+        // Estimated, pre-effects. RMS envelope x distance attenuation x source gain (which
+        // carries user volume and bus volume/mute/solo) x fade gain. Not the bus meters'
+        // input, which is pre-bus-fader — see AudioBusManager::updateBusMeters.
+        float level = 0.0f;
+        // LOWER = MORE IMPORTANT (0 = critical, 128 = neutral). Do not render it backwards.
+        uint8_t priority = 128;
+        bool playing = false; // false = paused; still holds its slot, so it still costs
+        glm::vec3 position{0.0f};
+        float distance = 0.0f;         // to the listener; 0 for 2D and streaming voices
+        float playbackPosition = 0.0f; // seconds; a virtual voice's simulated clock
     };
 
     // VK-1514: estimated post-bus-fader, pre-effects RMS and its decaying hold.

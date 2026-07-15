@@ -40,6 +40,7 @@ namespace core::audio
 
         AudioSource* getSource(AudioHandle handle);
         const AudioSource* getSource(AudioHandle handle) const;
+        void setVolume(AudioHandle handle, float volume);
 
         void stopAll();
         void update();
@@ -64,7 +65,7 @@ namespace core::audio
         {
             AudioHandle handle;
             size_t poolIndex;
-            float originalVolume;
+            float baseVolume;
             float remainingMs;
             float totalMs;
         };

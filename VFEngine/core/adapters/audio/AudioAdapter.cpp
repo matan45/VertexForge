@@ -166,6 +166,14 @@ namespace core {
         return audioController->getVoiceStats();
     }
 
+    std::vector<types::AudioVoiceRow> AudioAdapter::getActiveVoices() const {
+        return audioController->getActiveVoices();
+    }
+
+    void AudioAdapter::setVoiceDebugEnabled(bool enabled) {
+        audioController->setVoiceDebugEnabled(enabled);
+    }
+
     void AudioAdapter::createBus(const std::string& busName, const std::string& parentName) {
         audioController->createBus(busName, parentName);
     }

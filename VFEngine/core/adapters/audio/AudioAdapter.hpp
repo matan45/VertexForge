@@ -58,6 +58,8 @@ namespace core
         types::AudioSettings getCurrentSettings() const override;
         types::AudioHrtfStatus getHrtfStatus() const override;
         types::AudioVoiceStats getVoiceStats() const override;
+        std::vector<types::AudioVoiceRow> getActiveVoices() const override;
+        void setVoiceDebugEnabled(bool enabled) override;
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master") override;

@@ -79,6 +79,10 @@ namespace services {
         virtual types::AudioHrtfStatus getHrtfStatus() const = 0;
         // VK-1513: live real-voice count vs the configured budget.
         virtual types::AudioVoiceStats getVoiceStats() const = 0;
+        // VK-1515: one row per live voice for the editor's active-sounds overlay, and the
+        // gate that makes the audio thread produce them at all. Empty while the gate is off.
+        virtual std::vector<types::AudioVoiceRow> getActiveVoices() const = 0;
+        virtual void setVoiceDebugEnabled(bool enabled) = 0;
 
         // === Audio Buses ===
         virtual void createBus(const std::string& busName, const std::string& parentName = "Master") = 0;

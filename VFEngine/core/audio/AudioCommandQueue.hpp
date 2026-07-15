@@ -101,6 +101,10 @@ namespace core::audio
     struct FadeOutAndReleaseCmd { AudioHandle handle; float fadeDurationMs = 300.0f; };
     struct StopAllCmd {};
     struct ShutdownCmd {};
+    // VK-1515: gates the active-sounds overlay's per-voice capture. A command rather than a
+    // direct atomic store so the audio thread owns the accumulator and row reset, like every
+    // other mutation of its state.
+    struct SetVoiceDebugCmd { bool enabled; };
 
     using AudioCommand = std::variant<
         PlaySoundCmd, StopSoundCmd, PauseSoundCmd, ResumeSoundCmd,
@@ -109,7 +113,8 @@ namespace core::audio
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,
         LoadSnapshotCmd, SaveSnapshotCmd, DeleteSnapshotCmd,
-        UnloadBufferCmd, FadeOutAndReleaseCmd, StopAllCmd, ShutdownCmd
+        UnloadBufferCmd, FadeOutAndReleaseCmd, StopAllCmd, ShutdownCmd,
+        SetVoiceDebugCmd
     >;
 
     class AudioCommandQueue

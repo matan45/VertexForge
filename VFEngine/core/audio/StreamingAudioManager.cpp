@@ -61,6 +61,14 @@ namespace core::audio {
         }
     }
 
+    float StreamingAudioManager::getVolume(AudioHandle handle) const {
+        auto it = activeSources.find(handle);
+        if (it != activeSources.end()) {
+            return it->second->getVolume();
+        }
+        return 0.0f;
+    }
+
     void StreamingAudioManager::setPitch(AudioHandle handle, float pitch) {
         auto it = activeSources.find(handle);
         if (it != activeSources.end()) {

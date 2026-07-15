@@ -35,6 +35,9 @@ namespace core::audio
         void setVolume(AudioHandle handle, float volume);
         void setPitch(AudioHandle handle, float pitch);
         void setLooping(AudioHandle handle, bool loop);
+        // VK-1515: AL_GAIN carries userVolume * effectiveBusVolume, so this is what the
+        // overlay needs to report a stream's audible level the same way a pooled voice's is.
+        float getVolume(AudioHandle handle) const;
 
         bool isPlaying(AudioHandle handle) const;
         bool isFinished(AudioHandle handle) const;

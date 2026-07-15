@@ -186,6 +186,18 @@ namespace services {
                 return audioProvider->getVoiceStats();
             });
 
+        // VK-1515: the active-sounds overlay. Diagnostics, so both go straight to the
+        // provider and stay out of IAudioService — same call as voice stats and bus levels.
+        dispatcher.registerQueryHandler<events::audio::GetActiveVoicesQuery>(
+            [this](const auto&) {
+                return audioProvider->getActiveVoices();
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetVoiceDebugEnabledCommand>(
+            [this](const auto& cmd) {
+                audioProvider->setVoiceDebugEnabled(cmd.enabled);
+            });
+
         // Audio Bus Commands
         dispatcher.registerCommandHandler<events::audio::CreateBusCommand>(
             [this](const auto& cmd) {

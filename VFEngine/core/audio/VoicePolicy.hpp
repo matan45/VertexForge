@@ -16,17 +16,22 @@
 // must NOT be marked VF_AUDIO_API (that macro resolves to dllimport outside the DLL,
 // which would leave Tests with unresolved externals).
 //
-// This ticket ships Allow/Deny/Steal only. Virtualization (a losing voice kept alive on
-// a simulated playback clock and revived when it becomes audible again) is a follow-up:
-// it adds a Virtualize enumerator to VoiceDecisionKind plus a virtual-voice registry,
-// without changing the shape of anything here. Because a voice is only ever ranked at
-// play time, there is no real<->virtual flapping and therefore no hysteresis in this
-// version — the ticket's hysteresis/revive tests belong to that follow-up.
+// VK-1515 landed that follow-up: virtualization (a losing voice kept alive on a simulated
+// playback clock and revived when it becomes audible again). It arrived as rebalanceVoices()
+// below plus a virtual-voice registry on AudioThread, and deliberately NOT as a Virtualize
+// enumerator on VoiceDecisionKind: decidePlay answers a play-time question ("does this
+// request get a real slot?") whose Allow/Deny/Steal answers are unchanged and still pinned
+// by test_audio_voice_policy.cpp. Whether a denied or stolen voice is discarded or kept on a
+// clock is the caller's policy, and promotion/demotion is a per-TICK question that needs its
+// own entry point regardless. Ranking every tick DOES introduce real<->virtual flapping, so
+// unlike decidePlay, rebalanceVoices needs hysteresis.
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 #include "types/AudioTypes.hpp"
 
@@ -54,6 +59,28 @@ namespace core::audio
     // initPool(32)), so the pool's first growth step is also its ceiling and no
     // existing content changes behaviour.
     inline constexpr int kDefaultMaxRealVoices = 64;
+
+    // VK-1515. Ceiling on voices kept alive on a simulated clock after losing the real
+    // budget. Matches Unity's 512 virtual voices. A virtual voice costs a record and a
+    // float add per tick — no AL source, no decode — so this is a runaway guard, not a
+    // budget in the kDefaultMaxRealVoices sense: content that legitimately wants 512
+    // simultaneous sounds is already pathological. Beyond it, a losing voice is dropped
+    // outright, which is exactly VK-1513's pre-virtualization behaviour.
+    inline constexpr int kDefaultMaxVirtualVoices = 512;
+
+    // VK-1515. How decisively a virtual voice must out-score the worst real voice before
+    // it takes that slot: 1.25 = a 25% louder-after-priority win, ~1.9 dB.
+    //
+    // This is the anti-flap term and the reason rebalanceVoices exists as its own function.
+    // Two voices within a hair of each other at the budget edge would otherwise swap every
+    // tick, and a swap is not free: it is an AL source release plus an acquire + seek +
+    // play, 200x/second, audible as chatter. Requiring a margin means the incumbent keeps
+    // its slot through noise and only yields to a real change in the scene.
+    //
+    // Deliberately a ratio, not a difference: scores are gains spanning ~96 dB (see
+    // kPriorityStepsPerOctave), so a fixed epsilon would be meaningless at the top of the
+    // range and infinitely sticky at the bottom.
+    inline constexpr float kVoiceHysteresisRatio = 1.25f;
 
     // Priority authority: one octave (6.02 dB) of gain per this many priority steps.
     //
@@ -283,5 +310,97 @@ namespace core::audio
             return {VoiceDecisionKind::Steal, worst->handle};
 
         return {VoiceDecisionKind::Deny, kInvalidVoiceHandle};
+    }
+
+    // --- Virtualization (VK-1515) -------------------------------------------------
+
+    // Which voices swap state this tick. Handles only: moving a voice between real and
+    // virtual is an AL + registry operation, which this header must not know about.
+    struct VoiceRebalance
+    {
+        std::vector<uint64_t> demote;  // real -> virtual: release the AL source, keep the clock
+        std::vector<uint64_t> promote; // virtual -> real: revive at the clocked offset
+    };
+
+    // The per-tick half of the budget: decidePlay decides who gets a slot at play time,
+    // this decides who KEEPS one as the scene moves. Both sequences are ranked by the same
+    // voiceScore, so a virtual voice's gain estimate must be built the same way as a real
+    // one's — including bus volume/mute/solo, which a real voice carries implicitly in its
+    // AL_GAIN (see gatherLiveVoices). Score a virtual voice on its raw authored volume and
+    // it will out-rank real voices on a muted bus and evict audible sound.
+    //
+    // Callers should rate-limit this rather than run it at the full tick rate: it sorts
+    // both sets, and nothing it reacts to (listener/emitter motion) moves at 200Hz.
+    inline VoiceRebalance rebalanceVoices(std::span<const VoiceCandidate> real,
+                                          std::span<const VoiceCandidate> virt,
+                                          int maxRealVoices,
+                                          float hysteresisRatio = kVoiceHysteresisRatio)
+    {
+        VoiceRebalance out;
+
+        // Cap disabled: nothing is virtual by rights, so revive everything and demote nobody.
+        if (maxRealVoices <= 0)
+        {
+            out.promote.reserve(virt.size());
+            for (const VoiceCandidate& v : virt)
+                out.promote.push_back(v.handle);
+            return out;
+        }
+
+        // The overwhelmingly common case — nothing virtualized and room to spare — costs two
+        // integer compares and allocates nothing.
+        if (virt.empty() && real.size() <= static_cast<std::size_t>(maxRealVoices))
+            return out;
+
+        // Worst real first, best virtual first. moreImportant is a TOTAL order (score, then
+        // handle), so both orderings are fully determined regardless of the caller's gather
+        // order — which is unordered_map iteration and therefore arbitrary.
+        std::vector<const VoiceCandidate*> reals;
+        reals.reserve(real.size());
+        for (const VoiceCandidate& v : real)
+            reals.push_back(&v);
+        std::sort(reals.begin(), reals.end(),
+                  [](const VoiceCandidate* a, const VoiceCandidate* b) { return moreImportant(*b, *a); });
+
+        std::vector<const VoiceCandidate*> virts;
+        virts.reserve(virt.size());
+        for (const VoiceCandidate& v : virt)
+            virts.push_back(&v);
+        std::sort(virts.begin(), virts.end(),
+                  [](const VoiceCandidate* a, const VoiceCandidate* b) { return moreImportant(*a, *b); });
+
+        std::size_t realIdx = 0; // next-worst real, the eviction candidate
+        std::size_t virtIdx = 0; // next-best virtual, the promotion candidate
+
+        // Over budget. Reachable in normal use: ApplySettingsCmd can lower maxRealVoices
+        // under live voices, and the pool is never shrunk (AudioSourceManager:55-57).
+        while (reals.size() - realIdx > static_cast<std::size_t>(maxRealVoices))
+            out.demote.push_back(reals[realIdx++]->handle);
+
+        // A free slot displaces nobody, so it needs no margin — hysteresis exists to protect
+        // an incumbent, and here there is none.
+        std::size_t liveCount = reals.size() - realIdx;
+        while (virtIdx < virts.size() && liveCount < static_cast<std::size_t>(maxRealVoices))
+        {
+            out.promote.push_back(virts[virtIdx++]->handle);
+            ++liveCount;
+        }
+
+        // Contested: taking an occupied slot demands a decisive win. Spelled !(a > b) rather
+        // than (a <= b) so a NaN ratio stops the loop instead of swapping everything.
+        // Voices promoted into free slots above are not in `reals` and so cannot be demoted
+        // in the same pass — no voice flips twice per tick.
+        while (virtIdx < virts.size() && realIdx < reals.size())
+        {
+            const float incoming = voiceScore(*virts[virtIdx]);
+            const float worst = voiceScore(*reals[realIdx]);
+            if (!(incoming > worst * hysteresisRatio))
+                break; // sorted best-first: if this one can't win, none behind it can
+
+            out.demote.push_back(reals[realIdx++]->handle);
+            out.promote.push_back(virts[virtIdx++]->handle);
+        }
+
+        return out;
     }
 }

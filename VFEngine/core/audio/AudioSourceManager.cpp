@@ -142,6 +142,27 @@ namespace core::audio {
         return sourcePool[index].get();
     }
 
+    void AudioSourceManager::setVolume(AudioHandle handle, float volume)
+    {
+        const auto fadeIt = std::find_if(fadingQueue.begin(), fadingQueue.end(),
+            [handle](const FadingSource& fading) { return fading.handle == handle; });
+        if (fadeIt != fadingQueue.end())
+        {
+            fadeIt->baseVolume = volume;
+            if (fadeIt->poolIndex < sourcePool.size())
+            {
+                const float ratio = fadeIt->totalMs > 0.0f
+                    ? std::clamp(fadeIt->remainingMs / fadeIt->totalMs, 0.0f, 1.0f)
+                    : 0.0f;
+                sourcePool[fadeIt->poolIndex]->setVolume(volume * ratio);
+            }
+            return;
+        }
+
+        if (AudioSource* source = getSource(handle))
+            source->setVolume(volume);
+    }
+
     void AudioSourceManager::stopAll() {
         for (auto& [handle, index] : activeHandles) {
             if (index < sourcePool.size()) {
@@ -172,6 +193,12 @@ namespace core::audio {
         auto it = activeHandles.find(handle);
         if (it == activeHandles.end())
             return;
+
+        if (!std::isfinite(durationMs) || durationMs <= 0.0f)
+        {
+            releaseSource(handle);
+            return;
+        }
 
         size_t index = it->second;
         // Drive-by (VK-1513): this dereferenced sourcePool[index] unchecked, unlike
@@ -215,7 +242,7 @@ namespace core::audio {
             {
                 // Ramp volume down
                 float t = it->remainingMs / it->totalMs;
-                float fadedVolume = it->originalVolume * t;
+                float fadedVolume = it->baseVolume * t;
                 if (it->poolIndex < sourcePool.size())
                     sourcePool[it->poolIndex]->setVolume(fadedVolume);
                 ++it;

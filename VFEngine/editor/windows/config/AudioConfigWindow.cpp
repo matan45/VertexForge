@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "AudioConfigWindow.hpp"
+#include "../audio/AudioWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioSettingsEvents.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -213,25 +214,9 @@ namespace windows
                 voiceStats = types::AudioVoiceStats{};
             }
 
-            ImGui::Text("Real voices:");
-            ImGui::SameLine();
-            if (voiceStats.maxRealVoices <= 0)
-            {
-                ImGui::TextDisabled("%d / unlimited (cap disabled)", voiceStats.realVoices);
-            }
-            else
-            {
-                // Amber as the budget fills, red once it binds and sounds start being
-                // stolen or dropped — that transition is the thing worth noticing.
-                const float load = static_cast<float>(voiceStats.realVoices) /
-                                   static_cast<float>(voiceStats.maxRealVoices);
-                ImVec4 colour(0.3f, 1.0f, 0.3f, 1.0f);
-                if (load >= 1.0f)
-                    colour = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
-                else if (load >= 0.8f)
-                    colour = ImVec4(1.0f, 0.63f, 0.0f, 1.0f);
-                ImGui::TextColored(colour, "%d / %d", voiceStats.realVoices, voiceStats.maxRealVoices);
-            }
+            // VK-1515: shared with the active-sounds overlay, so the two readouts cannot
+            // disagree about what "the budget is full" looks like.
+            windows::audiowidgets::drawVoiceCountReadout(voiceStats);
             ImGui::TextDisabled("Streaming sounds are exempt: they never draw from the source pool");
 
             ImGui::Unindent();

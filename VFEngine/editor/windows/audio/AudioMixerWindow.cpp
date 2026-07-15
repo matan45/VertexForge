@@ -1,4 +1,5 @@
 #include "AudioMixerWindow.hpp"
+#include "AudioWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "events/audio/AudioEffectEvents.hpp"
@@ -9,43 +10,12 @@
 
 namespace
 {
+    // VK-1515: the dB floor, the colour thresholds and the drawing moved to
+    // windows/audio/AudioWidgets.hpp when the active-sounds overlay needed the same meter.
+    // They were file-local here, so a second window could not link to them at all. Only the
+    // strip geometry stays — it is specific to a mixer channel.
     constexpr float kBusMeterWidth = 12.0f;
     constexpr float kBusMeterHeight = 150.0f;
-    constexpr float kBusMeterFloorDb = -60.0f;
-
-    float busMeterNorm(float value)
-    {
-        if (!std::isfinite(value) || value <= 0.0f)
-            return 0.0f;
-        const float db = 20.0f * std::log10(value);
-        return std::clamp((db - kBusMeterFloorDb) / -kBusMeterFloorDb, 0.0f, 1.0f);
-    }
-
-    void drawBusMeter(ImVec2 pos, ImVec2 size, float rms, float peakHold)
-    {
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                                IM_COL32(40, 40, 40, 255));
-
-        const float normalizedRms = busMeterNorm(rms);
-        const float fillHeight = normalizedRms * size.y;
-        const ImU32 color = normalizedRms < 0.8f ? IM_COL32(90, 200, 90, 255)
-            : normalizedRms < 0.95f ? IM_COL32(220, 200, 60, 255)
-                                    : IM_COL32(230, 80, 60, 255);
-        if (fillHeight > 0.0f)
-        {
-            drawList->AddRectFilled(ImVec2(pos.x, pos.y + size.y - fillHeight),
-                                    ImVec2(pos.x + size.x, pos.y + size.y), color);
-        }
-
-        const float normalizedPeak = busMeterNorm(peakHold);
-        if (normalizedPeak > 0.0f)
-        {
-            const float y = pos.y + size.y - normalizedPeak * size.y;
-            drawList->AddLine(ImVec2(pos.x, y), ImVec2(pos.x + size.x, y),
-                              IM_COL32(240, 240, 240, 255), 2.0f);
-        }
-    }
 }
 
 namespace windows
@@ -117,8 +87,8 @@ namespace windows
             ImGui::PopItemWidth();
             ImGui::SameLine();
             const ImVec2 meterPos = ImGui::GetCursorScreenPos();
-            drawBusMeter(meterPos, ImVec2(kBusMeterWidth, kBusMeterHeight),
-                         level.rms, level.peakHold);
+            audiowidgets::drawVerticalMeter(meterPos, ImVec2(kBusMeterWidth, kBusMeterHeight),
+                                            level.rms, level.peakHold);
             ImGui::Dummy(ImVec2(kBusMeterWidth, kBusMeterHeight));
             if (ImGui::IsItemHovered())
             {

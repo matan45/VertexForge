@@ -60,11 +60,7 @@ namespace core::audio
             }
             else
             {
-                AudioSource* source = sourceManager->getSource(handle);
-                if (source)
-                {
-                    source->setVolume(effectiveVolume);
-                }
+                sourceManager->setVolume(handle, effectiveVolume);
             }
         });
         busManager->setEffectManager(effectManager.get());
@@ -311,7 +307,23 @@ namespace core::audio
         if (!initialized || !audioThread) return stats;
         stats.realVoices = audioThread->getRealVoiceCount();
         stats.maxRealVoices = audioThread->getMaxRealVoices();
+        stats.virtualVoices = audioThread->getVirtualVoiceCount();
         return stats;
+    }
+
+    std::vector<types::AudioVoiceRow> AudioController::getActiveVoices() const
+    {
+        // VK-1515: unlike the counts above this is a collection, so there is no atomic to
+        // read — the audio thread publishes it under a shared_mutex, following VK-1514's
+        // bus meters rather than the state snapshot (see AudioThread::voiceDebugMutex).
+        if (!initialized || !audioThread) return {};
+        return audioThread->getVoiceDebugRows();
+    }
+
+    void AudioController::setVoiceDebugEnabled(bool enabled)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetVoiceDebugCmd{enabled});
     }
 
     // === Audio Buses ===

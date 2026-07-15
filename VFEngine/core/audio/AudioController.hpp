@@ -84,6 +84,10 @@ namespace core::audio {
         types::AudioHrtfStatus getHrtfStatus() const;
         // VK-1513: live real-voice count vs the configured budget, for the editor readout.
         types::AudioVoiceStats getVoiceStats() const;
+        // VK-1515: one row per live voice for the active-sounds overlay, and the gate that
+        // makes the audio thread produce them. Empty while the gate is off.
+        std::vector<types::AudioVoiceRow> getActiveVoices() const;
+        void setVoiceDebugEnabled(bool enabled);
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master");

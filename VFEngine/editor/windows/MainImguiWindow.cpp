@@ -45,6 +45,7 @@ namespace windows
         menuBar.setUILayerBuilderWindow(&uiLayerBuilderWindow);
         menuBar.setMemoryDiagnosticsWindow(&memoryDiagnosticsWindow);
         menuBar.setRTTDebugWindow(&rttDebugWindow);
+        menuBar.setAudioDebugWindow(&audioDebugWindow);
         menuBar.setEditorPreferencesWindow(&editorPreferencesWindow);
 
         editorSettingsWindow.setWindows(&projectSettingsWindow, &editorCameraWindow,
@@ -239,6 +240,9 @@ namespace windows
             uiLayerBuilderWindow.draw();
             memoryDiagnosticsWindow.draw();
             rttDebugWindow.draw();
+            // VK-1515: must be called unconditionally, not just while visible — its draw()
+            // edge-detects the window closing to switch the audio thread's capture back off.
+            audioDebugWindow.draw();
             editorPreferencesWindow.draw();
             editorSettingsWindow.draw();
             environmentWindow.draw();
