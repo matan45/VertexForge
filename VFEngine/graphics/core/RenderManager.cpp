@@ -261,7 +261,12 @@ namespace core {
 			// Blit offscreen color image to swapchain image
 			vk::Image srcImage = blitSourceProvider(imageIdx);
 			vk::Image dstImage = swapChain.getSwapchainImage(imageIdx);
+			// Source is the offscreen color at the (possibly sub-native) render extent; the
+			// swapchain image is always the display extent. VK-1531: blit src(render)->dst(display)
+			// so a dynamic-resolution / upscaler-off sub-native render fills the screen (bilinear)
+			// instead of landing 1:1 in the corner. With no override the two are equal (no-op).
 			auto extent = swapChain.getSwapchainExtent();
+			auto displayExtent = swapChain.getDisplayExtent();
 
 			// Transition offscreen image: ShaderReadOnly -> TransferSrc
 			vk::ImageMemoryBarrier2 srcBarrier{};
@@ -298,7 +303,7 @@ namespace core {
 			blitRegion.srcOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
 			blitRegion.dstSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 };
 			blitRegion.dstOffsets[0] = vk::Offset3D{ 0, 0, 0 };
-			blitRegion.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1 };
+			blitRegion.dstOffsets[1] = vk::Offset3D{ static_cast<int32_t>(displayExtent.width), static_cast<int32_t>(displayExtent.height), 1 };
 
 			commandBuffer.blitImage(
 				srcImage, vk::ImageLayout::eTransferSrcOptimal,

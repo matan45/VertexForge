@@ -43,6 +43,11 @@ namespace controllers
 
     bool OffScreenController::applyRenderSettingsInternal(const types::RenderSettings& settings)
     {
+        // VK-1531: forward the dynamic-resolution config on every apply — independent of the
+        // renderer-ready retry below — so the per-frame controller in OffScreenViewPort always
+        // reflects the current settings even before the GPU-driven renderer is initialized.
+        offScreen->setDynamicResolutionSettings(settings.dynamicResolution);
+
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return false;
 

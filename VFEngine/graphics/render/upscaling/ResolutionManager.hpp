@@ -15,6 +15,10 @@ namespace render::upscaling
         void setDisplayResolution(uint32_t width, uint32_t height);
         void setQualityMode(::postprocess::UpscaleQuality quality);
 
+        // VK-1531: continuous dynamic-resolution multiplier layered UNDER the quality preset.
+        // scale is clamped to [minScale, 1.0]; 1.0 == the preset's nominal render size.
+        void setDynamicScale(float scale, float minScale);
+
         vk::Extent2D getDisplayResolution() const { return displayResolution; }
         vk::Extent2D getRenderResolution() const { return renderResolution; }
 
@@ -25,6 +29,7 @@ namespace render::upscaling
 
         float getScaleFactor() const { return scaleFactor; }
         bool isUpscaling() const { return scaleFactor > 1.0f; }
+        float getDynamicScale() const { return dynamicScale; }
 
         ::postprocess::UpscaleQuality getQualityMode() const { return currentQuality; }
 
@@ -32,6 +37,7 @@ namespace render::upscaling
         vk::Extent2D displayResolution{1920, 1080};
         vk::Extent2D renderResolution{1920, 1080};
         float scaleFactor = 1.0f;
+        float dynamicScale = 1.0f; // VK-1531: adaptive multiplier in (0, 1]
         ::postprocess::UpscaleQuality currentQuality = ::postprocess::UpscaleQuality::Native;
 
         void recompute();
