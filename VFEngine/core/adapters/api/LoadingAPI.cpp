@@ -8,6 +8,7 @@
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../../services/events/render/ObjectStreamingEvents.hpp"
+#include "../../../services/events/render/PipelineWarmupEvents.hpp"
 #include "../../../services/events/terrain/TerrainEvents.hpp"
 
 #include "resource/ResourceLoadScheduler.hpp"
@@ -72,8 +73,13 @@ namespace core::api
                 resource::ResourceLoadScheduler::instance().getActiveLoads().size());
             s.streamingPending = objStats.queuedForUpload + activeResourceLoads;
 
+            // GPU pipeline warm-up (VK-1532) -> the "init" band (90-100%). Keeps the loading
+            // screen up until material pipelines have been pre-created off the render thread.
+            const services::PipelineWarmupStats warm =
+                queryOr(events::render::GetPipelineWarmupStatsQuery{}, services::PipelineWarmupStats{});
+
             s.active = sceneActive || pendingTiles > 0 || objStats.queuedForUpload > 0 ||
-                       activeResourceLoads > 0;
+                       activeResourceLoads > 0 || warm.active;
 
             // Reset high-water marks between load sessions so a later, smaller
             // load doesn't inherit an inflated denominator.
@@ -113,7 +119,10 @@ namespace core::api
             s.inputs.terrain = terrainFrac;
             s.inputs.sectors = sectorsFrac;
             s.inputs.gpu = gpuFrac;
-            s.inputs.init = 1.0f; // no dedicated signal yet (physics/navmesh/scripts)
+            // --- init band (90-100%): async pipeline warm-up (VK-1532) ---
+            s.inputs.init = warm.total > 0
+                ? std::clamp(static_cast<float>(warm.completed) / static_cast<float>(warm.total), 0.0f, 1.0f)
+                : 1.0f;
             return s;
         }
 

@@ -5,10 +5,12 @@
 #include "material/MaterialTypes.hpp"
 #include "material/MaterialManager.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
+#include "../../../services/data/PipelineWarmupTypes.hpp"
 #include <array>
 #include <memory>
 #include <mutex>
 #include <vector>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 
@@ -47,6 +49,7 @@ namespace render::mesh
     class MaterialTextureCache;
     class MaterialCacheManager;
     class MaterialParameterBufferCache;
+    class MaterialPipelineWarmup;
 }
 
 namespace render::mesh
@@ -90,6 +93,9 @@ namespace render::mesh
 
         std::unique_ptr<MaterialCacheManager> materialCacheManager;
         material::CallbackId materialChangeCallbackId{};
+
+        // VK-1532: async material-pipeline warm-up for this (scene) pipeline instance.
+        std::unique_ptr<MaterialPipelineWarmup> pipelineWarmup;
 
         void registerMaterialChangeCallback();
         void prepareTexturesForFrame(const std::vector<MeshRenderData>& meshDrawList) const;
@@ -147,6 +153,13 @@ namespace render::mesh
                                       std::shared_ptr<material::MaterialData> materialData);
 
         std::string getLastShaderCompilationError() const;
+
+        // VK-1532: kick off async warm-up of this scene's material pipelines (plus any extra
+        // paths from a Phase-2 PSO manifest). Call on the main thread after scene load.
+        void beginPipelineWarmup(std::vector<std::string> extraPaths = {});
+        services::PipelineWarmupStats getPipelineWarmupStats() const;
+        // Toggle the render-thread mid-frame guard on the material shader cache.
+        void setFrameRecording(bool recording) const;
 
         void updatePreviewTextureDescriptors(
             uint32_t imageIndex,

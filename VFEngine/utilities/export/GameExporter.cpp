@@ -13,6 +13,7 @@
 #include "../material/MaterialAsset.hpp"
 #include "../material/MaterialInstanceTypes.hpp"
 #include "../material/MaterialRuntimeData.hpp"
+#include "../material/PipelineWarmupManifest.hpp"
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
@@ -593,6 +594,35 @@ namespace gameExport
 		auto& assetDb = asset::AssetDatabase::instance();
 		uint64_t unreferencedBytes = 0;
 
+		// VK-1532 Phase 2: per-scene PSO warm-up manifest. For each scene, record the GUIDs of
+		// every material reachable through the AssetDatabase dependency graph so the shipped
+		// runtime can warm those pipelines during the loading screen — including materials only
+		// referenced by prefabs that scripts spawn later at runtime.
+		material::PipelineWarmupManifest psoManifest;
+		auto collectSceneMaterialGuids = [&assetDb](const asset::AssetGUID& sceneGuid)
+		{
+			std::vector<std::string> materialGuids;
+			std::unordered_set<asset::AssetGUID, asset::AssetGUID::Hash> visited;
+			std::vector<asset::AssetGUID> worklist;
+			visited.insert(sceneGuid);
+			worklist.push_back(sceneGuid);
+			while (!worklist.empty())
+			{
+				asset::AssetGUID current = worklist.back();
+				worklist.pop_back();
+				for (const auto& dep : assetDb.getDependencies(current))
+				{
+					if (!visited.insert(dep).second) continue;
+					worklist.push_back(dep);
+					if (auto depPath = assetDb.getPath(dep); depPath && material::isMaterialFile(*depPath))
+					{
+						materialGuids.push_back(dep.toString());
+					}
+				}
+			}
+			return materialGuids;
+		};
+
 		// 1. Pack game assets from working directory
 		std::error_code ec;
 		fs::path excludeAbsolute;
@@ -637,6 +667,16 @@ namespace gameExport
 			// Convert JSON scenes to binary MessagePack for faster loading
 			if (ext == ".vfscene")
 			{
+				// VK-1532 Phase 2: record this scene's material closure into the warm-up manifest.
+				if (auto sceneGuid = assetDb.getGUID(entry.path().string()))
+				{
+					auto materialGuids = collectSceneMaterialGuids(*sceneGuid);
+					if (!materialGuids.empty())
+					{
+						psoManifest.scenes[sceneGuid->toString()] = std::move(materialGuids);
+					}
+				}
+
 				fs::path tempBinary = config.outputDirectory / "_temp_scenes" / relativePath;
 
 				// Incremental: reuse cached binary if source unchanged
@@ -757,6 +797,15 @@ namespace gameExport
 		if (config.cleanBuild && fs::exists(tempScenes))
 		{
 			fs::remove_all(tempScenes, ec);
+		}
+
+		// VK-1532 Phase 2: bake the PSO warm-up manifest into the archive.
+		if (!psoManifest.scenes.empty())
+		{
+			const std::string manifestJson = psoManifest.toJson();
+			writer.addMemory(material::kPsoManifestEntry, manifestJson.data(), manifestJson.size(),
+			                 archive::CompressionType::LZ4);
+			vfLogInfo("Export: PSO warm-up manifest written ({} scenes)", psoManifest.scenes.size());
 		}
 
 		if (!writer.finalize())

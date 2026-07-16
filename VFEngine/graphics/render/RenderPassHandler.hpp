@@ -10,6 +10,7 @@
 #include "../../services/data/CustomPipelineTypes.hpp"
 #include "../../services/data/PostProcessEffectTypes.hpp"
 #include "../../services/data/PluginTextureTypes.hpp"
+#include "../../services/data/PipelineWarmupTypes.hpp"
 #include "../../services/providers/render/IDecalRenderProvider.hpp"
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
@@ -372,6 +373,11 @@ namespace render
 
         mesh::StaticMeshPipeline* getMeshPipeline() const { return meshPipeline.get(); }
         bool isMeshPipelineInitialized() const { return meshPipelineInitialized; }
+
+        // VK-1532: async material-pipeline warm-up, forwarded to the scene mesh pipeline.
+        // Kicked off by the Core PipelineWarmupAdapter after a scene finishes loading.
+        void beginPipelineWarmup(std::vector<std::string> extraPaths = {});
+        services::PipelineWarmupStats getPipelineWarmupStats() const;
 
         void initMeshPipeline(bool enableGPUDriven = true);
         void reinitMeshPipelineWithDefaults();

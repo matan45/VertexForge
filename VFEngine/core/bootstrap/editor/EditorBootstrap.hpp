@@ -93,6 +93,7 @@ namespace core
     class PostProcessEffectAdapter;
     class PluginTextureAdapter;
     class DebugDrawAdapter;
+    class PipelineWarmupAdapter;
 
     namespace adapters
     {
@@ -140,6 +141,7 @@ namespace core
         std::unique_ptr<PostProcessEffectAdapter> postProcessEffectAdapter;
         std::unique_ptr<PluginTextureAdapter> pluginTextureAdapter;
         std::unique_ptr<DebugDrawAdapter> debugDrawAdapter;
+        std::unique_ptr<PipelineWarmupAdapter> pipelineWarmupAdapter;
         std::unique_ptr<adapters::GrassRenderAdapter> grassRenderAdapter;
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;

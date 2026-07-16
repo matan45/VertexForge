@@ -21,6 +21,7 @@
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
+#include "../../adapters/render/PipelineWarmupAdapter.hpp"
 
 namespace core
 {
@@ -56,6 +57,7 @@ namespace core
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
         runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
         pluginTextureAdapter = std::make_unique<PluginTextureAdapter>(offScreen.get());
+        pipelineWarmupAdapter = std::make_unique<PipelineWarmupAdapter>(offScreen.get());
 
         offScreen->init();
 

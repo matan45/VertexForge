@@ -28,6 +28,7 @@
 #include "../../adapters/render/PostProcessEffectAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
+#include "../../adapters/render/PipelineWarmupAdapter.hpp"
 #include "../../adapters/terrain/OceanRenderAdapter.hpp"
 #include "../../adapters/vegetation/GrassRenderAdapter.hpp"
 
@@ -88,6 +89,7 @@ namespace core
         terrainBrushComputeAdapter.reset();
         renderTextureAdapter.reset();
         renderHookAdapter.reset();
+        pipelineWarmupAdapter.reset();
         customPipelineAdapter.reset();
         postProcessEffectAdapter.reset();
         pluginTextureAdapter.reset();

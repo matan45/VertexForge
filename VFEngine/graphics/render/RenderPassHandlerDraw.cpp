@@ -88,7 +88,14 @@ namespace render
         importFrameResources(imageIndex);
         buildFrameGraph(commandBuffer, imageIndex);
         frameGraph->compile();
+
+        // VK-1532: flag the scene mesh cache as "recording" so any material pipeline created
+        // synchronously during graph execution (a warm-up miss) is logged/asserted. execute()
+        // records the SceneMeshes pass inline and joins parallel-recording jobs before it
+        // returns, so this single flag covers the render thread and those worker threads.
+        if (meshPipeline) meshPipeline->setFrameRecording(true);
         frameGraph->execute(commandBuffer, imageIndex);
+        if (meshPipeline) meshPipeline->setFrameRecording(false);
 
         // Plugin custom draws are enqueued per frame — drop them whether or not
         // the scene pass consumed them (e.g. GPU-driven renderer disabled).
@@ -96,6 +103,19 @@ namespace render
 
         // VK-1529 tier 1: close the span once every command this frame records is in.
         endFrameTiming(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::beginPipelineWarmup(std::vector<std::string> extraPaths)
+    {
+        if (meshPipeline)
+        {
+            meshPipeline->beginPipelineWarmup(std::move(extraPaths));
+        }
+    }
+
+    services::PipelineWarmupStats RenderPassHandler::getPipelineWarmupStats() const
+    {
+        return meshPipeline ? meshPipeline->getPipelineWarmupStats() : services::PipelineWarmupStats{};
     }
 
     void RenderPassHandler::beginFrameTiming(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
