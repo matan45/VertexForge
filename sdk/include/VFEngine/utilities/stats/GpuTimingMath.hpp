@@ -12,18 +12,27 @@ namespace render::timing
 
     inline constexpr float EMA_ALPHA = 0.1f;
 
-    // Timestamp counters are only guaranteed to be `validBits` wide (the spec
-    // permits 36..64) and the bits above that are undefined, so mask both ends
-    // before subtracting. The subtraction is then modular over the valid width,
-    // which makes a wrap-straddling interval report its real duration — at 36
-    // bits and a ~1ns period the counter wraps roughly every 69 seconds.
+    // Timestamp counters are only `validBits` wide (the spec permits 36..64, and
+    // guarantees bits outside that range read as zero), so the counter wraps at
+    // 2^validBits. Subtracting modulo that width therefore reports a
+    // wrap-straddling interval's real duration — at 36 bits and a ~1ns period the
+    // counter wraps roughly every 69 seconds. No need to mask the inputs: the spec
+    // already guarantees their high bits are zero.
+    //
+    // A delta landing in the upper half of the range is not a very long wrap — a
+    // real interval is at most a frame — it is an inverted pair, from a driver
+    // quirk or a query that was read without being written. Report 0 rather than
+    // ~2^validBits ticks: one such sample would pin emaFrameGpuMs for seconds and
+    // flatten the history plot's whole 120-frame window.
     inline float boundaryDeltaMs(uint64_t start, uint64_t end, double periodNs, uint32_t validBits)
     {
         if (periodNs <= 0.0 || validBits == 0) return 0.0f;
 
         const uint64_t mask = (validBits >= 64) ? ~uint64_t{0}
                                                 : ((uint64_t{1} << validBits) - 1);
-        const uint64_t ticks = ((end & mask) - (start & mask)) & mask;
+        const uint64_t ticks = (end - start) & mask;
+        if (ticks > (mask >> 1)) return 0.0f;
+
         return static_cast<float>(static_cast<double>(ticks) * periodNs / 1'000'000.0);
     }
 

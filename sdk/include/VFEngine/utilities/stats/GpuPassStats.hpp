@@ -65,7 +65,10 @@ namespace render
 
         // ---- Tier 1: whole-frame GPU span (always collected) ----
 
-        // Lock-free on purpose: the status bar reads these every frame.
+        // The three atomics are deliberately outside the mutex: the status bar reads
+        // them every frame and must never block on the render thread. The ring push
+        // below does take the lock — uncontended in practice, since the only reader
+        // is the profiler window, once per refresh interval and only while open.
         void publishFrameTime(float ms, float emaMs)
         {
             frameMsValue.store(ms, std::memory_order_relaxed);

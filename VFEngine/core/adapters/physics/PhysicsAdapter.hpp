@@ -43,6 +43,8 @@ namespace core
         void syncPhysicsStep() override;
         float getInterpolationAlpha() const override;
         services::PhysicsTransformSnapshot getInterpolatedTransform(services::EntityHandle entity) const override;
+        int getPhysicsStepsTaken() const override;
+        float getFixedTimestep() const override;
 
         void setGravity(const glm::vec3& gravity) override;
         glm::vec3 getGravity() const override;
@@ -192,6 +194,7 @@ namespace core
 
         std::future<physics::FixedTimestepResult> asyncStepFuture;
         float lastStepAlpha = 0.0f;
+        int lastStepCount = 0;
         bool asyncStepInFlight = false;
 
         struct PhysicsAnimationState

@@ -79,17 +79,19 @@ namespace services
 
             if (controller.characterControllerActive && physicsProvider)
             {
-                updateCharacterControllerEntity(entity, deltaTime);
+                // Character controllers manage their own wantsJump latch so a
+                // frame that runs zero fixed sub-steps does not swallow the input.
+                updateCharacterControllerEntity(entity);
             }
             else
             {
                 updateRigidBodyEntity(entity, deltaTime);
+                controller.wantsJump = false;
             }
 
             deriveLocomotionState(controller);
             syncLocomotionToAnimator(entity, controller);
 
-            controller.wantsJump = false;
             if (!controller.hasMoveToTarget)
             {
                 controller.moveInput = glm::vec3(0.0f);
@@ -98,72 +100,110 @@ namespace services
         }
     }
 
-    void ControllerServiceImpl::updateCharacterControllerEntity(entt::entity entity, float deltaTime)
+    void ControllerServiceImpl::updateCharacterControllerEntity(entt::entity entity)
     {
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& controller = registry.get<components::ControllerComponent>(entity);
         auto& transform = registry.get<components::TransformComponent>(entity);
         auto handle = internal::toHandle(entity);
 
-        float targetSpeed = controller.moveSpeed;
-        if (controller.wantsSprint)
-        {
-            targetSpeed *= controller.sprintMultiplier;
-        }
+        // VK-1530: advance the character controller at the same fixed cadence as
+        // the rigid-body world (shared step count + interpolation alpha from the
+        // physics provider) so movement is frame-rate independent, and render the
+        // transform interpolated between fixed steps to stay smooth above tick rate.
+        const int steps = physicsProvider->getPhysicsStepsTaken();
+        const float fixedDt = physicsProvider->getFixedTimestep();
+        const float alpha = physicsProvider->getInterpolationAlpha();
+
+        const float targetSpeed = controller.wantsSprint
+            ? controller.moveSpeed * controller.sprintMultiplier
+            : controller.moveSpeed;
 
         glm::vec3 desiredHorizontal{0.0f};
         if (glm::length2(controller.moveInput) > 0.001f)
         {
-            glm::vec3 normalizedInput = glm::normalize(controller.moveInput);
-            desiredHorizontal = normalizedInput * targetSpeed;
+            desiredHorizontal = glm::normalize(controller.moveInput) * targetSpeed;
         }
 
-        glm::vec3 currentHorizontal{controller.currentVelocity.x, 0.0f, controller.currentVelocity.z};
-        glm::vec3 velocityDiff = desiredHorizontal - currentHorizontal;
-        float diffLen = glm::length(velocityDiff);
+        const glm::vec3 gravity = physicsProvider->getGravity();
 
-        if (diffLen > 0.001f)
+        // Authoritative character position at the start of this frame. On the first
+        // sight of an entity, seed from its current transform (freshly placed).
+        auto lastIt = ccLastSimPos.find(entity);
+        const bool hadPrev = (lastIt != ccLastSimPos.end());
+        glm::vec3 prev = hadPrev ? lastIt->second : transform.position;
+        glm::vec3 curr = prev;
+
+        for (int i = 0; i < steps; ++i)
         {
-            float rate = glm::length2(desiredHorizontal) >= glm::length2(currentHorizontal)
-                ? controller.acceleration
-                : controller.deceleration;
+            glm::vec3 currentHorizontal{controller.currentVelocity.x, 0.0f, controller.currentVelocity.z};
+            glm::vec3 velocityDiff = desiredHorizontal - currentHorizontal;
+            float diffLen = glm::length(velocityDiff);
 
-            if (!controller.isGrounded)
+            if (diffLen > 0.001f)
             {
-                rate *= controller.airControlFactor;
+                float rate = glm::length2(desiredHorizontal) >= glm::length2(currentHorizontal)
+                    ? controller.acceleration
+                    : controller.deceleration;
+
+                if (!controller.isGrounded)
+                {
+                    rate *= controller.airControlFactor;
+                }
+
+                float maxDelta = rate * fixedDt;
+                if (diffLen <= maxDelta)
+                {
+                    currentHorizontal = desiredHorizontal;
+                }
+                else
+                {
+                    currentHorizontal += (velocityDiff / diffLen) * maxDelta;
+                }
             }
 
-            float maxDelta = rate * deltaTime;
-            if (diffLen <= maxDelta)
+            float verticalVel = controller.currentVelocity.y;
+            verticalVel += gravity.y * fixedDt;
+
+            // Latch the jump to the first sub-step: a multi-step frame must not
+            // apply the impulse more than once.
+            if (i == 0 && controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
             {
-                currentHorizontal = desiredHorizontal;
+                verticalVel = controller.jumpForce;
             }
-            else
-            {
-                currentHorizontal += (velocityDiff / diffLen) * maxDelta;
-            }
+
+            glm::vec3 fullVelocity{currentHorizontal.x, verticalVel, currentHorizontal.z};
+            auto result = physicsProvider->updateCharacterController(handle, fullVelocity, fixedDt);
+
+            controller.isGrounded = result.isGrounded;
+            controller.currentVelocity = result.linearVelocity;
+            curr = result.position;
         }
 
-        float verticalVel = controller.currentVelocity.y;
-        auto gravity = physicsProvider->getGravity();
-        verticalVel += gravity.y * deltaTime;
-
-        if (controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
+        // Consume the jump only if a sub-step actually ran this frame.
+        if (steps > 0)
         {
-            verticalVel = controller.jumpForce;
+            controller.wantsJump = false;
         }
 
-        glm::vec3 fullVelocity{currentHorizontal.x, verticalVel, currentHorizontal.z};
+        controller.verticalVelocity = controller.currentVelocity.y;
+        controller.currentSpeed = glm::length(glm::vec2(controller.currentVelocity.x, controller.currentVelocity.z));
 
-        auto result = physicsProvider->updateCharacterController(handle, fullVelocity, deltaTime);
+        // Snap (skip interpolation) across teleports / respawns — a character never
+        // legitimately moves this far in one frame; interpolating would streak.
+        constexpr float CC_TELEPORT_SNAP_DISTANCE2 = 50.0f * 50.0f;
+        if (hadPrev && glm::distance2(prev, curr) > CC_TELEPORT_SNAP_DISTANCE2)
+        {
+            prev = curr;
+        }
+        ccLastSimPos[entity] = curr;
 
-        transform.position = result.position;
+        // Render between the previous and current sim positions; the character's
+        // authoritative position (Jolt-side) is always curr — only the rendered
+        // transform lags by the interpolation factor. Clamp alpha defensively.
+        float a = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
+        transform.position = glm::mix(prev, curr, a);
         transform.isDirty = true;
-
-        controller.isGrounded = result.isGrounded;
-        controller.currentVelocity = result.linearVelocity;
-        controller.verticalVelocity = result.linearVelocity.y;
-        controller.currentSpeed = glm::length(glm::vec2(result.linearVelocity.x, result.linearVelocity.z));
     }
 
     void ControllerServiceImpl::updateRigidBodyEntity(entt::entity entity, float deltaTime)

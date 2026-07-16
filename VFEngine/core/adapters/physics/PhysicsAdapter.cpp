@@ -2,6 +2,7 @@
 #include "PhysicsConversions.hpp"
 #include "threading/JobSystem.hpp"
 #include "../../physics/PhysicsShapeFactory.hpp"
+#include "../../physics/FixedTimestepMath.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
 #include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
@@ -194,6 +195,7 @@ namespace core
         auto result = asyncStepFuture.get();
         asyncStepInFlight = false;
         lastStepAlpha = static_cast<float>(result.alpha);
+        lastStepCount = result.stepsTaken;
 
         // Process contact events on main thread
         physicsWorld->processContactEvents();
@@ -214,6 +216,17 @@ namespace core
         return lastStepAlpha;
     }
 
+    int PhysicsAdapter::getPhysicsStepsTaken() const
+    {
+        return lastStepCount;
+    }
+
+    float PhysicsAdapter::getFixedTimestep() const
+    {
+        return fixedTimestep ? static_cast<float>(fixedTimestep->getTimestep())
+                             : static_cast<float>(1.0 / 60.0);
+    }
+
     services::PhysicsTransformSnapshot PhysicsAdapter::getInterpolatedTransform(
         services::EntityHandle entity) const
     {
@@ -226,10 +239,12 @@ namespace core
 
         if (curr && prev)
         {
+            // interp* clamp alpha to [0,1] so a hitch (where alpha could momentarily
+            // exceed 1 before the drop-remainder guard) never extrapolates the pose.
             float alpha = lastStepAlpha;
-            result.position = glm::mix(prev->position, curr->position, alpha);
-            result.rotation = glm::slerp(prev->rotation, curr->rotation, alpha);
-            result.linearVelocity = glm::mix(prev->linearVelocity, curr->linearVelocity, alpha);
+            result.position = physics::interpVec3(prev->position, curr->position, alpha);
+            result.rotation = physics::interpRotation(prev->rotation, curr->rotation, alpha);
+            result.linearVelocity = physics::interpVec3(prev->linearVelocity, curr->linearVelocity, alpha);
         }
         else if (curr)
         {
