@@ -14,6 +14,7 @@
 #include "common/SharedCameraUBO.hpp"
 #include "graph/RenderGraphTypes.hpp"
 #include "raytracing/GPUTimestampQueryPool.hpp"
+#include "stats/GpuTimingMath.hpp"
 #include "gpudriven/billboard/BillboardGPUTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -295,6 +296,33 @@ namespace render
         // unsupported = timestamp queries unavailable, never retry
         bool graphProfilerInitialized = false;
         bool graphProfilerUnsupported = false;
+
+        // VK-1529 tier 1: one timestamp pair bracketing draw() — i.e. the whole
+        // offscreen command buffer. Two queries a frame, always collected, so the
+        // status bar gets a real GPU number without paying for the per-pass chain.
+        // Graphics queue only: async compute is submitted separately and carries
+        // no timestamps, so work that overlaps perfectly costs no wall-clock here
+        // and is correctly excluded, while an async stall shows up as real time.
+        raytracing::GPUTimestampQueryPool frameTimePool;
+        bool frameTimePoolInitialized = false;
+        bool frameTimeUnsupported = false;
+        bool frameTimeActiveThisFrame = false;
+        float emaFrameGpuMs = 0.0f;
+        bool frameGpuEmaSeeded = false;
+        // Whether a slot holds a completed span to publish. Guards the very first
+        // frame through each slot, where the queries have never been written.
+        std::array<bool, core::MAX_FRAMES_IN_FLIGHT> frameTimeSlotWritten{};
+
+        // EMA for the aux VT rows, keyed by scope name like the graph passes.
+        timing::NamedEma vtEma;
+        uint64_t vtEmaFrame = 0;
+        static constexpr uint64_t kVtEmaMaxAgeFrames = 600;
+
+        // Frames since enabling where the readback had nothing ready. Surfaced so a
+        // dropped sample stays distinguishable from a real one in the history plot;
+        // counted only after the first sample lands, so warmup does not inflate it.
+        uint32_t droppedGpuSamples = 0;
+        bool gpuSampleSeen = false;
 
         // VK-1480: aux GPU timestamps for work recorded inside the GPU-driven mesh pass
         // that RenderGraphProfiler can't see: the raw VT commands (RVT bake / SVT update /
@@ -639,6 +667,14 @@ namespace render
         // lazy-inits the GPU pass profiler, reads back last frame's timestamps
         // and publishes the snapshot for the editor.
         void syncGraphProfiler(uint32_t imageIndex);
+
+        // VK-1529 tier 1: the whole-frame GPU span. beginFrameTiming publishes
+        // this slot's previous occupant (fence-guaranteed complete) then opens a
+        // fresh span; endFrameTiming closes it. Both write outside any render
+        // pass — draw() brackets the entire command buffer. Always on, so the
+        // status bar has a GPU number with the profiler window closed.
+        void beginFrameTiming(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
+        void endFrameTiming(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         // VK-1480: aux VT timestamp scopes (see vtTimestampPool). beginVTTimestamps
         // resets the pool + this frame's bookkeeping (call once, outside a render pass,

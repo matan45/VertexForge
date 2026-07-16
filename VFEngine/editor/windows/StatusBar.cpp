@@ -8,6 +8,7 @@
 #include "types/RenderSettings.hpp"
 #include "memory/GpuAllocationStats.hpp"
 #include "threading/EditorTaskStats.hpp"
+#include "stats/GpuPassStats.hpp" // render::GpuPassStats tier-1 whole-frame GPU span
 #include <imgui.h>
 #include <filesystem>
 
@@ -142,10 +143,32 @@ namespace windows
                 separator();
                 ImGui::Text("FPS: %.0f", fps);
             }
+            if (debugSettings.showCPUTime)
+            {
+                separator();
+                ImGui::Text("CPU: %.1f ms", viewportFrameMs);
+            }
             if (debugSettings.showGPUTime)
             {
                 separator();
-                ImGui::Text("Frame: %.1f ms", viewportFrameMs);
+                // Tier 1 of the GpuPassStats sink: a whole-frame timestamp span,
+                // collected every frame, read lock-free. Until VK-1529 this slot
+                // printed viewportFrameMs -- CPU wall-clock under a "GPU" toggle.
+                const auto& gpuSink = render::GpuPassStats::instance();
+                if (gpuSink.hasFrameGpuTime())
+                {
+                    // Smoothed: the raw span jitters too much to read at a glance.
+                    ImGui::Text("GPU: %.2f ms", gpuSink.emaFrameGpuMs());
+                }
+                else
+                {
+                    ImGui::TextDisabled("GPU: --");
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Whole-frame GPU span (graphics queue only).\n"
+                        "Async-compute work is submitted separately and not timestamped.");
+                }
             }
             if (debugSettings.showDrawCalls)
             {

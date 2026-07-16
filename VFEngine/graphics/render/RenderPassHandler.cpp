@@ -417,6 +417,19 @@ namespace render
             vtTimestampPool.cleanup(device.getLogicalDevice());
             vtTimestampPoolInitialized = false;
         }
+        // VK-1529 tier 1: always-on whole-frame pool, so unlike the two above it is
+        // initialized on the first frame rather than on an enable request.
+        if (frameTimePoolInitialized)
+        {
+            frameTimePool.cleanup(device.getLogicalDevice());
+            frameTimePoolInitialized = false;
+            frameTimeSlotWritten.fill(false);
+            // Drop the smoothing state too, or a re-init blends timings from before
+            // the teardown into the new device's first samples.
+            frameGpuEmaSeeded = false;
+            emaFrameGpuMs = 0.0f;
+            vtEma.clear();
+        }
         if (postProcessPipeline) postProcessPipeline->cleanup();
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();

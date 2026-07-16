@@ -27,6 +27,10 @@ namespace config
     struct DebugSettings
     {
         bool showFPS = true;
+        // Separate readouts: showGPUTime is a timestamp-derived GPU span, showCPUTime
+        // is the wall-clock frame time. Until VK-1529 the "GPU" toggle in fact showed
+        // CPU time, so the two are split rather than one relabelled.
+        bool showCPUTime = true;
         bool showGPUTime = true;
         bool showDrawCalls = true;
         std::string logLevel = "Info";

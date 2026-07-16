@@ -231,6 +231,8 @@ namespace windows
             cloudConfigWindow.draw();
             lightStreamingDebugWindow.draw();
             pluginManagerWindow.draw();
+            // VK-1529: must be called unconditionally, not just while visible — its draw()
+            // edge-detects the window closing to stop per-pass GPU timestamp capture.
             taskGraphWindow.draw();
             inputActionMappingWindow.draw();
             heightmapGeneratorWindow.draw();

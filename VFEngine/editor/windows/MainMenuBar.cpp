@@ -379,6 +379,9 @@ namespace windows
             if (ImGui::MenuItem("Animation Stats") && animationDebugWindow) animationDebugWindow->show();
             if (ImGui::MenuItem("Light Streaming") && lightStreamingDebugWindow) lightStreamingDebugWindow->show();
             if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
+            // Same window, opened on its GPU Passes tab — the per-pass GPU profiler
+            // is otherwise undiscoverable behind a tab labelled "Task Graph".
+            if (ImGui::MenuItem("GPU Profiler") && taskGraphWindow) taskGraphWindow->showGpuTab();
             if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
             if (ImGui::MenuItem("RTT Debug") && rttDebugWindow) rttDebugWindow->show();
             if (ImGui::MenuItem("Audio Debug") && audioDebugWindow) audioDebugWindow->show();
