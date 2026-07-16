@@ -8,6 +8,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <fstream>
 
 namespace windows::details
@@ -52,6 +53,8 @@ namespace windows::details
             changed |= drawAudioFilePath(audioData);
             ImGui::Spacing();
             changed |= drawAudioSettings(audioData);
+            ImGui::Spacing();
+            changed |= drawVariation(audioData);
 
             if (changed)
             {
@@ -80,6 +83,7 @@ namespace windows::details
 
             uint64_t previewKey = handle.id;
             audioPreviewHandles.erase(previewKey);
+            previewRolls.erase(previewKey);
         }
 
         return true;
@@ -107,54 +111,22 @@ namespace windows::details
 
     bool AudioSource2DDrawer::drawAudioFilePath(services::AudioSource2DData& audioData)
     {
-        bool changed = false;
+        // VK-1520: the clip pool is drawn as one flat list — row 0 is audioRef,
+        // rows 1..N are clipVariants. A user who only ever wants one clip sees the
+        // same Select/Clear pair they always had.
+        return drawClipVariantList(audioData, "2D");
+    }
 
-        if (audioData.audioRef.isValid())
+    bool AudioSource2DDrawer::drawVariation(services::AudioSource2DData& audioData)
+    {
+        // Collapsed by default: the single-clip user never has to open it.
+        if (!ImGui::CollapsingHeader("Variation##2D"))
         {
-            std::string filename = audioData.audioRef.resolve();
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::Text("File: %s", filename.c_str());
+            return false;
         }
-        else
-        {
-            ImGui::TextDisabled("No audio file selected");
-        }
-
-        if (ImGui::Button("Select Audio File##2D"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Audio Files (*.vfAudio)", L"*.vfAudio"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    audioData.audioRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected audio file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool clearDisabled = !audioData.audioRef.isValid();
-        ImGui::BeginDisabled(clearDisabled);
-        if (ImGui::Button("Clear##Audio2D"))
-        {
-            audioData.audioRef = asset::AssetRef::invalid();
-            changed = true;
-        }
-        ImGui::EndDisabled();
-
+        ImGui::Indent(10.0f);
+        const bool changed = drawVariationSettings(audioData, "2D");
+        ImGui::Unindent(10.0f);
         return changed;
     }
 
@@ -205,6 +177,20 @@ namespace windows::details
             }
         }
 
+        // VK-1521: ramp up from silence when the sound starts. 0 = no fade.
+        if (ImGui::DragFloat("Fade In (ms)##2D", &audioData.fadeInMs, 10.0f, 0.0f, 10000.0f,
+                             "%.0f"))
+        {
+            audioData.fadeInMs = std::max(0.0f, audioData.fadeInMs);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Ramp this sound up from silence over this many milliseconds.\n"
+                              "0 = start at full volume. Pair with a fade-out on the outgoing\n"
+                              "sound to crossfade music.");
+        }
+
         return changed;
     }
 
@@ -236,8 +222,14 @@ namespace windows::details
 
         bool isPaused = hasPreviewHandle && !isCurrentlyPlaying;
 
-        // Play button
-        bool canPlay = audioData.audioRef.isValid() && !isCurrentlyPlaying;
+        // Play button. VK-1520: a variant-only source (audioRef cleared but variants
+        // authored) is playable, so gate on the pool rather than on audioRef alone.
+        bool hasClip = audioData.audioRef.isValid();
+        for (const auto& variant : audioData.clipVariants)
+        {
+            hasClip = hasClip || variant.isValid();
+        }
+        bool canPlay = hasClip && !isCurrentlyPlaying;
         if (!canPlay) ImGui::BeginDisabled();
         if (ImGui::Button("Play##2D", ImVec2(60, 0)))
         {
@@ -249,15 +241,25 @@ namespace windows::details
             }
             else
             {
-                events::audio::PlayStreamingSoundCommand playCmd;
-                playCmd.path = audioData.audioRef.resolve();
-                playCmd.params.volume = audioData.volume;
-                playCmd.params.pitch = audioData.pitch;
-                playCmd.params.loop = audioData.loop;
-                playCmd.params.busName = audioData.busName;
+                // VK-1520: audition through the same roll the runtime uses, so
+                // hitting Play five times gives five different footsteps. This is
+                // the only place a designer can actually hear the container.
+                const auto pick = rollPreview(audioData, previewRolls[previewKey]);
+                if (!pick.path.empty())
+                {
+                    events::audio::PlayStreamingSoundCommand playCmd;
+                    playCmd.path = pick.path;
+                    playCmd.params.volume = pick.volume;
+                    playCmd.params.pitch = pick.pitch;
+                    playCmd.params.loop = audioData.loop;
+                    playCmd.params.busName = audioData.busName;
+                    // VK-1521: audition the authored fade too — this is a streaming play,
+                    // so it exercises the exact path the ticket's music crossfade uses.
+                    playCmd.params.fadeInMs = audioData.fadeInMs;
 
-                services::AudioHandle newHandle = dispatcher.execute(playCmd);
-                audioPreviewHandles[previewKey] = newHandle;
+                    services::AudioHandle newHandle = dispatcher.execute(playCmd);
+                    audioPreviewHandles[previewKey] = newHandle;
+                }
             }
         }
         if (!canPlay) ImGui::EndDisabled();
@@ -295,5 +297,6 @@ namespace windows::details
     void AudioSource2DDrawer::clearHandles()
     {
         audioPreviewHandles.clear();
+        previewRolls.clear();
     }
 }

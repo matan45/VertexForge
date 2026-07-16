@@ -1,5 +1,6 @@
 #include "print/Log.hpp"
 #include "AudioConfigWindow.hpp"
+#include "../audio/AudioWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioSettingsEvents.hpp"
 #include "events/project/SceneEvents.hpp"
@@ -47,6 +48,8 @@ namespace windows
         }
 
         drawListenerSection();
+        ImGui::Spacing();
+        drawVoiceManagementSection();
         ImGui::Spacing();
         drawDistanceModelSection();
         ImGui::Spacing();
@@ -122,6 +125,99 @@ namespace windows
             }
             ImGui::PopItemWidth();
             ImGui::TextDisabled("Default: 343.3 m/s (speed of sound in air)");
+
+            ImGui::Spacing();
+
+            ImGui::Text("Max Doppler Speed");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragFloat("##MaxDopplerSpeed", &settings.maxDopplerSpeed, 1.0f, 1.0f, 10000.0f, "%.1f m/s"))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Teleport guard: single-frame moves faster than this get no pitch shift");
+
+            ImGui::Spacing();
+
+            // VK-1508: HRTF (binaural) toggle + live device status line. The checkbox rides
+            // the existing Apply/Save flow (ApplyAudioSettingsCommand carries the whole struct);
+            // the status line reflects the ACTUAL device state, which can differ from the request.
+            if (ImGui::Checkbox("Enable HRTF (Binaural)##Config", &settings.enableHrtf))
+            {
+                isDirty = true;
+            }
+            ImGui::TextDisabled("Head-tracked binaural rendering for headphones (OpenAL Soft)");
+
+            types::AudioHrtfStatus hrtfStatus = types::AudioHrtfStatus::Unsupported;
+            try
+            {
+                hrtfStatus = events::EventDispatcher::instance().query(events::audio::GetHrtfStatusQuery{});
+            }
+            catch (...)
+            {
+                hrtfStatus = types::AudioHrtfStatus::Unsupported;
+            }
+
+            ImGui::Text("Device status:");
+            ImGui::SameLine();
+            switch (hrtfStatus)
+            {
+            case types::AudioHrtfStatus::Enabled:
+            case types::AudioHrtfStatus::Required:
+            case types::AudioHrtfStatus::HeadphonesDetected:
+                ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            case types::AudioHrtfStatus::Denied:
+            case types::AudioHrtfStatus::UnsupportedFormat:
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            case types::AudioHrtfStatus::Unsupported:
+                ImGui::TextDisabled("%s", types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            default: // Disabled
+                ImGui::TextUnformatted(types::audioHrtfStatusToString(hrtfStatus));
+                break;
+            }
+
+            ImGui::Unindent();
+        }
+    }
+
+    // VK-1513: the scene's real-voice budget, plus a live occupancy readout. The readout is
+    // the instrument this feature is verified with — without it, "the count clamps" is only
+    // observable from a debugger.
+    void AudioConfigWindow::drawVoiceManagementSection()
+    {
+        if (ImGui::CollapsingHeader("Voice Management", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent();
+
+            ImGui::Text("Max Real Voices");
+            ImGui::PushItemWidth(-1);
+            if (ImGui::DragInt("##MaxRealVoices", &settings.maxRealVoices, 1.0f, 1, 256))
+            {
+                isDirty = true;
+            }
+            ImGui::PopItemWidth();
+            ImGui::TextDisabled("Sounds beyond the budget steal the least important voice, or are dropped");
+            ImGui::TextDisabled("Takes effect for newly started sounds; live voices are never cut off");
+
+            ImGui::Spacing();
+
+            types::AudioVoiceStats voiceStats;
+            try
+            {
+                voiceStats = events::EventDispatcher::instance().query(events::audio::GetVoiceCountQuery{});
+            }
+            catch (...)
+            {
+                voiceStats = types::AudioVoiceStats{};
+            }
+
+            // VK-1515: shared with the active-sounds overlay, so the two readouts cannot
+            // disagree about what "the budget is full" looks like.
+            windows::audiowidgets::drawVoiceCountReadout(voiceStats);
+            ImGui::TextDisabled("Streaming sounds are exempt: they never draw from the source pool");
 
             ImGui::Unindent();
         }

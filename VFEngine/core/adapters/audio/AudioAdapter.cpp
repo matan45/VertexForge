@@ -69,6 +69,8 @@ namespace core {
         coreParams.outerConeGain = params.outerConeGain;
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
+        coreParams.priority = params.priority;
+        coreParams.fadeInMs = params.fadeInMs;
 
         return audioController->playSound3D(path, position, coreParams);
     }
@@ -94,6 +96,8 @@ namespace core {
         coreParams.outerConeGain = params.outerConeGain;
         coreParams.direction = params.direction;
         coreParams.busName = params.busName;
+        coreParams.priority = params.priority;
+        coreParams.fadeInMs = params.fadeInMs;
 
         return audioController->playStreamingSound(path, coreParams);
     }
@@ -118,6 +122,10 @@ namespace core {
         return audioController->isPlaying(handle);
     }
 
+    types::SoundStatus AudioAdapter::getSoundStatus(services::AudioHandleId handle) const {
+        return audioController->getSoundStatus(handle);
+    }
+
     void AudioAdapter::setVolume(services::AudioHandleId handle, float volume) {
         audioController->setVolume(handle, volume);
     }
@@ -126,9 +134,19 @@ namespace core {
         audioController->setPitch(handle, pitch);
     }
 
+    void AudioAdapter::setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,
+                                          const glm::vec3& direction, const glm::vec3& velocity) {
+        audioController->setSourceTransform(handle, position, direction, velocity);
+    }
+
+    void AudioAdapter::setSourceOcclusion(services::AudioHandleId handle, float occlusion,
+                                          float lpfAmount, float volumeAmount) {
+        audioController->setSourceOcclusion(handle, occlusion, lpfAmount, volumeAmount);
+    }
+
     void AudioAdapter::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                            const glm::vec3& up) {
-        audioController->setListenerPosition(position, forward, up);
+                                            const glm::vec3& up, const glm::vec3& velocity) {
+        audioController->setListenerPosition(position, forward, up, velocity);
     }
 
     float AudioAdapter::getPlaybackPosition(services::AudioHandleId handle) const {
@@ -149,6 +167,22 @@ namespace core {
 
     types::AudioSettings AudioAdapter::getCurrentSettings() const {
         return audioController->getCurrentSettings();
+    }
+
+    types::AudioHrtfStatus AudioAdapter::getHrtfStatus() const {
+        return audioController->getHrtfStatus();
+    }
+
+    types::AudioVoiceStats AudioAdapter::getVoiceStats() const {
+        return audioController->getVoiceStats();
+    }
+
+    std::vector<types::AudioVoiceRow> AudioAdapter::getActiveVoices() const {
+        return audioController->getActiveVoices();
+    }
+
+    void AudioAdapter::setVoiceDebugEnabled(bool enabled) {
+        audioController->setVoiceDebugEnabled(enabled);
     }
 
     void AudioAdapter::createBus(const std::string& busName, const std::string& parentName) {
@@ -175,8 +209,30 @@ namespace core {
         return audioController->isBusMuted(busName);
     }
 
+    bool AudioAdapter::isBusSoloed(const std::string& busName) const {
+        return audioController->isBusSoloed(busName);
+    }
+
     std::vector<std::string> AudioAdapter::getBusNames() const {
         return audioController->getBusNames();
+    }
+
+    std::vector<types::AudioBusLevel> AudioAdapter::getBusLevels() const {
+        return audioController->getBusLevels();
+    }
+
+    void AudioAdapter::setBusDuck(const std::string& targetBus,
+                                  const types::BusDuckConfig& config) {
+        audioController->setBusDuck(targetBus, config);
+    }
+
+    void AudioAdapter::removeBusDuck(const std::string& targetBus) {
+        audioController->removeBusDuck(targetBus);
+    }
+
+    std::optional<types::BusDuckConfig> AudioAdapter::getBusDuck(
+        const std::string& targetBus) const {
+        return audioController->getBusDuck(targetBus);
     }
 
     void AudioAdapter::saveMixSnapshot(const std::string& name) {

@@ -3,8 +3,94 @@
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
 
+#include <algorithm>
+
 namespace serialization
 {
+    namespace
+    {
+        // VK-1513. Absent in scenes saved before the voice cap, so the struct default
+        // (128 == neutral) applies — no migration needed. Clamped because the field is a
+        // uint8_t and a hand-edited scene must not wrap around.
+        void readVoicePriority(const json& j, uint8_t& priority)
+        {
+            if (auto it = j.find("priority"); it != j.end() && it->is_number_integer())
+                priority = static_cast<uint8_t>(std::clamp(it->get<int>(), 0, 255));
+        }
+
+        // VK-1521. Absent in scenes saved before fade-in, so the struct default (0 == no
+        // fade) applies and playback stays byte-identical — no migration needed. Negatives
+        // are clamped away rather than left to the ramp's isRampable() guard: a hand-edited
+        // scene should round-trip as the 0 the editor would show, not as a value that only
+        // behaves like 0.
+        void readAudioFadeIn(const json& j, float& fadeInMs)
+        {
+            if (auto it = j.find("fadeInMs"); it != j.end() && it->is_number())
+                fadeInMs = std::max(0.0f, it->get<float>());
+        }
+
+        // VK-1520. Shared by both audio source components — their variation blocks
+        // are identical, so template over the component rather than duplicating.
+        //
+        // clipVariants is an array of OBJECTS, not of GUID strings: writeAssetRef
+        // emits TWO keys (the GUID and a resolvable "<key>Path" sibling that keeps
+        // scenes loadable with a cold AssetDatabase), so it cannot target an array
+        // element. Same shape as ScriptComponent::scripts below.
+        template<typename AudioComp>
+        void writeAudioVariation(json& j, const AudioComp& audioSource)
+        {
+            json variantsArray = json::array();
+            for (const auto& ref : audioSource.clipVariants)
+            {
+                json entryJson;
+                writeAssetRef(entryJson, "clipRef", ref);
+                variantsArray.push_back(entryJson);
+            }
+            j["clipVariants"] = variantsArray;
+            j["playOrder"] = static_cast<uint8_t>(audioSource.playOrder);
+            j["pitchVariation"] = audioSource.pitchVariation;
+            j["volumeVariation"] = audioSource.volumeVariation;
+        }
+
+        // Absent in scenes saved before variation containers, so the struct defaults
+        // apply (Single order + zero jitter == the old fixed-clip playback) — no
+        // migration needed.
+        template<typename AudioComp>
+        void readAudioVariation(const json& j, AudioComp& audioSource)
+        {
+            audioSource.clipVariants.clear();
+            if (auto it = j.find("clipVariants"); it != j.end() && it->is_array())
+            {
+                for (const auto& entryJson : *it)
+                {
+                    if (!entryJson.is_object())
+                        continue;
+                    audioSource.clipVariants.push_back(readAssetRef(entryJson, "clipRef"));
+                }
+            }
+            if (auto it = j.find("playOrder"); it != j.end() && it->is_number_integer())
+            {
+                // Clamped rather than cast blind — a hand-edited scene must not land
+                // the enum outside its declared range.
+                const int order = std::clamp(it->get<int>(), 0,
+                                             static_cast<int>(types::AudioPlayOrder::RoundRobin));
+                audioSource.playOrder = static_cast<types::AudioPlayOrder>(order);
+            }
+            if (auto it = j.find("pitchVariation"); it != j.end() && it->is_number())
+                audioSource.pitchVariation = it->get<float>();
+            if (auto it = j.find("volumeVariation"); it != j.end() && it->is_number())
+                audioSource.volumeVariation = it->get<float>();
+        }
+
+        // VK-1520 runtime state, reset alongside activeHandle/isPlaying: a saved
+        // scene must not remember which variant happened to play last.
+        template<typename AudioComp>
+        void resetAudioVariationRuntime(AudioComp& audioSource)
+        {
+            audioSource.lastVariant = types::AUDIO_VARIANT_NONE;
+            audioSource.playCount = 0;
+        }
+    }
 
     json SceneSerialization::serializeAudioSource2D(const components::AudioSource2DComponent& audioSource)
     {
@@ -14,6 +100,8 @@ namespace serialization
         j["pitch"] = audioSource.pitch;
         j["loop"] = audioSource.loop;
         j["busName"] = audioSource.busName;
+        j["fadeInMs"] = audioSource.fadeInMs;
+        writeAudioVariation(j, audioSource);
         return j;
     }
 
@@ -36,9 +124,12 @@ namespace serialization
         {
             audioSource.busName = it->get<std::string>();
         }
+        readAudioFadeIn(j, audioSource.fadeInMs);
+        readAudioVariation(j, audioSource);
         // Reset runtime state
         audioSource.activeHandle = 0;
         audioSource.isPlaying = false;
+        resetAudioVariationRuntime(audioSource);
     }
 
     json SceneSerialization::serializeAudioSource3D(const components::AudioSource3DComponent& audioSource)
@@ -55,11 +146,18 @@ namespace serialization
         j["filterStartDistance"] = audioSource.filterStartDistance;
         j["filterMaxDistance"] = audioSource.filterMaxDistance;
         j["filterIntensity"] = audioSource.filterIntensity;
+        j["enableOcclusion"] = audioSource.enableOcclusion;
+        j["occlusionLpf"] = audioSource.occlusionLpf;
+        j["occlusionVolume"] = audioSource.occlusionVolume;
+        j["occlusionLayerMask"] = audioSource.occlusionLayerMask;
         j["innerConeAngle"] = audioSource.innerConeAngle;
         j["outerConeAngle"] = audioSource.outerConeAngle;
         j["outerConeGain"] = audioSource.outerConeGain;
         j["showDebugCone"] = audioSource.showDebugCone;
         j["busName"] = audioSource.busName;
+        j["priority"] = audioSource.priority;
+        j["fadeInMs"] = audioSource.fadeInMs;
+        writeAudioVariation(j, audioSource);
         return j;
     }
 
@@ -91,6 +189,17 @@ namespace serialization
                 audioSource.filterMaxDistance = it->get<float>();
             if (auto it = j.find("filterIntensity"); it != j.end() && it->is_number())
                 audioSource.filterIntensity = it->get<float>();
+            // VK-1518. Absent in scenes saved before geometry occlusion, so the struct
+            // defaults apply (enableOcclusion = false) — no migration needed.
+            if (auto it = j.find("enableOcclusion"); it != j.end() && it->is_boolean())
+                audioSource.enableOcclusion = it->get<bool>();
+            if (auto it = j.find("occlusionLpf"); it != j.end() && it->is_number())
+                audioSource.occlusionLpf = it->get<float>();
+            if (auto it = j.find("occlusionVolume"); it != j.end() && it->is_number())
+                audioSource.occlusionVolume = it->get<float>();
+            if (auto it = j.find("occlusionLayerMask"); it != j.end() && it->is_number_unsigned())
+                audioSource.occlusionLayerMask = static_cast<uint16_t>(
+                    std::min(it->get<uint64_t>(), static_cast<uint64_t>(0xFFFF)));
             if (auto it = j.find("innerConeAngle"); it != j.end() && it->is_number())
                 audioSource.innerConeAngle = it->get<float>();
             if (auto it = j.find("outerConeAngle"); it != j.end() && it->is_number())
@@ -101,6 +210,8 @@ namespace serialization
                 audioSource.showDebugCone = it->get<bool>();
             if (auto it = j.find("busName"); it != j.end() && it->is_string())
                 audioSource.busName = it->get<std::string>();
+            readVoicePriority(j, audioSource.priority);
+            readAudioFadeIn(j, audioSource.fadeInMs);
         }
     } // anonymous namespace
 
@@ -109,9 +220,11 @@ namespace serialization
         audioSource.audioRef = readAssetRef(j, "audioRef", "audioFilePath");
         deserializeAudio3DBasicFields(j, audioSource);
         deserializeAudio3DFilterFields(j, audioSource);
+        readAudioVariation(j, audioSource);
         // Reset runtime state
         audioSource.activeHandle = 0;
         audioSource.isPlaying = false;
+        resetAudioVariationRuntime(audioSource);
     }
 
     json SceneSerialization::serializeReverbZone(const components::ReverbZoneComponent& zone)

@@ -9,10 +9,16 @@
 #include "AudioListener.hpp"
 #include "AudioSystem.hpp"
 #include "ReverbZoneManager.hpp"
+#include "VoicePolicy.hpp"
+#include "types/AudioTypes.hpp" // types::AudioVoiceRow — the overlay's per-voice payload
 #include <thread>
 #include <atomic>
+#include <deque>
+#include <shared_mutex>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 #include <chrono>
 
 namespace core::audio
@@ -24,6 +30,11 @@ namespace core::audio
             bool playing = false;
             float playbackPosition = 0.0f;
             float duration = 0.0f;
+            // VK-1513: the audio thread threw this play away — the budget denied it and the
+            // virtual set was full. The caller already holds a handle and has already set
+            // its component playing, so without this the component waits forever to observe
+            // a voice that will never exist.
+            bool rejected = false;
         };
         std::unordered_map<AudioHandle, SourceState> sources;
     };
@@ -54,10 +65,148 @@ namespace core::audio
 
         AudioStateSnapshot getSnapshot() const;
 
+        // VK-1513: live count of pooled (non-streaming) voices, for the editor's
+        // "Real voices: N / M" readout. Written on the audio thread, read on the main
+        // thread — an atomic rather than a snapshot field because getSnapshot() returns
+        // by value and would deep-copy a map on every poll. Mirrors AudioSystem's
+        // hrtfStatus (VK-1508).
+        int getRealVoiceCount() const { return realVoiceCount.load(std::memory_order_relaxed); }
+        int getMaxRealVoices() const { return maxRealVoices.load(std::memory_order_relaxed); }
+        // VK-1515: voices on a simulated clock, holding no AL source. Not bounded by
+        // maxRealVoices — that budget exists to ration AL sources, which these do not use.
+        int getVirtualVoiceCount() const { return virtualVoiceCount.load(std::memory_order_relaxed); }
+
+        // VK-1515: one row per live voice, for the editor's active-sounds overlay. Empty
+        // unless capture has been switched on with SetVoiceDebugCmd. Gated because, off,
+        // the audio thread pays one relaxed load per tick, whereas on it builds N rows of
+        // strings every kVoiceDebugInterval — a diagnostic must not perturb the thread it
+        // is diagnosing. The overlay drives the gate from its window's visibility.
+        std::vector<types::AudioVoiceRow> getVoiceDebugRows() const;
+
     private:
         void threadLoop();
         void processCommand(AudioCommand& cmd);
-        void publishSnapshot();
+        void publishSnapshot(float deltaTime);
+
+        // VK-1513 voice limiting.
+        // What the pooled path retains about a playing voice. OpenAL has no priority
+        // concept and stores no asset/bus identity, so the arbitration inputs have to be
+        // mirrored CPU-side. Streaming voices are deliberately absent: they never draw
+        // from the source pool this budget governs (see the PlaySoundCmd branch).
+        //
+        // VK-1515 widened this from the bare arbitration inputs to the whole play request.
+        // Virtualization has to be able to replay a voice exactly as it was first asked for
+        // — pitch, cone, distance filter and all — and the overlay needs its asset and bus.
+        // `params` is the single source of truth for the voice's mutable state: the command
+        // branches write volume/pitch/position back into it, so a record can never disagree
+        // with the AL source it mirrors (a second copy of `position` did exactly that).
+        // VK-1506 / VK-1518 / VK-1521. The runtime state a voice ACCRUES, as opposed to the
+        // play request it was born from (`params`). Every field here is something the engine
+        // observed or was told after the fact — a velocity, an occlusion verdict, a pause —
+        // and every one of them lives on the AL source, which a demote destroys.
+        //
+        // Deliberately NOT merged into PlaySoundParams: that type is the caller's authored
+        // request, it is VF_AUDIO_API and embedded by value (the full-rebuild hazard), and
+        // an occlusion verdict is not something the caller ever asked for.
+        //
+        // It is ONE struct so demote and revive move it as a unit. This bug class came from
+        // three features each adding a piece of source state and each forgetting one half of
+        // the round trip: velocity was never reset on recycle, occlusion was never restored
+        // on revive, pause was captured at demote and then dropped on the floor. Add a field
+        // here and both halves are structural rather than remembered.
+        struct VoiceMirror
+        {
+            glm::vec3 velocity{0.0f};
+            float occlusion = 0.0f;
+            float occlusionLpfAmount = 0.0f;
+            float occlusionVolumeAmount = 0.0f;
+            bool paused = false;
+        };
+
+        struct VoiceRecord
+        {
+            AudioHandle internal = InvalidAudioHandle;
+            ALuint bufferId = 0;
+            std::string path;
+            PlaySoundParams params;
+            VoiceMirror mirror;
+            // VK-1521. This voice is fading out to DIE — FadeOutAndReleaseCmd armed the
+            // ramp and the caller has already let go of the handle. The distinction the
+            // budget needs and cannot otherwise make: AudioSourceManager knows a ramp is
+            // running but not that its end is a funeral, and a fade-out that is merely a
+            // duck would be a legitimate voice to keep.
+            //
+            // Terminal voices must never be virtualized. Doing so captures params.volume
+            // (the PRE-fade target), drops the ramp with the released source, and revives
+            // the voice at full gain — and for a looping one whose handle the caller no
+            // longer holds, nothing can ever stop it again.
+            bool releasing = false;
+        };
+
+        // VK-1515. A voice that lost the real-voice budget but is kept alive on a simulated
+        // playback clock, so it can be revived at the right offset once it is worth hearing
+        // again. Holds no AL source and no pool slot — it costs a record and a float add.
+        struct VirtualVoice
+        {
+            std::string path;
+            PlaySoundParams params;
+            VoiceMirror mirror; // carried across the demote so revive can restore it
+            ALuint bufferId = 0;
+            float clock = 0.0f;    // simulated playback position, seconds
+            float duration = 0.0f; // 0 = unknown: never expires on its own
+        };
+
+        // VK-1515. Streaming voices are exempt from the budget and get no VoiceRecord, but
+        // the overlay still has to name them — and StreamingAudioSource retains no path of
+        // its own, so this is the only place a stream's identity survives. Deliberately its
+        // own map: realVoiceCount IS voiceRecords.size(), so putting streams in there would
+        // inflate the count and silently shrink the real budget.
+        struct StreamingVoiceRecord
+        {
+            std::string path;
+            std::string busName;
+        };
+
+        // The gain a voice is RANKED on: what it would be heard at with no ramp in flight.
+        // The one expression all three rankers share — see estimateAudibleGain on why this
+        // must never be read back out of AL_GAIN.
+        float targetGain(const PlaySoundParams& params) const;
+        // Shared by all three rankers so they cannot drift onto different scales again.
+        // `releaseGain` is 1.0 for anything that is not a terminal fade-out.
+        VoiceCandidate makeCandidate(AudioHandle externalHandle, const PlaySoundParams& params,
+                                     float releaseGain) const;
+
+        std::vector<VoiceCandidate> gatherLiveVoices() const;
+        std::vector<VoiceCandidate> gatherVirtualVoices() const;
+        // Acquire a pool slot and start `command` on it. InvalidAudioHandle == no voice.
+        AudioHandle tryStartRealVoice(const PlaySoundCmd& command, ALuint bufferId);
+        // VK-1513: publish that a play was thrown away, so the caller can stop waiting for
+        // it. The handle gets no registry entry at all — that is what being rejected means —
+        // so this is the only trace of it that ever reaches the main thread.
+        void rejectVoice(AudioHandle externalHandle);
+
+        // Hard-stops a voice and drops every trace of it. Used for steal victims, and for
+        // a terminal fade-out the budget wants to reap rather than revive.
+        void releaseVoice(AudioHandle externalHandle);
+        void forgetVoice(AudioHandle externalHandle);
+
+        // VK-1515 virtualization. Both return false when the virtual ceiling refuses; the
+        // voice is then left exactly as it was, and what that means is the caller's call.
+        bool virtualizeVoice(AudioHandle externalHandle, std::string path,
+                             const PlaySoundParams& params, const VoiceMirror& mirror,
+                             ALuint bufferId, float startClock);
+        bool demoteVoice(AudioHandle externalHandle); // real -> virtual, keeping the clock
+        bool reviveVoice(AudioHandle externalHandle); // virtual -> real, seeking to the clock
+        void updateVirtualClocks(float deltaTime);
+        void rebalanceRealVirtual(float deltaTime);
+        // VK-1515 debug capture. Returns true on the ticks the overlay's rows are rebuilt.
+        bool shouldPublishVoiceDebug(float deltaTime);
+        void commitVoiceDebug();
+        // The mutable state of a voice, whichever registry currently owns it. Returns null
+        // for streaming voices (which keep no params) and unknown handles.
+        PlaySoundParams* findVoiceParams(AudioHandle externalHandle);
+        // Same, for the state the caller never authored. See VoiceMirror.
+        VoiceMirror* findVoiceMirror(AudioHandle externalHandle);
 
         AudioCommandQueue& commandQueue;
         Dependencies deps;
@@ -78,6 +227,55 @@ namespace core::audio
         // Map pre-assigned (external) handles to internal handles from source/streaming managers
         std::unordered_map<AudioHandle, AudioHandle> externalToInternal;
         AudioHandle resolveHandle(AudioHandle externalHandle) const;
+
+        // VK-1513: arbitration state for pooled voices, keyed by external handle.
+        std::unordered_map<AudioHandle, VoiceRecord> voiceRecords;
+        // VK-1515: the other two registries a live handle can live in. Every handle in
+        // activeHandles is in exactly one of the three (or is a streaming voice, which is
+        // also in externalToInternal). Keyed by external handle, like voiceRecords.
+        std::unordered_map<AudioHandle, VirtualVoice> virtualVoices;
+        std::unordered_map<AudioHandle, StreamingVoiceRecord> streamingRecords;
+        std::vector<SourceMeterSample> sourceMeterSamples;
+
+        // VK-1513: recently rejected handles, each with a countdown in ticks.
+        //
+        // A ring with a TTL rather than a set, for two reasons. The tick runs at ~200Hz
+        // while AudioSceneUpdater polls at frame rate, so a rejection published for a single
+        // tick would usually be missed entirely — it has to linger long enough to be seen.
+        // And nothing ever acknowledges a rejection, so entries have to expire on their own
+        // or this would be the leak it exists to report. Bounded as a backstop: a scene
+        // pathological enough to reject faster than these drain must not also grow a queue.
+        std::deque<std::pair<AudioHandle, int>> rejectedRing;
+        static constexpr std::size_t kRejectedRingMax = 128;
+        static constexpr int kRejectedTicks = 200; // ~1s at the 5ms tick
+        std::atomic<int> maxRealVoices{kDefaultMaxRealVoices}; // <= 0 disables the cap
+        std::atomic<int> realVoiceCount{0};
+        std::atomic<int> virtualVoiceCount{0};
+
+        // VK-1515: rebalance is rate-limited rather than run every tick — it sorts both
+        // voice sets and does an alGetSourcef per live voice, and nothing it reacts to
+        // (listener or emitter motion) moves at the 200Hz tick rate. 20Hz is well inside
+        // the reaction time for "walked into earshot".
+        float rebalanceAccum = 0.0f;
+        static constexpr float kRebalanceInterval = 0.05f;
+
+        // VK-1515 debug capture.
+        //
+        // A mutex, deliberately, rather than the snapshots[2]/readIndex pair above. That
+        // scheme computes writeIdx = 1 - readIndex, so two ticks (10ms) after a reader
+        // starts copying, the audio thread reclaims the buffer under it. That is tolerable
+        // for a small POD map; a reader deep-copying N rows of std::string widens the window
+        // materially. This mirrors VK-1514's meterEntries instead (AudioBusManager), which
+        // is the same shape of data and which the audio thread already locks every tick.
+        mutable std::shared_mutex voiceDebugMutex;
+        std::vector<types::AudioVoiceRow> voiceDebugRows;    // guarded by voiceDebugMutex
+        std::vector<types::AudioVoiceRow> voiceDebugScratch; // audio-thread only; keeps capacity
+        std::atomic<bool> voiceDebugEnabled{false};
+        float voiceDebugAccum = 0.0f;
+        // 10Hz. The overlay polls at 2Hz, so the tick rate would be 100x waste.
+        static constexpr float kVoiceDebugInterval = 0.1f;
+        // Audio-thread-only; refreshed by ApplySettingsCmd. Matches AudioSettings' default.
+        types::AudioDistanceModel distanceModel = types::AudioDistanceModel::InverseDistanceClamped;
 
         std::chrono::steady_clock::time_point lastUpdateTime;
     };

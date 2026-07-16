@@ -9,8 +9,66 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/scene/ReverbZoneEvents.hpp"
 #include "resource/AssetLifecycleManager.hpp"
+#include <cmath>
 
 namespace services {
+
+    namespace {
+
+        // VK-1520: retargets an audio source's whole clip set (audioRef + the
+        // variant list) with correct refcounting.
+        //
+        // Acquires the ENTIRE new set BEFORE releasing the old one. The order is
+        // load-bearing: a clip present in both sets must never transiently hit
+        // refcount 0, or it would be evicted and reloaded mid-playback. The
+        // acquire/release pair is refcount-neutral for unchanged entries, so no
+        // set-difference is needed.
+        //
+        // This also fixes a pre-existing leak (drive-by): the old code released the
+        // old audioRef only `if (comp.audioRef != audioData.audioRef)` but acquired
+        // the new one unconditionally, so every set with an unchanged clip leaked a
+        // refcount — and the drawer fires a set command on EVERY FRAME a slider is
+        // dragged, so dragging Volume for 2s at 60fps leaked ~120 refcounts.
+        template<typename AudioComp, typename AudioData>
+        void retargetAudioClips(AudioComp& comp, const AudioData& audioData) {
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+
+            if (audioData.audioRef.isValid()) {
+                lifecycle.acquire(audioData.audioRef.getGUID(), resource::AssetType::Audio);
+            }
+            for (const auto& variant : audioData.clipVariants) {
+                if (variant.isValid()) {
+                    lifecycle.acquire(variant.getGUID(), resource::AssetType::Audio);
+                }
+            }
+
+            if (comp.audioRef.isValid()) {
+                lifecycle.release(comp.audioRef.getGUID());
+            }
+            for (const auto& variant : comp.clipVariants) {
+                if (variant.isValid()) {
+                    lifecycle.release(variant.getGUID());
+                }
+            }
+
+            comp.audioRef = audioData.audioRef;
+            comp.clipVariants = audioData.clipVariants;
+        }
+
+        // VK-1520: releases the whole clip set when the component goes away.
+        template<typename AudioComp>
+        void releaseAudioClips(const AudioComp& comp) {
+            auto& lifecycle = resource::AssetLifecycleManager::instance();
+            if (comp.audioRef.isValid()) {
+                lifecycle.release(comp.audioRef.getGUID());
+            }
+            for (const auto& variant : comp.clipVariants) {
+                if (variant.isValid()) {
+                    lifecycle.release(variant.getGUID());
+                }
+            }
+        }
+    }
 
     AudioComponentService::AudioComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph)) {}
@@ -41,9 +99,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
             auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
-            if (comp.audioRef.isValid()) {
-                resource::AssetLifecycleManager::instance().release(comp.audioRef.getGUID());
-            }
+            releaseAudioClips(comp);
             sceneEntity.removeComponent<components::AudioSource2DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
                 components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Audio2D);
@@ -81,6 +137,11 @@ namespace services {
         data.pitch = comp.pitch;
         data.loop = comp.loop;
         data.busName = comp.busName;
+        data.fadeInMs = comp.fadeInMs;
+        data.clipVariants = comp.clipVariants;
+        data.playOrder = comp.playOrder;
+        data.pitchVariation = comp.pitchVariation;
+        data.volumeVariation = comp.volumeVariation;
         return data;
     }
 
@@ -96,18 +157,20 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::AudioSource2DComponent>();
-        auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (comp.audioRef.isValid() && comp.audioRef != audioData.audioRef) {
-            lifecycle.release(comp.audioRef.getGUID());
-        }
-        comp.audioRef = audioData.audioRef;
+        // Assigns audioRef + clipVariants and does the refcounting in one place.
+        retargetAudioClips(comp, audioData);
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
         comp.busName = audioData.busName;
-        if (audioData.audioRef.isValid()) {
-            lifecycle.acquire(audioData.audioRef.getGUID(), resource::AssetType::Audio);
-        }
+        comp.fadeInMs = audioData.fadeInMs;
+        comp.playOrder = audioData.playOrder;
+        comp.pitchVariation = audioData.pitchVariation;
+        comp.volumeVariation = audioData.volumeVariation;
+        // NOTE: lastVariant/playCount are deliberately NOT touched here. They are
+        // runtime state and are absent from the DTO — the drawer round-trips this
+        // whole struct every frame a slider is dragged, which would otherwise reset
+        // the round-robin cursor mid-drag.
         return true;
     }
 
@@ -137,9 +200,7 @@ namespace services {
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
             auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
-            if (comp.audioRef.isValid()) {
-                resource::AssetLifecycleManager::instance().release(comp.audioRef.getGUID());
-            }
+            releaseAudioClips(comp);
             sceneEntity.removeComponent<components::AudioSource3DComponent>();
             if (!sceneEntity.hasComponent<components::AudioSource2DComponent>()) {
                 components_helpers::autoDetachBillboard(entity, components::BillboardIconType::Audio3D);
@@ -183,11 +244,21 @@ namespace services {
         data.filterStartDistance = comp.filterStartDistance;
         data.filterMaxDistance = comp.filterMaxDistance;
         data.filterIntensity = comp.filterIntensity;
+        data.enableOcclusion = comp.enableOcclusion;
+        data.occlusionLpf = comp.occlusionLpf;
+        data.occlusionVolume = comp.occlusionVolume;
+        data.occlusionLayerMask = comp.occlusionLayerMask;
         data.innerConeAngle = comp.innerConeAngle;
         data.outerConeAngle = comp.outerConeAngle;
         data.outerConeGain = comp.outerConeGain;
         data.showDebugCone = comp.showDebugCone;
         data.busName = comp.busName;
+        data.priority = comp.priority;
+        data.fadeInMs = comp.fadeInMs;
+        data.clipVariants = comp.clipVariants;
+        data.playOrder = comp.playOrder;
+        data.pitchVariation = comp.pitchVariation;
+        data.volumeVariation = comp.volumeVariation;
         return data;
     }
 
@@ -203,11 +274,8 @@ namespace services {
         }
 
         auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
-        auto& lifecycle = resource::AssetLifecycleManager::instance();
-        if (comp.audioRef.isValid() && comp.audioRef != audioData.audioRef) {
-            lifecycle.release(comp.audioRef.getGUID());
-        }
-        comp.audioRef = audioData.audioRef;
+        // Assigns audioRef + clipVariants and does the refcounting in one place.
+        retargetAudioClips(comp, audioData);
         comp.volume = audioData.volume;
         comp.pitch = audioData.pitch;
         comp.loop = audioData.loop;
@@ -218,14 +286,46 @@ namespace services {
         comp.filterStartDistance = audioData.filterStartDistance;
         comp.filterMaxDistance = audioData.filterMaxDistance;
         comp.filterIntensity = audioData.filterIntensity;
+        comp.enableOcclusion = audioData.enableOcclusion;
+        comp.occlusionLpf = audioData.occlusionLpf;
+        comp.occlusionVolume = audioData.occlusionVolume;
+        comp.occlusionLayerMask = audioData.occlusionLayerMask;
         comp.innerConeAngle = audioData.innerConeAngle;
         comp.outerConeAngle = audioData.outerConeAngle;
         comp.outerConeGain = audioData.outerConeGain;
         comp.showDebugCone = audioData.showDebugCone;
         comp.busName = audioData.busName;
-        if (audioData.audioRef.isValid()) {
-            lifecycle.acquire(audioData.audioRef.getGUID(), resource::AssetType::Audio);
+        comp.priority = audioData.priority;
+        comp.fadeInMs = audioData.fadeInMs;
+        comp.playOrder = audioData.playOrder;
+        comp.pitchVariation = audioData.pitchVariation;
+        comp.volumeVariation = audioData.volumeVariation;
+        // NOTE: lastVariant/playCount are runtime state and absent from the DTO —
+        // see setAudioSource2DData.
+        return true;
+    }
+
+    bool AudioComponentService::setAudioSource3DDistances(EntityHandle entity,
+                                                          float minDistance,
+                                                          float maxDistance) {
+        if (!std::isfinite(minDistance) || !std::isfinite(maxDistance) ||
+            minDistance < 0.0f || maxDistance < minDistance) {
+            return false;
         }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry)) {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::AudioSource3DComponent>()) {
+            return false;
+        }
+
+        auto& comp = sceneEntity.getComponent<components::AudioSource3DComponent>();
+        comp.minDistance = minDistance;
+        comp.maxDistance = maxDistance;
         return true;
     }
 
@@ -349,6 +449,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::scene::SetAudioSource3DDataCommand>(
             [this](const events::scene::SetAudioSource3DDataCommand& cmd) {
                 return setAudioSource3DData(cmd.entity, cmd.audioData);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetAudioSource3DDistancesCommand>(
+            [this](const events::scene::SetAudioSource3DDistancesCommand& cmd) {
+                return setAudioSource3DDistances(cmd.entity, cmd.minDistance, cmd.maxDistance);
             });
 
         dispatcher.registerQueryHandler<events::scene::HasAudioSource3DComponentQuery>(

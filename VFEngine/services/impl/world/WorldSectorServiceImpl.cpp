@@ -215,6 +215,9 @@ namespace services
                             playCmd.minDistance = audioComp.minDistance;
                             playCmd.maxDistance = audioComp.maxDistance;
                             playCmd.busName = snap.busName;
+                            // VK-1513: sourced from the live component, like the distances
+                            // above — the component outlives the sector's audio playback.
+                            playCmd.priority = audioComp.priority;
                             newHandle = disp.execute(playCmd);
 
                             audioComp.activeHandle = newHandle;
@@ -352,6 +355,12 @@ namespace services
 
                     AudioSnapshot snap;
                     snap.is3D = is3D;
+                    // VK-1520: this captures the AUTHORED pitch/clip, not the variant
+                    // and jitter the voice is actually playing. Restoring is gated on
+                    // `wasPlaying && loop` below, and variation containers target
+                    // one-shots (loop == false), so it is unreachable in practice —
+                    // a looped Random container would resume on variant 0 at the
+                    // authored pitch after a sector reload.
                     snap.volume = audioComp.volume;
                     snap.pitch = audioComp.pitch;
                     snap.loop = audioComp.loop;

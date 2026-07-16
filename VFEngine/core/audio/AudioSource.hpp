@@ -33,6 +33,18 @@ namespace core::audio
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         glm::vec3 direction{0.0f, 0.0f, -1.0f};
+
+        // VK-1506 / VK-1518. These two joined the config late, and the reason they belong
+        // here rather than on their own setters is the invariant applyConfig now carries:
+        // it fully determines every AL property and CPU mirror on the source, so a pool
+        // slot cannot inherit anything from its previous tenant. Velocity was the hole —
+        // nothing reset AL_VELOCITY on recycle, so a fresh one-shot doppler-shifted at the
+        // dead emitter's speed. Occlusion had resetOcclusionState() at every choke point,
+        // which is the same idea spelled twice; the defaults below make it one.
+        glm::vec3 velocity{0.0f};
+        float occlusion = 0.0f;             // cut amounts, not gains: 0 == no cut
+        float occlusionLpfAmount = 0.0f;
+        float occlusionVolumeAmount = 0.0f;
     };
 
     class AudioSource
@@ -47,6 +59,23 @@ namespace core::audio
         float filterStartDistance = 10.0f;
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
+
+        // VK-1518 geometry occlusion. occlusionTarget is the last verdict pushed by
+        // SetSourceOcclusionCmd; currentOcclusion is its attack/release glide. The two
+        // amounts are CUT amounts at full occlusion (0 = inert), like filterIntensity —
+        // so 0 is the neutral value a pooled source resets to (see detachFilter).
+        float occlusionTarget = 0.0f;
+        float currentOcclusion = 0.0f;
+        float occlusionLpfAmount = 0.0f;
+        float occlusionVolumeAmount = 0.0f;
+
+        void resetOcclusionState();
+
+        // setOcclusion + land the glide on its target in one step, for a source whose
+        // occlusion is being RESTORED rather than newly observed. A revived voice was
+        // already muffled when it lost its slot, so gliding in from 0 over the attack time
+        // would swell it audibly through the wall it is supposed to be behind.
+        void settleOcclusion(float occlusion, float lpfAmount, float volumeAmount);
 
     public:
         explicit AudioSource();
@@ -85,6 +114,9 @@ namespace core::audio
         void setPosition(const glm::vec3& position);
         glm::vec3 getPosition() const;
 
+        // AL_VELOCITY for doppler (VK-1506). Set to 0 by VK-1505's follow loop.
+        void setVelocity(const glm::vec3& velocity);
+
         void set3D(bool is3D);
 
         void setMinDistance(float distance);
@@ -108,6 +140,12 @@ namespace core::audio
         void initFilter();
         void cleanUpFilter();
         void setDistanceFilterParams(bool enabled, float startDist, float maxDist, float intensity);
+
+        // VK-1518: latest geometry-occlusion verdict for this voice (0 = clear, 1 = blocked)
+        // plus the authored cut amounts. Pushed per-emitter from AudioSceneUpdater's raycast;
+        // the glide and the AL writes happen in updateDistanceFilter.
+        void setOcclusion(float occlusion, float lpfAmount, float volumeAmount);
+
         void updateDistanceFilter(float distance, float deltaTime);
         void detachFilter();
     };

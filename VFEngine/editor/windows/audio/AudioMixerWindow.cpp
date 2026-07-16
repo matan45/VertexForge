@@ -1,9 +1,24 @@
 #include "AudioMixerWindow.hpp"
+#include "AudioWidgets.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/audio/AudioBusEvents.hpp"
 #include "events/audio/AudioEffectEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <imgui.h>
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace
+{
+    // VK-1515: the dB floor, the colour thresholds and the drawing moved to
+    // windows/audio/AudioWidgets.hpp when the active-sounds overlay needed the same meter.
+    // They were file-local here, so a second window could not link to them at all. Only the
+    // strip geometry stays — it is specific to a mixer channel.
+    constexpr float kBusMeterWidth = 12.0f;
+    constexpr float kBusMeterHeight = 150.0f;
+}
 
 namespace windows
 {
@@ -33,6 +48,10 @@ namespace windows
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
+        drawDuckingSection();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
         drawEffectChainSection();
         ImGui::Spacing();
         ImGui::Separator();
@@ -47,11 +66,14 @@ namespace windows
     void AudioMixerWindow::drawBusChannels()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
-        if (busNames.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
+        const auto busLevels = dispatcher.query(events::audio::GetBusLevelsQuery{});
+        if (busLevels.empty()) { ImGui::TextDisabled("No audio buses configured"); return; }
 
-        for (size_t i = 0; i < busNames.size(); ++i) {
-            const auto& name = busNames[i];
+        ImGui::TextDisabled("Levels: estimated, pre-duck, pre-effects");
+
+        for (size_t i = 0; i < busLevels.size(); ++i) {
+            const auto& level = busLevels[i];
+            const auto& name = level.name;
             ImGui::BeginGroup();
             ImGui::PushID(static_cast<int>(i));
 
@@ -69,27 +91,148 @@ namespace windows
                 dispatcher.execute(cmd);
             }
             ImGui::PopItemWidth();
+            ImGui::SameLine();
+            const ImVec2 meterPos = ImGui::GetCursorScreenPos();
+            audiowidgets::drawVerticalMeter(meterPos, ImVec2(kBusMeterWidth, kBusMeterHeight),
+                                            level.rms, level.peakHold);
+            ImGui::Dummy(ImVec2(kBusMeterWidth, kBusMeterHeight));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Estimated detector level (pre-duck, pre-effects)\n"
+                                  "RMS envelope with bus gain and distance attenuation\n"
+                                  "Floor: -60 dB");
+            }
             ImGui::Text("%.0f%%", volume * 100.0f);
 
             events::audio::IsBusMutedQuery muteQuery; muteQuery.busName = name;
             bool muted = dispatcher.query(muteQuery);
             if (muted) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
             if (ImGui::Button("M", ImVec2(25, 20))) {
-                events::audio::SetBusMutedCommand cmd; cmd.busName = name; cmd.muted = !muted;
-                dispatcher.execute(cmd);
+                if (name == "Master") {
+                    events::editor::SetEditorAudioMutedCommand cmd;
+                    cmd.muted = !muted;
+                    dispatcher.execute(cmd);
+                } else {
+                    events::audio::SetBusMutedCommand cmd;
+                    cmd.busName = name; cmd.muted = !muted;
+                    dispatcher.execute(cmd);
+                }
             }
             if (muted) ImGui::PopStyleColor();
 
             ImGui::SameLine();
+            events::audio::IsBusSoloedQuery soloQuery; soloQuery.busName = name;
+            bool soloed = dispatcher.query(soloQuery);
+            if (soloed) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.65f, 0.15f, 1.0f));
             if (ImGui::Button("S", ImVec2(25, 20))) {
-                events::audio::SetBusSoloedCommand cmd; cmd.busName = name; cmd.soloed = true;
+                events::audio::SetBusSoloedCommand cmd; cmd.busName = name; cmd.soloed = !soloed;
                 dispatcher.execute(cmd);
             }
+            if (soloed) ImGui::PopStyleColor();
+
+            events::audio::GetBusDuckQuery duckQuery;
+            duckQuery.targetBus = name;
+            const auto duckConfig = dispatcher.query(duckQuery);
+            ImGui::TextDisabled("Duck by...");
+            ImGui::PushItemWidth(80.0f);
+            const char* duckPreview = duckConfig ? duckConfig->sourceBus.c_str() : "None";
+            if (ImGui::BeginCombo("##duckSource", duckPreview)) {
+                const bool noDuck = !duckConfig;
+                if (ImGui::Selectable("None", noDuck) && duckConfig) {
+                    events::audio::RemoveBusDuckCommand cmd;
+                    cmd.targetBus = name;
+                    dispatcher.execute(cmd);
+                }
+                if (noDuck) ImGui::SetItemDefaultFocus();
+
+                for (const auto& sourceLevel : busLevels) {
+                    if (sourceLevel.name == name) continue;
+                    const bool selected = duckConfig
+                        && duckConfig->sourceBus == sourceLevel.name;
+                    if (ImGui::Selectable(sourceLevel.name.c_str(), selected)) {
+                        types::BusDuckConfig config = duckConfig.value_or(types::BusDuckConfig{});
+                        config.sourceBus = sourceLevel.name;
+                        events::audio::SetBusDuckCommand cmd;
+                        cmd.targetBus = name;
+                        cmd.config = std::move(config);
+                        dispatcher.execute(cmd);
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
 
             ImGui::PopID();
             ImGui::EndGroup();
-            if (i < busNames.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
+            if (i < busLevels.size() - 1) { ImGui::SameLine(); ImGui::Dummy(ImVec2(10, 0)); ImGui::SameLine(); }
         }
+    }
+
+    void AudioMixerWindow::drawDuckingSection()
+    {
+        if (selectedBusName.empty()) {
+            ImGui::TextDisabled("Select a bus to edit its ducking");
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::audio::GetBusDuckQuery query;
+        query.targetBus = selectedBusName;
+        const auto storedConfig = dispatcher.query(query);
+
+        ImGui::Text("Ducking: %s", selectedBusName.c_str());
+        if (!storedConfig) {
+            ImGui::TextDisabled("Choose a source from the strip's 'Duck by...' selector");
+            return;
+        }
+
+        types::BusDuckConfig config = *storedConfig;
+        bool changed = false;
+        const auto busNames = dispatcher.query(events::audio::GetBusNamesQuery{});
+
+        ImGui::PushItemWidth(180.0f);
+        if (ImGui::BeginCombo("Source Bus", config.sourceBus.c_str())) {
+            for (const auto& sourceName : busNames) {
+                if (sourceName == selectedBusName) continue;
+                const bool selected = sourceName == config.sourceBus;
+                if (ImGui::Selectable(sourceName.c_str(), selected)) {
+                    config.sourceBus = sourceName;
+                    changed = true;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        changed |= ImGui::SliderFloat("Threshold", &config.thresholdDb,
+                                      types::kBusDuckMinThresholdDb,
+                                      types::kBusDuckMaxThresholdDb, "%.1f dB");
+        changed |= ImGui::SliderFloat("Reduction", &config.amountDb,
+                                      types::kBusDuckMinAmountDb,
+                                      types::kBusDuckMaxAmountDb, "%.1f dB");
+        changed |= ImGui::DragFloat("Attack", &config.attackMs, 1.0f,
+                                    types::kBusDuckMinTimeMs,
+                                    types::kBusDuckMaxTimeMs, "%.0f ms");
+        changed |= ImGui::DragFloat("Release", &config.releaseMs, 1.0f,
+                                    types::kBusDuckMinTimeMs,
+                                    types::kBusDuckMaxTimeMs, "%.0f ms");
+        ImGui::PopItemWidth();
+
+        if (changed) {
+            events::audio::SetBusDuckCommand cmd;
+            cmd.targetBus = selectedBusName;
+            cmd.config = std::move(config);
+            dispatcher.execute(cmd);
+        }
+
+        if (ImGui::Button("Remove Ducking")) {
+            events::audio::RemoveBusDuckCommand cmd;
+            cmd.targetBus = selectedBusName;
+            dispatcher.execute(cmd);
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("Runtime only; removal follows the configured release");
     }
 
     void AudioMixerWindow::drawEffectChainSection()
@@ -136,11 +279,11 @@ namespace windows
 
             if (ImGui::TreeNode("Parameters")) {
                 switch (effect.type) {
-                case types::AudioEffectType::Reverb:    drawReverbEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::EQ:        drawEQEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Compressor: drawCompressorEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Echo:      drawEchoEditor(selectedBusName, effect.id); break;
-                case types::AudioEffectType::Chorus:    drawChorusEditor(selectedBusName, effect.id); break;
+                case types::AudioEffectType::Reverb:    drawReverbEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::EQ:        drawEQEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Compressor: drawCompressorEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Echo:      drawEchoEditor(selectedBusName, effect); break;
+                case types::AudioEffectType::Chorus:    drawChorusEditor(selectedBusName, effect); break;
                 }
                 ImGui::TreePop();
             }
@@ -162,7 +305,8 @@ namespace windows
         else if (maxEffects == 0) { ImGui::TextDisabled("EFX not available"); }
     }
 
-    void AudioMixerWindow::drawReverbEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawReverbEditor(const std::string& busName,
+                                             const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
         static std::vector<std::string> presetNames = {
@@ -171,17 +315,27 @@ namespace windows
             "Hallway", "Forest", "City", "Mountains", "Underwater",
             "Chapel", "Castle Hall", "Factory Hall"};
 
-        static int selectedPreset = 0;
+        const auto* storedParams = std::get_if<types::ReverbParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid reverb parameters");
+            return;
+        }
+
+        const std::string& currentPreset = storedParams->presetName.empty()
+            ? presetNames.front()
+            : storedParams->presetName;
         ImGui::PushItemWidth(200);
-        if (ImGui::BeginCombo("Preset##rv", presetNames[selectedPreset].c_str())) {
+        if (ImGui::BeginCombo("Preset##rv", currentPreset.c_str())) {
             for (int i = 0; i < static_cast<int>(presetNames.size()); ++i) {
-                bool isSelected = (selectedPreset == i);
+                bool isSelected = presetNames[i] == currentPreset;
                 if (ImGui::Selectable(presetNames[i].c_str(), isSelected)) {
-                    selectedPreset = i;
-                    types::BusEffectConfig config; config.id = effectId; config.type = types::AudioEffectType::Reverb;
-                    types::ReverbParams params; params.presetName = presetNames[i]; config.params = params;
+                    types::BusEffectConfig config = effect;
+                    types::ReverbParams params = *storedParams;
+                    params.presetName = presetNames[i];
+                    config.params = std::move(params);
                     events::audio::UpdateBusEffectCommand cmd;
-                    cmd.busName = busName; cmd.effectId = effectId; cmd.config = config;
+                    cmd.busName = busName; cmd.effectId = effect.id; cmd.config = std::move(config);
                     dispatcher.execute(cmd);
                 }
                 if (isSelected) ImGui::SetItemDefaultFocus();
@@ -192,12 +346,19 @@ namespace windows
         ImGui::TextDisabled("Use presets to configure reverb parameters");
     }
 
-    void AudioMixerWindow::drawEQEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawEQEditor(const std::string& busName,
+                                         const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // EQ band controls
-        static types::EQParams eqParams;
+        const auto* storedParams = std::get_if<types::EQParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid EQ parameters");
+            return;
+        }
+
+        types::EQParams eqParams = *storedParams;
 
         bool changed = false;
         ImGui::PushItemWidth(150);
@@ -215,44 +376,56 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::EQ;
+            types::BusEffectConfig config = effect;
             config.params = eqParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawCompressorEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawCompressorEditor(const std::string& busName,
+                                                 const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static bool compOn = true;
+        const auto* storedParams = std::get_if<types::CompressorParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid compressor parameters");
+            return;
+        }
+
+        bool compOn = storedParams->onOff;
         if (ImGui::Checkbox("Compressor On", &compOn))
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Compressor;
+            types::BusEffectConfig config = effect;
             config.params = types::CompressorParams{compOn};
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawEchoEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawEchoEditor(const std::string& busName,
+                                           const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static types::EchoParams echoParams;
+        const auto* storedParams = std::get_if<types::EchoParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid echo parameters");
+            return;
+        }
+
+        types::EchoParams echoParams = *storedParams;
         bool changed = false;
 
         ImGui::PushItemWidth(150);
@@ -265,24 +438,30 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Echo;
+            types::BusEffectConfig config = effect;
             config.params = echoParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }
 
-    void AudioMixerWindow::drawChorusEditor(const std::string& busName, uint32_t effectId)
+    void AudioMixerWindow::drawChorusEditor(const std::string& busName,
+                                             const types::BusEffectConfig& effect)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        static types::ChorusParams chorusParams;
+        const auto* storedParams = std::get_if<types::ChorusParams>(&effect.params);
+        if (!storedParams)
+        {
+            ImGui::TextDisabled("Invalid chorus parameters");
+            return;
+        }
+
+        types::ChorusParams chorusParams = *storedParams;
         bool changed = false;
 
         ImGui::PushItemWidth(150);
@@ -299,15 +478,13 @@ namespace windows
 
         if (changed)
         {
-            types::BusEffectConfig config;
-            config.id = effectId;
-            config.type = types::AudioEffectType::Chorus;
+            types::BusEffectConfig config = effect;
             config.params = chorusParams;
 
             events::audio::UpdateBusEffectCommand cmd;
             cmd.busName = busName;
-            cmd.effectId = effectId;
-            cmd.config = config;
+            cmd.effectId = effect.id;
+            cmd.config = std::move(config);
             dispatcher.execute(cmd);
         }
     }

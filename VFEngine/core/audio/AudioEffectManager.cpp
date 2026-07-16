@@ -66,6 +66,7 @@ namespace core::audio
         entry.type = config.type;
         entry.enabled = config.enabled;
         entry.wetDryMix = config.wetDryMix;
+        entry.params = config.params;
 
         applyEffectParams(effect, config);
 
@@ -132,6 +133,7 @@ namespace core::audio
             AudioSystem::checkError("updateEffectParams re-attach");
         }
 
+        entry->params = config.params;
         return true;
     }
 
@@ -238,7 +240,7 @@ namespace core::audio
             config.type = slot.type;
             config.enabled = slot.enabled;
             config.wetDryMix = slot.wetDryMix;
-            config.params = types::BusEffectConfig::createDefault(slot.type).params;
+            config.params = slot.params;
             result.push_back(config);
         }
         return result;

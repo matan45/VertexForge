@@ -120,6 +120,12 @@ namespace windows
 
             overlay.draw(gizmo);
             gizmo.draw(*editorCamera);
+            const bool attenuationViewportAvailable =
+                texture.isValid() && vs.x > 0.0f && vs.y > 0.0f;
+            audioAttenuationGizmo.draw(
+                *editorCamera, picker, vp, vs, attenuationViewportAvailable, isPlayMode,
+                isHovered, isFocused, cameraLookActive);
+            const bool attenuationGizmoConsumesMouse = audioAttenuationGizmo.wantsMouseCapture();
 
             if (!isPlayMode)
             {
@@ -128,8 +134,9 @@ namespace windows
                 drawSelectedUIOutline(vp, vs);
             }
 
-            handleEntityPicking(isPlayMode, vp, vs);
-            selector.update(picker, *editorCamera, isPlayMode, vp, vs);
+            handleEntityPicking(isPlayMode, vp, vs, attenuationGizmoConsumesMouse);
+            selector.update(picker, *editorCamera, isPlayMode, vp, vs,
+                            audioAttenuationGizmo.isDragging());
             handleSculptBrush();
             handlePaintBrush();
             handleHoleBrush();
@@ -439,9 +446,11 @@ namespace windows
         ImGui::EndDragDropTarget();
     }
 
-    void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize)
+    void ViewPort::handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos,
+                                       glm::vec2 viewportSize, bool customGizmoConsumesMouse)
     {
         if (isPlayMode) return;
+        if (customGizmoConsumesMouse) return;
 
         auto& sculptDispatcher = events::EventDispatcher::instance();
         if (sculptDispatcher.query(events::sculpt::IsSculptModeActiveQuery{})) return;

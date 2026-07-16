@@ -5,6 +5,7 @@
 namespace core::audio {
 
     bool AudioSystem::s_efxAvailable = false;
+    bool AudioSystem::s_spatializeAvailable = false;
     LPALGENFILTERS AudioSystem::alGenFilters = nullptr;
     LPALDELETEFILTERS AudioSystem::alDeleteFilters = nullptr;
     LPALFILTERI AudioSystem::alFilteri = nullptr;
@@ -58,6 +59,15 @@ namespace core::audio {
 
         alDistanceModel(AL_INVERSE_DISTANCE_CLAMPED);
 
+        // AL (not ALC) extension — queried without a device argument. When present,
+        // 3D sources force AL_SOURCE_SPATIALIZE_SOFT so stereo/multichannel clips are
+        // downmixed and spatialized instead of silently playing un-spatialized.
+        spatializeSupported = alIsExtensionPresent("AL_SOFT_source_spatialize") == AL_TRUE;
+        if (!spatializeSupported)
+        {
+            vfLogWarning("OpenAL AL_SOFT_source_spatialize not available - stereo 3D clips won't spatialize (force-mono import recommended)");
+        }
+
         efxSupported = alcIsExtensionPresent(device, "ALC_EXT_EFX") == ALC_TRUE;
         if (efxSupported)
         {
@@ -110,6 +120,30 @@ namespace core::audio {
             vfLogWarning("OpenAL EFX extension not available - distance filtering disabled");
         }
         s_efxAvailable = efxSupported;
+        s_spatializeAvailable = spatializeSupported;
+
+        // VK-1508: HRTF is an ALC (device-scope) extension — detect with the device arg, and
+        // load alcResetDeviceSOFT dynamically since AL_ALEXT_PROTOTYPES is not defined here.
+        hrtfSupported = alcIsExtensionPresent(device, "ALC_SOFT_HRTF") == ALC_TRUE;
+        if (hrtfSupported)
+        {
+            alcResetDeviceSOFT = reinterpret_cast<LPALCRESETDEVICESOFT>(alcGetProcAddress(device, "alcResetDeviceSOFT"));
+            if (!alcResetDeviceSOFT)
+            {
+                hrtfSupported = false;
+                vfLogWarning("ALC_SOFT_HRTF present but alcResetDeviceSOFT failed to load - HRTF toggle disabled");
+            }
+        }
+        if (hrtfSupported)
+        {
+            ALCint status = ALC_HRTF_DISABLED_SOFT;
+            alcGetIntegerv(device, ALC_HRTF_STATUS_SOFT, 1, &status);
+            hrtfStatus.store(status, std::memory_order_relaxed);
+        }
+        else
+        {
+            vfLogWarning("OpenAL ALC_SOFT_HRTF not available - binaural output toggle disabled");
+        }
 
         initialized = true;
 
@@ -284,8 +318,26 @@ namespace core::audio {
         setDistanceModel(settings.distanceModel);
         currentSettings.defaultRolloffFactor = settings.defaultRolloffFactor;
 
-        vfLogInfo("Audio settings applied - Master Volume: {}, Doppler: {}, Speed of Sound: {}",
-            settings.masterVolume, settings.dopplerFactor, settings.speedOfSound);
+        // VK-1508: live HRTF toggle. Change-gated so an unrelated Apply doesn't re-init the
+        // device; hrtfApplied forces the first apply to honor the setting even when it equals
+        // the default (OpenAL-soft may auto-enable HRTF otherwise). alcResetDeviceSOFT preserves
+        // the context, sources, buffers and EFX effect slots, so reverb/bus setup survives.
+        if (hrtfSupported && (!hrtfApplied || settings.enableHrtf != currentSettings.enableHrtf))
+        {
+            const ALCint attrs[] = { ALC_HRTF_SOFT, settings.enableHrtf ? ALC_TRUE : ALC_FALSE, 0 };
+            if (alcResetDeviceSOFT(device, attrs) == ALC_FALSE)
+            {
+                vfLogWarning("alcResetDeviceSOFT failed while toggling HRTF");
+            }
+            ALCint status = ALC_HRTF_DISABLED_SOFT;
+            alcGetIntegerv(device, ALC_HRTF_STATUS_SOFT, 1, &status);
+            hrtfStatus.store(status, std::memory_order_relaxed);
+            hrtfApplied = true;
+        }
+        currentSettings.enableHrtf = settings.enableHrtf;
+
+        vfLogInfo("Audio settings applied - Master Volume: {}, Doppler: {}, Speed of Sound: {}, HRTF: {}",
+            settings.masterVolume, settings.dopplerFactor, settings.speedOfSound, settings.enableHrtf);
     }
 
 }

@@ -1,5 +1,6 @@
 #include "EditorSettingsService.hpp"
 #include "../../events/editor/EditorSettingsEvents.hpp"
+#include "../../events/audio/AudioBusEvents.hpp"
 #include "config/EditorPreferencesSerializer.hpp"
 #include "print/Log.hpp"
 #include <fstream>
@@ -34,8 +35,37 @@ namespace services
             {
                 std::lock_guard<std::mutex> lock(settingsMutex);
                 ensureLoaded();
+                // Captured AFTER ensureLoaded and BEFORE the assignment below: ensureLoaded
+                // overwrites currentSettings from disk, so reading the old mute any earlier
+                // compares against a value that is about to be thrown away.
+                const bool wasMuted = currentSettings.audio.globalMuted;
                 currentSettings = cmd.settings;
-                applyLogLevel(currentSettings.debug.logLevel);
+                applyRuntimeSettings();
+                // Only when the PREFERENCE changed. The Master bus is shared — a mix
+                // snapshot or a script may own its mute right now — so re-asserting a
+                // value the user did not touch, every time an unrelated preference is
+                // saved, silently un-mutes audio something else deliberately silenced.
+                if (currentSettings.audio.globalMuted != wasMuted)
+                    applyGlobalMute();
+                save();
+                notifySettingsChanged();
+                return true;
+            });
+
+        dispatcher.registerCommandHandler<::events::editor::SetEditorAudioMutedCommand>(
+            [this](const ::events::editor::SetEditorAudioMutedCommand& cmd)
+            {
+                std::lock_guard<std::mutex> lock(settingsMutex);
+                ensureLoaded();
+                currentSettings.audio.globalMuted = cmd.muted;
+                applyRuntimeSettings();
+                // Unconditional, deliberately — this is the ONE command that is about the
+                // mute, so the user pressing the toolbar toggle must always reach the bus.
+                // EngineToolbar reads the LIVE bus to draw itself but writes the PREFERENCE,
+                // so the two can legitimately disagree: if a script muted Master while the
+                // preference already said muted, a change-gate here would make the unmute
+                // button do nothing at all.
+                applyGlobalMute();
                 save();
                 notifySettingsChanged();
                 return true;
@@ -54,7 +84,13 @@ namespace services
             [this](const ::events::editor::ResetEditorSettingsCommand&)
             {
                 std::lock_guard<std::mutex> lock(settingsMutex);
+                const bool wasMuted = currentSettings.audio.globalMuted;
                 currentSettings = config::EditorPreferences::createDefault();
+                applyRuntimeSettings();
+                // Same rule as SetEditorSettingsCommand: resetting preferences is not a
+                // statement about a Master mute somebody else owns.
+                if (currentSettings.audio.globalMuted != wasMuted)
+                    applyGlobalMute();
                 save();
                 notifySettingsChanged();
                 return true;
@@ -73,6 +109,11 @@ namespace services
             {
                 return getSettingsPath();
             });
+
+        // Audio handlers are registered before editor settings during bootstrap, so
+        // applying persisted runtime preferences here is safe and does not depend on UI.
+        std::lock_guard<std::mutex> lock(settingsMutex);
+        ensureLoaded();
     }
 
     void EditorSettingsService::ensureLoaded()
@@ -80,12 +121,21 @@ namespace services
         if (loaded) return;
         loaded = true;
 
-        std::string path = getSettingsPath();
-        if (path.empty()) return;
+        // Startup is the one place the preference legitimately asserts onto the Master bus:
+        // nothing else has had a chance to speak for it yet, so there is nothing to clobber.
+        const std::string path = getSettingsPath();
+        if (path.empty())
+        {
+            applyRuntimeSettings();
+            applyGlobalMute();
+            return;
+        }
 
         if (!std::filesystem::exists(path))
         {
             save();
+            applyRuntimeSettings();
+            applyGlobalMute();
             return;
         }
 
@@ -99,14 +149,28 @@ namespace services
 
             if (!j.is_null())
                 currentSettings = j.get<config::EditorPreferences>();
-
-            applyLogLevel(currentSettings.debug.logLevel);
         }
         catch (const std::exception& e)
         {
             vfLogWarning("[EditorSettingsService] Failed to load settings: {}", e.what());
             currentSettings = config::EditorPreferences::createDefault();
         }
+
+        applyRuntimeSettings();
+        applyGlobalMute();
+    }
+
+    void EditorSettingsService::applyRuntimeSettings()
+    {
+        applyLogLevel(currentSettings.debug.logLevel);
+    }
+
+    void EditorSettingsService::applyGlobalMute()
+    {
+        ::events::audio::SetBusMutedCommand muteCommand;
+        muteCommand.busName = "Master";
+        muteCommand.muted = currentSettings.audio.globalMuted;
+        ::events::EventDispatcher::instance().execute(muteCommand);
     }
 
     void EditorSettingsService::save()

@@ -30,11 +30,36 @@ namespace core::audio
     struct SetVolumeCmd { AudioHandle handle; float volume; };
     struct SetPitchCmd { AudioHandle handle; float pitch; };
 
+    // Per-frame re-sync of a playing 3D source's transform (VK-1505: sounds follow
+    // moving entities). velocity is plumbed for VK-1506 doppler but dispatched as 0 today.
+    struct SetSourceTransformCmd
+    {
+        AudioHandle handle;
+        glm::vec3 position;
+        glm::vec3 direction;
+        glm::vec3 velocity;
+    };
+
+    // VK-1518: latest geometry-occlusion verdict for a playing 3D source, plus the authored
+    // cut amounts. Deliberately NOT folded into SetSourceTransformCmd: that command is
+    // dirty-gated on movement, so a stationary emitter behind a closing door would never
+    // re-dispatch. The two cadences are also different (transform: per-frame when moving;
+    // occlusion: ~10 Hz round-robin). occlusion is 0 (clear) .. 1 (blocked); the amounts are
+    // cut amounts at full occlusion (0 = inert), matching AudioSource3DComponent.
+    struct SetSourceOcclusionCmd
+    {
+        AudioHandle handle;
+        float occlusion;
+        float lpfAmount;
+        float volumeAmount;
+    };
+
     struct SetListenerCmd
     {
         glm::vec3 position;
         glm::vec3 forward;
         glm::vec3 up;
+        glm::vec3 velocity;  // VK-1506 doppler (0 on the editor path)
     };
 
     struct SetPlaybackPosCmd
@@ -49,6 +74,8 @@ namespace core::audio
     struct BusMuteCmd { std::string busName; bool muted; };
     struct BusSoloCmd { std::string busName; bool soloed; };
     struct CreateBusCmd { std::string name; std::string parentName; };
+    struct SetBusDuckCmd { std::string targetBus; types::BusDuckConfig config; };
+    struct RemoveBusDuckCmd { std::string targetBus; };
 
     struct AddBusEffectCmd
     {
@@ -90,15 +117,22 @@ namespace core::audio
     struct FadeOutAndReleaseCmd { AudioHandle handle; float fadeDurationMs = 300.0f; };
     struct StopAllCmd {};
     struct ShutdownCmd {};
+    // VK-1515: gates the active-sounds overlay's per-voice capture. A command rather than a
+    // direct atomic store so the audio thread owns the accumulator and row reset, like every
+    // other mutation of its state.
+    struct SetVoiceDebugCmd { bool enabled; };
 
     using AudioCommand = std::variant<
         PlaySoundCmd, StopSoundCmd, PauseSoundCmd, ResumeSoundCmd,
-        SetVolumeCmd, SetPitchCmd, SetListenerCmd, SetPlaybackPosCmd,
+        SetVolumeCmd, SetPitchCmd, SetSourceTransformCmd, SetSourceOcclusionCmd,
+        SetListenerCmd, SetPlaybackPosCmd,
         ApplySettingsCmd, BusVolumeCmd, BusMuteCmd, BusSoloCmd, CreateBusCmd,
+        SetBusDuckCmd, RemoveBusDuckCmd,
         AddBusEffectCmd, RemoveBusEffectCmd, UpdateBusEffectCmd,
         SetBusEffectEnabledCmd, SetBusEffectWetDryCmd,
         LoadSnapshotCmd, SaveSnapshotCmd, DeleteSnapshotCmd,
-        UnloadBufferCmd, FadeOutAndReleaseCmd, StopAllCmd, ShutdownCmd
+        UnloadBufferCmd, FadeOutAndReleaseCmd, StopAllCmd, ShutdownCmd,
+        SetVoiceDebugCmd
     >;
 
     class AudioCommandQueue

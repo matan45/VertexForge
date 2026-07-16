@@ -17,11 +17,11 @@ namespace core::audio
         types::AudioEffectType type = types::AudioEffectType::Reverb;
         bool enabled = true;
         float wetDryMix = 1.0f;
+        decltype(types::BusEffectConfig::params) params;
     };
 
-    // All methods must be called from the thread owning the OpenAL context (main thread).
-    // OpenAL EFX calls are not thread-safe; the engine enforces this by dispatching
-    // all audio commands synchronously on the main thread via CQRS event handlers.
+    // Mutating methods must be called from the dedicated thread that owns the OpenAL context.
+    // Reads are externally synchronized by AudioBusManager's bus mutex.
     class AudioEffectManager
     {
     public:

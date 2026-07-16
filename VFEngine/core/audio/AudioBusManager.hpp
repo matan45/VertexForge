@@ -1,5 +1,7 @@
 #pragma once
 #include "AudioSourceManager.hpp"
+#include "BusDucking.hpp"
+#include "BusMetering.hpp"
 #include "types/AudioTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
 #include <AL/al.h>
@@ -8,7 +10,9 @@
 #include <unordered_map>
 #include <map>
 #include <functional>
+#include <optional>
 #include <shared_mutex>
+#include <span>
 
 namespace core::audio
 {
@@ -21,6 +25,11 @@ namespace core::audio
         bool muted = false;
         bool soloed = false;
         float effectiveVolume = 1.0f;
+        std::optional<types::BusDuckConfig> duckConfig;
+        uint32_t duckSourceBusId = 0;
+        ducking::DuckEnvelope duckEnvelope;
+        float duckGain = 1.0f;
+        float duckReleaseMs = types::BusDuckConfig{}.releaseMs;
         std::vector<uint32_t> childIds;
     };
 
@@ -40,6 +49,12 @@ namespace core::audio
         AudioHandle handle = 0;
         uint32_t busId = 0;
         float userVolume = 1.0f;
+    };
+
+    struct SourceMeterSample
+    {
+        AudioHandle handle = 0;
+        float dryRms = 0.0f;
     };
 
     namespace BusNames
@@ -69,22 +84,37 @@ namespace core::audio
         AudioBus* getBusByName(const std::string& name);
         uint32_t getBusIdByName(const std::string& name) const;
         std::vector<std::string> getBusNames() const;
+        std::vector<types::AudioBusLevel> getBusLevels() const;
 
         // Bus controls
         void setBusVolume(const std::string& name, float volume);
         void setBusMuted(const std::string& name, bool muted);
         void setBusSoloed(const std::string& name, bool soloed);
         float getBusVolume(const std::string& name) const;
+        // VK-1513: the bus's volume with the whole parent chain and mute/solo already
+        // folded in — i.e. the multiplier that flushDirtyVolumes() pushes into AL_GAIN.
+        // Lets the voice policy score an incoming sound on the same footing as live ones,
+        // whose AL_GAIN already carries it. Returns 1.0 for an unknown bus.
+        float getBusEffectiveVolume(const std::string& name) const;
         bool isBusMuted(const std::string& name) const;
         bool isBusSoloed(const std::string& name) const;
 
+        // Sidechain ducking. Mutations run on the audio thread; getBusDuck() is a
+        // cross-thread value read protected by busMutex.
+        bool setBusDuck(const std::string& targetBus, const types::BusDuckConfig& config);
+        bool removeBusDuck(const std::string& targetBus);
+        std::optional<types::BusDuckConfig> getBusDuck(const std::string& targetBus) const;
+
         // Source-to-bus assignment
         void assignSource(AudioHandle handle, const std::string& busName, float userVolume);
+        void detachSourceRouting(AudioHandle handle);
         void removeSource(AudioHandle handle);
         void setSourceUserVolume(AudioHandle handle, float volume);
 
         // Call once per frame to flush deferred volume recalculations
+        void updateDucking(float deltaTime);
         void flushDirtyVolumes();
+        void updateBusMeters(std::span<const SourceMeterSample> samples, float deltaTime);
 
         // Snapshots
         void saveSnapshot(const std::string& name);
@@ -113,6 +143,8 @@ namespace core::audio
         void recalculateEffectiveVolumes();
         void recalculateBusEffective(AudioBus& bus, float parentEffective, bool parentMuted, bool anySoloed);
         void applyEffectiveVolumesToSources();
+        void replaceBusEffectChainLocked(uint32_t busId,
+                                         const std::vector<types::BusEffectConfig>& chain);
 
         mutable std::shared_mutex busMutex;
 
@@ -126,5 +158,11 @@ namespace core::audio
         AudioEffectManager* effectManager = nullptr;
         ReverbZoneManager* reverbZoneManager = nullptr;
         bool volumesDirty = false;
+
+        // VK-1514: protected by busMutex alongside the topology and tracked routing.
+        std::vector<metering::Entry> meterEntries;
+        std::vector<metering::BusNode> meterNodesScratch;
+        std::vector<float> directPowerScratch;
+        std::vector<float> meterRmsScratch;
     };
 }

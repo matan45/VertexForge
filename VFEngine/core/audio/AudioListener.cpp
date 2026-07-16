@@ -26,4 +26,10 @@ namespace core::audio {
         AudioSystem::checkError("setListenerOrientation");
     }
 
+    void AudioListener::setVelocity(const glm::vec3& velocity) {
+        currentVelocity = velocity;
+        alListener3f(AL_VELOCITY, velocity.x, velocity.y, velocity.z);
+        AudioSystem::checkError("setListenerVelocity");
+    }
+
 }

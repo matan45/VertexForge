@@ -1,0 +1,190 @@
+#include <doctest.h>
+#include <math/TransformUtils.hpp>
+#include <glm/glm.hpp>
+#include <cmath>
+
+// ============================================================
+// VK-1505: shared spatial-audio helpers extracted into math/TransformUtils.hpp.
+//
+//   * forwardFromEulerDegrees — the engine's -Z-forward vector from an Euler
+//     rotation (x = pitch, y = yaw) in degrees. Single source of truth for
+//     AudioAPI (play-time source direction) and AudioSceneUpdater (per-frame
+//     emitter follow + listener forward).
+//   * positionMovedBeyond — squared-distance dirty-check that gates per-frame
+//     re-dispatch of a moving 3D source's transform.
+//
+// CPU-only: no OpenAL device, no EnTT registry — the helpers are pure.
+// ============================================================
+
+namespace
+{
+    constexpr float kEps = 1e-4f;
+
+    bool approxVec(const glm::vec3& a, const glm::vec3& b, float eps = kEps)
+    {
+        return std::abs(a.x - b.x) < eps && std::abs(a.y - b.y) < eps &&
+               std::abs(a.z - b.z) < eps;
+    }
+
+    // The inline formula that lived — byte-for-byte identical — in AudioAPI.cpp and
+    // AudioSceneUpdater.cpp before the extraction. Retained here so the refactor can be
+    // proven behaviour-preserving.
+    glm::vec3 legacyForward(const glm::vec3& rotationDeg)
+    {
+        const float yawRad = glm::radians(rotationDeg.y);
+        const float pitchRad = glm::radians(rotationDeg.x);
+        glm::vec3 forward;
+        forward.x = -std::sin(yawRad) * std::cos(pitchRad);
+        forward.y = std::sin(pitchRad);
+        forward.z = -std::cos(yawRad) * std::cos(pitchRad);
+        return glm::normalize(forward);
+    }
+}
+
+TEST_SUITE("AudioSpatial")
+{
+    TEST_CASE("forwardFromEulerDegrees: cardinal directions")
+    {
+        CHECK(approxVec(math::forwardFromEulerDegrees(glm::vec3(0.0f, 0.0f, 0.0f)),
+                        glm::vec3(0.0f, 0.0f, -1.0f)));
+        CHECK(approxVec(math::forwardFromEulerDegrees(glm::vec3(0.0f, 90.0f, 0.0f)),
+                        glm::vec3(-1.0f, 0.0f, 0.0f)));
+        CHECK(approxVec(math::forwardFromEulerDegrees(glm::vec3(0.0f, 180.0f, 0.0f)),
+                        glm::vec3(0.0f, 0.0f, 1.0f)));
+        CHECK(approxVec(math::forwardFromEulerDegrees(glm::vec3(0.0f, -90.0f, 0.0f)),
+                        glm::vec3(1.0f, 0.0f, 0.0f)));
+        CHECK(approxVec(math::forwardFromEulerDegrees(glm::vec3(90.0f, 0.0f, 0.0f)),
+                        glm::vec3(0.0f, 1.0f, 0.0f)));
+    }
+
+    TEST_CASE("forwardFromEulerDegrees: result is unit length")
+    {
+        const glm::vec3 f = math::forwardFromEulerDegrees(glm::vec3(37.0f, 200.0f, 0.0f));
+        CHECK(std::abs(glm::length(f) - 1.0f) < 1e-4f);
+    }
+
+    TEST_CASE("forwardFromEulerDegrees: matches the original inline formula (refactor guard)")
+    {
+        const glm::vec3 samples[] = {
+            {0.0f, 0.0f, 0.0f},   {12.0f, 34.0f, 0.0f},   {-45.0f, 120.0f, 0.0f},
+            {80.0f, -175.0f, 0.0f}, {37.0f, 200.0f, 0.0f}, {-60.0f, -300.0f, 0.0f},
+        };
+        for (const auto& r : samples)
+        {
+            CHECK(approxVec(math::forwardFromEulerDegrees(r), legacyForward(r)));
+        }
+    }
+
+    TEST_CASE("positionMovedBeyond: epsilon dirty-check")
+    {
+        constexpr float eps = 1e-3f;
+        const glm::vec3 a(1.0f, 2.0f, 3.0f);
+
+        // Identical / below-epsilon delta -> not moved.
+        CHECK_FALSE(math::positionMovedBeyond(a, a, eps));
+        CHECK_FALSE(math::positionMovedBeyond(a, a + glm::vec3(5e-4f, 0.0f, 0.0f), eps));
+
+        // Above-epsilon on a single axis -> moved.
+        CHECK(math::positionMovedBeyond(a, a + glm::vec3(2e-3f, 0.0f, 0.0f), eps));
+
+        // Euclidean, not per-axis: each component < eps but |d| ~= 1.39e-3 > eps.
+        CHECK(math::positionMovedBeyond(a, a + glm::vec3(8e-4f, 8e-4f, 8e-4f), eps));
+
+        // Symmetric in its arguments.
+        const glm::vec3 b = a + glm::vec3(2e-3f, 0.0f, 0.0f);
+        CHECK(math::positionMovedBeyond(a, b, eps) == math::positionMovedBeyond(b, a, eps));
+    }
+
+    // VK-1506: doppler velocity from a per-frame finite difference, with a
+    // divide-by-zero guard and a teleport guard.
+    TEST_CASE("computeClampedVelocity: finite difference + dt and teleport guards")
+    {
+        constexpr float maxSpeed = 343.3f;
+
+        // Normal motion: 2 units over 0.5 s -> 4 units/s along +x.
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     0.5f, maxSpeed),
+                        glm::vec3(4.0f, 0.0f, 0.0f)));
+
+        // dt <= 0 -> zero (paused frame / first sample), never a division by zero.
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     0.0f, maxSpeed), glm::vec3(0.0f)));
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(2.0f, 0.0f, 0.0f),
+                                                     -0.1f, maxSpeed), glm::vec3(0.0f)));
+
+        // Teleport: 100 units in ~one frame (~6250 u/s) exceeds the cap -> zero (no chirp).
+        CHECK(approxVec(math::computeClampedVelocity(glm::vec3(0.0f), glm::vec3(100.0f, 0.0f, 0.0f),
+                                                     0.016f, maxSpeed), glm::vec3(0.0f)));
+
+        // Just under the cap -> preserved (a fast fly-by still bends pitch).
+        // ~342 u/s along +x at 60 fps.
+        const glm::vec3 fast = math::computeClampedVelocity(
+            glm::vec3(0.0f), glm::vec3(5.7f, 0.0f, 0.0f), 0.016666667f, maxSpeed);
+        CHECK(fast.x > 300.0f);
+        CHECK(fast.x < maxSpeed);
+        CHECK(std::abs(fast.y) < kEps);
+        CHECK(std::abs(fast.z) < kEps);
+    }
+
+    // VK-1511: polar offset of an audition source in the listener basis, used by the
+    // Audio Preview window's 3D-audition mode to place a source relative to the
+    // camera-driven listener.
+    TEST_CASE("polarOffsetInBasis: azimuth cardinals in the listener basis")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f,   0.0f, 0.0f), glm::vec3(0, 0, -1))); // +forward
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f,  90.0f, 0.0f), glm::vec3(1, 0,  0))); // +right
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 180.0f, 0.0f), glm::vec3(0, 0,  1))); // behind
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, -90.0f, 0.0f), glm::vec3(-1, 0, 0))); // -right
+    }
+
+    TEST_CASE("polarOffsetInBasis: elevation drives the up axis")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 0.0f,  90.0f), glm::vec3(0,  1, 0)));
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 0.0f, -90.0f), glm::vec3(0, -1, 0)));
+        // At the pole, azimuth is irrelevant.
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 1.0f, 47.0f, 90.0f), glm::vec3(0, 1, 0)));
+    }
+
+    TEST_CASE("polarOffsetInBasis: distance scales magnitude, not direction")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f), up(0.0f, 1.0f, 0.0f);
+        const glm::vec3 o1 = math::polarOffsetInBasis(fwd, up, 1.0f, 33.0f, 21.0f);
+        const glm::vec3 o5 = math::polarOffsetInBasis(fwd, up, 5.0f, 33.0f, 21.0f);
+        CHECK(std::abs(glm::length(o1) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(o5) - 5.0f) < 1e-4f);
+        CHECK(approxVec(o5, o1 * 5.0f));
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, up, 0.0f, 33.0f, 21.0f), glm::vec3(0.0f)));
+    }
+
+    TEST_CASE("polarOffsetInBasis: non-orthogonal up is re-orthogonalized")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f);
+        const glm::vec3 tiltedUp(0.0f, 1.0f, 0.4f); // has a forward-parallel component
+        // az0/el0 depends only on forward -> exact regardless of up tilt.
+        CHECK(approxVec(math::polarOffsetInBasis(fwd, tiltedUp, 1.0f, 0.0f, 0.0f), glm::vec3(0, 0, -1)));
+        // The elevation axis must be perpendicular to forward and unit length.
+        const glm::vec3 upOff = math::polarOffsetInBasis(fwd, tiltedUp, 1.0f, 0.0f, 90.0f);
+        CHECK(std::abs(glm::length(upOff) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::dot(glm::normalize(upOff), fwd)) < 1e-4f);
+    }
+
+    TEST_CASE("polarOffsetInBasis: degenerate up parallel to forward is guarded")
+    {
+        const glm::vec3 fwd(0.0f, 0.0f, -1.0f);
+        const glm::vec3 parallelUp(0.0f, 0.0f, -1.0f); // cross(forward, up) == 0
+        const glm::vec3 f = math::polarOffsetInBasis(fwd, parallelUp, 1.0f,  0.0f,  0.0f);
+        const glm::vec3 r = math::polarOffsetInBasis(fwd, parallelUp, 1.0f, 90.0f,  0.0f);
+        const glm::vec3 u = math::polarOffsetInBasis(fwd, parallelUp, 1.0f,  0.0f, 90.0f);
+        CHECK(std::isfinite(r.x)); CHECK(std::isfinite(r.y)); CHECK(std::isfinite(r.z));
+        CHECK(std::abs(glm::length(f) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(r) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::length(u) - 1.0f) < 1e-4f);
+        CHECK(std::abs(glm::dot(f, r)) < 1e-4f);
+        CHECK(std::abs(glm::dot(f, u)) < 1e-4f);
+        CHECK(std::abs(glm::dot(r, u)) < 1e-4f);
+        CHECK(approxVec(f, glm::vec3(0, 0, -1)));   // world-up fallback keeps forward on -Z
+        CHECK(approxVec(u, glm::vec3(0, 1,  0)));   // and el 90 on world +Y
+    }
+}

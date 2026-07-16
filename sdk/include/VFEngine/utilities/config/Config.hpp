@@ -121,6 +121,9 @@ namespace importConfig
     {
         AudioCompressionQuality quality = AudioCompressionQuality::Medium;
         AudioLoadType loadType = AudioLoadType::Auto;
+        // Downmix to mono at import. OpenAL only spatializes mono buffers, so 3D
+        // clips should be mono; this also halves the stored data.
+        bool forceMono = false;
     };
 
     // Value type for importer-declared options (see import::ImportOptionDesc).

@@ -115,6 +115,13 @@ namespace vfx
             glm::vec3 half3(dims);
             return glm::mix(-half3, half3, progress);
         }
+        case ShapeType::Line:
+        {
+            // Centered segment along dims.xyz (same curve as a Box diagonal); random
+            // placement (VFXParticleSystemSpawn) keeps Line particles ON the segment.
+            glm::vec3 half3(dims);
+            return glm::mix(-half3, half3, progress);
+        }
         case ShapeType::Point:
         default:
             return glm::vec3(0.0f);

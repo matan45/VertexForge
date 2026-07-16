@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "Audio.hpp"
 #include "VorbisEncoder.hpp"
+#include "resource/AudioDownmix.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/VfAudioHeader.hpp"
 #include "resource/VorbisDecoder.hpp"
@@ -80,6 +81,16 @@ namespace types
 
         if (decoded.data.empty())
             return;
+
+        // Force-mono downmix (opt-in). Done here, before both the Lossless-PCM and
+        // Vorbis-encode branches, so every load type ends up mono. OpenAL only
+        // spatializes mono buffers, so 3D clips need this; it also halves the data.
+        if (file.config.audioConfig.forceMono && decoded.channels > 1)
+        {
+            decoded.data = resource::downmixToMono(decoded.data, decoded.channels);
+            decoded.channels = 1;
+            decoded.frames = static_cast<uint32_t>(decoded.data.size());
+        }
 
         if (progressCallback) progressCallback(0.5f);
 

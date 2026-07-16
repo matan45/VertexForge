@@ -2,6 +2,7 @@
 #include <types/AudioTypes.hpp>
 #include <types/AudioEffectTypes.hpp>
 #include <variant>
+#include <string>
 
 // ============================================================
 // VK-1060: Audio types unit tests
@@ -118,6 +119,36 @@ TEST_CASE("EQParams: cutoff frequencies positive") {
     CHECK(params.highCutoff > 0.0f);
     CHECK(params.mid1Center > 0.0f);
     CHECK(params.mid2Center > 0.0f);
+}
+
+// ---- VK-1508: HRTF toggle + status ----
+
+TEST_CASE("AudioSettings::createDefault: HRTF disabled by default") {
+    auto settings = types::AudioSettings::createDefault();
+    CHECK(settings.enableHrtf == false);
+}
+
+TEST_CASE("AudioHrtfStatus: enum ordinals match ALC_HRTF_*_SOFT (0..5)") {
+    // The audio backend static_casts the raw ALC status straight into this enum,
+    // so the ordinals must line up with the ALC_HRTF_*_SOFT tokens.
+    CHECK(static_cast<int>(types::AudioHrtfStatus::Disabled) == 0);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::Enabled) == 1);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::Denied) == 2);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::Required) == 3);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::HeadphonesDetected) == 4);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::UnsupportedFormat) == 5);
+    CHECK(static_cast<int>(types::AudioHrtfStatus::Unsupported) == -1);
+}
+
+TEST_CASE("audioHrtfStatusToString: maps every status value") {
+    using types::AudioHrtfStatus;
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Unsupported)) == "Not supported");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Disabled)) == "Disabled");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Enabled)) == "Enabled");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Denied)) == "Denied");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::Required)) == "Required");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::HeadphonesDetected)) == "Headphones detected");
+    CHECK(std::string(types::audioHrtfStatusToString(AudioHrtfStatus::UnsupportedFormat)) == "Unsupported format");
 }
 
 } // TEST_SUITE

@@ -1,7 +1,9 @@
 #pragma once
 #include "../EventTypes.hpp"
+#include "types/AudioTypes.hpp"
 #include <string>
 #include <vector>
+#include <optional>
 
 namespace events::audio {
 
@@ -39,8 +41,33 @@ namespace events::audio {
         std::string_view getName() const override { return "IsBusMuted"; }
     };
 
+    struct IsBusSoloedQuery : ::events::IQuery<bool> {
+        std::string busName;
+        std::string_view getName() const override { return "IsBusSoloed"; }
+    };
+
     struct GetBusNamesQuery : ::events::IQuery<std::vector<std::string>> {
         std::string_view getName() const override { return "GetBusNames"; }
+    };
+
+    struct SetBusDuckCommand : ::events::ICommand<void> {
+        std::string targetBus;
+        types::BusDuckConfig config;
+        std::string_view getName() const override { return "SetBusDuck"; }
+    };
+
+    struct RemoveBusDuckCommand : ::events::ICommand<void> {
+        std::string targetBus;
+        std::string_view getName() const override { return "RemoveBusDuck"; }
+    };
+
+    struct GetBusLevelsQuery : ::events::IQuery<std::vector<types::AudioBusLevel>> {
+        std::string_view getName() const override { return "GetBusLevels"; }
+    };
+
+    struct GetBusDuckQuery : ::events::IQuery<std::optional<types::BusDuckConfig>> {
+        std::string targetBus;
+        std::string_view getName() const override { return "GetBusDuck"; }
     };
 
     struct SaveMixSnapshotCommand : ::events::ICommand<void> {

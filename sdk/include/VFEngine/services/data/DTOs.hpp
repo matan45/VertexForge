@@ -2,6 +2,7 @@
 #include "EntityHandle.hpp"
 #include "types/PhysicsTypes.hpp"
 #include "types/AudioEffectTypes.hpp"
+#include "types/AudioVariationTypes.hpp"
 #include "types/PhysicsAnimationTypes.hpp"
 #include "types/VehicleTypes.hpp"
 #include <rendertexture/RenderTextureTypes.hpp>
@@ -191,6 +192,19 @@ namespace services
         float pitch = 1.0f;
         bool loop = false;
         std::string busName = "Music";
+        // VK-1521: fade-in ramp length in ms. 0 = no fade.
+        float fadeInMs = 0.0f;
+
+        // VK-1520: mirrors AudioSource2DComponent's variation block. Pool is
+        // [audioRef] ++ valid(clipVariants) — audioRef is variant 0. AUTHORED
+        // fields only: lastVariant/playCount are runtime state and stay out, the
+        // same way activeHandle/isPlaying do. That is load-bearing, not tidiness
+        // — the drawer round-trips this whole DTO every frame a slider is
+        // dragged, which would reset the round-robin cursor mid-drag.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;
+        float volumeVariation = 0.0f;
     };
 
     struct AudioSource3DData
@@ -208,11 +222,29 @@ namespace services
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        // VK-1518: mirrors AudioSource3DComponent's occlusion block. Both floats are CUT
+        // amounts at full occlusion (0 = inert); occlusionLayerMask is the trace channel
+        // (bit N = collision layer N), Static|Kinematic by default.
+        bool enableOcclusion = false;
+        float occlusionLpf = 0.7f;
+        float occlusionVolume = 0.3f;
+        uint16_t occlusionLayerMask = 0x0005;
+
         float innerConeAngle = 360.0f;
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
         bool showDebugCone = false;
         std::string busName = "SFX";
+        // VK-1513: lower = more important (0 = critical, 255 = least, 128 = neutral).
+        uint8_t priority = 128;
+        // VK-1521: fade-in ramp length in ms. 0 = no fade.
+        float fadeInMs = 0.0f;
+
+        // VK-1520: see AudioSource2DData's variation block. Authored fields only.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;
+        float volumeVariation = 0.0f;
     };
 
     struct ReverbZoneData

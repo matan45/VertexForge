@@ -4,10 +4,13 @@
 #include "events/editor/EditorKeybindingEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/editor/SculptModeEvents.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
+#include "events/audio/AudioBusEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <IconsFontAwesome6.h>
 
 namespace windows
 {
@@ -33,14 +36,17 @@ namespace windows
         if (ImGui::Begin("##EngineToolbar", nullptr, flags))
         {
             float windowWidth = ImGui::GetWindowWidth();
-            // Estimate play controls width: edit mode Play(60)+Debug(60), play mode
-            // Pause(60)+Stop(60) ~ 130; pad to keep the group roughly centered.
-            float controlsWidth = 200.0f;
+            // Estimate play controls plus the global-audio toggle and keep the group
+            // roughly centered. Play mode can grow further when Step/time scale appear.
+            float controlsWidth = 240.0f;
             float centerX = (windowWidth - controlsWidth) * 0.5f;
             if (centerX < 8.0f) centerX = 8.0f;
 
             ImGui::SetCursorPosX(centerX);
             drawPlayControls();
+
+            ImGui::SameLine(0.0f, 8.0f);
+            drawAudioMuteToggle();
 
             ImGui::SameLine(0.0f, 16.0f);
             ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
@@ -50,6 +56,42 @@ namespace windows
         }
         ImGui::End();
         ImGui::PopStyleVar();
+    }
+
+    void EngineToolbar::drawAudioMuteToggle()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::audio::IsBusMutedQuery query;
+        query.busName = "Master";
+        const bool muted = dispatcher.query(query);
+
+        if (muted)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+        }
+
+        const char* label = muted
+            ? ICON_FA_VOLUME_XMARK "##GlobalAudioMute"
+            : ICON_FA_VOLUME_HIGH "##GlobalAudioMute";
+        if (ImGui::Button(label, ImVec2(30.0f, 0.0f)))
+        {
+            events::editor::SetEditorAudioMutedCommand command;
+            command.muted = !muted;
+            dispatcher.execute(command);
+        }
+
+        if (muted)
+        {
+            ImGui::PopStyleColor();
+        }
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip(muted
+                ? "Unmute all editor audio (Play mode and previews)"
+                : "Mute all editor audio (Play mode and previews)");
+        }
     }
 
     void EngineToolbar::registerHotkeys()

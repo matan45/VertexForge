@@ -2,6 +2,7 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "ViewPortPicker.hpp"
 #include "ViewPortGizmo.hpp"
+#include "ViewPortAudioAttenuationGizmo.hpp"
 #include "ViewPortOverlay.hpp"
 #include "ViewPortSelection.hpp"
 #include "../../camera/EditorCamera.hpp"
@@ -24,6 +25,7 @@ namespace windows
 
         ViewPortPicker picker;
         ViewPortGizmo gizmo;
+        ViewPortAudioAttenuationGizmo audioAttenuationGizmo;
         ViewPortOverlay overlay;
         ViewPortSelection selector;  // VK-1490 modifier clicks + drag-marquee
 
@@ -52,7 +54,8 @@ namespace windows
         void handleAssetDrop(glm::vec2 viewportPos, glm::vec2 viewportSize);
         glm::vec3 computeDropPosition(glm::vec2 mousePos, glm::vec2 viewportPos, glm::vec2 viewportSize);
         void spawnPrefabAt(const std::string& path, const glm::vec3& dropPos);
-        void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleEntityPicking(bool isPlayMode, glm::vec2 viewportPos, glm::vec2 viewportSize,
+                                 bool customGizmoConsumesMouse);
         void drawSelectedUIOutline(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void updateBrushCursors(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void sendCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);

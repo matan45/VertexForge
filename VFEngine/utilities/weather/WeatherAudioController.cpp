@@ -41,7 +41,8 @@ namespace weather
 
         float windTarget = WIND_BASE_VOLUME + (state.windSpeed / 40.0f) * (WIND_MAX_VOLUME - WIND_BASE_VOLUME);
         windTarget = std::clamp(windTarget, 0.0f, WIND_MAX_VOLUME);
-        updateLoop(deltaTime, windTarget, windHandle, windVolume, audioConfig.windLoopPath);
+        updateLoop(deltaTime, windTarget, windHandle, windVolume, windSilentTime,
+                   audioConfig.windLoopPath);
 
         if (windHandle != 0)
         {
@@ -51,30 +52,47 @@ namespace weather
 
         float rainTarget = (state.precipType == PrecipitationType::Rain && state.precipIntensity > 0.01f)
             ? state.precipIntensity * RAIN_MAX_VOLUME : 0.0f;
-        updateLoop(deltaTime, rainTarget, rainHandle, rainVolume, audioConfig.rainLoopPath);
+        updateLoop(deltaTime, rainTarget, rainHandle, rainVolume, rainSilentTime,
+                   audioConfig.rainLoopPath);
 
         float snowTarget = (state.precipType == PrecipitationType::Snow && state.precipIntensity > 0.01f)
             ? state.precipIntensity * SNOW_MAX_VOLUME : 0.0f;
-        updateLoop(deltaTime, snowTarget, snowHandle, snowVolume, audioConfig.snowLoopPath);
+        updateLoop(deltaTime, snowTarget, snowHandle, snowVolume, snowSilentTime,
+                   audioConfig.snowLoopPath);
     }
 
     void WeatherAudioController::updateLoop(float deltaTime, float targetVolume,
-                                             uint64_t& handle, float& volume, const std::string& path)
+                                             uint64_t& handle, float& volume, float& silentTime,
+                                             const std::string& path)
     {
-        float diff = targetVolume - volume;
-        volume += std::clamp(diff, -VOLUME_RAMP_SPEED * deltaTime, VOLUME_RAMP_SPEED * deltaTime);
+        // The decision itself is pure and lives in WeatherLoopGate.hpp; this function is
+        // only the part that talks to the engine. The split is what makes the stacking bug
+        // testable at all — Tests cannot link Weather.
+        LoopGateState gate;
+        gate.volume = volume;
+        gate.silentTime = silentTime;
 
-        if (volume > 0.01f && handle == 0 && !path.empty())
-            startLoop(handle, path, 0.0f);
+        const LoopGateDecision d = evaluateLoopGate(gate, targetVolume, deltaTime,
+                                                    handle != 0, !path.empty(),
+                                                    VOLUME_RAMP_SPEED);
 
-        if (handle != 0)
-            setLoopVolume(handle, volume);
+        volume = gate.volume;
+        silentTime = gate.silentTime;
 
-        if (volume <= 0.01f && handle != 0)
+        if (d.start)
+            startLoop(handle, path, d.appliedVolume, CROSSFADE_DURATION_MS);
+
+        // Safe during a fade-in: this lands in StreamingAudioManager::setVolume, which
+        // re-bases the ramp's target instead of overwriting AL_GAIN, so the fade survives.
+        if (d.applyVolume && handle != 0)
+            setLoopVolume(handle, d.appliedVolume);
+
+        if (d.stop)
             fadeOutLoop(handle);
     }
 
-    void WeatherAudioController::startLoop(uint64_t& handle, const std::string& path, float volume)
+    void WeatherAudioController::startLoop(uint64_t& handle, const std::string& path, float volume,
+                                            float fadeInMs)
     {
         try
         {
@@ -85,6 +103,7 @@ namespace weather
             cmd.params.streaming = true;
             cmd.params.volume = volume;
             cmd.params.busName = "Weather";
+            cmd.params.fadeInMs = fadeInMs;
             auto result = dispatcher.execute(cmd);
             handle = result.id;
         }

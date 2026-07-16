@@ -60,11 +60,7 @@ namespace core::audio
             }
             else
             {
-                AudioSource* source = sourceManager->getSource(handle);
-                if (source)
-                {
-                    source->setVolume(effectiveVolume);
-                }
+                sourceManager->setVolume(handle, effectiveVolume);
             }
         });
         busManager->setEffectManager(effectManager.get());
@@ -215,6 +211,22 @@ namespace core::audio
         return it != snapshot.sources.end() && it->second.playing;
     }
 
+    types::SoundStatus AudioController::getSoundStatus(AudioHandle handle) const
+    {
+        types::SoundStatus status;
+        if (!initialized || !audioThread) return status;
+        // ONE getSnapshot() — it returns by value and deep-copies its source map, and the
+        // caller asks per 3D emitter per frame. Answering `playing` and `rejected` from two
+        // separate queries would double that cost for every emitter in the scene.
+        const auto& snapshot = audioThread->getSnapshot();
+        if (const auto it = snapshot.sources.find(handle); it != snapshot.sources.end())
+        {
+            status.playing = it->second.playing;
+            status.rejected = it->second.rejected;
+        }
+        return status;
+    }
+
     void AudioController::setVolume(AudioHandle handle, float volume)
     {
         if (!initialized || !commandQueue) return;
@@ -227,6 +239,20 @@ namespace core::audio
         commandQueue->enqueue(SetPitchCmd{handle, pitch});
     }
 
+    void AudioController::setSourceTransform(AudioHandle handle, const glm::vec3& position,
+                                             const glm::vec3& direction, const glm::vec3& velocity)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetSourceTransformCmd{handle, position, direction, velocity});
+    }
+
+    void AudioController::setSourceOcclusion(AudioHandle handle, float occlusion,
+                                             float lpfAmount, float volumeAmount)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetSourceOcclusionCmd{handle, occlusion, lpfAmount, volumeAmount});
+    }
+
     void AudioController::stopAll()
     {
         if (!initialized || !commandQueue) return;
@@ -234,10 +260,10 @@ namespace core::audio
     }
 
     void AudioController::setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                              const glm::vec3& up)
+                                              const glm::vec3& up, const glm::vec3& velocity)
     {
         if (!initialized || !commandQueue) return;
-        commandQueue->enqueue(SetListenerCmd{position, forward, up});
+        commandQueue->enqueue(SetListenerCmd{position, forward, up, velocity});
     }
 
     // === Playback Position ===
@@ -276,8 +302,51 @@ namespace core::audio
     types::AudioSettings AudioController::getCurrentSettings() const
     {
         if (!initialized) return types::AudioSettings::createDefault();
-        // Settings are cached on main thread (not modified by audio thread)
+        // NOTE: this comment used to claim the settings are "cached on main thread (not
+        // modified by audio thread)". That is false — ApplySettingsCmd runs applySettings()
+        // on the AUDIO thread, which writes the scalar fields (AudioSystem.cpp). So this is
+        // an unsynchronized read of scalars written elsewhere. Pre-existing across every
+        // field here and out of scope for VK-1513, which does not worsen it: VoicePolicy
+        // reads maxRealVoices on the audio thread, the same thread that writes it. See
+        // AudioSystem's hrtfStatus for the pattern a proper fix should follow.
         return audioSystem->getCurrentSettings();
+    }
+
+    types::AudioHrtfStatus AudioController::getHrtfStatus() const
+    {
+        // VK-1508: audioSystem caches the status in a std::atomic (written on the audio
+        // thread), so this main-thread read never touches the OpenAL device/context.
+        if (!initialized) return types::AudioHrtfStatus::Unsupported;
+        return audioSystem->getHrtfStatus();
+    }
+
+    types::AudioVoiceStats AudioController::getVoiceStats() const
+    {
+        // VK-1513: both values are std::atomics on AudioThread (written there, read here),
+        // following the hrtfStatus precedent above — deliberately not routed through the
+        // state snapshot, which getSnapshot() returns by value and would deep-copy a map on
+        // every editor poll.
+        types::AudioVoiceStats stats;
+        if (!initialized || !audioThread) return stats;
+        stats.realVoices = audioThread->getRealVoiceCount();
+        stats.maxRealVoices = audioThread->getMaxRealVoices();
+        stats.virtualVoices = audioThread->getVirtualVoiceCount();
+        return stats;
+    }
+
+    std::vector<types::AudioVoiceRow> AudioController::getActiveVoices() const
+    {
+        // VK-1515: unlike the counts above this is a collection, so there is no atomic to
+        // read — the audio thread publishes it under a shared_mutex, following VK-1514's
+        // bus meters rather than the state snapshot (see AudioThread::voiceDebugMutex).
+        if (!initialized || !audioThread) return {};
+        return audioThread->getVoiceDebugRows();
+    }
+
+    void AudioController::setVoiceDebugEnabled(bool enabled)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetVoiceDebugCmd{enabled});
     }
 
     // === Audio Buses ===
@@ -318,10 +387,42 @@ namespace core::audio
         return busManager->isBusMuted(busName);
     }
 
+    bool AudioController::isBusSoloed(const std::string& busName) const
+    {
+        if (!initialized) return false;
+        return busManager->isBusSoloed(busName);
+    }
+
     std::vector<std::string> AudioController::getBusNames() const
     {
         if (!initialized) return {};
         return busManager->getBusNames();
+    }
+
+    std::vector<types::AudioBusLevel> AudioController::getBusLevels() const
+    {
+        if (!initialized) return {};
+        return busManager->getBusLevels();
+    }
+
+    void AudioController::setBusDuck(const std::string& targetBus,
+                                     const types::BusDuckConfig& config)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(SetBusDuckCmd{targetBus, config});
+    }
+
+    void AudioController::removeBusDuck(const std::string& targetBus)
+    {
+        if (!initialized || !commandQueue) return;
+        commandQueue->enqueue(RemoveBusDuckCmd{targetBus});
+    }
+
+    std::optional<types::BusDuckConfig> AudioController::getBusDuck(
+        const std::string& targetBus) const
+    {
+        if (!initialized) return std::nullopt;
+        return busManager->getBusDuck(targetBus);
     }
 
     void AudioController::saveMixSnapshot(const std::string& name)

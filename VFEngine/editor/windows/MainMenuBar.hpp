@@ -39,6 +39,7 @@ namespace windows
     class UILayerBuilderWindow;
     class MemoryDiagnosticsWindow;
     class RTTDebugWindow;
+    class AudioDebugWindow;
     class EditorPreferencesWindow;
     class EditorSettingsWindow;
     class ExportGameWindow;
@@ -84,6 +85,7 @@ namespace windows
         UILayerBuilderWindow* uiLayerBuilderWindow = nullptr;
         MemoryDiagnosticsWindow* memoryDiagnosticsWindow = nullptr;
         RTTDebugWindow* rttDebugWindow = nullptr;
+        AudioDebugWindow* audioDebugWindow = nullptr;
         EditorPreferencesWindow* editorPreferencesWindow = nullptr;
         EditorSettingsWindow* editorSettingsWindow = nullptr;
         ExportGameWindow* exportGameWindow = nullptr;
@@ -239,6 +241,11 @@ namespace windows
         void setRTTDebugWindow(RTTDebugWindow* window)
         {
             rttDebugWindow = window;
+        }
+
+        void setAudioDebugWindow(AudioDebugWindow* window)
+        {
+            audioDebugWindow = window;
         }
 
         void setEditorPreferencesWindow(EditorPreferencesWindow* window)

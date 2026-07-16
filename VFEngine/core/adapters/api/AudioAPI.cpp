@@ -10,8 +10,14 @@
 #include "../../../services/events/audio/AudioBusEvents.hpp"
 #include "../../../services/events/audio/AudioEffectEvents.hpp"
 #include "types/AudioEffectTypes.hpp"
+#include "types/AudioVariationTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "math/TransformUtils.hpp"
+#include <algorithm>
+#include <cstdint>
+#include <string>
+#include <vector>
 
 namespace core::api
 {
@@ -29,6 +35,80 @@ namespace core::api
             {
                 func(registry.get<components::AudioSource3DComponent>(entity));
             }
+        }
+
+        // VK-1520: the outcome of one variation roll — which clip to play and the
+        // jittered pitch/volume to play it at.
+        struct AudioPlayRoll
+        {
+            std::string path;
+            float volume = 1.0f;
+            float pitch = 1.0f;
+        };
+
+        // VK-1520: picks the clip and rolls the pitch/volume jitter for one play.
+        // Runs main-thread at play time, so the audio thread is untouched — the
+        // jittered values ride the existing PlaySound/PlayStreaming command params.
+        //
+        // The pool is [audioRef] ++ valid(clipVariants): audioRef IS variant 0 and
+        // stays in the rotation, so a designer who adds variants alongside an
+        // existing clip never finds that clip silently stops playing. Invalid refs
+        // (a row added but no file picked yet) are compacted out here, so
+        // lastVariant indexes the compacted pool.
+        //
+        // Returns an empty path when there is nothing playable, which is exactly
+        // the condition the pre-VK-1520 `!audioRef.isValid()` guard tested.
+        template<typename Comp>
+        AudioPlayRoll rollAudioPlay(entt::entity entity, Comp& audioComp)
+        {
+            std::vector<const asset::AssetRef*> pool;
+            pool.reserve(1 + audioComp.clipVariants.size());
+            if (audioComp.audioRef.isValid())
+            {
+                pool.push_back(&audioComp.audioRef);
+            }
+            for (const auto& variant : audioComp.clipVariants)
+            {
+                if (pool.size() >= types::AUDIO_MAX_VARIANTS)
+                {
+                    break;
+                }
+                if (variant.isValid())
+                {
+                    pool.push_back(&variant);
+                }
+            }
+            if (pool.empty())
+            {
+                return {};
+            }
+
+            const uint32_t seed =
+                types::audioPlaySeed(static_cast<uint32_t>(entity), audioComp.playCount++);
+
+            const uint8_t index = types::selectVariant(
+                pool.size(), audioComp.lastVariant, audioComp.playOrder,
+                types::audioVarianceUnit(seed, types::AudioVarianceStream::ClipSelect));
+            audioComp.lastVariant = index;
+
+            AudioPlayRoll roll;
+            roll.path = pool[index]->resolve();
+            // Jitter is deliberately applied to the command params only, NEVER
+            // written back into the component: the component holds the AUTHORED
+            // value. Writing back would make audio.getPitch() return jittered
+            // values, make the drawer's Pitch slider visibly crawl, persist the
+            // crawled value into the scene on the next SetAudioSourceDataCommand,
+            // and compound every play into an unbounded ratchet.
+            //
+            // Jitter is orthogonal to playOrder — a designer with one clip must be
+            // able to de-mechanise it without authoring fake variants.
+            roll.pitch = types::audioJitterPitch(
+                audioComp.pitch, audioComp.pitchVariation,
+                types::audioVarianceSigned(seed, types::AudioVarianceStream::Pitch));
+            roll.volume = types::audioJitterVolume(
+                audioComp.volume, audioComp.volumeVariation,
+                types::audioVarianceSigned(seed, types::AudioVarianceStream::Volume));
+            return roll;
         }
 
         template<typename Func>
@@ -62,7 +142,11 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource2DComponent>(*entity);
-                    if (!audioComp.audioRef.isValid())
+                    // VK-1520: rolls the clip + jitter. An empty path means nothing
+                    // playable, which subsumes the old !audioRef.isValid() guard and
+                    // additionally covers a variant-only source (audioRef cleared).
+                    const auto roll = rollAudioPlay(*entity, audioComp);
+                    if (roll.path.empty())
                         return value::Value(static_cast<int64_t>(0));
 
                     if (audioComp.activeHandle != 0)
@@ -73,12 +157,13 @@ namespace core::api
                     }
 
                     events::audio::PlayStreamingSoundCommand cmd;
-                    cmd.path = audioComp.audioRef.resolve();
-                    cmd.params.volume = audioComp.volume;
-                    cmd.params.pitch = audioComp.pitch;
+                    cmd.path = roll.path;
+                    cmd.params.volume = roll.volume;
+                    cmd.params.pitch = roll.pitch;
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = false;
                     cmd.params.busName = audioComp.busName;
+                    cmd.params.fadeInMs = audioComp.fadeInMs;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -98,7 +183,10 @@ namespace core::api
                         return value::Value(static_cast<int64_t>(0));
 
                     auto& audioComp = registry.get<components::AudioSource3DComponent>(*entity);
-                    if (!audioComp.audioRef.isValid())
+                    // VK-1520: see _native_audio_play2d — pool-empty subsumes the old
+                    // !audioRef.isValid() guard and covers variant-only sources.
+                    const auto roll = rollAudioPlay(*entity, audioComp);
+                    if (roll.path.empty())
                         return value::Value(static_cast<int64_t>(0));
 
                     glm::vec3 position(0.0f);
@@ -116,10 +204,10 @@ namespace core::api
                     }
 
                     events::audio::PlaySound3DCommand cmd;
-                    cmd.path = audioComp.audioRef.resolve();
+                    cmd.path = roll.path;
                     cmd.position = position;
-                    cmd.params.volume = audioComp.volume;
-                    cmd.params.pitch = audioComp.pitch;
+                    cmd.params.volume = roll.volume;
+                    cmd.params.pitch = roll.pitch;
                     cmd.params.loop = audioComp.loop;
                     cmd.params.is3D = true;
                     cmd.params.minDistance = audioComp.minDistance;
@@ -135,16 +223,12 @@ namespace core::api
                     if (registry.all_of<components::TransformComponent>(*entity))
                     {
                         auto& transform = registry.get<components::TransformComponent>(*entity);
-                        float yawRad = glm::radians(transform.rotation.y);
-                        float pitchRad = glm::radians(transform.rotation.x);
-                        glm::vec3 forward;
-                        forward.x = -std::sin(yawRad) * std::cos(pitchRad);
-                        forward.y = std::sin(pitchRad);
-                        forward.z = -std::cos(yawRad) * std::cos(pitchRad);
-                        cmd.params.direction = glm::normalize(forward);
+                        cmd.params.direction = math::forwardFromEulerDegrees(transform.rotation);
                     }
 
                     cmd.params.busName = audioComp.busName;
+                    cmd.params.priority = audioComp.priority;
+                    cmd.params.fadeInMs = audioComp.fadeInMs;
                     auto handle = dispatcher.execute(cmd);
 
                     audioComp.activeHandle = handle.id;
@@ -378,6 +462,63 @@ namespace core::api
                     if (registry.all_of<components::AudioSource3DComponent>(*entity))
                     {
                         return value::Value(registry.get<components::AudioSource3DComponent>(*entity).enableDistanceFilter);
+                    }
+                    return value::Value(false);
+                }});
+
+            // === Geometry Occlusion (VK-1518) ===
+            // lpf/volume are CUT AMOUNTS at full occlusion (0 = inert, 1 = full cut), like
+            // the distance filter's intensity. AudioSceneUpdater raycasts and pushes the
+            // verdict to the audio thread; scripts only author the component.
+            interpreter->registerNativeFunction("_native_audio_setOcclusion",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.size() < 4) return value::Value(std::monostate{});
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(std::monostate{});
+
+                    bool enabled = extractBool(args[1]);
+                    float lpf = extractFloat(args[2]);
+                    float volume = extractFloat(args[3]);
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        auto& comp = registry.get<components::AudioSource3DComponent>(*entity);
+                        comp.enableOcclusion = enabled;
+                        comp.occlusionLpf = lpf;
+                        comp.occlusionVolume = volume;
+                    }
+                    return value::Value(std::monostate{});
+                }});
+
+            // The trace channel: bit N = collision layer N blocks sound.
+            interpreter->registerNativeFunction("_native_audio_setOcclusionLayerMask",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.size() < 2) return value::Value(std::monostate{});
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(std::monostate{});
+
+                    const auto mask = static_cast<uint16_t>(
+                        std::clamp(extractInt64(args[1]), int64_t{0}, int64_t{0xFFFF}));
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        registry.get<components::AudioSource3DComponent>(*entity).occlusionLayerMask = mask;
+                    }
+                    return value::Value(std::monostate{});
+                }});
+
+            interpreter->registerNativeFunction("_native_audio_getOcclusionEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.empty()) return value::Value(false);
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity) return value::Value(false);
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    if (registry.all_of<components::AudioSource3DComponent>(*entity))
+                    {
+                        return value::Value(registry.get<components::AudioSource3DComponent>(*entity).enableOcclusion);
                     }
                     return value::Value(false);
                 }});

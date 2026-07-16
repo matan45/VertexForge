@@ -20,6 +20,11 @@ namespace services
 
     private:
         void ensureLoaded();
+        void applyRuntimeSettings();
+        // Separate from applyRuntimeSettings: the log level is owned outright by the
+        // preference, but the Master bus is shared with scripts and mix snapshots, so the
+        // preference may only assert onto it when the preference itself changes.
+        void applyGlobalMute();
         void save();
         void notifySettingsChanged();
         std::string getSettingsPath() const;

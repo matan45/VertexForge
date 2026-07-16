@@ -16,6 +16,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <optional>
 
 namespace core::audio {
 
@@ -64,12 +65,20 @@ namespace core::audio {
         void pauseSound(AudioHandle handle);
         void resumeSound(AudioHandle handle);
         bool isPlaying(AudioHandle handle) const;
+        // isPlaying plus "was this play thrown away". One snapshot read, because
+        // getSnapshot() deep-copies its map and the caller polls per emitter per frame.
+        types::SoundStatus getSoundStatus(AudioHandle handle) const;
         void setVolume(AudioHandle handle, float volume);
         void setPitch(AudioHandle handle, float pitch);
+        void setSourceTransform(AudioHandle handle, const glm::vec3& position,
+                                const glm::vec3& direction, const glm::vec3& velocity);
+        // VK-1518: geometry occlusion verdict + authored cut amounts for a playing 3D source.
+        void setSourceOcclusion(AudioHandle handle, float occlusion,
+                                float lpfAmount, float volumeAmount);
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                  const glm::vec3& up);
+                                  const glm::vec3& up, const glm::vec3& velocity);
 
         // === Playback Position ===
         float getPlaybackPosition(AudioHandle handle) const;
@@ -79,6 +88,13 @@ namespace core::audio {
         // === Audio Settings ===
         void applySettings(const types::AudioSettings& settings);
         types::AudioSettings getCurrentSettings() const;
+        types::AudioHrtfStatus getHrtfStatus() const;
+        // VK-1513: live real-voice count vs the configured budget, for the editor readout.
+        types::AudioVoiceStats getVoiceStats() const;
+        // VK-1515: one row per live voice for the active-sounds overlay, and the gate that
+        // makes the audio thread produce them. Empty while the gate is off.
+        std::vector<types::AudioVoiceRow> getActiveVoices() const;
+        void setVoiceDebugEnabled(bool enabled);
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master");
@@ -87,7 +103,12 @@ namespace core::audio {
         void setBusSoloed(const std::string& busName, bool soloed);
         float getBusVolume(const std::string& busName) const;
         bool isBusMuted(const std::string& busName) const;
+        bool isBusSoloed(const std::string& busName) const;
         std::vector<std::string> getBusNames() const;
+        std::vector<types::AudioBusLevel> getBusLevels() const;
+        void setBusDuck(const std::string& targetBus, const types::BusDuckConfig& config);
+        void removeBusDuck(const std::string& targetBus);
+        std::optional<types::BusDuckConfig> getBusDuck(const std::string& targetBus) const;
         void saveMixSnapshot(const std::string& name);
         void loadMixSnapshot(const std::string& name);
         void deleteMixSnapshot(const std::string& name);

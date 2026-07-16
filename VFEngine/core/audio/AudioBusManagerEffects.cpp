@@ -1,11 +1,71 @@
 #include "AudioBusManager.hpp"
 #include "AudioEffectManager.hpp"
+#include "BusGainPolicy.hpp"
 #include "ReverbZoneManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
 namespace core::audio
 {
+    void AudioBusManager::replaceBusEffectChainLocked(
+        uint32_t busId, const std::vector<types::BusEffectConfig>& chain)
+    {
+        if (!effectManager)
+        {
+            return;
+        }
+
+        const int maxEffects = effectManager->getMaxEffectsPerBus();
+        if (maxEffects < 0 || chain.size() > static_cast<std::size_t>(maxEffects))
+        {
+            vfLogWarning("AudioBusManager: Snapshot chain for bus {} has {} effects, maximum is {}; keeping current chain",
+                         busId, chain.size(), maxEffects);
+            return;
+        }
+
+        std::vector<ALuint> sourceIds;
+        if (sourceResolveCallback)
+        {
+            sourceIds.reserve(trackedSources.size());
+            for (const auto& [handle, tracked] : trackedSources)
+            {
+                if (tracked.busId != busId)
+                {
+                    continue;
+                }
+
+                const ALuint sourceId = sourceResolveCallback(handle);
+                if (sourceId != 0)
+                {
+                    sourceIds.push_back(sourceId);
+                }
+            }
+        }
+
+        // OpenAL refuses to delete an auxiliary slot while a source send references it.
+        for (const ALuint sourceId : sourceIds)
+        {
+            effectManager->unrouteSource(sourceId, busId);
+        }
+
+        effectManager->clearBusEffects(busId);
+        for (std::size_t effectIndex = 0; effectIndex < chain.size(); ++effectIndex)
+        {
+            if (!effectManager->addEffect(busId, chain[effectIndex]))
+            {
+                vfLogWarning("AudioBusManager: Failed to restore effect {} ({}) on bus {}",
+                             effectIndex,
+                             types::audioEffectTypeToString(chain[effectIndex].type),
+                             busId);
+            }
+        }
+
+        for (const ALuint sourceId : sourceIds)
+        {
+            effectManager->routeSourceToBus(sourceId, busId);
+        }
+    }
+
     bool AudioBusManager::addBusEffect(const std::string& busName, const types::BusEffectConfig& config)
     {
         std::unique_lock lock(busMutex);
@@ -129,12 +189,10 @@ namespace core::audio
         {
             if (bus.name == "Master")
             {
-                float masterVol = bus.volume;
-                if (anySoloed && !bus.soloed) masterVol = 0.0f;
-                if (!anySoloed && bus.muted) masterVol = 0.0f;
-
-                bus.effectiveVolume = masterVol;
-                recalculateBusEffective(bus, masterVol, bus.muted, anySoloed);
+                bus.effectiveVolume = gainpolicy::rootEffectiveVolume(
+                    bus.volume * bus.duckGain, bus.muted, bus.soloed, anySoloed);
+                recalculateBusEffective(
+                    bus, bus.effectiveVolume, bus.muted, anySoloed);
                 break;
             }
         }
@@ -149,34 +207,10 @@ namespace core::audio
             if (!child) continue;
 
             bool effectivelyMuted = child->muted || parentMuted;
-
-            if (anySoloed)
-            {
-                if (child->soloed)
-                {
-                    child->effectiveVolume = child->volume * parentEffective;
-                    // Parent is not soloed, but child is -- use own volume
-                    if (parentEffective == 0.0f)
-                    {
-                        child->effectiveVolume = child->volume;
-                    }
-                }
-                else
-                {
-                    child->effectiveVolume = 0.0f;
-                }
-            }
-            else
-            {
-                if (effectivelyMuted)
-                {
-                    child->effectiveVolume = 0.0f;
-                }
-                else
-                {
-                    child->effectiveVolume = child->volume * parentEffective;
-                }
-            }
+            child->effectiveVolume = gainpolicy::childEffectiveVolume(
+                child->volume * child->duckGain, parentEffective,
+                child->muted, parentMuted,
+                child->soloed, anySoloed);
 
             recalculateBusEffective(*child, child->effectiveVolume, effectivelyMuted, anySoloed);
         }

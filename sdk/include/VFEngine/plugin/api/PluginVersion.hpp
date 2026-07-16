@@ -26,6 +26,22 @@ namespace plugin {
     //      2D texture as a generic UI image source (bind any plugin/GPU texture to a
     //      UIImageComponent by key; used for a smooth minimap fog-of-war overlay).
     // v18: VFXPreviewParams appends loopDuration for finite-burst loop previews.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 18;
+    // v19: services::AudioParams appends priority (voice-budget arbitration weight;
+    //      lower = more important). It crosses the boundary by reference in
+    //      PluginContext::playSound3D/playStreamingSound, so a plugin built against v18
+    //      would construct a shorter object and the engine would read past its end.
+    // v20: services::AudioParams appends fadeInMs (ramp a sound up from silence instead of
+    //      starting at full gain; 0 = no fade). Same boundary and same hazard as v19 — it
+    //      crosses by reference in PluginContext::playSound3D/playStreamingSound, so a plugin
+    //      built against v19 would construct a shorter object and the engine would read past
+    //      its end.
+    // v21: VK-1513's priority is REMOVED from components::AudioSource2DComponent and
+    //      services::AudioSource2DData. 2D sources play through the streaming path, which
+    //      allocates its own AL sources and is never voice-budgeted, so the field could
+    //      never do anything. A removal is as breaking as an append: both types are
+    //      SDK-exported and embedded by value, so a plugin built against v20 would lay the
+    //      trailing fields out at the wrong offsets. services::AudioParams::priority is
+    //      untouched — it still arbitrates the pooled 3D path.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 21;
 
 }

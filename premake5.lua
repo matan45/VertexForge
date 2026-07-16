@@ -177,6 +177,20 @@ project "Core"
       "VFEngine/core/physics/**"
    }
 
+   -- VK-1518: AudioSceneUpdater stays in Core, NOT the Audio DLL. It is scene->event glue
+   -- (EnTT view + EventDispatcher, zero OpenAL), and EventDispatcher's singleton lives in
+   -- the Services StaticLib -- so a copy compiled into Audio.dll gets its OWN dispatcher
+   -- with no handlers registered, and every command it dispatched (VK-1505 emitter follow,
+   -- VK-1506 doppler, VK-1518 occlusion rays) was silently dropped. Compiling it here puts
+   -- it in the executable that registers the handlers. Contrast Threading/ECSRegistry/
+   -- AssetDB/CpuMemory, which solve the same singleton problem with a DLL of their own.
+   -- Its one cross-DLL call, ReverbZoneManager, is exported via VF_AUDIO_API and Core
+   -- already links Audio.
+   files {
+      "VFEngine/core/audio/AudioSceneUpdater.hpp",
+      "VFEngine/core/audio/AudioSceneUpdater.cpp"
+   }
+
    includedirs {
       "VFEngine/graphics/controllers",   -- Graphics headers
       "VFEngine/window/controllers",     -- Window headers
@@ -693,6 +707,14 @@ project "Audio"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
    files { "VFEngine/core/audio/**.hpp", "VFEngine/core/audio/**.cpp" }
+
+   -- VK-1518: compiled by Core instead, so it shares the executable's EventDispatcher.
+   -- See the note on Core's files{} above -- a copy in here would dispatch into a private
+   -- dispatcher with no handlers and silently do nothing.
+   removefiles {
+      "VFEngine/core/audio/AudioSceneUpdater.hpp",
+      "VFEngine/core/audio/AudioSceneUpdater.cpp"
+   }
 
    includedirs {
       "dependencies/spdlog/include",

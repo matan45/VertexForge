@@ -1,5 +1,7 @@
 #include "AudioSource.hpp"
 #include "AudioSystem.hpp"
+#include "OcclusionPolicy.hpp"
+#include <AL/alext.h> // AL_SOURCE_SPATIALIZE_SOFT / AL_AUTO_SOFT (not in <AL/al.h>)
 #include <algorithm>
 
 namespace core::audio
@@ -44,13 +46,21 @@ namespace core::audio
           distanceFilterEnabled(other.distanceFilterEnabled),
           filterStartDistance(other.filterStartDistance),
           filterMaxDistance(other.filterMaxDistance),
-          filterIntensity(other.filterIntensity)
+          filterIntensity(other.filterIntensity),
+          occlusionTarget(other.occlusionTarget),
+          currentOcclusion(other.currentOcclusion),
+          occlusionLpfAmount(other.occlusionLpfAmount),
+          occlusionVolumeAmount(other.occlusionVolumeAmount)
     {
         other.sourceId = 0;
         other.spatialEnabled = false;
         other.filterId = 0;
         other.currentGainHF = 1.0f;
         other.distanceFilterEnabled = false;
+        other.occlusionTarget = 0.0f;
+        other.currentOcclusion = 0.0f;
+        other.occlusionLpfAmount = 0.0f;
+        other.occlusionVolumeAmount = 0.0f;
     }
 
     AudioSource& AudioSource::operator=(AudioSource&& other) noexcept
@@ -72,11 +82,19 @@ namespace core::audio
             filterStartDistance = other.filterStartDistance;
             filterMaxDistance = other.filterMaxDistance;
             filterIntensity = other.filterIntensity;
+            occlusionTarget = other.occlusionTarget;
+            currentOcclusion = other.currentOcclusion;
+            occlusionLpfAmount = other.occlusionLpfAmount;
+            occlusionVolumeAmount = other.occlusionVolumeAmount;
             other.sourceId = 0;
             other.spatialEnabled = false;
             other.filterId = 0;
             other.currentGainHF = 1.0f;
             other.distanceFilterEnabled = false;
+            other.occlusionTarget = 0.0f;
+            other.currentOcclusion = 0.0f;
+            other.occlusionLpfAmount = 0.0f;
+            other.occlusionVolumeAmount = 0.0f;
         }
         return *this;
     }
@@ -220,6 +238,13 @@ namespace core::audio
         AudioSystem::checkError("setPosition");
     }
 
+    void AudioSource::setVelocity(const glm::vec3& velocity)
+    {
+        if (!isValid()) return;
+        alSource3f(sourceId, AL_VELOCITY, velocity.x, velocity.y, velocity.z);
+        AudioSystem::checkError("setVelocity");
+    }
+
     glm::vec3 AudioSource::getPosition() const
     {
         if (!isValid()) return glm::vec3(0.0f);
@@ -235,6 +260,16 @@ namespace core::audio
 
         spatialEnabled = is3D;
         alSourcei(sourceId, AL_SOURCE_RELATIVE, is3D ? AL_FALSE : AL_TRUE);
+
+        // Force spatialization for 3D sources so stereo/multichannel clips are
+        // downmixed and spatialized instead of playing flat (AL_AUTO_SOFT only
+        // spatializes mono). AL_AUTO_SOFT restores the default for 2D sources,
+        // which matters because pooled sources are recycled across 2D/3D plays.
+        if (AudioSystem::isSpatializeAvailable())
+        {
+            alSourcei(sourceId, AL_SOURCE_SPATIALIZE_SOFT, is3D ? AL_TRUE : AL_AUTO_SOFT);
+        }
+
         AudioSystem::checkError("set3D");
     }
 
@@ -277,6 +312,14 @@ namespace core::audio
         AudioSystem::checkError("setRolloffFactor");
     }
 
+    // Sources are pooled, so this is the ONLY thing standing between a new voice and
+    // whatever its slot's previous tenant left behind. It must therefore be total: every
+    // AL property and every CPU mirror this class owns is written here, unconditionally.
+    // Adding state to AudioSource without adding it here is what produced VK-1506's
+    // velocity leak — a fresh one-shot inheriting a dead emitter's doppler.
+    //
+    // Fade and pause are deliberately absent: a fade is AudioSourceManager's queue state,
+    // not a property of the source, and pause is a transition rather than a value.
     void AudioSource::applyConfig(const AudioSourceConfig& config)
     {
         setVolume(config.volume);
@@ -284,6 +327,7 @@ namespace core::audio
         setLooping(config.loop);
         set3D(config.is3D);
         setPosition(config.position);
+        setVelocity(config.velocity);
         setMinDistance(config.minDistance);
         setMaxDistance(config.maxDistance);
         setRolloffFactor(config.rolloffFactor);
@@ -293,6 +337,9 @@ namespace core::audio
         setConeInnerAngle(config.innerConeAngle);
         setConeOuterAngle(config.outerConeAngle);
         setConeOuterGain(config.outerConeGain);
+        // settle, not set: for a fresh play all three are 0 and this is exactly
+        // resetOcclusionState(); for a revive it must land already-muffled.
+        settleOcclusion(config.occlusion, config.occlusionLpfAmount, config.occlusionVolumeAmount);
     }
 
     float AudioSource::getPlaybackPosition() const
@@ -370,6 +417,7 @@ namespace core::audio
             filterId = 0;
         }
         currentGainHF = 1.0f;
+        resetOcclusionState();
     }
 
     void AudioSource::setDistanceFilterParams(bool enabled, float startDist, float maxDist, float intensity)
@@ -380,11 +428,42 @@ namespace core::audio
         filterIntensity = std::clamp(intensity, 0.0f, 1.0f);
     }
 
+    void AudioSource::setOcclusion(float occlusion, float lpfAmount, float volumeAmount)
+    {
+        occlusionTarget = std::clamp(occlusion, 0.0f, 1.0f);
+        occlusionLpfAmount = std::clamp(lpfAmount, 0.0f, 1.0f);
+        occlusionVolumeAmount = std::clamp(volumeAmount, 0.0f, 1.0f);
+    }
+
+    void AudioSource::settleOcclusion(float occlusion, float lpfAmount, float volumeAmount)
+    {
+        setOcclusion(occlusion, lpfAmount, volumeAmount);
+        // Skip the attack/release glide entirely. updateDistanceFilter would otherwise
+        // ramp currentOcclusion up from 0 at kAttackRate, which for a restored voice is
+        // an audible swell rather than the steady state it was already in.
+        currentOcclusion = occlusionTarget;
+    }
+
+    void AudioSource::resetOcclusionState()
+    {
+        // VK-1518: the neutral value is 0 (NO cut), because the amounts are cut amounts
+        // rather than gains. Resetting these to 1 would leave every recycled voice muffled.
+        occlusionTarget = 0.0f;
+        currentOcclusion = 0.0f;
+        occlusionLpfAmount = 0.0f;
+        occlusionVolumeAmount = 0.0f;
+    }
+
     void AudioSource::updateDistanceFilter(float distance, float deltaTime)
     {
         if (!isValid() || filterId == 0) return;
 
-        if (!distanceFilterEnabled)
+        // VK-1518: two independent terms now drive this one filter — distance rolloff and
+        // geometry occlusion. Both are 0 on any source that has never been occluded, which
+        // is what keeps everything below identical to the pre-VK-1518 behaviour.
+        const bool occlusionIdle = (occlusionTarget <= 0.0f && currentOcclusion <= 0.0f);
+
+        if (!distanceFilterEnabled && occlusionIdle)
         {
             if (currentGainHF < 1.0f)
             {
@@ -393,25 +472,44 @@ namespace core::audio
             return;
         }
 
+        // Distance term. Now gated on its own knob: occlusion alone can bring us in here.
         float targetGainHF = 1.0f;
-        if (distance >= filterMaxDistance)
+        if (distanceFilterEnabled)
         {
-            targetGainHF = 1.0f - filterIntensity * 0.9f;
-        }
-        else if (distance > filterStartDistance)
-        {
-            float t = (distance - filterStartDistance) / (filterMaxDistance - filterStartDistance);
-            targetGainHF = 1.0f - filterIntensity * 0.9f * t;
-        }
+            if (distance >= filterMaxDistance)
+            {
+                targetGainHF = 1.0f - filterIntensity * 0.9f;
+            }
+            else if (distance > filterStartDistance)
+            {
+                float t = (distance - filterStartDistance) / (filterMaxDistance - filterStartDistance);
+                targetGainHF = 1.0f - filterIntensity * 0.9f * t;
+            }
 
-        targetGainHF = std::clamp(targetGainHF, 0.1f, 1.0f);
+            targetGainHF = std::clamp(targetGainHF, 0.1f, 1.0f);
+        }
 
         constexpr float smoothingRate = 10.0f;
         float lerpFactor = std::min(1.0f, deltaTime * smoothingRate);
         currentGainHF += (targetGainHF - currentGainHF) * lerpFactor;
 
-        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAINHF, currentGainHF);
-        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAIN, 1.0f);
+        // Occlusion term: its own asymmetric glide, folded in at write time rather than into
+        // targetGainHF, so the distance smoothing keeps its exact meaning and occlusion is
+        // not cascaded through a second one-pole.
+        currentOcclusion = occlusion::smoothOcclusion(
+            currentOcclusion, occlusionTarget, deltaTime,
+            occlusionTarget > currentOcclusion ? occlusion::kAttackRate : occlusion::kReleaseRate);
+
+        const float occHF = occlusion::occlusionGain(currentOcclusion, occlusionLpfAmount);
+        const float occGain = occlusion::occlusionGain(currentOcclusion, occlusionVolumeAmount);
+
+        // occlusion == 0 => occHF == occGain == 1.0f EXACTLY, so these two writes reduce to
+        // the old (currentGainHF, 1.0f) pair. AL_LOWPASS_GAIN finally earns its keep here:
+        // AL_GAIN already carries userVolume * busVolume * fade, so it is not ours to touch.
+        // Note this attenuates the DIRECT path only — reverb rides AL_AUXILIARY_SEND_FILTER,
+        // so an occluded sound still feeds the room. That is deliberate (UE5 does the same).
+        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAINHF, std::clamp(currentGainHF * occHF, 0.0f, 1.0f));
+        AudioSystem::alFilterf(filterId, AL_LOWPASS_GAIN, occGain);
         alSourcei(sourceId, AL_DIRECT_FILTER, static_cast<ALint>(filterId));
     }
 
@@ -424,5 +522,9 @@ namespace core::audio
             alSourcei(sourceId, AL_DIRECT_FILTER, AL_FILTER_NULL);
         }
         currentGainHF = 1.0f;
+        // VK-1518: sources are POOLED and this is the single choke point every recycle runs
+        // through (releaseSource, fade completion, VK-1515's demoteVoice). Miss it and a
+        // fresh one-shot inherits the previous tenant's muffle.
+        resetOcclusionState();
     }
 }

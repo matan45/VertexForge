@@ -9,6 +9,7 @@
 #include "../asset/AssetRef.hpp"
 #include "../animator/SocketTypes.hpp"
 #include "../types/AudioEffectTypes.hpp"
+#include "../types/AudioVariationTypes.hpp"
 
 namespace components
 {
@@ -99,8 +100,29 @@ namespace components
 
         std::string busName = "Music";
 
+        // VK-1521: ramp up from silence over this many ms when the sound starts. 0 = no fade,
+        // so existing scenes are unchanged. This component plays through the STREAMING path
+        // (_native_audio_play2d dispatches PlayStreamingSoundCommand), so it is the streaming
+        // ramp that makes this field do anything.
+        float fadeInMs = 0.0f;
+
+        // VK-1520: variation container. The playable pool is [audioRef] ++ the
+        // valid entries of clipVariants, so audioRef IS variant 0 and stays in
+        // the rotation. Defaults (Single + zero variation) make playback
+        // byte-identical to pre-VK-1520 for every existing scene.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;  // +/- fraction of the authored pitch; 0 = inert
+        float volumeVariation = 0.0f; // +/- fraction of the authored volume; 0 = inert
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
+        // VK-1520 runtime state, like activeHandle/isPlaying above: never
+        // serialized, never in the DTO. lastVariant drives no-immediate-repeat;
+        // playCount is the per-play seed entropy (seeding from lastVariant alone
+        // would collapse the sequence into a fixed cycle).
+        uint8_t lastVariant = types::AUDIO_VARIANT_NONE;
+        uint32_t playCount = 0;
     };
 
     struct AudioSource3DComponent
@@ -118,6 +140,23 @@ namespace components
         float filterMaxDistance = 100.0f;
         float filterIntensity = 1.0f;
 
+        // VK-1518: geometry occlusion — a listener->emitter raycast muffles this source when
+        // level geometry blocks it. Opt-in, so no existing scene changes behaviour.
+        // Both floats are CUT AMOUNTS at full occlusion (0 = inert, 1 = full cut), matching
+        // filterIntensity above. occlusionLpf drives AL_LOWPASS_GAINHF and occlusionVolume
+        // drives AL_LOWPASS_GAIN on the direct path — deliberately NOT AL_GAIN, which
+        // already carries volume * bus * fade.
+        bool enableOcclusion = false;
+        float occlusionLpf = 0.7f;     // cut 70% of the highs when fully occluded
+        float occlusionVolume = 0.3f;  // cut 30% of the volume when fully occluded
+        // The "trace channel": which collision layers count as blocking. Static|Kinematic by
+        // default, so walls and moving doors occlude but trigger volumes and the player's own
+        // Dynamic capsule do not (the raycast has no sensor filter — it matches on layer
+        // only). Bit N = layer N; indices per types::PhysicsSettings::createDefault():
+        // Static 0, Dynamic 1, Kinematic 2, Sensor 3. Kept as a literal rather than an
+        // include — this header must not depend on PhysicsTypes.hpp.
+        uint16_t occlusionLayerMask = 0x0005;
+
         float innerConeAngle = 360.0f;
         float outerConeAngle = 360.0f;
         float outerConeGain = 0.0f;
@@ -125,8 +164,30 @@ namespace components
 
         std::string busName = "SFX";
 
+        // VK-1513: arbitration weight when the scene's real-voice budget is full.
+        // LOWER = MORE IMPORTANT (0 = critical, 255 = least, 128 = neutral), matching
+        // VFXComponent::priority and Unity. Note ReverbZoneComponent::priority below uses
+        // the opposite convention — that one is zone override, not budget eviction.
+        // 2D sources carry no priority: they play through the streaming path, which
+        // allocates its own AL sources and is never budgeted.
+        uint8_t priority = 128;
+
+        // VK-1521: see AudioSource2DComponent::fadeInMs. 0 = no fade. This component plays
+        // through the pooled path (_native_audio_play3d dispatches PlaySound3DCommand).
+        float fadeInMs = 0.0f;
+
+        // VK-1520: see AudioSource2DComponent's variation block. Pool is
+        // [audioRef] ++ valid(clipVariants); audioRef is variant 0.
+        std::vector<asset::AssetRef> clipVariants;
+        types::AudioPlayOrder playOrder = types::AudioPlayOrder::Single;
+        float pitchVariation = 0.0f;
+        float volumeVariation = 0.0f;
+
         uint64_t activeHandle = 0;
         bool isPlaying = false;
+        // VK-1520 runtime state — not serialized, not in the DTO.
+        uint8_t lastVariant = types::AUDIO_VARIANT_NONE;
+        uint32_t playCount = 0;
     };
 
     struct ScriptEntry

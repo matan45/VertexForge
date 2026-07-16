@@ -1,6 +1,7 @@
 #pragma once
 #include "../../interfaces/audio/IAudioService.hpp"
 #include "../../providers/audio/IAudioProvider.hpp"
+#include "../../events/audio/AudioEvents.hpp"
 
 namespace services {
 
@@ -14,7 +15,8 @@ namespace services {
         // === Listener (Camera/Player) ===
         void setListenerPosition(const glm::vec3& position,
                                  const glm::vec3& forward,
-                                 const glm::vec3& up = glm::vec3(0, 1, 0)) override;
+                                 const glm::vec3& up = glm::vec3(0, 1, 0),
+                                 const glm::vec3& velocity = glm::vec3(0.0f)) override;
 
         // === Sound Playback ===
         [[nodiscard]] AudioHandle playSound3D(const std::string& path, const glm::vec3& position,
@@ -42,7 +44,13 @@ namespace services {
         void setBusSoloed(const std::string& busName, bool soloed) override;
         [[nodiscard]] float getBusVolume(const std::string& busName) const override;
         [[nodiscard]] bool isBusMuted(const std::string& busName) const override;
+        [[nodiscard]] bool isBusSoloed(const std::string& busName) const override;
         [[nodiscard]] std::vector<std::string> getBusNames() const override;
+        void setBusDuck(const std::string& targetBus,
+                        const types::BusDuckConfig& config) override;
+        void removeBusDuck(const std::string& targetBus) override;
+        [[nodiscard]] std::optional<types::BusDuckConfig> getBusDuck(
+            const std::string& targetBus) const override;
         void saveMixSnapshot(const std::string& name) override;
         void loadMixSnapshot(const std::string& name) override;
         void deleteMixSnapshot(const std::string& name) override;
@@ -61,6 +69,14 @@ namespace services {
         AudioPlayParams convertParams(const AudioParams& params) const;
 
         IAudioProvider* audioProvider;
+
+        // VK-1511: main-thread cache of the last listener pose. Written by the
+        // SetListenerPositionCommand handler, read by GetListenerStateQuery — both
+        // run synchronously on the main dispatch thread (editor: ViewPort is the sole
+        // writer), so no atomics are needed and the audio-thread snapshot is bypassed.
+        // Leading :: — inside `namespace services` a plain `events::` binds to the
+        // `services::events` namespace (VFXPreviewEvents.hpp), not global ::events.
+        ::events::audio::ListenerState cachedListener;
     };
 
 }

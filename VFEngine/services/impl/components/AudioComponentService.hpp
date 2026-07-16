@@ -36,6 +36,7 @@ namespace services {
         bool hasAudioSource3DComponent(EntityHandle entity) const;
         std::optional<AudioSource3DData> getAudioSource3DData(EntityHandle entity) const;
         bool setAudioSource3DData(EntityHandle entity, const AudioSource3DData& audioData);
+        bool setAudioSource3DDistances(EntityHandle entity, float minDistance, float maxDistance);
 
         // Reverb Zone Operations
         bool addReverbZoneComponent(EntityHandle entity);

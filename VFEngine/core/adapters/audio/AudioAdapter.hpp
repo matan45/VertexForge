@@ -39,12 +39,17 @@ namespace core
         void pauseSound(services::AudioHandleId handle) override;
         void resumeSound(services::AudioHandleId handle) override;
         bool isPlaying(services::AudioHandleId handle) const override;
+        types::SoundStatus getSoundStatus(services::AudioHandleId handle) const override;
         void setVolume(services::AudioHandleId handle, float volume) override;
         void setPitch(services::AudioHandleId handle, float pitch) override;
+        void setSourceTransform(services::AudioHandleId handle, const glm::vec3& position,
+                                const glm::vec3& direction, const glm::vec3& velocity) override;
+        void setSourceOcclusion(services::AudioHandleId handle, float occlusion,
+                                float lpfAmount, float volumeAmount) override;
 
         // === Listener ===
         void setListenerPosition(const glm::vec3& position, const glm::vec3& forward,
-                                 const glm::vec3& up) override;
+                                 const glm::vec3& up, const glm::vec3& velocity) override;
 
         // === Playback Position ===
         float getPlaybackPosition(services::AudioHandleId handle) const override;
@@ -54,6 +59,10 @@ namespace core
         // === Audio Settings ===
         void applySettings(const types::AudioSettings& settings) override;
         types::AudioSettings getCurrentSettings() const override;
+        types::AudioHrtfStatus getHrtfStatus() const override;
+        types::AudioVoiceStats getVoiceStats() const override;
+        std::vector<types::AudioVoiceRow> getActiveVoices() const override;
+        void setVoiceDebugEnabled(bool enabled) override;
 
         // === Audio Buses ===
         void createBus(const std::string& busName, const std::string& parentName = "Master") override;
@@ -62,7 +71,14 @@ namespace core
         void setBusSoloed(const std::string& busName, bool soloed) override;
         float getBusVolume(const std::string& busName) const override;
         bool isBusMuted(const std::string& busName) const override;
+        bool isBusSoloed(const std::string& busName) const override;
         std::vector<std::string> getBusNames() const override;
+        std::vector<types::AudioBusLevel> getBusLevels() const override;
+        void setBusDuck(const std::string& targetBus,
+                        const types::BusDuckConfig& config) override;
+        void removeBusDuck(const std::string& targetBus) override;
+        std::optional<types::BusDuckConfig> getBusDuck(
+            const std::string& targetBus) const override;
         void saveMixSnapshot(const std::string& name) override;
         void loadMixSnapshot(const std::string& name) override;
         void deleteMixSnapshot(const std::string& name) override;

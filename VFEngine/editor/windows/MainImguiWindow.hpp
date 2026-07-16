@@ -39,6 +39,7 @@
 #include "uilayer/UILayerBuilderWindow.hpp"
 #include "debug/MemoryDiagnosticsWindow.hpp"
 #include "debug/RTTDebugWindow.hpp"
+#include "audio/AudioDebugWindow.hpp"
 #include "config/EditorPreferencesWindow.hpp"
 #include "config/EditorSettingsWindow.hpp"
 #include "config/EnvironmentWindow.hpp"
@@ -101,6 +102,7 @@ namespace windows
         UILayerBuilderWindow uiLayerBuilderWindow;
         MemoryDiagnosticsWindow memoryDiagnosticsWindow;
         RTTDebugWindow rttDebugWindow;
+        AudioDebugWindow audioDebugWindow;
         EditorPreferencesWindow editorPreferencesWindow;
         EditorSettingsWindow editorSettingsWindow;
         EnvironmentWindow environmentWindow;

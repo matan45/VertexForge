@@ -271,6 +271,21 @@ namespace serialization
                 settings.dopplerFactor = listener["dopplerFactor"].get<float>();
             if (listener.contains("speedOfSound") && listener["speedOfSound"].is_number())
                 settings.speedOfSound = listener["speedOfSound"].get<float>();
+            if (listener.contains("maxDopplerSpeed") && listener["maxDopplerSpeed"].is_number())
+                settings.maxDopplerSpeed = listener["maxDopplerSpeed"].get<float>();
+            if (listener.contains("enableHrtf") && listener["enableHrtf"].is_boolean())
+                settings.enableHrtf = listener["enableHrtf"].get<bool>();
+        }
+
+        // VK-1513. Absent in scenes saved before the voice cap existed, so the struct
+        // default (64) applies — no migration needed.
+        void deserializeAudioVoices(const json& j, types::AudioSettings& settings)
+        {
+            if (!j.contains("voices") || !j["voices"].is_object())
+                return;
+            const auto& voices = j["voices"];
+            if (voices.contains("maxRealVoices") && voices["maxRealVoices"].is_number_integer())
+                settings.maxRealVoices = voices["maxRealVoices"].get<int>();
         }
 
         void deserializeAudioDistModel(const json& j, types::AudioSettings& settings)
@@ -374,7 +389,13 @@ namespace serialization
         j["listener"] = {
             {"masterVolume", settings.masterVolume},
             {"dopplerFactor", settings.dopplerFactor},
-            {"speedOfSound", settings.speedOfSound}
+            {"speedOfSound", settings.speedOfSound},
+            {"maxDopplerSpeed", settings.maxDopplerSpeed},
+            {"enableHrtf", settings.enableHrtf}
+        };
+
+        j["voices"] = {
+            {"maxRealVoices", settings.maxRealVoices}
         };
 
         j["distanceModel"] = {
@@ -398,6 +419,7 @@ namespace serialization
     void SceneSerialization::deserializeAudioSettings(const json& j, types::AudioSettings& settings)
     {
         deserializeAudioListener(j, settings);
+        deserializeAudioVoices(j, settings);
         deserializeAudioDistModel(j, settings);
         deserializeAudioDistFilter(j, settings);
         deserializeAudioBuses(j, settings);

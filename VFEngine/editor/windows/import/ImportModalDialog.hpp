@@ -20,6 +20,7 @@ namespace windows
         importConfig::TextureCompressionQuality compressionQuality = importConfig::TextureCompressionQuality::Balanced;
         importConfig::AudioCompressionQuality audioQuality = importConfig::AudioCompressionQuality::Medium;
         importConfig::AudioLoadType audioLoadType = importConfig::AudioLoadType::Auto;
+        bool audioForceMono = false;
         bool openModal = false;
 
     public:

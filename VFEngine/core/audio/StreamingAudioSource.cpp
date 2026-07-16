@@ -22,10 +22,12 @@ namespace core::audio
           , looping(other.looping)
           , spatialEnabled(other.spatialEnabled)
           , samplesPerBuffer(other.samplesPerBuffer)
-          , totalSamplesPlayed(other.totalSamplesPlayed)
+          , queuedChunks(std::move(other.queuedChunks))
+          , nextDecodedSample(other.nextDecodedSample)
     {
         other.sourceId = 0;
         other.state = StreamingState::Stopped;
+        other.nextDecodedSample = 0;
     }
 
     StreamingAudioSource& StreamingAudioSource::operator=(StreamingAudioSource&& other) noexcept
@@ -42,9 +44,11 @@ namespace core::audio
             looping = other.looping;
             spatialEnabled = other.spatialEnabled;
             samplesPerBuffer = other.samplesPerBuffer;
-            totalSamplesPlayed = other.totalSamplesPlayed;
+            queuedChunks = std::move(other.queuedChunks);
+            nextDecodedSample = other.nextDecodedSample;
             other.sourceId = 0;
             other.state = StreamingState::Stopped;
+            other.nextDecodedSample = 0;
         }
         return *this;
     }
@@ -69,7 +73,6 @@ namespace core::audio
         }
 
         state = StreamingState::Stopped;
-        totalSamplesPlayed = 0;
 
         return true;
     }
@@ -80,7 +83,7 @@ namespace core::audio
         cleanupBuffers();
         streamHandle.reset();
         state = StreamingState::Stopped;
-        totalSamplesPlayed = 0;
+        resetQueuedState();
     }
 
     bool StreamingAudioSource::initBuffers()
@@ -119,13 +122,13 @@ namespace core::audio
             return false;
         }
 
+        resetQueuedState();
         for (ALuint bufferId : bufferIds)
         {
-            if (!fillBuffer(bufferId))
+            if (!fillAndQueueBuffer(bufferId))
             {
                 break;
             }
-            queueBuffer(bufferId);
         }
 
         return true;
@@ -156,7 +159,7 @@ namespace core::audio
         }
 
         readBuffer.clear();
-        bufferSampleCounts.clear();
+        resetQueuedState();
         samplesPerBuffer = 0;
     }
 
@@ -168,21 +171,19 @@ namespace core::audio
         return (header.channels == 2) ? AL_FORMAT_STEREO16 : AL_FORMAT_MONO16;
     }
 
-    bool StreamingAudioSource::fillBuffer(ALuint bufferId)
+    std::optional<QueuedEnvelopeChunk> StreamingAudioSource::fillBuffer(ALuint bufferId)
     {
         if (!streamHandle || streamHandle->isEOF())
         {
-            return false;
+            return std::nullopt;
         }
 
         size_t samplesRead = streamHandle->readSamples(readBuffer, samplesPerBuffer);
 
         if (samplesRead == 0)
         {
-            return false;
+            return std::nullopt;
         }
-
-        bufferSampleCounts[bufferId] = samplesRead;
 
         const auto& header = streamHandle->getHeader();
         ALenum format = getFormat();
@@ -197,16 +198,41 @@ namespace core::audio
 
         if (AudioSystem::checkError("alBufferData"))
         {
-            return false;
+            nextDecodedSample += samplesRead;
+            return std::nullopt;
         }
 
+        QueuedEnvelopeChunk chunk;
+        chunk.bufferId = bufferId;
+        chunk.startSample = nextDecodedSample;
+        chunk.sampleCount = samplesRead;
+        chunk.rms = resource::buildRmsEnvelope(
+            std::span<const short>(readBuffer.data(), samplesRead),
+            header.channels, header.sampleRate);
+        nextDecodedSample += samplesRead;
+        return chunk;
+    }
+
+    bool StreamingAudioSource::queueBuffer(QueuedEnvelopeChunk chunk)
+    {
+        const ALuint bufferId = static_cast<ALuint>(chunk.bufferId);
+        alSourceQueueBuffers(sourceId, 1, &bufferId);
+        if (AudioSystem::checkError("alSourceQueueBuffers"))
+            return false;
+        queuedChunks.push_back(std::move(chunk));
         return true;
     }
 
-    bool StreamingAudioSource::queueBuffer(ALuint bufferId)
+    bool StreamingAudioSource::fillAndQueueBuffer(ALuint bufferId)
     {
-        alSourceQueueBuffers(sourceId, 1, &bufferId);
-        return !AudioSystem::checkError("alSourceQueueBuffers");
+        auto chunk = fillBuffer(bufferId);
+        return chunk.has_value() && queueBuffer(std::move(*chunk));
+    }
+
+    void StreamingAudioSource::resetQueuedState(size_t nextSample)
+    {
+        queuedChunks.clear();
+        nextDecodedSample = nextSample;
     }
 
     void StreamingAudioSource::processFinishedBuffers()
@@ -231,27 +257,26 @@ namespace core::audio
                 break;
             }
 
-            auto it = bufferSampleCounts.find(bufferId);
-            size_t samplesInBuffer = (it != bufferSampleCounts.end()) ? it->second : samplesPerBuffer;
-            totalSamplesPlayed += samplesInBuffer;
+            const auto chunkIt = std::find_if(queuedChunks.begin(), queuedChunks.end(),
+                [bufferId](const QueuedEnvelopeChunk& chunk)
+                {
+                    return chunk.bufferId == static_cast<uint32_t>(bufferId);
+                });
+            if (chunkIt != queuedChunks.end())
+                queuedChunks.erase(chunkIt);
+            else
+                vfLogWarning("StreamingAudioSource: unqueued buffer {} has no meter metadata", bufferId);
 
             if (!streamHandle->isEOF())
             {
-                if (fillBuffer(bufferId))
-                {
-                    queueBuffer(bufferId);
-                }
+                fillAndQueueBuffer(bufferId);
             }
             else if (looping)
             {
-                // Reset stream and refill
+                // Queue loop-head data behind any tail chunks that OpenAL has not played.
                 streamHandle->reset();
-                totalSamplesPlayed = 0;
-                bufferSampleCounts.clear();
-                if (fillBuffer(bufferId))
-                {
-                    queueBuffer(bufferId);
-                }
+                nextDecodedSample = 0;
+                fillAndQueueBuffer(bufferId);
             }
         }
 
@@ -284,12 +309,11 @@ namespace core::audio
         if (state == StreamingState::Finished)
         {
             streamHandle->reset();
-            totalSamplesPlayed = 0;
+            resetQueuedState();
 
             for (ALuint bufferId : bufferIds)
             {
-                if (!fillBuffer(bufferId)) break;
-                queueBuffer(bufferId);
+                if (!fillAndQueueBuffer(bufferId)) break;
             }
         }
 
@@ -314,7 +338,12 @@ namespace core::audio
 
     void StreamingAudioSource::stop()
     {
-        if (sourceId == 0) return;
+        if (sourceId == 0)
+        {
+            resetQueuedState();
+            state = StreamingState::Stopped;
+            return;
+        }
 
         alSourceStop(sourceId);
 
@@ -330,8 +359,7 @@ namespace core::audio
         {
             streamHandle->reset();
         }
-        totalSamplesPlayed = 0;
-        bufferSampleCounts.clear();
+        resetQueuedState();
 
         state = StreamingState::Stopped;
     }
@@ -388,10 +416,15 @@ namespace core::audio
 
     float StreamingAudioSource::getPlaybackPosition() const
     {
-        if (!streamHandle) return 0.0f;
+        return getPlaybackMetrics().positionSeconds;
+    }
+
+    StreamingPlaybackMetrics StreamingAudioSource::getPlaybackMetrics() const
+    {
+        if (!streamHandle) return {};
 
         const auto& header = streamHandle->getHeader();
-        if (header.sampleRate == 0 || header.channels == 0) return 0.0f;
+        if (header.sampleRate == 0 || header.channels == 0) return {};
 
         ALint byteOffset = 0;
         if (sourceId != 0)
@@ -399,46 +432,28 @@ namespace core::audio
             alGetSourcei(sourceId, AL_BYTE_OFFSET, &byteOffset);
         }
 
-        size_t currentSamples = totalSamplesPlayed + (byteOffset / sizeof(short));
-        return static_cast<float>(currentSamples) /
-            static_cast<float>(header.sampleRate * header.channels);
+        const std::size_t queueSampleOffset = byteOffset > 0
+            ? static_cast<std::size_t>(byteOffset) / sizeof(short)
+            : 0;
+        return sampleQueuedPlayback(queuedChunks, queueSampleOffset,
+                                    header.channels, header.sampleRate);
     }
 
-    bool StreamingAudioSource::setPlaybackPosition(float seconds)
+    // Refill the AL queue from `sample` and put the source back into `prevState`. Shared by
+    // both exits of setPlaybackPosition, because the failure path needs it just as much as
+    // the success path: a stream left with an empty queue reports position 0, and a Playing
+    // one with nothing to mix is walked to Finished by processFinishedBuffers and reaped a
+    // tick later.
+    //
+    // Safe to call play() here: `state` is still prevState, so its `if (state == Finished)`
+    // branch cannot fire and re-reset what we have just queued.
+    void StreamingAudioSource::refillAndRestore(size_t sample, StreamingState prevState)
     {
-        if (!streamHandle) return false;
-
-        // Clamp to valid range (must match what seekToTime does internally)
-        seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
-
-        StreamingState prevState = state;
-
-        if (sourceId != 0)
-        {
-            alSourceStop(sourceId);
-
-            ALint queuedCount = 0;
-            alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
-            if (queuedCount > 0)
-            {
-                std::vector<ALuint> unqueuedBuffers(queuedCount);
-                alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
-            }
-        }
-
-        if (!streamHandle->seekToTime(seconds))
-        {
-            return false;
-        }
-
-        const auto& header = streamHandle->getHeader();
-        totalSamplesPlayed = static_cast<size_t>(seconds * static_cast<float>(header.sampleRate) * static_cast<float>(header.channels));
-        bufferSampleCounts.clear();
+        resetQueuedState(sample);
 
         for (ALuint bufferId : bufferIds)
         {
-            if (!fillBuffer(bufferId)) break;
-            queueBuffer(bufferId);
+            if (!fillAndQueueBuffer(bufferId)) break;
         }
 
         if (prevState == StreamingState::Playing)
@@ -454,7 +469,67 @@ namespace core::audio
         {
             state = StreamingState::Stopped;
         }
+    }
 
+    bool StreamingAudioSource::setPlaybackPosition(float seconds)
+    {
+        if (!streamHandle) return false;
+
+        // FIRST, before anything is torn down: alSourceStop zeroes AL_BYTE_OFFSET and
+        // resetQueuedState empties queuedChunks, and the reported position is derived from
+        // both — so read it once, here, or a failed seek has nothing to roll back to.
+        //
+        // The PLAYHEAD, deliberately, not nextDecodedSample: that is the decoder's WRITE
+        // cursor, a whole queue ahead of what is being heard, so restoring it would answer a
+        // failed scrub by silently jumping forward.
+        const float restoreSeconds = getPlaybackPosition();
+
+        // Clamp to valid range (must match what seekToTime does internally)
+        seconds = std::max(0.0f, std::min(seconds, streamHandle->getDuration()));
+
+        const StreamingState prevState = state;
+
+        if (sourceId != 0)
+        {
+            alSourceStop(sourceId);
+
+            ALint queuedCount = 0;
+            alGetSourcei(sourceId, AL_BUFFERS_QUEUED, &queuedCount);
+            if (queuedCount > 0)
+            {
+                std::vector<ALuint> unqueuedBuffers(queuedCount);
+                alSourceUnqueueBuffers(sourceId, queuedCount, unqueuedBuffers.data());
+            }
+        }
+
+        const auto& header = streamHandle->getHeader();
+        const auto sampleAt = [&header](float t) {
+            return static_cast<size_t>(t * static_cast<float>(header.sampleRate)
+                                       * static_cast<float>(header.channels));
+        };
+
+        if (!streamHandle->seekToTime(seconds))
+        {
+            // A failed seek must leave the stream where it was, not destroy it. Bailing out
+            // here with an empty queue is what made a failed scrub snap the preview playhead
+            // to 0 — and it also stranded a Playing source with nothing to mix, so the
+            // stream itself died a tick later.
+            if (streamHandle->seekToTime(restoreSeconds))
+            {
+                refillAndRestore(sampleAt(restoreSeconds), prevState);
+            }
+            else
+            {
+                // Even the rollback failed. The top of the file is the one offset the
+                // decoder is guaranteed to reach, and a stream playing from 0 beats a
+                // stream that no longer exists.
+                streamHandle->reset();
+                refillAndRestore(0, prevState);
+            }
+            return false;
+        }
+
+        refillAndRestore(sampleAt(seconds), prevState);
         return true;
     }
 

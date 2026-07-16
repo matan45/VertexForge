@@ -49,6 +49,7 @@ TEST_SUITE("SceneSettingsSerialization")
 
         auto audio = types::AudioSettings::createDefault();
         audio.masterVolume = 0.35f;
+        audio.enableHrtf = true; // VK-1508
         sceneGraph.setAudioSettings(audio);
 
         auto render = types::RenderSettings::createDefault();
@@ -78,6 +79,7 @@ TEST_SUITE("SceneSettingsSerialization")
         auto settingsJson = readJson(settingsPath);
         CHECK(settingsJson["physicsSettings"]["gravityScale"].get<float>() == doctest::Approx(2.5f));
         CHECK(settingsJson["audioSettings"]["listener"]["masterVolume"].get<float>() == doctest::Approx(0.35f));
+        CHECK(settingsJson["audioSettings"]["listener"]["enableHrtf"].get<bool>() == true); // VK-1508
         CHECK(settingsJson["renderSettings"]["shadows"]["enabled"].get<bool>() == false);
         CHECK(settingsJson["renderSettings"]["terrain"]["detailMaps"].get<bool>() == true);
         CHECK(settingsJson["inputMapping"].get<std::string>() == "config/input.vfInputMapping");
@@ -99,6 +101,7 @@ TEST_SUITE("SceneSettingsSerialization")
 
         auto audio = types::AudioSettings::createDefault();
         audio.masterVolume = 0.2f;
+        audio.enableHrtf = true; // VK-1508
         source.setAudioSettings(audio);
 
         auto render = types::RenderSettings::createDefault();
@@ -115,6 +118,7 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
         CHECK(loaded.getPhysicsSettings().gravityScale == doctest::Approx(3.0f));
         CHECK(loaded.getAudioSettings().masterVolume == doctest::Approx(0.2f));
+        CHECK(loaded.getAudioSettings().enableHrtf == true); // VK-1508
         CHECK(loaded.getRenderSettings().distanceCulling.enabled);
         CHECK(loaded.getRenderSettings().terrain.detailMaps);
     }

@@ -3,6 +3,8 @@
 #include "ReverbZoneManager.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace core::audio
 {
@@ -32,6 +34,10 @@ namespace core::audio
         snapshots.clear();
         buses.clear();
         nameToId.clear();
+        meterEntries.clear();
+        meterNodesScratch.clear();
+        directPowerScratch.clear();
+        meterRmsScratch.clear();
         nextBusId = 0;
     }
 
@@ -91,6 +97,7 @@ namespace core::audio
 
         nameToId[name] = bus.id;
         buses.push_back(std::move(bus));
+        meterEntries.resize(buses.size());
 
         recalculateEffectiveVolumes();
         return buses.back().id;
@@ -130,6 +137,25 @@ namespace core::audio
         return names;
     }
 
+    std::vector<types::AudioBusLevel> AudioBusManager::getBusLevels() const
+    {
+        std::shared_lock lock(busMutex);
+        std::vector<types::AudioBusLevel> levels;
+        levels.reserve(buses.size());
+        for (std::size_t i = 0; i < buses.size(); ++i)
+        {
+            types::AudioBusLevel level;
+            level.name = buses[i].name;
+            if (i < meterEntries.size())
+            {
+                level.rms = meterEntries[i].rms;
+                level.peakHold = meterEntries[i].peakHold;
+            }
+            levels.push_back(std::move(level));
+        }
+        return levels;
+    }
+
     void AudioBusManager::setBusVolume(const std::string& name, float volume)
     {
         std::unique_lock lock(busMutex);
@@ -160,6 +186,102 @@ namespace core::audio
         volumesDirty = true;
     }
 
+    bool AudioBusManager::setBusDuck(const std::string& targetBus,
+                                     const types::BusDuckConfig& config)
+    {
+        std::unique_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        const auto sourceIt = nameToId.find(config.sourceBus);
+        if (targetIt == nameToId.end())
+        {
+            vfLogWarning("AudioBusManager: Cannot configure ducking for unknown target bus '{}'",
+                         targetBus);
+            return false;
+        }
+        if (sourceIt == nameToId.end())
+        {
+            vfLogWarning("AudioBusManager: Cannot duck '{}' from unknown source bus '{}'",
+                         targetBus, config.sourceBus);
+            return false;
+        }
+        if (targetIt->second == sourceIt->second)
+        {
+            vfLogWarning("AudioBusManager: Bus '{}' cannot duck itself", targetBus);
+            return false;
+        }
+
+        auto* target = getBus(targetIt->second);
+        if (!target)
+        {
+            return false;
+        }
+
+        target->duckConfig = ducking::sanitizeConfig(config);
+        target->duckSourceBusId = sourceIt->second;
+        target->duckReleaseMs = target->duckConfig->releaseMs;
+        return true;
+    }
+
+    bool AudioBusManager::removeBusDuck(const std::string& targetBus)
+    {
+        std::unique_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        if (targetIt == nameToId.end())
+        {
+            return false;
+        }
+
+        auto* target = getBus(targetIt->second);
+        if (!target || !target->duckConfig)
+        {
+            return false;
+        }
+
+        target->duckReleaseMs = target->duckConfig->releaseMs;
+        target->duckConfig.reset();
+        return true;
+    }
+
+    std::optional<types::BusDuckConfig> AudioBusManager::getBusDuck(
+        const std::string& targetBus) const
+    {
+        std::shared_lock lock(busMutex);
+        const auto targetIt = nameToId.find(targetBus);
+        if (targetIt == nameToId.end() || targetIt->second >= buses.size())
+        {
+            return std::nullopt;
+        }
+        return buses[targetIt->second].duckConfig;
+    }
+
+    void AudioBusManager::updateDucking(float deltaTime)
+    {
+        std::unique_lock lock(busMutex);
+        for (auto& bus : buses)
+        {
+            float nextGain = 1.0f;
+            if (bus.duckConfig)
+            {
+                const float sourceRms = bus.duckSourceBusId < meterEntries.size()
+                    ? meterEntries[bus.duckSourceBusId].rms : 0.0f;
+                nextGain = bus.duckEnvelope.update(
+                    sourceRms, *bus.duckConfig, deltaTime);
+            }
+            else if (!bus.duckEnvelope.isUnity())
+            {
+                nextGain = bus.duckEnvelope.release(bus.duckReleaseMs, deltaTime);
+            }
+
+            const bool reachedUnity = nextGain == 1.0f && bus.duckGain != 1.0f;
+            if (reachedUnity
+                || std::abs(nextGain - bus.duckGain) >= ducking::kGainDirtyEpsilon)
+            {
+                bus.duckGain = nextGain;
+                volumesDirty = true;
+            }
+        }
+    }
+
     void AudioBusManager::flushDirtyVolumes()
     {
         std::unique_lock lock(busMutex);
@@ -167,6 +289,51 @@ namespace core::audio
         volumesDirty = false;
         recalculateEffectiveVolumes();
         applyEffectiveVolumesToSources();
+    }
+
+    void AudioBusManager::updateBusMeters(std::span<const SourceMeterSample> samples,
+                                           float deltaTime)
+    {
+        std::unique_lock lock(busMutex);
+        const std::size_t count = buses.size();
+        meterEntries.resize(count);
+        meterNodesScratch.resize(count);
+        directPowerScratch.assign(count, 0.0f);
+        meterRmsScratch.assign(count, 0.0f);
+
+        for (const SourceMeterSample& sample : samples)
+        {
+            const auto trackedIt = trackedSources.find(sample.handle);
+            if (trackedIt == trackedSources.end() || trackedIt->second.busId >= count)
+                continue;
+
+            const float dryRms = metering::finiteNonNegative(sample.dryRms);
+            const float userVolume = metering::finiteNonNegative(trackedIt->second.userVolume);
+            const double amplitude = static_cast<double>(dryRms)
+                * static_cast<double>(userVolume);
+            const double power = amplitude * amplitude;
+            const double accumulated = static_cast<double>(
+                directPowerScratch[trackedIt->second.busId]) + power;
+            directPowerScratch[trackedIt->second.busId] = static_cast<float>(std::min(
+                accumulated, static_cast<double>(std::numeric_limits<float>::max())));
+        }
+
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            meterNodesScratch[i].parentId = buses[i].parentId;
+            meterNodesScratch[i].volume = buses[i].volume;
+            meterNodesScratch[i].effectiveVolume = buses[i].effectiveVolume;
+            meterNodesScratch[i].muted = buses[i].muted;
+            meterNodesScratch[i].soloed = buses[i].soloed;
+        }
+
+        metering::accumulateBusRms(meterNodesScratch, directPowerScratch, meterRmsScratch);
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            meterEntries[i].rms = meterRmsScratch[i];
+            meterEntries[i].peakHold = metering::decayPeakHold(
+                meterEntries[i].peakHold, meterEntries[i].rms, deltaTime);
+        }
     }
 
     float AudioBusManager::getBusVolume(const std::string& name) const
@@ -178,6 +345,19 @@ namespace core::audio
         for (const auto& bus : buses)
         {
             if (bus.id == it->second) return bus.volume;
+        }
+        return 1.0f;
+    }
+
+    float AudioBusManager::getBusEffectiveVolume(const std::string& name) const
+    {
+        std::shared_lock lock(busMutex);
+        auto it = nameToId.find(name);
+        if (it == nameToId.end()) return 1.0f;
+
+        for (const auto& bus : buses)
+        {
+            if (bus.id == it->second) return bus.effectiveVolume;
         }
         return 1.0f;
     }
@@ -269,6 +449,22 @@ namespace core::audio
         }
     }
 
+    void AudioBusManager::detachSourceRouting(AudioHandle handle)
+    {
+        std::unique_lock lock(busMutex);
+        const auto it = trackedSources.find(handle);
+        if (it == trackedSources.end() || !sourceResolveCallback)
+            return;
+
+        const ALuint sourceId = sourceResolveCallback(handle);
+        if (sourceId == 0)
+            return;
+        if (effectManager)
+            effectManager->unrouteSource(sourceId, it->second.busId);
+        if (reverbZoneManager)
+            reverbZoneManager->unrouteSource(sourceId);
+    }
+
     void AudioBusManager::setSourceUserVolume(AudioHandle handle, float volume)
     {
         std::unique_lock lock(busMutex);
@@ -298,11 +494,9 @@ namespace core::audio
 
             if (effectManager)
             {
-                auto chain = effectManager->getBusEffectChain(bus.id);
-                if (!chain.empty())
-                {
-                    snapshot.busEffects[bus.id] = chain;
-                }
+                // Presence is meaningful even for an empty chain: runtime snapshots
+                // restore effects, while settings-loaded snapshots omit this entry.
+                snapshot.busEffects[bus.id] = effectManager->getBusEffectChain(bus.id);
             }
         }
         snapshots[name] = std::move(snapshot);
@@ -327,6 +521,12 @@ namespace core::audio
             if (muteIt != snapshot.busMutes.end())
             {
                 bus.muted = muteIt->second;
+            }
+
+            auto effectsIt = snapshot.busEffects.find(bus.id);
+            if (effectsIt != snapshot.busEffects.end())
+            {
+                replaceBusEffectChainLocked(bus.id, effectsIt->second);
             }
         }
 
@@ -403,6 +603,7 @@ namespace core::audio
 
         buses.clear();
         nameToId.clear();
+        meterEntries.clear();
         nextBusId = 0;
 
         if (definitions.empty())

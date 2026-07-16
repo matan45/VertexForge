@@ -58,6 +58,7 @@ namespace events::audio::snapshot
         float minDistance = 1.0f;
         float maxDistance = 100.0f;
         std::string busName;
+        uint8_t priority = 128; // VK-1513: lower = more important
 
         std::string_view getName() const override { return "PlayRestoredAudio3D"; }
     };
@@ -69,6 +70,7 @@ namespace events::audio::snapshot
         float pitch = 1.0f;
         bool loop = false;
         std::string busName;
+        uint8_t priority = 128; // VK-1513: lower = more important
 
         std::string_view getName() const override { return "PlayRestoredAudio2D"; }
     };

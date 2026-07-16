@@ -7,6 +7,7 @@
 #include "config/PhysicsConfigWindow.hpp"
 #include "config/AudioConfigWindow.hpp"
 #include "audio/AudioMixerWindow.hpp"
+#include "audio/AudioDebugWindow.hpp"
 #include "config/RenderConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
@@ -380,6 +381,7 @@ namespace windows
             if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
             if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
             if (ImGui::MenuItem("RTT Debug") && rttDebugWindow) rttDebugWindow->show();
+            if (ImGui::MenuItem("Audio Debug") && audioDebugWindow) audioDebugWindow->show();
 
             ImGui::EndMenu();
         }

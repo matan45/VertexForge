@@ -23,6 +23,7 @@ namespace vfx
         node.properties.erase("thickness");   // VK-1525: Ring
         node.properties.erase("arc");          // VK-1525: Ring
         node.properties.erase("startAngle");   // VK-1525: Ring
+        node.properties.erase("lineHalf");     // Line
 
         switch (shapeType)
         {
@@ -85,6 +86,14 @@ namespace vfx
             node.properties["startAngle"] = VFXProperty{
                 "startAngle", VFXPropertyType::Float,
                 ShapeDefaults::RING_START_ANGLE, -6.28318530718f, 6.28318530718f
+            };
+            break;
+
+        case ShapeType::Line:
+            node.properties["lineHalf"] = VFXProperty{
+                "lineHalf", VFXPropertyType::Vec3,
+                glm::vec3(ShapeDefaults::LINE_HALF_X, 0.0f, 0.0f),
+                -100.0f, 100.0f
             };
             break;
 

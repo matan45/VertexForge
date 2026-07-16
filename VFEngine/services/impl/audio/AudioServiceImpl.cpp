@@ -22,7 +22,15 @@ namespace services {
         // Listener Commands
         dispatcher.registerCommandHandler<events::audio::SetListenerPositionCommand>(
             [this](const auto& cmd) {
-                setListenerPosition(cmd.position, cmd.forward, cmd.up);
+                setListenerPosition(cmd.position, cmd.forward, cmd.up, cmd.velocity);
+                // VK-1511: cache the pose so the editor's 3D-audition mode can read it
+                // back on the main thread (race-free — this handler is the sole writer).
+                cachedListener = {cmd.position, cmd.forward, cmd.up, /*valid=*/true};
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetListenerStateQuery>(
+            [this](const auto&) {
+                return cachedListener;
             });
 
         // Sound Playback Commands
@@ -59,6 +67,7 @@ namespace services {
                 params.minDistance = cmd.minDistance;
                 params.maxDistance = cmd.maxDistance;
                 params.busName = cmd.busName;
+                params.priority = cmd.priority;
                 return audioProvider->playSound3D(cmd.path, cmd.position, params);
             });
 
@@ -70,6 +79,7 @@ namespace services {
                 params.pitch = cmd.pitch;
                 params.loop = cmd.loop;
                 params.busName = cmd.busName;
+                params.priority = cmd.priority;
                 return audioProvider->playStreamingSound(cmd.path, params);
             });
 
@@ -111,6 +121,26 @@ namespace services {
                 setPitch(cmd.handle, cmd.pitch);
             });
 
+        // VK-1505: per-frame emitter transform re-sync. Engine-internal loop (driven by
+        // AudioSceneUpdater), not a script-facing verb, so it calls the provider directly
+        // rather than adding a method to IAudioService (mirrors the snapshot handlers above).
+        dispatcher.registerCommandHandler<events::audio::SetSoundTransformCommand>(
+            [this](const auto& cmd) {
+                if (audioProvider)
+                    audioProvider->setSourceTransform(cmd.handle.id, cmd.position,
+                                                      cmd.direction, cmd.velocity);
+            });
+
+        // VK-1518: per-emitter geometry-occlusion verdict. Engine-internal loop (driven by
+        // AudioSceneUpdater's raycast), so it calls the provider directly for the same
+        // reason SetSoundTransformCommand does.
+        dispatcher.registerCommandHandler<events::audio::SetSoundOcclusionCommand>(
+            [this](const auto& cmd) {
+                if (audioProvider)
+                    audioProvider->setSourceOcclusion(cmd.handle.id, cmd.occlusion,
+                                                      cmd.lpfAmount, cmd.volumeAmount);
+            });
+
         // Streaming Audio Commands
         dispatcher.registerCommandHandler<events::audio::PlayStreamingSoundCommand>(
             [this](const auto& cmd) {
@@ -128,6 +158,11 @@ namespace services {
                 return isPlaying(query.handle);
             });
 
+        dispatcher.registerQueryHandler<events::audio::SoundStatusQuery>(
+            [this](const auto& query) {
+                return audioProvider->getSoundStatus(query.handle.id);
+            });
+
         dispatcher.registerQueryHandler<events::audio::GetPlaybackPositionQuery>(
             [this](const auto& query) {
                 return getPlaybackPosition(query.handle);
@@ -142,12 +177,40 @@ namespace services {
         dispatcher.registerCommandHandler<events::audio::ApplyAudioSettingsCommand>(
             [this](const auto& cmd) {
                 audioProvider->applySettings(cmd.settings);
+                // VK-1506: let main-thread consumers cache the doppler teleport guard.
+                events::audio::AudioSettingsChangedNotification note;
+                note.maxDopplerSpeed = cmd.settings.maxDopplerSpeed;
+                ::events::EventDispatcher::instance().publish(note);
                 return true;
             });
 
         dispatcher.registerQueryHandler<events::audio::GetAudioSettingsQuery>(
             [this](const auto&) {
                 return audioProvider->getCurrentSettings();
+            });
+
+        // VK-1508: report the live device HRTF status for the editor's status line.
+        dispatcher.registerQueryHandler<events::audio::GetHrtfStatusQuery>(
+            [this](const auto&) {
+                return audioProvider->getHrtfStatus();
+            });
+
+        // VK-1513: report real-voice budget occupancy for the editor's voice readout.
+        dispatcher.registerQueryHandler<events::audio::GetVoiceCountQuery>(
+            [this](const auto&) {
+                return audioProvider->getVoiceStats();
+            });
+
+        // VK-1515: the active-sounds overlay. Diagnostics, so both go straight to the
+        // provider and stay out of IAudioService — same call as voice stats and bus levels.
+        dispatcher.registerQueryHandler<events::audio::GetActiveVoicesQuery>(
+            [this](const auto&) {
+                return audioProvider->getActiveVoices();
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetVoiceDebugEnabledCommand>(
+            [this](const auto& cmd) {
+                audioProvider->setVoiceDebugEnabled(cmd.enabled);
             });
 
         // Audio Bus Commands
@@ -169,6 +232,16 @@ namespace services {
         dispatcher.registerCommandHandler<events::audio::SetBusSoloedCommand>(
             [this](const auto& cmd) {
                 setBusSoloed(cmd.busName, cmd.soloed);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::SetBusDuckCommand>(
+            [this](const auto& cmd) {
+                setBusDuck(cmd.targetBus, cmd.config);
+            });
+
+        dispatcher.registerCommandHandler<events::audio::RemoveBusDuckCommand>(
+            [this](const auto& cmd) {
+                removeBusDuck(cmd.targetBus);
             });
 
         dispatcher.registerCommandHandler<events::audio::SaveMixSnapshotCommand>(
@@ -197,9 +270,25 @@ namespace services {
                 return isBusMuted(query.busName);
             });
 
+        dispatcher.registerQueryHandler<events::audio::IsBusSoloedQuery>(
+            [this](const auto& query) {
+                return isBusSoloed(query.busName);
+            });
+
         dispatcher.registerQueryHandler<events::audio::GetBusNamesQuery>(
             [this](const auto&) {
                 return getBusNames();
+            });
+
+        // VK-1514: diagnostic query goes directly to the provider, like voice stats.
+        dispatcher.registerQueryHandler<events::audio::GetBusLevelsQuery>(
+            [this](const auto&) {
+                return audioProvider->getBusLevels();
+            });
+
+        dispatcher.registerQueryHandler<events::audio::GetBusDuckQuery>(
+            [this](const auto& query) {
+                return getBusDuck(query.targetBus);
             });
 
         dispatcher.registerQueryHandler<events::audio::GetSnapshotNamesQuery>(
@@ -247,8 +336,9 @@ namespace services {
 
     void AudioServiceImpl::setListenerPosition(const glm::vec3& position,
                                                 const glm::vec3& forward,
-                                                const glm::vec3& up) {
-        audioProvider->setListenerPosition(position, forward, up);
+                                                const glm::vec3& up,
+                                                const glm::vec3& velocity) {
+        audioProvider->setListenerPosition(position, forward, up, velocity);
     }
 
     AudioHandle AudioServiceImpl::playSound3D(const std::string& path, const glm::vec3& position,
@@ -321,6 +411,8 @@ namespace services {
         playParams.outerConeGain = params.outerConeGain;
         playParams.direction = params.direction;
         playParams.busName = params.busName;
+        playParams.priority = params.priority;
+        playParams.fadeInMs = params.fadeInMs;
         return playParams;
     }
 
@@ -348,8 +440,26 @@ namespace services {
         return audioProvider->isBusMuted(busName);
     }
 
+    bool AudioServiceImpl::isBusSoloed(const std::string& busName) const {
+        return audioProvider->isBusSoloed(busName);
+    }
+
     std::vector<std::string> AudioServiceImpl::getBusNames() const {
         return audioProvider->getBusNames();
+    }
+
+    void AudioServiceImpl::setBusDuck(const std::string& targetBus,
+                                      const types::BusDuckConfig& config) {
+        audioProvider->setBusDuck(targetBus, config);
+    }
+
+    void AudioServiceImpl::removeBusDuck(const std::string& targetBus) {
+        audioProvider->removeBusDuck(targetBus);
+    }
+
+    std::optional<types::BusDuckConfig> AudioServiceImpl::getBusDuck(
+        const std::string& targetBus) const {
+        return audioProvider->getBusDuck(targetBus);
     }
 
     void AudioServiceImpl::saveMixSnapshot(const std::string& name) {
