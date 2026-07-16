@@ -98,8 +98,8 @@ TEST_CASE("collectMaterialPathsForWarmup unions default + submesh materials, ded
 TEST_CASE("collectMaterialPathsForWarmup returns empty for a registry with no materials")
 {
     entt::registry registry;
-    registry.create();
-    registry.create();
+    [[maybe_unused]] const auto e1 = registry.create();
+    [[maybe_unused]] const auto e2 = registry.create();
     CHECK(material::collectMaterialPathsForWarmup(registry).empty());
 }
 
