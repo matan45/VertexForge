@@ -395,6 +395,13 @@ namespace serialization
             json entryJson;
             writeAssetRef(entryJson, "scriptRef", entry.scriptRef);
             entryJson["enabled"] = entry.enabled;
+            // inputPriority previously never round-tripped, so an authored execution order was
+            // silently reset to 0 on every load. VK-1536 adds the tick-governor fields beside it and
+            // fixes that at the same time.
+            entryJson["inputPriority"] = entry.inputPriority;
+            entryJson["updateInterval"] = entry.updateInterval;
+            entryJson["tickSignificance"] = entry.tickSignificance;
+            entryJson["pinFullRate"] = entry.pinFullRate;
             scriptsArray.push_back(entryJson);
         }
         j["scripts"] = scriptsArray;
@@ -415,9 +422,17 @@ namespace serialization
                 {
                     entry.enabled = entryJson["enabled"].get<bool>();
                 }
+                // Tolerant defaults: a scene saved before VK-1536 has none of these keys and reads
+                // back as "every frame, unthrottled" — i.e. exactly its current behavior.
+                entry.inputPriority = entryJson.value("inputPriority", 0);
+                entry.updateInterval = entryJson.value("updateInterval", 0.0f);
+                entry.tickSignificance = entryJson.value("tickSignificance", 1.0f);
+                entry.pinFullRate = entryJson.value("pinFullRate", false);
                 // Reset runtime state
                 entry.started = false;
                 entry.instanceId = 0;
+                entry.tickAccumulator = 0.0f;
+                entry.tickFirstDone = false;
                 script.scripts.push_back(entry);
             }
         }

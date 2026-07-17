@@ -197,8 +197,21 @@ namespace components
         bool enabled = true;
         int inputPriority = 0;
 
+        // VK-1536 tick governor — authored, serialized.
+        // updateInterval 0 == every frame == governor bypassed, matching the engine-wide
+        // "0 disables the cap" convention so unopted scenes stay byte-identical.
+        // A throttled script is handed the ACCUMULATED dt and MUST integrate against it; scripts
+        // that poll level-triggered input must not be throttled (see ScriptTickGovernor.hpp).
+        float updateInterval = 0.0f;   // seconds between onUpdate calls
+        float tickSignificance = 1.0f; // weight for distance scaling: higher == ticks at range
+        bool pinFullRate = false;      // exempt from DISTANCE scaling; authored interval still honored
+
         bool started = false;
         uint64_t instanceId = 0;
+
+        // VK-1536 runtime state — not serialized, reset on load (like started/instanceId).
+        float tickAccumulator = 0.0f;
+        bool tickFirstDone = false;
 
         services::ScriptPlaybackState playbackState = services::ScriptPlaybackState::Stopped;
     };

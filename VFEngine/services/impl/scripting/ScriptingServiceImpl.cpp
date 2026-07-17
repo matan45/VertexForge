@@ -5,6 +5,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -282,6 +283,13 @@ namespace services
         entry.scriptRef = scriptRef;
         entry.scriptPath = data.scriptPath;
         entry.enabled = data.enabled;
+        // Carry the full authored set: this is the only path an entity duplicate has to
+        // reconstruct its scripts (ComponentClone excludes ScriptComponent), so anything not
+        // copied here is silently lost on duplicate.
+        entry.inputPriority = data.inputPriority;
+        entry.updateInterval = data.updateInterval;
+        entry.tickSignificance = data.tickSignificance;
+        entry.pinFullRate = data.pinFullRate;
 
         scriptComp.scripts.push_back(entry);
         scriptListDirty = true;
@@ -427,6 +435,36 @@ namespace services
         scriptListDirty = false;
     }
 
+    bool ScriptingServiceImpl::queryCameraPosition(glm::vec3& outPos) const
+    {
+        // VK-1536. updateScripts only runs in play mode (EditorFrameTaskGraph gates on
+        // isPlayMode() && isGameTimeActive(); Runtime is always play), so the primary camera is
+        // always a real ECS entity here. That is why this can use the two-hop query directly and
+        // does not need WorldSectorStreamingOps' isPlayMode ? primary : cachedViewportCamera
+        // hybrid — the edit-mode staleness that WeatherServiceImpl::queryCameraPosition works
+        // around cannot arise on this path.
+        try
+        {
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            auto camOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
+            if (!camOpt.has_value())
+                return false;
+
+            events::scene::GetWorldTransformQuery tq;
+            tq.entity = camOpt.value();
+            auto xformOpt = dispatcher.query(tq);
+            if (!xformOpt.has_value())
+                return false;
+
+            outPos = xformOpt->position;
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     void ScriptingServiceImpl::updateScripts(float deltaTime)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -442,6 +480,11 @@ namespace services
             rebuildScriptUpdateList(registry);
         }
 
+        // VK-1536 — resolve the camera ONCE per tick, not per script: the two-hop query is far more
+        // expensive than the distance test it feeds. Only needed when distance scaling is on.
+        glm::vec3 cameraPos{0.0f};
+        const bool haveCamera = scriptLOD.enabled && queryCameraPosition(cameraPos);
+
         for (const auto& [entity, scriptIndex, priority] : cachedUpdateList)
         {
             // Entities/scripts can be destroyed mid-frame by other scripts —
@@ -452,12 +495,14 @@ namespace services
                 continue;
             }
 
-            std::string entityName;
+            // VK-1536: assign() into a reused member rather than a fresh local — this runs for every
+            // script every frame, and the copy is deliberate (see the catch below).
+            entityNameScratch.clear();
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
                 if (!nameComp.isActive) continue;
-                entityName = nameComp.name;
+                entityNameScratch.assign(nameComp.name);
             }
 
             auto& scriptComp = registry.get<components::ScriptComponent>(entity);
@@ -526,13 +571,58 @@ namespace services
                 }
             }
 
+            // VK-1536 tick governor. Placed AFTER the load/start blocks above on purpose: a script
+            // must still load and receive onStart/onEnable at full rate, so throttling only ever
+            // affects how often onUpdate runs, never whether the script comes alive.
+            //
+            // Distance scaling multiplies the AUTHORED interval, and is only reached when the script
+            // already opted in (updateInterval > 0). Gating on the authored value first is what
+            // keeps this off by default: a plain multiply would be a no-op anyway (0 * n == 0), but
+            // more importantly distance must never silently throttle a script whose author never
+            // asked for it.
+            float effInterval = entry.updateInterval;
+            if (effInterval > 0.0f && haveCamera && !entry.pinFullRate &&
+                registry.all_of<components::WorldTransformComponent>(entity))
+            {
+                // WorldTransformComponent, never TransformComponent: the latter is parent-local, so
+                // a child of a moving root would score against the wrong position.
+                const auto& wt = registry.get<components::WorldTransformComponent>(entity);
+                const glm::vec3 diff = glm::vec3(wt.worldMatrix[3]) - cameraPos;
+                const float distSq = glm::dot(diff, diff);
+                effInterval *= scripting::distanceMultiplier(
+                    scriptLOD, scripting::effectiveDistanceSq(distSq, entry.tickSignificance));
+            }
+            // An entity with no WorldTransformComponent (a manager/singleton script) has no position
+            // to score, so it keeps its authored interval and is never distance-throttled.
+
+            scripting::ScriptTickInputs tickIn;
+            tickIn.accumulator = entry.tickAccumulator;
+            tickIn.dt = deltaTime;
+            tickIn.interval = effInterval;
+            tickIn.firstTickDone = entry.tickFirstDone;
+            tickIn.instanceId = entry.instanceId;
+
+            const scripting::ScriptTickDecision tick = scripting::evaluateScriptTick(tickIn);
+            entry.tickAccumulator = tick.accumulator;
+            entry.tickFirstDone = tick.firstTickDone;
+            if (!tick.shouldTick) continue;
+
             // Breadcrumb so that an *uncatchable* native fault (e.g. an mType JIT
             // access violation) inside this script is still attributed by name in
             // the crash report written by util::installCrashHandler().
-            util::setCrashLogContext("script onUpdate: " + entry.scriptPath + " @ '" + entityName + "'");
+            // VK-1536: built into a reused member instead of concatenating fresh temporaries —
+            // setCrashLogContext only memcpys into a fixed buffer, so the allocations this used to
+            // do were the entire cost of a diagnostic that is read only if the process faults.
+            crashContextScratch.clear();
+            crashContextScratch += "script onUpdate: ";
+            crashContextScratch += entry.scriptPath;
+            crashContextScratch += " @ '";
+            crashContextScratch += entityNameScratch;
+            crashContextScratch += "'";
+            util::setCrashLogContext(crashContextScratch);
             try
             {
-                scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+                scriptingProvider->callOnUpdate(entry.instanceId, tick.tickDt);
             }
             catch (const std::exception& e)
             {
@@ -541,8 +631,10 @@ namespace services
                 // bypass this catch entirely — those are captured by the crash
                 // handler, or avoided by running with JIT off (the editor "Debug"
                 // script button forces the VM into interpreter mode).
+                // entityNameScratch is a copy, not a view: the script may have destroyed its own
+                // entity (and its NameComponent) inside callOnUpdate above.
                 vfLogScriptError("[Script] '{}' on '{}' threw in onUpdate: {}",
-                                 entry.scriptPath, entityName, e.what());
+                                 entry.scriptPath, entityNameScratch, e.what());
                 continue;
             }
         }
