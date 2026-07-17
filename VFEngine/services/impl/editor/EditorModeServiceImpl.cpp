@@ -190,12 +190,16 @@ namespace services
 
         pendingReselectNames.clear();
 
-        if (!resolved.empty())
-        {
-            events::scene::SelectEntitiesCommand cmd;
-            cmd.entities = std::move(resolved);
-            dispatcher.execute(cmd);
-        }
+        // Write unconditionally, even when nothing resolved. The empty-list early return
+        // above means reaching here implies a Stop is in flight, so this cannot disturb an
+        // ordinary scene load. It matters because Scene Graph selection is now permitted
+        // during play: the captured selection may name a play-SPAWNED entity that the
+        // snapshot restore just destroyed, which resolves to nothing here. Since
+        // setSelectedEntities prunes dead handles on WRITE only (there is no destroy hook),
+        // skipping the write would leave that dead handle selected in edit mode.
+        events::scene::SelectEntitiesCommand cmd;
+        cmd.entities = std::move(resolved);
+        dispatcher.execute(cmd);
     }
 
     EditorMode EditorModeServiceImpl::getMode() const
