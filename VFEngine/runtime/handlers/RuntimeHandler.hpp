@@ -52,6 +52,7 @@ namespace services {
     class VFXPlayModeHandler;
     class VFXSequenceRuntimeServiceImpl;
     class VFXSequencePlayModeHandler;
+    class ConfigService;
 }
 
 namespace handlers {
@@ -95,6 +96,10 @@ namespace handlers {
         std::shared_ptr<services::IPluginTextureService> pluginTextureService;
         std::shared_ptr<services::IWeatherService> weatherService;
         std::shared_ptr<services::ITimeService> timeService;
+        // VK-1534: per-user graphics settings store (config.json next to saves/). Wired
+        // into the Runtime so the Config/Save script natives function in shipped games
+        // and the persisted gfx.* preset/display override can be re-applied on scene load.
+        std::unique_ptr<services::ConfigService> configService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 
@@ -102,6 +107,9 @@ namespace handlers {
 
         events::SubscriptionToken resizeSubscription;
         events::SubscriptionToken displaySettingsSubscription;
+        // VK-1534: re-applies the persisted gfx.* override after each scene load's
+        // baked settings, so the player's choice wins and survives scene transitions.
+        events::SubscriptionToken sceneLoadedSubscription;
 
     public:
         explicit RuntimeHandler();
