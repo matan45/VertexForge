@@ -358,4 +358,34 @@ namespace render::gpudriven
         if (transferManager && transferManager->hasPendingTransfers())
             transferManager->waitAll();
     }
+
+    uint64_t MergedMeshBuffer::residentBytes(const MergedMeshInfo& mesh) const
+    {
+        uint64_t bytes = 0;
+        for (const SubmeshLocation& submesh : mesh.submeshes)
+        {
+            for (uint32_t lod = 0; lod < LOD_LEVEL_COUNT; ++lod)
+            {
+                if (submesh.lodStates[lod] != LODStreamState::Ready)
+                    continue;
+                const LODDrawInfo& info = submesh.lods[lod];
+                bytes += static_cast<uint64_t>(info.vertexCount) * vertexStride;
+                bytes += static_cast<uint64_t>(info.indexCount) * sizeof(uint32_t);
+            }
+        }
+        return bytes;
+    }
+
+    void MergedMeshBuffer::appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& meshTotal) const
+    {
+        out.reserve(out.size() + registeredMeshes.size());
+        for (const MergedMeshInfo& mesh : registeredMeshes)
+        {
+            const uint64_t bytes = residentBytes(mesh);
+            if (bytes == 0)
+                continue; // no resident LOD → nothing streamed in yet
+            out.push_back(memory::VramAssetRow{mesh.meshPath, memory::VramAssetCategory::Mesh, bytes});
+            meshTotal += bytes;
+        }
+    }
 }

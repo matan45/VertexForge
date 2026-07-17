@@ -4,6 +4,7 @@
 #include "../GPUDrivenTypes.hpp"
 #include "resource/Types.hpp"
 #include "resource/TextureStreamHandle.hpp"
+#include "memory/VramAssetSnapshot.hpp"
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <string>
@@ -164,6 +165,13 @@ namespace render::gpudriven
         void resetDistances();
 
         const TextureStreamStats& getStats() const { return stats; }
+
+        // VK-1539 memory profiler: append one per-texture VRAM row {path, gpuMemoryUsage} for
+        // every resident streamed texture and set texTotal to the authoritative running total
+        // (stats.vramUsedBytes) — the exact value that also feeds CullingDebugStats, so the
+        // profiler's VRAM tab reconciles with the Culling Stats window by construction. Walks the
+        // private `textures` map, so it MUST be called on the render thread that owns it.
+        void appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& texTotal) const;
 
         void clear();
 

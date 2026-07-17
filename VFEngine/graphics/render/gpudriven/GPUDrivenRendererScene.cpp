@@ -22,6 +22,8 @@
 #include "components/PhysicsAnimationComponent.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "print/Log.hpp"
+#include "memory/GpuAllocationStats.hpp"   // VK-1539: diagnosticsActive gate
+#include "memory/VramAssetSnapshot.hpp"    // VK-1539: per-asset VRAM attribution publish
 #include <algorithm>
 #include <unordered_map>
 
@@ -100,6 +102,11 @@ namespace render::gpudriven
 
             textureStreamManager->update(cameraPosition, textureStreamFrame++);
         }
+
+        // VK-1539: publish per-asset VRAM attribution for the Memory Diagnostics window. Runs on
+        // the render thread (walking the managers' live containers is only safe here) and is a
+        // no-op unless the profiler window is open (diagnosticsActive) and its throttle is due.
+        publishVramAttribution();
 
         TextureIndexResolver textureResolver = createTextureResolver();
         ShaderGroupResolver shaderGroupResolver = [this](const std::string& materialPath) -> uint32_t {
@@ -347,6 +354,42 @@ namespace render::gpudriven
             return nullptr;
         }
         return cullPipeline->getDescriptorSetLayout();
+    }
+
+    void GPUDrivenRenderer::publishVramAttribution()
+    {
+        // Gate 1: skip entirely unless the Memory Diagnostics window is open (it sets
+        // diagnosticsActive every frame). Gate 2: throttle the O(assets) walk to once every
+        // kVramAttributionInterval frames, matching the GpuMemorySnapshot cadence.
+        if (!memory::GpuAllocationStats::diagnosticsActive.load(std::memory_order_relaxed))
+            return;
+        if ((vramAttributionFrame++ % kVramAttributionInterval) != 0)
+            return;
+
+        memory::VramAssetSnapshotData snap;
+        if (textureStreamManager)
+            textureStreamManager->appendVramRows(snap.rows, snap.textureTotalBytes);
+        if (mergedBuffer)
+            mergedBuffer->appendVramRows(snap.rows, snap.meshTotalBytes);
+        if (svtManager)
+            svtManager->appendVramRows(snap.rows, snap.vtTotalBytes);
+
+        // Keep the top-N largest consumers, sorted bytes-descending for the editor table.
+        constexpr size_t kMaxRows = 128;
+        const auto byBytesDesc = [](const memory::VramAssetRow& a, const memory::VramAssetRow& b)
+        { return a.bytes > b.bytes; };
+        if (snap.rows.size() > kMaxRows)
+        {
+            std::partial_sort(snap.rows.begin(), snap.rows.begin() + kMaxRows, snap.rows.end(), byBytesDesc);
+            snap.rows.resize(kMaxRows);
+        }
+        else
+        {
+            std::sort(snap.rows.begin(), snap.rows.end(), byBytesDesc);
+        }
+
+        snap.generation = ++vramAttributionGeneration;
+        memory::VramAssetSnapshot::publish(std::move(snap));
     }
 
     void GPUDrivenRenderer::updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,

@@ -59,6 +59,16 @@ namespace render::vt
         [[nodiscard]] bool isResident(const VTPageKey& k) const { return resident.count(k.packed()) != 0; }
         [[nodiscard]] uint32_t residentCount() const { return static_cast<uint32_t>(resident.size()); }
 
+        // VK-1539 read-only per-owner walk: invoke fn(imageId) for every resident page so the SVT
+        // manager can tally page counts grouped by owning image (× tileByteSize → per-asset VRAM)
+        // without exposing the private residency map. Non-mutating sibling of evictImage().
+        template <typename Fn>
+        void forEachResident(Fn&& fn) const
+        {
+            for (const auto& entry : resident)
+                fn(entry.second.key.imageId);
+        }
+
         [[nodiscard]] uint32_t tileFor(const VTPageKey& k) const
         {
             auto it = resident.find(k.packed());

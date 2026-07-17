@@ -2,7 +2,10 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "memory/GpuMemorySnapshot.hpp"
+#include "memory/VramAssetSnapshot.hpp"
+#include "memory/MemorySnapshotCapture.hpp"
 #include "cpumem/CpuMemorySnapshot.hpp"
 
 namespace windows
@@ -42,6 +45,16 @@ namespace windows
         SampleRing cpuTrackedMB;
         memory::CpuMemorySnapshotData cpuSnapshot; // refreshed on the sample tick
 
+        // --- VRAM per-asset attribution (VK-1539) ---
+        memory::VramAssetSnapshotData vramSnapshot; // refreshed on the sample tick
+        int vramCategoryFilter = 0;                 // 0=All, then Texture/Mesh/VirtualTexture
+
+        // --- named snapshot captures + diff (VK-1539) ---
+        std::vector<memory::MemorySnapshotCapture> captures; // session-only
+        char captureLabel[64] = {};
+        int diffA = -1;
+        int diffB = -1;
+
         void sample();
 
         // GPU draw methods
@@ -62,5 +75,12 @@ namespace windows
         void drawCpuCategoryTable();
         void drawCpuTimeSeriesPanel();
         void drawGateStatePanel();
+
+        // VRAM Assets + Snapshots tabs (VK-1539)
+        void drawVramTab();
+        void drawSnapshotsTab();
+        void captureNow(const char* label);
+        void exportCaptureCsv(const memory::MemorySnapshotCapture& cap);
+        void exportCaptureJson(const memory::MemorySnapshotCapture& cap);
     };
 }
