@@ -131,6 +131,17 @@ namespace windows
 			if (ImGui::Button(paused ? "Resume" : "Pause"))
 			{
 				paused = !paused;
+				if (paused)
+				{
+					// Freeze the current history ring so the Timeline tab can scrub it.
+					frozenHistory = threading::TaskProfiler::instance().getHistoryChronological();
+					scrubIndex = static_cast<int>(frozenHistory.size()) - 1;
+				}
+				else
+				{
+					frozenHistory.clear();
+					scrubIndex = -1;
+				}
 			}
 			ImGui::SameLine();
 			if (paused)
@@ -154,7 +165,10 @@ namespace windows
 
 			if (ImGui::BeginTabBar("TaskGraphTabs"))
 			{
-				if (ImGui::BeginTabItem("Timeline"))
+				const ImGuiTabItemFlags timelineTabFlags =
+					selectTimelineTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+				selectTimelineTab = false;
+				if (ImGui::BeginTabItem("Timeline", nullptr, timelineTabFlags))
 				{
 					drawTimeline();
 					ImGui::EndTabItem();
@@ -259,13 +273,31 @@ namespace windows
 
 	void TaskGraphWindow::drawTimeline()
 	{
-		if (latestFrame.entries.empty())
+		// When paused, scrub the frozen history ring; otherwise track the latest frame.
+		const bool scrubbing = paused && !frozenHistory.empty();
+		if (scrubbing)
+		{
+			scrubIndex = std::clamp(scrubIndex, 0, static_cast<int>(frozenHistory.size()) - 1);
+			ImGui::SetNextItemWidth(-1.0f);
+			ImGui::SliderInt("##framescrub", &scrubIndex, 0,
+				static_cast<int>(frozenHistory.size()) - 1, "Frame %d (oldest 0 -> newest)");
+		}
+		const threading::FrameProfileSnapshot& frame =
+			scrubbing ? frozenHistory[static_cast<size_t>(scrubIndex)] : latestFrame;
+
+		if (frame.entries.empty())
 		{
 			ImGui::TextDisabled("No profiling data available");
 			return;
 		}
 
-		float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
+		// Lane count from the displayed frame's own entries (a scrubbed historical
+		// frame may have used fewer worker threads than the global max).
+		uint32_t frameMaxThreadId = 0;
+		for (const auto& e : frame.entries)
+			frameMaxThreadId = std::max(frameMaxThreadId, e.threadId);
+
+		float frameDurationMs = static_cast<float>(frame.frameDurationNs) / 1e6f;
 		ImGui::Text("Frame duration: %.3f ms", frameDurationMs);
 
 		drawFrameHistoryPlot("##cpuhistory", cpuHistoryMs);
@@ -279,10 +311,10 @@ namespace windows
 		float leftMargin = 80.0f;
 		float topMargin = 20.0f;
 		float rowHeight = 28.0f;
-		uint32_t threadCount = maxThreadId + 1;
+		uint32_t threadCount = frameMaxThreadId + 1;
 		float timelineWidth = canvasSize.x - leftMargin - 10.0f;
 
-		if (latestFrame.frameDurationNs == 0) return;
+		if (frame.frameDurationNs == 0) return;
 
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -292,7 +324,7 @@ namespace windows
 			IM_COL32(30, 30, 30, 255));
 
 		// Thread labels
-		for (uint32_t t = 0; t <= maxThreadId; ++t)
+		for (uint32_t t = 0; t <= frameMaxThreadId; ++t)
 		{
 			float y = canvasPos.y + topMargin + t * rowHeight;
 			char label[32];
@@ -318,19 +350,19 @@ namespace windows
 		}
 
 		// Draw task bars
-		double nsToPixel = static_cast<double>(timelineWidth) / static_cast<double>(latestFrame.frameDurationNs);
+		double nsToPixel = static_cast<double>(timelineWidth) / static_cast<double>(frame.frameDurationNs);
 
 		// Find earliest start for offset
 		uint64_t minStart = UINT64_MAX;
-		for (auto& e : latestFrame.entries)
+		for (auto& e : frame.entries)
 		{
 			if (e.endTimeNs > 0 && e.startTimeNs < minStart)
 				minStart = e.startTimeNs;
 		}
 
-		for (uint32_t i = 0; i < latestFrame.entries.size(); ++i)
+		for (uint32_t i = 0; i < frame.entries.size(); ++i)
 		{
-			auto& entry = latestFrame.entries[i];
+			auto& entry = frame.entries[i];
 			if (entry.endTimeNs == 0) continue;
 
 			float x0 = canvasPos.x + leftMargin +
@@ -343,7 +375,9 @@ namespace windows
 			// Minimum visible width
 			if (x1 - x0 < 2.0f) x1 = x0 + 2.0f;
 
-			ImU32 color = getTaskColor(i);
+			// Color by task NAME (not entry index) so a task keeps its color across
+			// frames even as entry order / worker assignment shifts.
+			ImU32 color = getTaskColor(static_cast<uint32_t>(std::hash<std::string>{}(entry.name)));
 			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), color, 2.0f);
 
 			// Task name label (if bar is wide enough)
@@ -361,8 +395,19 @@ namespace windows
 				ImGui::BeginTooltip();
 				double durationUs = static_cast<double>(entry.endTimeNs - entry.startTimeNs) / 1000.0;
 				ImGui::Text("%s", entry.name.c_str());
-				ImGui::Text("Duration: %.1f us", durationUs);
+				ImGui::Text("This frame: %.1f us", durationUs);
 				ImGui::Text("Thread: %u", entry.threadId);
+				// Aggregate stats across the history ring (computeStats), matched by name.
+				for (const auto& s : stats)
+				{
+					if (s.name == entry.name)
+					{
+						ImGui::Separator();
+						ImGui::Text("avg %.1f us | min %.1f us | max %.1f us",
+							s.avgDurationUs, s.minDurationUs, s.maxDurationUs);
+						break;
+					}
+				}
 				ImGui::EndTooltip();
 			}
 		}

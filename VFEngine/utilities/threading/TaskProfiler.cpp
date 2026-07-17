@@ -80,6 +80,25 @@ namespace threading {
 		return history;
 	}
 
+	std::vector<FrameProfileSnapshot> TaskProfiler::getHistoryChronological() const
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		if (!wrapped)
+		{
+			// Not yet wrapped: physical push_back order is already oldest -> newest.
+			return history;
+		}
+		// Wrapped: the slot about to be overwritten (writeIndex) holds the oldest
+		// frame; walk forward with wrap-around to reach the newest at writeIndex-1.
+		std::vector<FrameProfileSnapshot> result;
+		result.reserve(history.size());
+		for (size_t i = 0; i < history.size(); ++i)
+		{
+			result.push_back(history[(writeIndex + i) % history.size()]);
+		}
+		return result;
+	}
+
 	std::vector<TaskProfileStats> TaskProfiler::computeStats() const
 	{
 		std::lock_guard<std::mutex> lock(mutex);

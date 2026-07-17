@@ -382,6 +382,8 @@ namespace windows
             // Same window, opened on its GPU Passes tab — the per-pass GPU profiler
             // is otherwise undiscoverable behind a tab labelled "Task Graph".
             if (ImGui::MenuItem("GPU Profiler") && taskGraphWindow) taskGraphWindow->showGpuTab();
+            // Same window, opened on its Timeline tab — the CPU worker-lane timeline.
+            if (ImGui::MenuItem("CPU Profiler") && taskGraphWindow) taskGraphWindow->showTimelineTab();
             if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
             if (ImGui::MenuItem("RTT Debug") && rttDebugWindow) rttDebugWindow->show();
             if (ImGui::MenuItem("Audio Debug") && audioDebugWindow) audioDebugWindow->show();

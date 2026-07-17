@@ -43,7 +43,6 @@ namespace threading {
 
 		// Profiling data - one entry per task (reused across frames)
 		std::vector<TaskProfileEntry> profileData;
-		std::chrono::high_resolution_clock::time_point baseTime;
 
 		// Persistent enkiTS completables, built once and re-armed every frame (roots are
 		// re-added in execute(); the rest auto-launch via native dependencies). Each node

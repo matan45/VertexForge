@@ -47,8 +47,11 @@ namespace threading {
 		// Get the most recent frame snapshot
 		FrameProfileSnapshot getLatestFrame() const;
 
-		// Get the full history ring buffer
+		// Get the full history ring buffer (physical ring order)
 		std::vector<FrameProfileSnapshot> getHistory() const;
+
+		// Get the full history ordered oldest -> newest (for timeline frame-scrubbing).
+		std::vector<FrameProfileSnapshot> getHistoryChronological() const;
 
 		// Compute per-task statistics across the history
 		std::vector<TaskProfileStats> computeStats() const;

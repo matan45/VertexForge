@@ -36,6 +36,12 @@ namespace windows
 		// oldest-to-newest, for the Timeline tab's history plot.
 		std::vector<float> cpuHistoryMs;
 
+		// Frame-scrub state: on Pause we snapshot the history ring (oldest->newest)
+		// so the Timeline tab can scrub individual frames while the live feed is
+		// frozen. Empty / -1 when live.
+		std::vector<threading::FrameProfileSnapshot> frozenHistory;
+		int scrubIndex = -1;
+
 		// GPU pass timings published by the render graph profiler.
 		bool gpuProfilingEnabled = false;
 		// Mirrors the request we last pushed to the sink so draw() can spot the
@@ -47,6 +53,9 @@ namespace windows
 		// Set by showGpuTab() so the Debug > GPU Profiler entry lands on the right
 		// tab; consumed (and cleared) by the next draw.
 		bool selectGpuTab = false;
+		// Set by showTimelineTab() so the Debug > CPU Profiler entry lands on the
+		// Timeline tab; consumed (and cleared) by the next draw.
+		bool selectTimelineTab = false;
 		render::GpuFrameStats gpuStats;
 		std::vector<float> gpuHistoryMs;
 
@@ -70,6 +79,13 @@ namespace windows
 			visible = true;
 			selectGpuTab = true;
 			gpuProfilingEnabled = true;
+		}
+		// Opens the window straight on the Timeline (CPU profiler) tab for the
+		// Debug > CPU Profiler menu entry.
+		void showTimelineTab()
+		{
+			visible = true;
+			selectTimelineTab = true;
 		}
 
 	private:
