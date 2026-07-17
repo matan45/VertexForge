@@ -8,6 +8,7 @@
 #include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <algorithm>
+#include <chrono>
 
 namespace serialization
 {
@@ -205,12 +206,17 @@ namespace serialization
         json sceneJson;
         json settingsJson;
 
+        // VK-1538 Stage 0: measure decode vs registry-build time (JSON path).
+        const auto decodeStart = std::chrono::steady_clock::now();
+        auto decodeEnd = decodeStart;
+
         try
         {
             if (!rawData.empty())
             {
                 sceneJson = json::parse(rawData.begin(), rawData.end());
             }
+            decodeEnd = std::chrono::steady_clock::now();
 
             if (sceneJson.is_null())
             {
@@ -248,6 +254,7 @@ namespace serialization
 
         try
         {
+            const auto deserializeStart = std::chrono::steady_clock::now();
             size_t totalEntities = countEntities(sceneJson["root"]);
             size_t entitiesLoaded = 0;
 
@@ -262,8 +269,16 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
             DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
             deserializeEntity(sceneJson["root"], root, ctx);
+            const auto deserializeEnd = std::chrono::steady_clock::now();
 
             resolveRenderTextureSourceNames();
+
+            const double decodeMs =
+                std::chrono::duration<double, std::milli>(decodeEnd - decodeStart).count();
+            const double deserializeMs =
+                std::chrono::duration<double, std::milli>(deserializeEnd - deserializeStart).count();
+            vfLogWarning("[VK-1538] Scene load [json]: decode={:.2f} ms, deserialize={:.2f} ms, entities={}",
+                         decodeMs, deserializeMs, totalEntities);
 
             return true;
         }
@@ -305,19 +320,18 @@ namespace serialization
 
         auto rawData = resource::readFileBytes(std::string(filename));
 
-        // Binary scenes have no incremental path yet - load synchronously.
-        if (BinarySceneSerialization::isBinaryScene(rawData))
-        {
-            state.success =
-                BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, filename, progressCallback);
-            state.finished = true;
-            return false;
-        }
-
         json settingsJson;
         try
         {
-            if (!rawData.empty())
+            // VK-1538: a binary scene decodes to the same snapshot DOM, then runs
+            // the identical DFS-stack path below — so binary scenes are now
+            // frame-budgeted too (the monolithic msgpack decode still happens up
+            // front, exactly as json::parse does for the text path).
+            if (BinarySceneSerialization::isBinaryScene(rawData))
+            {
+                state.sceneJson = BinarySceneSerialization::decodePayload(rawData);
+            }
+            else if (!rawData.empty())
             {
                 state.sceneJson = json::parse(rawData.begin(), rawData.end());
             }

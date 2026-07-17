@@ -7,6 +7,7 @@
 
 #include <fstream>
 #include <cstring>
+#include <chrono>
 
 namespace serialization
 {
@@ -75,48 +76,12 @@ namespace serialization
 		}
 	}
 
-	bool BinarySceneSerialization::saveBinaryScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
+	bool BinarySceneSerialization::peekHeader(const std::vector<uint8_t>& data, Header& outHeader)
 	{
-		try
-		{
-			json snapshot = SceneSerialization::createSnapshot(sceneGraph, filename);
-			if (snapshot.is_null() || !snapshot.contains("root"))
-			{
-				vfLogError("BinaryScene: Failed to create scene snapshot");
-				return false;
-			}
-
-			size_t entityCount = SceneSerialization::countEntities(snapshot["root"]);
-			std::vector<uint8_t> msgpack = json::to_msgpack(snapshot);
-
-			Header header{};
-			std::memcpy(header.magic, MAGIC, 4);
-			header.version = FORMAT_VERSION;
-			header.flags = 0;
-			header.entityCount = static_cast<uint32_t>(entityCount);
-			header.payloadSize = static_cast<uint32_t>(msgpack.size());
-			header.totalFileSize = HEADER_SIZE + msgpack.size();
-
-			std::ofstream file(std::string(filename), std::ios::binary);
-			if (!file.is_open())
-			{
-				vfLogError("BinaryScene: Failed to create file: {}", filename);
-				return false;
-			}
-
-			file.write(reinterpret_cast<const char*>(&header), HEADER_SIZE);
-			file.write(reinterpret_cast<const char*>(msgpack.data()),
-			           static_cast<std::streamsize>(msgpack.size()));
-
-			vfLogInfo("BinaryScene: Saved {} entities ({} bytes, payload {} bytes)",
-			          entityCount, header.totalFileSize, msgpack.size());
-			return true;
-		}
-		catch (const std::exception& e)
-		{
-			vfLogError("BinaryScene: Failed to save: {}", e.what());
-			return false;
-		}
+		if (data.size() < HEADER_SIZE) return false;
+		if (std::memcmp(data.data(), MAGIC, 4) != 0) return false;
+		std::memcpy(&outHeader, data.data(), HEADER_SIZE);
+		return true;
 	}
 
 	bool BinarySceneSerialization::loadBinarySceneInto(const std::vector<uint8_t>& data,
@@ -124,13 +89,28 @@ namespace serialization
 	                                                    std::string_view filename,
 	                                                    SceneLoadProgressCallback progressCallback)
 	{
+		const auto decodeStart = std::chrono::steady_clock::now();
 		json snapshot = decodePayload(data);
+		const auto decodeEnd = std::chrono::steady_clock::now();
 		if (snapshot.is_null())
 		{
 			return false;
 		}
 
-		return SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, filename, progressCallback);
+		const bool ok =
+		    SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, filename, progressCallback);
+		const auto deserializeEnd = std::chrono::steady_clock::now();
+
+		// VK-1538 Stage 0: report decode vs registry-build time so `p` (decode's
+		// share of cold load) can be measured on a real scene.
+		Header header{};
+		peekHeader(data, header);
+		const double decodeMs = std::chrono::duration<double, std::milli>(decodeEnd - decodeStart).count();
+		const double deserializeMs =
+		    std::chrono::duration<double, std::milli>(deserializeEnd - decodeEnd).count();
+		vfLogWarning("[VK-1538] BinaryScene load [msgpack]: decode={:.2f} ms, deserialize={:.2f} ms, entities={}",
+		             decodeMs, deserializeMs, header.entityCount);
+		return ok;
 	}
 
 	bool BinarySceneSerialization::loadBinarySceneAdditive(const std::vector<uint8_t>& data,
@@ -193,7 +173,8 @@ namespace serialization
 		}
 	}
 
-	bool BinarySceneSerialization::convertJsonToBinary(std::string_view jsonPath, std::string_view binaryPath)
+	bool BinarySceneSerialization::convertJsonToBinary(std::string_view jsonPath, std::string_view binaryPath,
+	                                                   uint64_t sourceHash)
 	{
 		try
 		{
@@ -222,6 +203,7 @@ namespace serialization
 			header.entityCount = static_cast<uint32_t>(entityCount);
 			header.payloadSize = static_cast<uint32_t>(msgpack.size());
 			header.totalFileSize = HEADER_SIZE + msgpack.size();
+			header.sourceHash = sourceHash;
 
 			std::ofstream file(std::string(binaryPath), std::ios::binary);
 			if (!file.is_open())

@@ -679,11 +679,26 @@ namespace gameExport
 
 				fs::path tempBinary = config.outputDirectory / "_temp_scenes" / relativePath;
 
-				// Incremental: reuse cached binary if source unchanged
+				// Reuse the cached blob only if it is the current format version AND
+				// was built from this exact source content (VK-1538). Keying on the
+				// blob's own header — not the manifest mtime — invalidates stale
+				// blobs cleanly after a FORMAT_VERSION bump, which the mtime/hash
+				// source check could not see (it would ship a v1 blob the runtime
+				// rejects). Also closes the whole-second mtime granularity hole.
 				bool needsConversion = true;
-				if (!previousManifest.hasSourceChanged(archivePath, {assetSource}) && fs::exists(tempBinary))
+				if (fs::exists(tempBinary))
 				{
-					needsConversion = false;
+					std::ifstream cached(tempBinary, std::ios::binary);
+					std::vector<uint8_t> headerBytes(serialization::BinarySceneSerialization::HEADER_SIZE);
+					serialization::BinarySceneSerialization::Header cachedHeader{};
+					if (cached.read(reinterpret_cast<char*>(headerBytes.data()),
+					                static_cast<std::streamsize>(headerBytes.size())) &&
+					    serialization::BinarySceneSerialization::peekHeader(headerBytes, cachedHeader) &&
+					    cachedHeader.version == serialization::BinarySceneSerialization::FORMAT_VERSION &&
+					    cachedHeader.sourceHash == assetSource.contentHash)
+					{
+						needsConversion = false;
+					}
 				}
 
 				if (needsConversion)
@@ -691,7 +706,7 @@ namespace gameExport
 					fs::create_directories(tempBinary.parent_path(), ec);
 
 					if (serialization::BinarySceneSerialization::convertJsonToBinary(
-							entry.path().string(), tempBinary.string()))
+							entry.path().string(), tempBinary.string(), assetSource.contentHash))
 					{
 						// Conversion succeeded
 					}
