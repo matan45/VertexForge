@@ -46,7 +46,7 @@ namespace windows
         memory::CpuMemorySnapshotData cpuSnapshot; // refreshed on the sample tick
 
         // --- VRAM per-asset attribution (VK-1539) ---
-        memory::VramAssetSnapshotData vramSnapshot; // refreshed on the sample tick
+        memory::VramAssetSnapshot vramSnapshot; // refreshed on the sample tick
         int vramCategoryFilter = 0;                 // 0=All, then Texture/Mesh/VirtualTexture
 
         // --- named snapshot captures + diff (VK-1539) ---

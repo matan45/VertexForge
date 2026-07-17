@@ -366,7 +366,7 @@ namespace render::gpudriven
         if ((vramAttributionFrame++ % kVramAttributionInterval) != 0)
             return;
 
-        memory::VramAssetSnapshotData snap;
+        memory::VramAssetSnapshot snap;
         if (textureStreamManager)
             textureStreamManager->appendVramRows(snap.rows, snap.textureTotalBytes);
         if (mergedBuffer)
