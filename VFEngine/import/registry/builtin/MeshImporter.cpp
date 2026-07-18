@@ -63,6 +63,14 @@ namespace import::builtin
                    std::get<bool>(it->second);
         }
 
+        bool isCombineMeshes(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("combineMeshes");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
         bool isOBJ(std::span<const unsigned char> header)
         {
             const std::vector<std::string> objKeywords = {"# ", "v ", "vn ", "vt ", "f ", "o ", "g "};
@@ -119,15 +127,18 @@ namespace import::builtin
                 };
             }
 
-            // The model may contain several meshes; each is written to its own
-            // .vfMesh. Optionally (VK-55) embedded textures are extracted to
-            // .vfImage. Surface every produced file so the controller creates a
-            // .vfmeta and an ImportFileResult per asset (with the right type).
+            // Split layout writes one .vfMesh per Assimp mesh. Combined static
+            // layout writes one multi-submesh .vfMesh. Surface every produced
+            // file so the controller creates the matching metadata and result.
+            // Optionally (VK-55), embedded textures are extracted to .vfImage.
             const bool extractEmbedded = isExtractEmbeddedTextures(context);
 
             std::vector<std::string> writtenMeshes;
             std::vector<std::string> writtenTextures;
-            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress,
+            const auto outputLayout = isCombineMeshes(context)
+                                          ? types::MeshOutputLayout::CombinedStatic
+                                          : types::MeshOutputLayout::Split;
+            meshProcessor.loadFromFile(context.file, context.fileName, context.location, outputLayout, meshProgress,
                                        &writtenMeshes,
                                        extractEmbedded ? &writtenTextures : nullptr);
 
@@ -182,6 +193,14 @@ namespace import::builtin
         extractEmbeddedTextures.type = ImportOptionDesc::Type::Bool;
         extractEmbeddedTextures.defaultValue = false;
 
-        return {animationOnly, extractEmbeddedTextures};
+        ImportOptionDesc combineMeshes;
+        combineMeshes.key = "combineMeshes";
+        combineMeshes.label = "Combine Meshes";
+        combineMeshes.tooltip =
+            "Write one multi-submesh .vfMesh for static models so one Mesh Component renders the complete model";
+        combineMeshes.type = ImportOptionDesc::Type::Bool;
+        combineMeshes.defaultValue = false;
+
+        return {animationOnly, extractEmbeddedTextures, combineMeshes};
     }
 }

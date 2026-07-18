@@ -19,6 +19,7 @@
 #include <filesystem>
 #include <unordered_set>
 #include <cctype>
+#include <cmath>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -343,12 +344,11 @@ namespace
         resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(resource::MeshCompressionFlags::ALL));
     }
 
-    void writeSubmeshHeader(std::ofstream& outFile, const aiMesh* assimpMesh)
+    void writeSubmeshHeader(std::ofstream& outFile, std::string_view meshName,
+                            size_t vertexCount, size_t triangleCount)
     {
-        std::string meshName = assimpMesh->mName.C_Str();
-
         vfLogDebug("Processing submesh '{}' ({} vertices, {} triangles)...",
-                  meshName, assimpMesh->mNumVertices, assimpMesh->mNumFaces);
+                   meshName, vertexCount, triangleCount);
 
         uint32_t nameLength = static_cast<uint32_t>(meshName.length());
         resource::endian::writeLE<uint32_t>(outFile, nameLength);
@@ -415,6 +415,147 @@ namespace
         return unique;
     }
 
+    struct StaticMeshInstance
+    {
+        const aiMesh* mesh = nullptr;
+        glm::mat4 transform{1.0f};
+        std::string nodeName;
+    };
+
+    bool isStaticScene(const aiScene* scene)
+    {
+        if (!scene || scene->mNumAnimations > 0)
+            return false;
+
+        for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+        {
+            if (scene->mMeshes[i] && scene->mMeshes[i]->HasBones())
+                return false;
+        }
+
+        return true;
+    }
+
+    void collectStaticMeshInstances(const aiScene* scene, const aiNode* node,
+                                    const glm::mat4& parentTransform,
+                                    std::vector<StaticMeshInstance>& instances,
+                                    std::vector<bool>& referencedMeshes)
+    {
+        if (!scene || !node)
+            return;
+
+        const glm::mat4 nodeTransform = parentTransform * convertMatrix(node->mTransformation);
+        for (uint32_t i = 0; i < node->mNumMeshes; ++i)
+        {
+            const uint32_t meshIndex = node->mMeshes[i];
+            if (meshIndex >= scene->mNumMeshes || !scene->mMeshes[meshIndex])
+            {
+                vfLogWarning("Node '{}' references invalid mesh index {}", node->mName.C_Str(), meshIndex);
+                continue;
+            }
+
+            instances.push_back({scene->mMeshes[meshIndex], nodeTransform, node->mName.C_Str()});
+            referencedMeshes[meshIndex] = true;
+        }
+
+        for (uint32_t i = 0; i < node->mNumChildren; ++i)
+            collectStaticMeshInstances(scene, node->mChildren[i], nodeTransform, instances, referencedMeshes);
+    }
+
+    std::vector<StaticMeshInstance> buildStaticMeshInstances(const aiScene* scene)
+    {
+        std::vector<StaticMeshInstance> instances;
+        if (!scene || !scene->mRootNode)
+            return instances;
+
+        instances.reserve(scene->mNumMeshes);
+        std::vector<bool> referencedMeshes(scene->mNumMeshes, false);
+        collectStaticMeshInstances(scene, scene->mRootNode, glm::mat4(1.0f),
+                                   instances, referencedMeshes);
+
+        // Assimp scenes normally reference every mesh from a node. Preserve any
+        // malformed-but-readable unreferenced meshes instead of silently dropping them.
+        for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+        {
+            if (!referencedMeshes[i] && scene->mMeshes[i])
+            {
+                vfLogWarning("Mesh '{}' is not referenced by the scene hierarchy; importing with identity transform",
+                             scene->mMeshes[i]->mName.C_Str());
+                instances.push_back({scene->mMeshes[i], glm::mat4(1.0f), {}});
+            }
+        }
+
+        return instances;
+    }
+
+    std::string makeUniqueSubmeshName(const StaticMeshInstance& instance, size_t index,
+                                      std::unordered_set<std::string>& usedNames)
+    {
+        std::string candidate = instance.mesh ? std::string(instance.mesh->mName.C_Str()) : std::string{};
+        if (candidate.empty())
+            candidate = instance.nodeName;
+        if (candidate.empty())
+            candidate = "SubMesh_" + std::to_string(index);
+
+        std::string unique = candidate;
+        uint32_t suffix = 1;
+        while (!usedNames.insert(unique).second)
+            unique = candidate + "_" + std::to_string(suffix++);
+        return unique;
+    }
+
+    void applyStaticTransform(types::LODMeshData& meshData, const glm::mat4& transform)
+    {
+        const glm::mat3 linearTransform(transform);
+        const float determinant = glm::determinant(linearTransform);
+        const bool invertible = std::abs(determinant) > 1.0e-8f;
+        const glm::mat3 normalTransform = invertible
+                                              ? glm::transpose(glm::inverse(linearTransform))
+                                              : linearTransform;
+
+        if (!invertible)
+            vfLogWarning("Combined mesh instance has a singular node transform; degenerate normals may be produced");
+
+        for (auto& vertex : meshData.vertices)
+        {
+            vertex.position = glm::vec3(transform * glm::vec4(vertex.position, 1.0f));
+
+            const glm::vec3 transformedNormal = normalTransform * vertex.normal;
+            const float normalLengthSquared = glm::dot(transformedNormal, transformedNormal);
+            vertex.normal = normalLengthSquared > 1.0e-12f
+                                ? transformedNormal / std::sqrt(normalLengthSquared)
+                                : glm::vec3(0.0f);
+        }
+
+        if (determinant < 0.0f)
+        {
+            for (size_t i = 0; i + 2 < meshData.indices.size(); i += 3)
+                std::swap(meshData.indices[i + 1], meshData.indices[i + 2]);
+        }
+    }
+
+    void writeProcessedSubmesh(std::ofstream& outFile, std::string_view name,
+                               types::LODMeshData lod0,
+                               const importConfig::MeshImportConfig& config,
+                               const types::MeshLODGenerator& lodGen,
+                               const types::MeshSerializer& serializer)
+    {
+        writeSubmeshHeader(outFile, name, lod0.vertices.size(), lod0.indices.size() / 3);
+        auto lodLevels = lodGen.generateLODLevels(lod0);
+
+        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
+
+        vfLogDebug("  Generating meshlets...");
+        std::array<types::MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
+        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
+        serializer.writeMeshletData(outFile, meshletResults);
+
+        const resource::ConvexDecompositionData convexData = lodGen.generateConvexDecomposition(lod0, config);
+        serializer.writeConvexDecompositionData(outFile, convexData);
+    }
+
     // Mesh decode semaphore: separate from the texture/HDR semaphore in Texture.cpp.
     // Both live in Import.dll but in different TUs, so they are independent permit
     // pools (2+2 max concurrent). Move to a shared Import TU if a unified cap
@@ -443,7 +584,8 @@ namespace
 namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                            std::string_view location, MeshProgressCallback progressCallback,
+                            std::string_view location, MeshOutputLayout outputLayout,
+                            MeshProgressCallback progressCallback,
                             std::vector<std::string>* outWrittenFiles,
                             std::vector<std::string>* outWrittenTextures) const
     {
@@ -473,7 +615,19 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        if (outputLayout == MeshOutputLayout::CombinedStatic && isStaticScene(scene))
+        {
+            saveCombinedStaticMesh(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        }
+        else
+        {
+            if (outputLayout == MeshOutputLayout::CombinedStatic)
+            {
+                vfLogWarning("Combine Meshes requested for animated or skinned model '{}'; using split mesh output",
+                             fileName);
+            }
+            saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        }
 
         if (file.config.meshConfig.fractureConfig.generateFractureData)
         {
@@ -615,23 +769,9 @@ namespace types
 
             // One mesh per file => numMeshes == 1.
             writeFileHeader(outFile, 1);
-            writeSubmeshHeader(outFile, scene->mMeshes[i]);
-
             LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[i], skeleton);
-            auto lodLevels = lodGen.generateLODLevels(lod0);
-
-            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
-
-            vfLogDebug("  Generating meshlets...");
-            std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
-            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
-
-            serializer.writeMeshletData(outFile, meshletResults);
-
-            resource::ConvexDecompositionData convexData = lodGen.generateConvexDecomposition(lod0, config.meshConfig);
-            serializer.writeConvexDecompositionData(outFile, convexData);
+            writeProcessedSubmesh(outFile, scene->mMeshes[i]->mName.C_Str(), std::move(lod0),
+                                  config.meshConfig, lodGen, serializer);
 
             serializer.writeSkeletonData(outFile, skeleton);
 
@@ -648,6 +788,74 @@ namespace types
                 progressCallback(progress);
             }
         }
+    }
+
+    void Mesh::saveCombinedStaticMesh(std::string_view location, std::string_view fileName,
+                                      const aiScene* scene, const importConfig::ImportConfig& config,
+                                      MeshProgressCallback progressCallback,
+                                      std::vector<std::string>* outWrittenFiles) const
+    {
+        constexpr size_t maxCombinedSubmeshes = 10'000;
+        auto instances = buildStaticMeshInstances(scene);
+        if (instances.empty())
+        {
+            vfLogWarning("No mesh instances found in '{}'; nothing to write", fileName);
+            return;
+        }
+        if (instances.size() > maxCombinedSubmeshes)
+        {
+            vfLogError("Combined mesh '{}' has {} submeshes, exceeding the supported limit of {}",
+                       fileName, instances.size(), maxCombinedSubmeshes);
+            return;
+        }
+
+        const std::filesystem::path outputPath =
+            std::filesystem::path(location) / (std::string(fileName) + "." + FileExtension::mesh);
+        std::ofstream outFile(outputPath, std::ios::binary);
+        if (!outFile)
+        {
+            vfLogError("Failed to open file for writing: {}", outputPath.string());
+            return;
+        }
+
+        writeFileHeader(outFile, static_cast<uint32_t>(instances.size()));
+
+        MeshLODGenerator lodGen;
+        MeshSerializer serializer;
+        ExtractedSkeleton emptySkeleton;
+        std::unordered_set<std::string> usedNames;
+        usedNames.reserve(instances.size());
+
+        vfLogDebug("Generating LODs and meshlets for {} combined submesh instance(s)...", instances.size());
+        for (size_t i = 0; i < instances.size(); ++i)
+        {
+            const auto& instance = instances[i];
+            LODMeshData lod0 = convertAssimpMesh(instance.mesh, emptySkeleton);
+            applyStaticTransform(lod0, instance.transform);
+            const std::string submeshName = makeUniqueSubmeshName(instance, i, usedNames);
+            writeProcessedSubmesh(outFile, submeshName, std::move(lod0),
+                                  config.meshConfig, lodGen, serializer);
+
+            if (progressCallback)
+            {
+                const float progress = 0.2f +
+                    (static_cast<float>(i + 1) / static_cast<float>(instances.size())) * 0.75f;
+                progressCallback(progress);
+            }
+        }
+
+        serializer.writeSkeletonData(outFile, emptySkeleton);
+        outFile.close();
+        if (!outFile)
+        {
+            vfLogError("Failed while writing combined mesh: {}", outputPath.string());
+            return;
+        }
+
+        if (outWrittenFiles)
+            outWrittenFiles->push_back(outputPath.string());
+
+        vfLogInfo("Combined mesh saved to: {} ({} submeshes)", outputPath.string(), instances.size());
     }
 
     void Mesh::generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,
