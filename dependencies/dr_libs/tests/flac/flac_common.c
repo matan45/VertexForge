@@ -163,7 +163,7 @@ drflac_result libflac_init_file(const char* pFilePath, libflac* pDecoder)
 
     /* Initialize the libFLAC decoder. */
     pStreamDecoder = FLAC__stream_decoder_new();
-    if (pDecoder == NULL) {
+    if (pStreamDecoder == NULL) {
         return DRFLAC_ERROR;    /* Failed to create a new stream decoder. Out of memory. */
     }
 
@@ -309,7 +309,7 @@ drflac_bool32 libflac_seek_to_pcm_frame(libflac* pDecoder, drflac_uint64 targetP
 
 
 /* Helper for printing CPU caps from dr_flac. */
-void print_cpu_caps()
+void print_cpu_caps(void)
 {
 #if defined(DRFLAC_64BIT)
     printf("64 Bit\n");

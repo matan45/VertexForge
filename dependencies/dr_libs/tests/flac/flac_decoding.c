@@ -1,13 +1,13 @@
 /*#define DR_FLAC_NO_CRC*/
 /*#define DR_FLAC_NO_SIMD*/
 /*#define DR_FLAC_BUFFER_SIZE 4096*/
-#include "dr_flac_common.c"
+#include "flac_common.c"
 
 #define FILE_NAME_WIDTH 40
 #define NUMBER_WIDTH    10
 #define TABLE_MARGIN    2
 
-#define DEFAULT_SOURCE_DIR  "testvectors/flac/testbench"
+#define DEFAULT_SOURCE_DIR  "tests/testvectors/flac/testbench"
 
 drflac_result decode_test__read_and_compare_pcm_frames_s32(libflac* pLibFlac, drflac* pFlac, drflac_uint64 pcmFrameCount, drflac_int32* pPCMFrames_libflac, drflac_int32* pPCMFrames_drflac)
 {
@@ -357,19 +357,19 @@ drflac_result decode_test_file(const char* pFilePath)
 
     dr_printf_fixed_with_margin(FILE_NAME_WIDTH, TABLE_MARGIN, "%s", dr_path_file_name(pFilePath));
 
-    /* First load the decoder from libFLAC. */
-    result = libflac_init_file(pFilePath, &libflac);
-    if (result != DRFLAC_SUCCESS) {
-        printf("  Failed to open via libFLAC.");
-        return result;
-    }
-
-    /* Now load from dr_flac. */
+    /* First load from dr_flac. */
     pFlac = drflac_open_file_with_metadata(pFilePath, on_meta, NULL, NULL);
     if (pFlac == NULL) {
         printf("  Failed to open via dr_flac.");
-        libflac_uninit(&libflac);
         return DRFLAC_ERROR;    /* Failed to load dr_flac decoder. */
+    }
+
+    /* Now load the decoder from libFLAC. */
+    result = libflac_init_file(pFilePath, &libflac);
+    if (result != DRFLAC_SUCCESS) {
+        printf("  Failed to open via libFLAC.");
+        drflac_close(pFlac);
+        return result;
     }
 
     /* At this point we should have both libFLAC and dr_flac decoders open. We can now perform identical operations on each of them and compare. */
@@ -433,7 +433,7 @@ drflac_result decode_test_directory(const char* pDirectoryPath)
     return DRFLAC_SUCCESS;
 }
 
-drflac_result decode_test()
+drflac_result decode_test(void)
 {
     drflac_result result = DRFLAC_SUCCESS;
 
@@ -645,7 +645,7 @@ drflac_result open_and_read_test_directory(const char* pDirectoryPath)
     return DRFLAC_SUCCESS;
 }
 
-drflac_result open_and_read_test()
+drflac_result open_and_read_test(void)
 {
     drflac_result result = DRFLAC_SUCCESS;
 
@@ -760,7 +760,7 @@ drflac_result decode_profiling_directory(const char* pDirectoryPath)
     return (foundError) ? DRFLAC_ERROR : DRFLAC_SUCCESS;
 }
 
-drflac_result decode_profiling()
+drflac_result decode_profiling(void)
 {
     drflac_result result = DRFLAC_SUCCESS;
 

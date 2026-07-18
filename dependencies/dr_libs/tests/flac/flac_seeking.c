@@ -1,5 +1,5 @@
 /*#define DR_FLAC_NO_CRC*/
-#include "dr_flac_common.c"
+#include "flac_common.c"
 
 #define PROFILING_NAME_WIDTH    40
 #define PROFILING_NUMBER_WIDTH  10
@@ -217,13 +217,13 @@ drflac_result seek_test_directory(const char* pDirectoryPath)
     return DRFLAC_SUCCESS;
 }
 
-drflac_result seek_test()
+drflac_result seek_test(void)
 {
     drflac_result result = DRFLAC_SUCCESS;
 
     /* Directories. */
     {
-        result = seek_test_directory("testvectors/flac/tests");
+        result = seek_test_directory("tests/testvectors/flac/testbench");
         (void)result;
     }
 
@@ -421,7 +421,7 @@ drflac_result seek_profiling_directory(const char* pDirectoryPath, profiling_sta
     return DRFLAC_SUCCESS;
 }
 
-drflac_result seek_profiling()
+drflac_result seek_profiling(void)
 {
     drflac_result result = DRFLAC_SUCCESS;
     profiling_state globalProfiling;
