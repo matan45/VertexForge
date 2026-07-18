@@ -31,6 +31,7 @@
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/time/TimeServiceImpl.hpp"
+#include "impl/save/ConfigService.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
@@ -55,9 +56,49 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/render/RuntimeRenderSettingsApply.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/save/ConfigEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
+#include "events/animation/AnimationBudgetEvents.hpp"
+#include "types/RenderSettingsConfig.hpp"
 #include "math/TransformUtils.hpp"
 
 namespace handlers {
+
+namespace {
+    // VK-1534: re-apply the persisted per-user graphics override on top of a scene's
+    // just-applied baked settings. Reads gfx.* from config.json; if the player never
+    // chose a preset (sentinel -1) it leaves the scene-baked settings untouched. Mirrors
+    // the runtime apply set in core/adapters/api/GraphicsAPI.cpp (ApplyShadowSettings +
+    // display + VFX/anim LOD only — NOT post-process/atmosphere/cloud, which would
+    // clobber the scene-authored look).
+    void applyPersistedGraphicsOverride()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::save::GetConfigIntQuery presetQ;
+        presetQ.key = "gfx.preset";
+        presetQ.defaultValue = -1;
+        int64_t preset = dispatcher.query(presetQ);
+        if (preset < 0)
+            return;
+
+        events::save::GetConfigIntQuery presentQ;
+        presentQ.key = "gfx.presentMode";
+        presentQ.defaultValue = static_cast<int64_t>(static_cast<int>(types::PresentMode::Mailbox));
+        events::save::GetConfigIntQuery msaaQ;
+        msaaQ.key = "gfx.msaa";
+        msaaQ.defaultValue = static_cast<int64_t>(static_cast<int>(types::MsaaSamples::Off));
+
+        types::RenderSettings s = types::buildFromConfig(
+            static_cast<int>(preset),
+            static_cast<int>(dispatcher.query(presentQ)),
+            static_cast<int>(dispatcher.query(msaaQ)));
+
+        services::render::applyRuntimeRenderSettings(dispatcher, s);
+    }
+}
 
     RuntimeHandler::RuntimeHandler()
         : bootstrap(std::make_unique<core::RuntimeBootstrap>()) {}
@@ -159,6 +200,7 @@ namespace handlers {
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        configService.reset();
         pluginTextureService.reset();
         renderTextureService.reset();
         debugDrawService.reset();
@@ -382,6 +424,11 @@ namespace handlers {
         // the engineTime::Timer statics — no provider/adapter needed.
         timeService = std::make_shared<services::TimeServiceImpl>();
 
+        // VK-1534: JSON key/value store (config.json next to saves/). Editor-only until
+        // now, so the Config/Save script natives were silently no-ops in shipped games;
+        // wiring it here fixes that and backs the persisted gfx.* graphics settings.
+        configService = std::make_unique<services::ConfigService>();
+
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
@@ -452,6 +499,7 @@ namespace handlers {
         runtimePickerService->registerEventHandlers();
         pluginTextureService->registerEventHandlers();
         timeService->registerEventHandlers();
+        configService->registerEventHandlers(events::EventDispatcher::instance());
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();
@@ -471,6 +519,15 @@ namespace handlers {
             [this](const events::application::ApplyDisplaySettingsNotification& n) {
                 bootstrap->applyDisplaySettings(n.presentMode, n.msaa);
             });
+
+        // VK-1534: the startup scene load is deferred/incremental — ScenePersistenceService
+        // ::finishLoad applies the scene-baked RenderSettings and publishes SceneLoaded LAST.
+        // Re-applying the persisted gfx.* override here (after the baked apply) makes the
+        // player's saved choice win, on boot and on every subsequent scene transition.
+        sceneLoadedSubscription = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [](const events::scene::SceneLoadedNotification&) {
+                applyPersistedGraphicsOverride();
+            });
     }
 
     void RuntimeHandler::cleanupEventSubscriptions()
@@ -485,6 +542,11 @@ namespace handlers {
         if (displaySettingsSubscription.isValid()) {
             dispatcher.unsubscribe(displaySettingsSubscription);
             displaySettingsSubscription = {};
+        }
+
+        if (sceneLoadedSubscription.isValid()) {
+            dispatcher.unsubscribe(sceneLoadedSubscription);
+            sceneLoadedSubscription = {};
         }
     }
 

@@ -282,6 +282,16 @@ namespace types
         float hysteresisMargin = 0.05f;
     };
 
+    // VK-1531: adaptive dynamic-resolution governor. Off by default. When enabled, a GPU-frame-time
+    // feedback controller (DynamicResolutionBudget) steps the pre-upscale render scale within
+    // [minScale, 1.0] to hold gpuFrameTimeTargetMs. 16.6 ms == a 60 FPS budget.
+    struct DynamicResolutionSettings
+    {
+        bool enabled = false;
+        float gpuFrameTimeTargetMs = 16.6f;
+        float minScale = 0.5f;
+    };
+
     struct RenderSettings
     {
         RenderPreset activePreset = RenderPreset::High;
@@ -292,6 +302,7 @@ namespace types
         vfx::VFXQualityTier vfxQualityTier = vfx::VFXQualityTier::High;
 
         DisplaySettings display;
+        DynamicResolutionSettings dynamicResolution;
         ShadowSettings shadows;
         RTShadowSettings rtShadows;
         LightStreamingSettings lightStreaming;

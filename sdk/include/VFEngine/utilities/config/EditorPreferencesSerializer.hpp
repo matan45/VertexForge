@@ -51,6 +51,7 @@ namespace config
     {
         j = json{
             {"showFPS", s.showFPS},
+            {"showCPUTime", s.showCPUTime},
             {"showGPUTime", s.showGPUTime},
             {"showDrawCalls", s.showDrawCalls},
             {"logLevel", s.logLevel}
@@ -61,6 +62,7 @@ namespace config
     {
         DebugSettings defaults;
         s.showFPS = j.value("showFPS", defaults.showFPS);
+        s.showCPUTime = j.value("showCPUTime", defaults.showCPUTime);
         s.showGPUTime = j.value("showGPUTime", defaults.showGPUTime);
         s.showDrawCalls = j.value("showDrawCalls", defaults.showDrawCalls);
         s.logLevel = j.value("logLevel", defaults.logLevel);

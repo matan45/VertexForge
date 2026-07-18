@@ -1,6 +1,7 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
 #include "MaterialCacheManager.hpp"
+#include "MaterialPipelineWarmup.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
 #include "../material/MaterialParameterBufferCache.hpp"
@@ -30,12 +31,35 @@ namespace render::mesh
         materialCacheManager->setShaderCache(materialShaderCache.get());
         materialCacheManager->setTextureCache(textureCache.get());
         materialCacheManager->setParameterBufferCache(parameterBufferCache.get());
+
+        pipelineWarmup = std::make_unique<MaterialPipelineWarmup>(*materialShaderCache, *materialCacheManager);
     }
 
     StaticMeshPipeline::~StaticMeshPipeline()
     {
         if (materialChangeCallbackId) {
             material::MaterialManager::instance().unregisterChangeCallback(materialChangeCallbackId);
+        }
+    }
+
+    void StaticMeshPipeline::beginPipelineWarmup(std::vector<std::string> extraPaths)
+    {
+        if (pipelineWarmup)
+        {
+            pipelineWarmup->begin(std::move(extraPaths));
+        }
+    }
+
+    services::PipelineWarmupStats StaticMeshPipeline::getPipelineWarmupStats() const
+    {
+        return pipelineWarmup ? pipelineWarmup->getStats() : services::PipelineWarmupStats{};
+    }
+
+    void StaticMeshPipeline::setFrameRecording(bool recording) const
+    {
+        if (materialShaderCache)
+        {
+            materialShaderCache->setFrameRecording(recording);
         }
     }
 
@@ -134,6 +158,13 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUpForReinit()
     {
+        // VK-1532: drain warm-up jobs before we destroy/recreate the pipeline layout + formats
+        // they read. waitIdle() (already called by the reinit callers) only waits on the GPU.
+        if (pipelineWarmup)
+        {
+            pipelineWarmup->stop();
+        }
+
         if (cameraUBO && !externalCameraBuffer)
         {
             device.getLogicalDevice().destroyBuffer(cameraUBO);
@@ -205,6 +236,12 @@ namespace render::mesh
 
     void StaticMeshPipeline::cleanUp()
     {
+        // VK-1532: drain warm-up jobs before tearing down the caches they write into.
+        if (pipelineWarmup)
+        {
+            pipelineWarmup->stop();
+        }
+
         if (materialCacheManager)
         {
             materialCacheManager->clear();

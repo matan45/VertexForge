@@ -71,6 +71,7 @@ namespace core
     class BehaviorTreeAdapter;
     class RuntimePickerAdapter;
     class PluginTextureAdapter;
+    class PipelineWarmupAdapter;
 
     class RuntimeBootstrap
     {
@@ -97,6 +98,7 @@ namespace core
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
         std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
         std::unique_ptr<PluginTextureAdapter> pluginTextureAdapter;
+        std::unique_ptr<PipelineWarmupAdapter> pipelineWarmupAdapter;
 
     public:
         explicit RuntimeBootstrap();

@@ -248,6 +248,13 @@ namespace services
                     cmd.entity = newHandle;
                     cmd.data.scriptPath = entry.scriptRef.resolve();
                     cmd.data.enabled = entry.enabled;
+                    // Every authored field must be carried, or duplicating an entity silently
+                    // resets it. Runtime state (started/instanceId/tick accumulator) is
+                    // deliberately NOT copied — the new entity gets its own script instance.
+                    cmd.data.inputPriority = entry.inputPriority;
+                    cmd.data.updateInterval = entry.updateInterval;
+                    cmd.data.tickSignificance = entry.tickSignificance;
+                    cmd.data.pinFullRate = entry.pinFullRate;
                     dispatcher.execute(cmd);
                 }
             }

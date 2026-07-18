@@ -69,6 +69,24 @@ namespace windows
 
 	void TaskGraphWindow::draw()
 	{
+		// Per-pass GPU timestamps cost real GPU time, so only collect them while
+		// someone is looking. This has to run BEFORE the !visible early-out: ImGui's
+		// close button writes `visible` behind our back, so the close edge is only
+		// ever observable on a frame where we would otherwise have returned already.
+		const bool wantGpuCapture = visible && gpuProfilingEnabled;
+		if (wantGpuCapture != gpuCaptureActive)
+		{
+			render::GpuPassStats::instance().requestEnabled(wantGpuCapture);
+			gpuCaptureActive = wantGpuCapture;
+			if (!wantGpuCapture)
+			{
+				gpuStats = {};
+			}
+			// Re-arm so reopening refreshes immediately rather than showing up to
+			// REFRESH_INTERVAL of stale rows from the last time it was open.
+			refreshTimer = REFRESH_INTERVAL;
+		}
+
 		if (!visible) return;
 
 		if (!paused)
@@ -82,6 +100,9 @@ namespace windows
 		}
 
 		ImGui::SetNextWindowSize(ImVec2(700, 450), ImGuiCond_FirstUseEver);
+		// Title is load-bearing: imgui.ini keys saved layouts by it ([Window][Task
+		// Graph Profiler]), so renaming orphans every existing user's docked position.
+		// Discoverability of the GPU profiler is handled by the Debug menu entry instead.
 		if (ImGui::Begin("Task Graph Profiler", &visible))
 		{
 			// Toolbar
@@ -110,6 +131,17 @@ namespace windows
 			if (ImGui::Button(paused ? "Resume" : "Pause"))
 			{
 				paused = !paused;
+				if (paused)
+				{
+					// Freeze the current history ring so the Timeline tab can scrub it.
+					frozenHistory = threading::TaskProfiler::instance().getHistoryChronological();
+					scrubIndex = static_cast<int>(frozenHistory.size()) - 1;
+				}
+				else
+				{
+					frozenHistory.clear();
+					scrubIndex = -1;
+				}
 			}
 			ImGui::SameLine();
 			if (paused)
@@ -133,7 +165,10 @@ namespace windows
 
 			if (ImGui::BeginTabBar("TaskGraphTabs"))
 			{
-				if (ImGui::BeginTabItem("Timeline"))
+				const ImGuiTabItemFlags timelineTabFlags =
+					selectTimelineTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+				selectTimelineTab = false;
+				if (ImGui::BeginTabItem("Timeline", nullptr, timelineTabFlags))
 				{
 					drawTimeline();
 					ImGui::EndTabItem();
@@ -153,7 +188,10 @@ namespace windows
 					drawDrawCalls();
 					ImGui::EndTabItem();
 				}
-				if (ImGui::BeginTabItem("GPU Passes"))
+				const ImGuiTabItemFlags gpuTabFlags =
+					selectGpuTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+				selectGpuTab = false;
+				if (ImGui::BeginTabItem("GPU Passes", nullptr, gpuTabFlags))
 				{
 					drawGpuPasses();
 					ImGui::EndTabItem();
@@ -216,20 +254,16 @@ namespace windows
 			activeLoads = loadScheduler.getActiveLoads();
 			recentLoads = loadScheduler.getRecentCompletions();
 
-			// GPU pass timings flow through the GpuPassStats sink, independent
-			// of CPU task-graph profiling
+			// GPU timings flow through the GpuPassStats sink, independent of CPU
+			// task-graph profiling. Deliberately does NOT read the enable request
+			// back: gpuProfilingEnabled is this window's own checkbox, and draw()
+			// is the only writer of the request. Reading it back would let any
+			// other requester flip the checkbox under the user.
 			auto& gpuSink = render::GpuPassStats::instance();
-			gpuProfilingEnabled = gpuSink.isEnabledRequested();
-			if (gpuProfilingEnabled)
-			{
-				gpuStats = gpuSink.snapshot();
-				gpuHistoryMs = gpuSink.totalMsHistory();
-			}
-			else
-			{
-				gpuStats = {};
-				gpuHistoryMs.clear();
-			}
+			// Whole-frame span history is tier 1 — always collected, so the plot is
+			// already populated when the window opens.
+			gpuHistoryMs = gpuSink.frameMsHistory();
+			gpuStats = gpuCaptureActive ? gpuSink.snapshot() : render::GpuFrameStats{};
 		}
 		catch (const std::exception&)
 		{
@@ -239,13 +273,31 @@ namespace windows
 
 	void TaskGraphWindow::drawTimeline()
 	{
-		if (latestFrame.entries.empty())
+		// When paused, scrub the frozen history ring; otherwise track the latest frame.
+		const bool scrubbing = paused && !frozenHistory.empty();
+		if (scrubbing)
+		{
+			scrubIndex = std::clamp(scrubIndex, 0, static_cast<int>(frozenHistory.size()) - 1);
+			ImGui::SetNextItemWidth(-1.0f);
+			ImGui::SliderInt("##framescrub", &scrubIndex, 0,
+				static_cast<int>(frozenHistory.size()) - 1, "Frame %d (oldest 0 -> newest)");
+		}
+		const threading::FrameProfileSnapshot& frame =
+			scrubbing ? frozenHistory[static_cast<size_t>(scrubIndex)] : latestFrame;
+
+		if (frame.entries.empty())
 		{
 			ImGui::TextDisabled("No profiling data available");
 			return;
 		}
 
-		float frameDurationMs = static_cast<float>(latestFrame.frameDurationNs) / 1e6f;
+		// Lane count from the displayed frame's own entries (a scrubbed historical
+		// frame may have used fewer worker threads than the global max).
+		uint32_t frameMaxThreadId = 0;
+		for (const auto& e : frame.entries)
+			frameMaxThreadId = std::max(frameMaxThreadId, e.threadId);
+
+		float frameDurationMs = static_cast<float>(frame.frameDurationNs) / 1e6f;
 		ImGui::Text("Frame duration: %.3f ms", frameDurationMs);
 
 		drawFrameHistoryPlot("##cpuhistory", cpuHistoryMs);
@@ -259,10 +311,10 @@ namespace windows
 		float leftMargin = 80.0f;
 		float topMargin = 20.0f;
 		float rowHeight = 28.0f;
-		uint32_t threadCount = maxThreadId + 1;
+		uint32_t threadCount = frameMaxThreadId + 1;
 		float timelineWidth = canvasSize.x - leftMargin - 10.0f;
 
-		if (latestFrame.frameDurationNs == 0) return;
+		if (frame.frameDurationNs == 0) return;
 
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -272,7 +324,7 @@ namespace windows
 			IM_COL32(30, 30, 30, 255));
 
 		// Thread labels
-		for (uint32_t t = 0; t <= maxThreadId; ++t)
+		for (uint32_t t = 0; t <= frameMaxThreadId; ++t)
 		{
 			float y = canvasPos.y + topMargin + t * rowHeight;
 			char label[32];
@@ -298,19 +350,19 @@ namespace windows
 		}
 
 		// Draw task bars
-		double nsToPixel = static_cast<double>(timelineWidth) / static_cast<double>(latestFrame.frameDurationNs);
+		double nsToPixel = static_cast<double>(timelineWidth) / static_cast<double>(frame.frameDurationNs);
 
 		// Find earliest start for offset
 		uint64_t minStart = UINT64_MAX;
-		for (auto& e : latestFrame.entries)
+		for (auto& e : frame.entries)
 		{
 			if (e.endTimeNs > 0 && e.startTimeNs < minStart)
 				minStart = e.startTimeNs;
 		}
 
-		for (uint32_t i = 0; i < latestFrame.entries.size(); ++i)
+		for (uint32_t i = 0; i < frame.entries.size(); ++i)
 		{
-			auto& entry = latestFrame.entries[i];
+			auto& entry = frame.entries[i];
 			if (entry.endTimeNs == 0) continue;
 
 			float x0 = canvasPos.x + leftMargin +
@@ -323,7 +375,9 @@ namespace windows
 			// Minimum visible width
 			if (x1 - x0 < 2.0f) x1 = x0 + 2.0f;
 
-			ImU32 color = getTaskColor(i);
+			// Color by task NAME (not entry index) so a task keeps its color across
+			// frames even as entry order / worker assignment shifts.
+			ImU32 color = getTaskColor(static_cast<uint32_t>(std::hash<std::string>{}(entry.name)));
 			drawList->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), color, 2.0f);
 
 			// Task name label (if bar is wide enough)
@@ -341,8 +395,19 @@ namespace windows
 				ImGui::BeginTooltip();
 				double durationUs = static_cast<double>(entry.endTimeNs - entry.startTimeNs) / 1000.0;
 				ImGui::Text("%s", entry.name.c_str());
-				ImGui::Text("Duration: %.1f us", durationUs);
+				ImGui::Text("This frame: %.1f us", durationUs);
 				ImGui::Text("Thread: %u", entry.threadId);
+				// Aggregate stats across the history ring (computeStats), matched by name.
+				for (const auto& s : stats)
+				{
+					if (s.name == entry.name)
+					{
+						ImGui::Separator();
+						ImGui::Text("avg %.1f us | min %.1f us | max %.1f us",
+							s.avgDurationUs, s.minDurationUs, s.maxDurationUs);
+						break;
+					}
+				}
 				ImGui::EndTooltip();
 			}
 		}
@@ -742,6 +807,54 @@ namespace windows
 		}
 	}
 
+	void TaskGraphWindow::drawGpuPassTable(const char* id, const std::vector<size_t>& rows, float denomMs)
+	{
+		const float barMaxWidth = 220.0f;
+		const float barHeight = ImGui::GetTextLineHeight();
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		if (!ImGui::BeginTable(id, 4,
+			ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg))
+		{
+			return;
+		}
+
+		ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthFixed, 170.0f);
+		ImGui::TableSetupColumn("Last (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+		ImGui::TableSetupColumn("EMA (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+		ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableHeadersRow();
+
+		for (size_t idx : rows)
+		{
+			const auto& pass = gpuStats.passTimings[idx];
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", pass.name.c_str());
+			ImGui::TableNextColumn();
+			ImGui::Text("%.3f", pass.ms);
+			ImGui::TableNextColumn();
+			ImGui::Text("%.3f", pass.emaMs);
+			ImGui::TableNextColumn();
+
+			const float rawFrac = (denomMs > 0.0f) ? (pass.emaMs / denomMs) : 0.0f;
+			// Report the real share but clamp the geometry: a sub-scope overlapping
+			// other work can read past 100%, and an unclamped bar overruns its column.
+			const float barFrac = std::clamp(rawFrac, 0.0f, 1.0f);
+			ImVec2 p0 = ImGui::GetCursorScreenPos();
+			float w = barMaxWidth * barFrac;
+			ImU32 color = getTaskColor(static_cast<uint32_t>(idx));
+			drawList->AddRectFilled(p0, ImVec2(p0.x + std::max(w, 2.0f), p0.y + barHeight), color, 2.0f);
+			char overlay[32];
+			snprintf(overlay, sizeof(overlay), "%.0f%%", rawFrac * 100.0f);
+			drawList->AddText(ImVec2(p0.x + 4.0f, p0.y), IM_COL32(255, 255, 255, 255), overlay);
+			ImGui::Dummy(ImVec2(barMaxWidth, barHeight));
+		}
+
+		ImGui::EndTable();
+	}
+
 	void TaskGraphWindow::drawGpuPasses()
 	{
 		auto& gpuSink = render::GpuPassStats::instance();
@@ -752,23 +865,43 @@ namespace windows
 			return;
 		}
 
-		bool enabled = gpuProfilingEnabled;
-		if (ImGui::Checkbox("GPU Profiling", &enabled))
+		// Tier 1: the whole-frame span. Two timestamps a frame, always collected,
+		// so this reads even with per-pass profiling off.
+		if (gpuSink.hasFrameGpuTime())
 		{
-			gpuProfilingEnabled = enabled;
-			gpuSink.requestEnabled(enabled);
-			if (!enabled)
+			ImGui::Text("GPU frame: %.3f ms (EMA %.3f ms)",
+				gpuSink.frameGpuMs(), gpuSink.emaFrameGpuMs());
+			ImGui::SameLine();
+			ImGui::TextDisabled("(?)");
+			if (ImGui::IsItemHovered())
 			{
-				gpuStats = {};
-				gpuHistoryMs.clear();
+				ImGui::SetTooltip("Whole-frame GPU span for the offscreen command buffer.\n"
+					"Graphics queue only: async-compute work is submitted separately\n"
+					"and carries no timestamps.");
 			}
 		}
+		else
+		{
+			ImGui::TextDisabled("Waiting for the first GPU frame readback...");
+		}
+
+		drawFrameHistoryPlot("##gpuhistory", gpuHistoryMs);
+		ImGui::Separator();
+
+		// Tier 2: one timestamp per render-graph pass boundary. Not free, so it is
+		// off by default and draw() drops the request when the window closes.
+		bool enabled = gpuProfilingEnabled;
+		if (ImGui::Checkbox("Per-pass GPU profiling", &enabled))
+		{
+			// draw() owns the request — it ANDs this with `visible` and edge-detects.
+			gpuProfilingEnabled = enabled;
+		}
 		ImGui::SameLine();
-		ImGui::TextDisabled("Per-pass render graph timings (timestamp queries, off by default)");
+		ImGui::TextDisabled("Timestamps every render-graph pass boundary (off by default)");
 
 		if (!gpuProfilingEnabled)
 		{
-			ImGui::TextDisabled("Enable GPU profiling to collect pass timings");
+			ImGui::TextDisabled("Enable per-pass profiling to break the frame down by pass");
 			return;
 		}
 
@@ -778,58 +911,58 @@ namespace windows
 			return;
 		}
 
-		ImGui::Text("GPU frame: %.3f ms (EMA %.3f ms)  |  Barriers: %u (%u flushes)",
+		ImGui::Text("Graph passes: %.3f ms (EMA %.3f ms)  |  Barriers: %u (%u flushes)",
 			gpuStats.totalMs, gpuStats.emaTotalMs, gpuStats.barrierCount, gpuStats.barrierFlushCount);
-
-		drawFrameHistoryPlot("##gpuhistory", gpuHistoryMs);
-		ImGui::Separator();
-
-		// Passes sorted by EMA cost, descending
-		std::vector<size_t> order(gpuStats.passTimings.size());
-		for (size_t i = 0; i < order.size(); ++i) order[i] = i;
-		std::sort(order.begin(), order.end(),
-			[this](size_t a, size_t b)
-			{
-				return gpuStats.passTimings[a].emaMs > gpuStats.passTimings[b].emaMs;
-			});
-
-		const float barMaxWidth = 220.0f;
-		const float barHeight = ImGui::GetTextLineHeight();
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-		if (ImGui::BeginTable("GpuPassTimings", 4,
-			ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg))
+		if (gpuStats.droppedSamples > 0)
 		{
-			ImGui::TableSetupColumn("Pass", ImGuiTableColumnFlags_WidthFixed, 170.0f);
-			ImGui::TableSetupColumn("Last (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-			ImGui::TableSetupColumn("EMA (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-			ImGui::TableSetupColumn("Share", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableHeadersRow();
-
-			for (size_t idx : order)
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "|  dropped: %u", gpuStats.droppedSamples);
+			if (ImGui::IsItemHovered())
 			{
-				const auto& pass = gpuStats.passTimings[idx];
-
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-				ImGui::Text("%s", pass.name.c_str());
-				ImGui::TableNextColumn();
-				ImGui::Text("%.3f", pass.ms);
-				ImGui::TableNextColumn();
-				ImGui::Text("%.3f", pass.emaMs);
-				ImGui::TableNextColumn();
-				float frac = (gpuStats.emaTotalMs > 0.0f) ? pass.emaMs / gpuStats.emaTotalMs : 0.0f;
-				ImVec2 p0 = ImGui::GetCursorScreenPos();
-				float w = barMaxWidth * frac;
-				ImU32 color = getTaskColor(static_cast<uint32_t>(idx));
-				drawList->AddRectFilled(p0, ImVec2(p0.x + std::max(w, 2.0f), p0.y + barHeight), color, 2.0f);
-				char overlay[32];
-				snprintf(overlay, sizeof(overlay), "%.0f%%", frac * 100.0f);
-				drawList->AddText(ImVec2(p0.x + 4.0f, p0.y), IM_COL32(255, 255, 255, 255), overlay);
-				ImGui::Dummy(ImVec2(barMaxWidth, barHeight));
+				ImGui::SetTooltip("Frames whose timestamps were not ready in time and so\n"
+					"contributed no sample. Expected to stay at 0 in steady state.");
 			}
+		}
 
-			ImGui::EndTable();
+		// Split the graph passes from the aux sub-scopes. Aux scopes are recorded
+		// INSIDE a graph pass, so their cost is already in the total above — listing
+		// them as siblings is what used to push the shares past 100%.
+		std::vector<size_t> graphRows;
+		std::vector<size_t> auxRows;
+		for (size_t i = 0; i < gpuStats.passTimings.size(); ++i)
+		{
+			(gpuStats.passTimings[i].isAux ? auxRows : graphRows).push_back(i);
+		}
+
+		auto byEmaDesc = [this](size_t a, size_t b)
+		{
+			return gpuStats.passTimings[a].emaMs > gpuStats.passTimings[b].emaMs;
+		};
+		std::sort(graphRows.begin(), graphRows.end(), byEmaDesc);
+		std::sort(auxRows.begin(), auxRows.end(), byEmaDesc);
+
+		// Denominator is the sum of the graph rows' EMAs, NOT emaTotalMs. The
+		// boundary chain makes the RAW parts sum to the raw total, but the EMAs seed
+		// independently — a pass appearing mid-session (SSR/Clouds/Upscale toggling)
+		// seeds exact from its first sample while emaTotalMs is still converging, so
+		// dividing by emaTotalMs lets the shares transiently read past 100%. Summing
+		// the rows keeps the column structurally at 100%.
+		float emaDenom = 0.0f;
+		for (size_t i : graphRows) emaDenom += gpuStats.passTimings[i].emaMs;
+
+		drawGpuPassTable("GpuPassTimings", graphRows, emaDenom);
+
+		if (!auxRows.empty())
+		{
+			ImGui::Separator();
+			if (ImGui::TreeNodeEx("Sub-scopes", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				ImGui::TextDisabled("Recorded inside SceneMeshes, so already counted above —");
+				ImGui::TextDisabled("and each overlaps other GPU work, so read them as upper bounds.");
+				// Same denominator: these are fractions of the same frame, just nested.
+				drawGpuPassTable("GpuAuxTimings", auxRows, emaDenom);
+				ImGui::TreePop();
+			}
 		}
 	}
 }

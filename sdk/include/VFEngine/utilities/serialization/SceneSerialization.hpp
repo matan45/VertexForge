@@ -95,11 +95,11 @@ namespace serialization
                                   SceneLoadProgressCallback progressCallback = nullptr);
 
         // Frame-budgeted variant of loadSceneInto (VK-1268). beginIncrementalLoad
-        // parses + clears + spawns the root, then returns true if stepping is
-        // required (call stepIncrementalLoad each frame until it returns false).
-        // Returns false when the load already finished in begin() — binary scenes
-        // (loaded synchronously), parse failures, or an empty scene; check
-        // state.success. Binary scenes are not yet incremental.
+        // parses/decodes + clears + spawns the root, then returns true if stepping
+        // is required (call stepIncrementalLoad each frame until it returns false).
+        // Returns false when the load already finished in begin() — parse failures
+        // or an empty scene; check state.success. Binary scenes decode up front
+        // (VK-1538) then spread entity creation across frames like JSON scenes.
         static bool beginIncrementalLoad(std::string_view filename, scene::SceneGraphSystem& sceneGraph,
                                          SceneLoadProgressCallback progressCallback,
                                          IncrementalLoadState& state);

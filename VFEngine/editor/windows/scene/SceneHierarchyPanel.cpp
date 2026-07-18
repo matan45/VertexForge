@@ -251,10 +251,19 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        // VK-1490: selection input is edit-mode only. The gate sits on the input
-        // handler, not on the commands — Stop still restores the selection
-        // through SelectEntitiesCommand while transitioning back to Edit.
-        if (dispatcher.query(events::editor::IsPlayModeQuery{})) return;
+        // Scene Graph selection is allowed in play mode: inspecting a live entity's
+        // components in the Details panel is the main way to debug a running game
+        // (e.g. reading a spawned unit's tick-governor values). This deliberately
+        // relaxes VK-1490's edit-mode-only rule for the Scene Graph click ONLY —
+        // selecting is read-only, and every ACTING consumer keeps its own play gate:
+        //   - gizmo            -> ViewPortGizmo::draw early-outs in play mode
+        //   - silhouette outline -> EditorRenderServiceImpl pushes an empty selection
+        //   - UI outline       -> ViewPort's !isPlayMode block
+        //   - viewport picking -> ViewPort::handleEntityPicking
+        //   - rename/delete/copy/paste/duplicate -> handleShortcuts' own gate below
+        // Stop clears/restores the selection unconditionally (see
+        // EditorModeServiceImpl::reselectPendingEntities), so a selection naming a
+        // play-spawned entity cannot survive as a dangling handle.
 
         const ImGuiIO& io = ImGui::GetIO();
 

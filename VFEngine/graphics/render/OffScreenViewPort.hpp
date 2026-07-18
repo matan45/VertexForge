@@ -15,6 +15,11 @@ namespace core
     class AsyncComputeManager;
 }
 
+namespace types
+{
+    struct DynamicResolutionSettings; // VK-1531
+}
+
 namespace render
 {
     class RenderPassHandler;
@@ -46,6 +51,14 @@ namespace render
         core::AsyncComputeManager* asyncComputeManager = nullptr;
         uint32_t skipAsyncComputeFrames = 0;
         bool upscaleResourcesDirty = false;
+
+        // VK-1531 dynamic-resolution controller state (owned here; ticked in render()).
+        bool drEnabled = false;
+        float drTargetMs = 16.6f;
+        float drMinScale = 0.5f;
+        float drAppliedScale = 1.0f;
+        uint32_t drFramesOver = 0;
+        uint32_t drFramesUnder = 0;
 
         inline static std::mutex pendingRenderWaitsMutex;
         inline static std::vector<PendingRenderWait> pendingRenderWaits;
@@ -79,10 +92,17 @@ namespace render
         void setUpscaleResourcesDirty(bool dirty) { upscaleResourcesDirty = dirty; }
         bool isUpscaleResourcesDirty() const { return upscaleResourcesDirty; }
 
+        // VK-1531 adaptive dynamic resolution. The controller is ticked once per frame from
+        // render(); the settings ride the RenderSettings apply path. A scale step reallocates the
+        // offscreen targets in place and blanks ImGui for one frame (RenderManager one-frame skip,
+        // the same contract as a window resize).
+        void setDynamicResolutionSettings(const types::DynamicResolutionSettings& s);
+
         static void addPendingRenderWait(PendingRenderWait wait);
 
     private:
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void tickDynamicResolution();
         static std::vector<PendingRenderWait> consumePendingRenderWaits();
 
         void createOffscreenResources();

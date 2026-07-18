@@ -8,7 +8,10 @@
 #include "../core/AsyncComputeManager.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "upscaling/UpscaleManager.hpp"
+#include "upscaling/DynamicResolutionBudget.hpp"
 #include "types/CameraTypes.hpp"
+#include "types/RenderSettings.hpp"
+#include "stats/GpuPassStats.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -87,6 +90,12 @@ namespace render
 
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
         (void)result;
+
+        // VK-1531: run the adaptive dynamic-resolution controller here — after this frame-in-flight
+        // slot's fence is signaled (so its GPU work is done and recreate()'s waitIdle is safe) and
+        // BEFORE any command recording below. A scale step reallocates the offscreen targets in
+        // place; hysteresis keeps steps 10-30 frames apart, so the cost is amortized.
+        tickDynamicResolution();
 
         // VK-1502: lazily create last-frame depth copies when a VFX emitter enables depth-buffer collision
         // (so the DepthCopy pass runs and the sim can sample last-frame depth). Idempotent; created here —
@@ -368,9 +377,12 @@ namespace render
             }
         }
 
-        // Re-apply render extent override for upscaling (display size may have changed on resize)
+        // Re-apply render extent override for upscaling (display size may have changed on resize).
+        // VK-1531: also when dynamic resolution is enabled with the upscaler OFF, so a resize
+        // re-derives the sub-native render extent from the ResolutionManager (which holds the
+        // current dynamicScale) instead of leaving a stale override for the old display size.
         auto* upscaleManager = device.getUpscaleManager();
-        if (upscaleManager && upscaleManager->isActive())
+        if (upscaleManager && (upscaleManager->isActive() || drEnabled))
         {
             auto& resMgr = upscaleManager->getResolutionManager();
             auto displayExtent = swapChain.getDisplayExtent();
@@ -393,6 +405,97 @@ namespace render
             return offscreenResources.colorImages[index].colorImage;
         }
         return {};
+    }
+
+    void OffScreenViewPort::setDynamicResolutionSettings(const types::DynamicResolutionSettings& s)
+    {
+        drEnabled = s.enabled;
+        drTargetMs = s.gpuFrameTimeTargetMs;
+        drMinScale = s.minScale;
+    }
+
+    void OffScreenViewPort::tickDynamicResolution()
+    {
+        // Internal tunables (mirror RTShadowProfiler's constants). Deliberately asymmetric:
+        // react quickly when over budget, creep back slowly to damp oscillation.
+        constexpr uint32_t kHysteresisFramesDown = 10;
+        constexpr uint32_t kHysteresisFramesUp = 30;
+        constexpr float kRestoreThreshold = 0.7f;
+        constexpr float kDownStep = 0.10f;
+        constexpr float kUpStep = 0.05f;
+
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager) return;
+        auto& resMgr = upscaleManager->getResolutionManager();
+
+        float desiredScale = drAppliedScale;
+
+        if (drEnabled)
+        {
+            auto& stats = GpuPassStats::instance();
+
+            upscaling::DynResInputs in{};
+            in.enabled = true;
+            in.haveFrameTime = stats.hasFrameGpuTime();
+            in.emaFrameGpuMs = stats.emaFrameGpuMs();
+            in.targetMs = drTargetMs;
+            in.restoreThreshold = kRestoreThreshold;
+            in.framesOverBudget = drFramesOver;
+            in.framesUnderBudget = drFramesUnder;
+            in.hysteresisFramesDown = kHysteresisFramesDown;
+            in.hysteresisFramesUp = kHysteresisFramesUp;
+            in.appliedScale = drAppliedScale;
+            in.minScale = drMinScale;
+            in.maxScale = 1.0f;
+            in.downStep = kDownStep;
+            in.upStep = kUpStep;
+
+            // The EMA-vs-target comparison and the deadband counter maintenance now live inside the
+            // unit-tested core; the tick only carries the counters + applied scale across frames.
+            const upscaling::DynResDecision d = upscaling::evaluateDynamicResolutionCore(in);
+            drFramesOver = d.framesOverBudget;
+            drFramesUnder = d.framesUnderBudget;
+            if (d.newScale.has_value())
+                desiredScale = d.newScale.value();
+        }
+        else
+        {
+            // Disabled: release any active downscale so the viewport returns to native.
+            drFramesOver = 0;
+            drFramesUnder = 0;
+            if (drAppliedScale < 1.0f)
+                desiredScale = 1.0f;
+        }
+
+        if (desiredScale == drAppliedScale)
+            return;
+
+        // Route through the ResolutionManager (the single source of truth that recreate() and the
+        // resize path re-read), then only pay the waitIdle + realloc when the even pixel extent
+        // actually changes — near the clamp bounds the scale can move without changing pixels.
+        auto displayExtent = swapChain.getDisplayExtent();
+        resMgr.setDisplayResolution(displayExtent.width, displayExtent.height);
+        const vk::Extent2D before = resMgr.getRenderResolution();
+        resMgr.setDynamicScale(desiredScale, drEnabled ? drMinScale : 0.05f);
+        const vk::Extent2D after = resMgr.getRenderResolution();
+        drAppliedScale = desiredScale;
+
+        if (after.width == before.width && after.height == before.height)
+            return;
+
+        // Set the override explicitly (covers the upscaler-off restore case where recreate()'s
+        // re-apply block is skipped), then reallocate. recreate() waitIdle()s internally.
+        swapChain.setRenderExtentOverride(after);
+        recreate();
+
+        setUpscaleResourcesDirty(true);
+        if (renderPassHandler)
+            renderPassHandler->resetUpscaleFirstFrame();
+
+        // recreate() freed the offscreen ImGui viewport descriptors; the editor's already-snapshotted
+        // draw data for this frame still references the old set, so skip one ImGui frame (same
+        // contract as a window resize). No-op in the runtime blit present path.
+        core::RenderManager::requestSkipImguiNextFrame();
     }
 
     void OffScreenViewPort::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

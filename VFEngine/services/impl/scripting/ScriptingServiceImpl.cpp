@@ -5,6 +5,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -282,6 +283,13 @@ namespace services
         entry.scriptRef = scriptRef;
         entry.scriptPath = data.scriptPath;
         entry.enabled = data.enabled;
+        // Carry the full authored set: this is the only path an entity duplicate has to
+        // reconstruct its scripts (ComponentClone excludes ScriptComponent), so anything not
+        // copied here is silently lost on duplicate.
+        entry.inputPriority = data.inputPriority;
+        entry.updateInterval = data.updateInterval;
+        entry.tickSignificance = data.tickSignificance;
+        entry.pinFullRate = data.pinFullRate;
 
         scriptComp.scripts.push_back(entry);
         scriptListDirty = true;
@@ -452,12 +460,14 @@ namespace services
                 continue;
             }
 
-            std::string entityName;
+            // VK-1536: assign() into a reused member rather than a fresh local — this runs for every
+            // script every frame, and the copy is deliberate (see the catch below).
+            entityNameScratch.clear();
             if (registry.all_of<components::NameComponent>(entity))
             {
                 const auto& nameComp = registry.get<components::NameComponent>(entity);
                 if (!nameComp.isActive) continue;
-                entityName = nameComp.name;
+                entityNameScratch.assign(nameComp.name);
             }
 
             auto& scriptComp = registry.get<components::ScriptComponent>(entity);
@@ -526,13 +536,39 @@ namespace services
                 }
             }
 
+            // VK-1536 tick governor. Placed AFTER the load/start blocks above on purpose: a script
+            // must still load and receive onStart/onEnable at full rate, so throttling only ever
+            // affects how often onUpdate runs, never whether the script comes alive.
+            const float effInterval = entry.updateInterval;
+
+            scripting::ScriptTickInputs tickIn;
+            tickIn.accumulator = entry.tickAccumulator;
+            tickIn.dt = deltaTime;
+            tickIn.interval = effInterval;
+            tickIn.firstTickDone = entry.tickFirstDone;
+            tickIn.instanceId = entry.instanceId;
+
+            const scripting::ScriptTickDecision tick = scripting::evaluateScriptTick(tickIn);
+            entry.tickAccumulator = tick.accumulator;
+            entry.tickFirstDone = tick.firstTickDone;
+            if (!tick.shouldTick) continue;
+
             // Breadcrumb so that an *uncatchable* native fault (e.g. an mType JIT
             // access violation) inside this script is still attributed by name in
             // the crash report written by util::installCrashHandler().
-            util::setCrashLogContext("script onUpdate: " + entry.scriptPath + " @ '" + entityName + "'");
+            // VK-1536: built into a reused member instead of concatenating fresh temporaries —
+            // setCrashLogContext only memcpys into a fixed buffer, so the allocations this used to
+            // do were the entire cost of a diagnostic that is read only if the process faults.
+            crashContextScratch.clear();
+            crashContextScratch += "script onUpdate: ";
+            crashContextScratch += entry.scriptPath;
+            crashContextScratch += " @ '";
+            crashContextScratch += entityNameScratch;
+            crashContextScratch += "'";
+            util::setCrashLogContext(crashContextScratch);
             try
             {
-                scriptingProvider->callOnUpdate(entry.instanceId, deltaTime);
+                scriptingProvider->callOnUpdate(entry.instanceId, tick.tickDt);
             }
             catch (const std::exception& e)
             {
@@ -541,8 +577,10 @@ namespace services
                 // bypass this catch entirely — those are captured by the crash
                 // handler, or avoided by running with JIT off (the editor "Debug"
                 // script button forces the VM into interpreter mode).
+                // entityNameScratch is a copy, not a view: the script may have destroyed its own
+                // entity (and its NameComponent) inside callOnUpdate above.
                 vfLogScriptError("[Script] '{}' on '{}' threw in onUpdate: {}",
-                                 entry.scriptPath, entityName, e.what());
+                                 entry.scriptPath, entityNameScratch, e.what());
                 continue;
             }
         }

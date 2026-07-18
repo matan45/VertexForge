@@ -18,10 +18,6 @@ namespace threading {
 		// AddTaskSetToPipe so the scheduler's pipe atomics establish the happens-before.
 		pImpl->profilingEnabled = profilingEnabled;
 
-		if (profilingEnabled) {
-			pImpl->baseTime = std::chrono::high_resolution_clock::now();
-		}
-
 		// Zero the timing fields every frame regardless of profiling state. Otherwise a
 		// profiled frame followed by an unprofiled one would leave getProfileData()
 		// returning last-profiled-frame timings as if they were current (the cached

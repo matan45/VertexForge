@@ -519,6 +519,11 @@ namespace serialization
             {"presentMode", static_cast<int>(settings.display.presentMode)},
             {"msaa", static_cast<int>(settings.display.msaa)}
         };
+        j["dynamicResolution"] = {
+            {"enabled", settings.dynamicResolution.enabled},
+            {"gpuFrameTimeTargetMs", settings.dynamicResolution.gpuFrameTimeTargetMs},
+            {"minScale", settings.dynamicResolution.minScale}
+        };
         j["shadows"] = serializeShadowSettings(settings.shadows);
         j["rtShadows"] = serializeRTShadowSettings(settings.rtShadows);
         j["culling"] = serializeCullingSettings(settings.culling);
@@ -546,6 +551,17 @@ namespace serialization
                 settings.display.presentMode = static_cast<types::PresentMode>(display["presentMode"].get<int>());
             if (display.contains("msaa") && display["msaa"].is_number_integer())
                 settings.display.msaa = static_cast<types::MsaaSamples>(display["msaa"].get<int>());
+        }
+
+        if (j.contains("dynamicResolution") && j["dynamicResolution"].is_object())
+        {
+            const auto& dr = j["dynamicResolution"];
+            if (dr.contains("enabled") && dr["enabled"].is_boolean())
+                settings.dynamicResolution.enabled = dr["enabled"].get<bool>();
+            if (dr.contains("gpuFrameTimeTargetMs") && dr["gpuFrameTimeTargetMs"].is_number())
+                settings.dynamicResolution.gpuFrameTimeTargetMs = dr["gpuFrameTimeTargetMs"].get<float>();
+            if (dr.contains("minScale") && dr["minScale"].is_number())
+                settings.dynamicResolution.minScale = dr["minScale"].get<float>();
         }
 
         deserializeShadowSettings(j, settings.shadows);

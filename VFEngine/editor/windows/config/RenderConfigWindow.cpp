@@ -111,6 +111,29 @@ namespace windows
                                "Anti-aliasing handled by the upscaler (DLAA).");
         }
 
+        // VK-1531: adaptive dynamic resolution — a GPU-frame-time feedback governor that scales the
+        // internal render resolution to hold a budget. Off by default; layers under a pinned DLSS
+        // quality mode and also works with the upscaler off.
+        ImGui::SeparatorText("Dynamic Resolution");
+        if (ImGui::Checkbox("Enable Dynamic Resolution", &settings.dynamicResolution.enabled))
+            markDirty();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(
+                "Adaptively scales the internal render resolution to hold a GPU frame-time budget.\n"
+                "Steps down under sustained load and recovers when it drops (hysteresis, no oscillation).\n"
+                "Works with the upscaler on (adjusts the pre-upscale input) or off. Applied on Apply.");
+        if (settings.dynamicResolution.enabled)
+        {
+            if (ImGui::SliderFloat("GPU Frame Target (ms)", &settings.dynamicResolution.gpuFrameTimeTargetMs, 4.0f, 33.3f, "%.1f"))
+                markDirty();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Target whole-frame GPU time. 16.6 ms == 60 FPS, 33.3 ms == 30 FPS.");
+            if (ImGui::SliderFloat("Min Resolution Scale", &settings.dynamicResolution.minScale, 0.3f, 1.0f, "%.2f"))
+                markDirty();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Lower bound on the render scale (per axis) the governor may drop to.");
+        }
+
         ImGui::Unindent(10.0f);
         ImGui::Separator();
     }

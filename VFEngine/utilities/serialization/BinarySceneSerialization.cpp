@@ -54,6 +54,10 @@ namespace serialization
 
 	json BinarySceneSerialization::decodePayload(const std::vector<uint8_t>& data)
 	{
+		// Public entry point — guard the header read (mirrors isBinaryScene / peekHeader) so a
+		// short/truncated buffer can never over-read past the allocation via the memcpy below.
+		if (data.size() < HEADER_SIZE) return json{};
+
 		Header header{};
 		std::memcpy(&header, data.data(), HEADER_SIZE);
 
@@ -75,48 +79,12 @@ namespace serialization
 		}
 	}
 
-	bool BinarySceneSerialization::saveBinaryScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
+	bool BinarySceneSerialization::peekHeader(const std::vector<uint8_t>& data, Header& outHeader)
 	{
-		try
-		{
-			json snapshot = SceneSerialization::createSnapshot(sceneGraph, filename);
-			if (snapshot.is_null() || !snapshot.contains("root"))
-			{
-				vfLogError("BinaryScene: Failed to create scene snapshot");
-				return false;
-			}
-
-			size_t entityCount = SceneSerialization::countEntities(snapshot["root"]);
-			std::vector<uint8_t> msgpack = json::to_msgpack(snapshot);
-
-			Header header{};
-			std::memcpy(header.magic, MAGIC, 4);
-			header.version = FORMAT_VERSION;
-			header.flags = 0;
-			header.entityCount = static_cast<uint32_t>(entityCount);
-			header.payloadSize = static_cast<uint32_t>(msgpack.size());
-			header.totalFileSize = HEADER_SIZE + msgpack.size();
-
-			std::ofstream file(std::string(filename), std::ios::binary);
-			if (!file.is_open())
-			{
-				vfLogError("BinaryScene: Failed to create file: {}", filename);
-				return false;
-			}
-
-			file.write(reinterpret_cast<const char*>(&header), HEADER_SIZE);
-			file.write(reinterpret_cast<const char*>(msgpack.data()),
-			           static_cast<std::streamsize>(msgpack.size()));
-
-			vfLogInfo("BinaryScene: Saved {} entities ({} bytes, payload {} bytes)",
-			          entityCount, header.totalFileSize, msgpack.size());
-			return true;
-		}
-		catch (const std::exception& e)
-		{
-			vfLogError("BinaryScene: Failed to save: {}", e.what());
-			return false;
-		}
+		if (data.size() < HEADER_SIZE) return false;
+		if (std::memcmp(data.data(), MAGIC, 4) != 0) return false;
+		std::memcpy(&outHeader, data.data(), HEADER_SIZE);
+		return true;
 	}
 
 	bool BinarySceneSerialization::loadBinarySceneInto(const std::vector<uint8_t>& data,
@@ -193,7 +161,8 @@ namespace serialization
 		}
 	}
 
-	bool BinarySceneSerialization::convertJsonToBinary(std::string_view jsonPath, std::string_view binaryPath)
+	bool BinarySceneSerialization::convertJsonToBinary(std::string_view jsonPath, std::string_view binaryPath,
+	                                                   uint64_t sourceHash)
 	{
 		try
 		{
@@ -222,6 +191,7 @@ namespace serialization
 			header.entityCount = static_cast<uint32_t>(entityCount);
 			header.payloadSize = static_cast<uint32_t>(msgpack.size());
 			header.totalFileSize = HEADER_SIZE + msgpack.size();
+			header.sourceHash = sourceHash;
 
 			std::ofstream file(std::string(binaryPath), std::ios::binary);
 			if (!file.is_open())

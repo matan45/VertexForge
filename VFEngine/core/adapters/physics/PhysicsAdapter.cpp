@@ -2,6 +2,7 @@
 #include "PhysicsConversions.hpp"
 #include "threading/JobSystem.hpp"
 #include "../../physics/PhysicsShapeFactory.hpp"
+#include "../../physics/FixedTimestepMath.hpp"
 #include "../../services/events/physics/PhysicsEvents.hpp"
 #include "../../services/events/lifecycle/AssetLifecycleEvents.hpp"
 #include "../../services/events/EventDispatcher.hpp"
@@ -167,8 +168,6 @@ namespace core
     {
         if (!isInitialized()) return;
 
-        // Swap buffers: previous write becomes read (previous frame state)
-        physicsWorld->swapStateBuffers();
         physicsWorld->applyPendingVehicleInputs();
 
         asyncStepFuture = threading::JobSystem::instance().submit(
@@ -179,8 +178,20 @@ namespace core
                     physicsWorld->step(fixedDt);
                 });
 
-                // Capture state snapshot while still on worker thread (Jolt sim is done)
-                physicsWorld->captureState();
+                // Advance the interpolation double-buffer ONLY on a frame that actually stepped.
+                // swap makes the previous frame's write buffer the new read (prev) buffer, then
+                // capture writes the post-step state into the new write (curr) buffer, so the two
+                // buffers bracket [prev step, curr step] (both writes done here on the worker thread,
+                // the Jolt sim is finished, and the sole reader — getInterpolatedTransform — only runs
+                // after syncPhysicsStep joins this job). On a zero-step frame we leave both buffers
+                // untouched so getInterpolatedTransform keeps interpolating from prev toward curr as
+                // alpha grows; swapping+capturing there would collapse read==curr==write and pin the
+                // render to curr, making bodies judder at the physics rate above the display rate.
+                if (result.stepsTaken > 0)
+                {
+                    physicsWorld->swapStateBuffers();
+                    physicsWorld->captureState();
+                }
                 return result;
             }, threading::JobPriority::HIGH);
 
@@ -194,6 +205,7 @@ namespace core
         auto result = asyncStepFuture.get();
         asyncStepInFlight = false;
         lastStepAlpha = static_cast<float>(result.alpha);
+        lastStepCount = result.stepsTaken;
 
         // Process contact events on main thread
         physicsWorld->processContactEvents();
@@ -214,6 +226,17 @@ namespace core
         return lastStepAlpha;
     }
 
+    int PhysicsAdapter::getPhysicsStepsTaken() const
+    {
+        return lastStepCount;
+    }
+
+    float PhysicsAdapter::getFixedTimestep() const
+    {
+        return fixedTimestep ? static_cast<float>(fixedTimestep->getTimestep())
+                             : static_cast<float>(1.0 / 60.0);
+    }
+
     services::PhysicsTransformSnapshot PhysicsAdapter::getInterpolatedTransform(
         services::EntityHandle entity) const
     {
@@ -226,10 +249,12 @@ namespace core
 
         if (curr && prev)
         {
+            // interp* clamp alpha to [0,1] so a hitch (where alpha could momentarily
+            // exceed 1 before the drop-remainder guard) never extrapolates the pose.
             float alpha = lastStepAlpha;
-            result.position = glm::mix(prev->position, curr->position, alpha);
-            result.rotation = glm::slerp(prev->rotation, curr->rotation, alpha);
-            result.linearVelocity = glm::mix(prev->linearVelocity, curr->linearVelocity, alpha);
+            result.position = physics::interpVec3(prev->position, curr->position, alpha);
+            result.rotation = physics::interpRotation(prev->rotation, curr->rotation, alpha);
+            result.linearVelocity = physics::interpVec3(prev->linearVelocity, curr->linearVelocity, alpha);
         }
         else if (curr)
         {

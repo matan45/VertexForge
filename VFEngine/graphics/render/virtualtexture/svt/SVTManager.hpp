@@ -10,6 +10,7 @@
 #include "../../../core/BindlessConstants.hpp"
 #include "threading/JobSystem.hpp"
 #include "threading/CancellationToken.hpp"
+#include "memory/VramAssetSnapshot.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <vector>
@@ -169,6 +170,13 @@ namespace render::gpudriven
         [[nodiscard]] uint32_t residentPageCount() const;
         [[nodiscard]] uint32_t pinnedPageCount() const { return static_cast<uint32_t>(pinnedKeys.size()); }
         [[nodiscard]] uint32_t pinBacklog() const { return static_cast<uint32_t>(pendingPins.size()); }
+
+        // VK-1539 memory profiler: append one per-owner VRAM row {image path, resident pages ×
+        // tileByteSize} for each SVT image with resident atlas pages, accumulating vtTotal. Walks
+        // every pool's residency, so it MUST be called on the render thread that owns it. Note the
+        // atlas is a shared fixed-budget pool — these rows are an occupancy share, not distinct
+        // allocations, and reconcile internally only (no CullingStats counterpart).
+        void appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& vtTotal) const;
 
     private:
         struct SVTImage

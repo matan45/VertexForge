@@ -1,6 +1,7 @@
 #include "StaticMeshPipeline.hpp"
 #include "MeshGPUCache.hpp"
 #include "MaterialCacheManager.hpp"
+#include "MaterialPipelineWarmup.hpp"
 #include "../DebugRenderer.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialShaderCache.hpp"
@@ -72,13 +73,20 @@ namespace render::mesh
     {
         vk::Pipeline targetPipeline = graphicsPipeline;
 
+        // VK-1532: while async warm-up is running, never synchronously create a not-yet-warm
+        // pipeline on the render thread — fall back to the default lit pipeline for this frame
+        // and pick up the custom pipeline once warm-up completes. When warm-up is inactive this
+        // is a single atomic load and the path below is unchanged.
+        const bool warmupActive = pipelineWarmup && pipelineWarmup->isActive();
+
         if (materialShaderCache && !pbrValues.materialPath.empty())
         {
             auto matIt = materialCache.find(pbrValues.materialPath);
             if (matIt != materialCache.end() && matIt->second)
             {
                 const material::MaterialData& matData = *matIt->second;
-                if (!matData.cachedVertexShader.empty() && !matData.cachedFragmentShader.empty())
+                if (!matData.cachedVertexShader.empty() && !matData.cachedFragmentShader.empty() &&
+                    (!warmupActive || materialShaderCache->hasPipeline(pbrValues.materialPath)))
                 {
                     const MaterialPipelineData* matPipeline =
                         materialShaderCache->getOrCreatePipeline(pbrValues.materialPath, matData);

@@ -307,6 +307,11 @@ namespace render::gpudriven
         std::unique_ptr<SVTManager> svtManager;
         uint32_t svtFrameCounter = 0;
 
+        // VK-1539 per-asset VRAM attribution throttle (see publishVramAttribution).
+        static constexpr uint32_t kVramAttributionInterval = 16;
+        uint32_t vramAttributionFrame = 0;
+        uint64_t vramAttributionGeneration = 0;
+
         // VK-1493 toon profile GPU table (set-1 binding 6). Created with the mesh pipelines,
         // always present so binding 6 has a live buffer. Null only before init / after teardown.
         std::unique_ptr<ToonProfileGpuTable> toonProfileTable;
@@ -785,6 +790,10 @@ namespace render::gpudriven
 
         void updateMeshStreaming(const std::vector<mesh::MeshRenderData>& opaqueObjects,
                                  const glm::vec3& cameraPosition);
+        // VK-1539: assemble + publish per-asset VRAM attribution from the streaming managers for
+        // the editor Memory Diagnostics window. Called once per frame from updateScene; gated by
+        // GpuAllocationStats::diagnosticsActive and throttled to kVramAttributionInterval frames.
+        void publishVramAttribution();
         void registerSceneMaterialTextures(const std::vector<mesh::MeshRenderData>& opaqueObjects);
         TextureIndexResolver createTextureResolver();
         BoneOffsetResolver updateAnimationBones();

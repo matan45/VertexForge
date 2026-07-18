@@ -8,11 +8,14 @@
 #include "events/memory/CpuMemoryEvents.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <fstream>
 #include <vector>
 #include <string>
 #include <cstdio>
+#include <cctype>
+#include <ctime>
 
 #ifdef DEBUG
 #include "memory/DebugAllocatorWrapper.hpp"
@@ -31,6 +34,86 @@ namespace
         if (fragPercent > 30.0f) return ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
         if (fragPercent > 10.0f) return ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
         return ImVec4(0.3f, 1.0f, 0.3f, 1.0f);
+    }
+
+    // VK-1539 diff coloring: growth (positive delta) reads as a potential leak, shrink as freed.
+    ImVec4 deltaColor(int64_t byteDelta)
+    {
+        if (byteDelta > 0) return ImVec4(1.0f, 0.4f, 0.3f, 1.0f);
+        if (byteDelta < 0) return ImVec4(0.3f, 1.0f, 0.4f, 1.0f);
+        return ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
+    }
+
+    // Filesystem-safe version of a capture label, for export filenames.
+    std::string sanitizeLabel(const std::string& label)
+    {
+        std::string s;
+        s.reserve(label.size());
+        for (char c : label)
+            s.push_back((std::isalnum(static_cast<unsigned char>(c)) != 0) ? c : '_');
+        if (s.empty()) s = "capture";
+        return s;
+    }
+
+    // RFC-4180 CSV field escaping: a field containing a comma, quote or newline is wrapped in
+    // double-quotes with any interior quote doubled. Asset paths (VramAssetRow::name) can legally
+    // contain commas on Windows, which would otherwise shift every downstream column.
+    std::string csvEscape(const std::string& field)
+    {
+        if (field.find_first_of(",\"\n\r") == std::string::npos)
+            return field;
+        std::string out;
+        out.reserve(field.size() + 2);
+        out.push_back('"');
+        for (char c : field)
+        {
+            if (c == '"') out.push_back('"'); // double an interior quote
+            out.push_back(c);
+        }
+        out.push_back('"');
+        return out;
+    }
+
+    // Render one diff axis (CPU categories / GPU heaps / per-asset) as a colored delta table.
+    // Unchanged rows are hidden so the leak hunt focuses on what actually moved.
+    template <class Row>
+    void drawDeltaTable(const char* id, const char* title, const std::vector<memory::DiffRow<Row>>& deltas)
+    {
+        if (!ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        int shown = 0;
+        for (const auto& d : deltas)
+            if (d.kind != memory::DeltaKind::Unchanged) ++shown;
+        if (shown == 0)
+        {
+            ImGui::TextDisabled("No changes.");
+            return;
+        }
+
+        if (ImGui::BeginTable(id, 3,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+            ImVec2(0, std::min(200.0f, 24.0f + shown * 20.0f))))
+        {
+            ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Change",   ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Delta MB", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableHeadersRow();
+
+            for (const auto& d : deltas)
+            {
+                if (d.kind == memory::DeltaKind::Unchanged) continue;
+                const ImVec4 col = deltaColor(d.byteDelta);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(d.key.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextColored(col, "%s", memory::deltaKindName(d.kind));
+                ImGui::TableNextColumn();
+                ImGui::TextColored(col, "%+.2f", static_cast<double>(d.byteDelta) / MB);
+            }
+            ImGui::EndTable();
+        }
     }
 }
 
@@ -84,6 +167,18 @@ namespace windows
                     ImGui::EndTabItem();
                 }
 
+                if (ImGui::BeginTabItem("VRAM Assets"))
+                {
+                    drawVramTab();
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Snapshots"))
+                {
+                    drawSnapshotsTab();
+                    ImGui::EndTabItem();
+                }
+
                 ImGui::EndTabBar();
             }
         }
@@ -102,6 +197,9 @@ namespace windows
         // CPU sampling — cold path snapshot from CpuMemoryManager.
         cpuSnapshot = memory::CpuMemoryManager::instance().snapshot();
         cpuTrackedMB.push(toMB(cpuSnapshot.totalTrackedBytes));
+
+        // VK-1539 per-asset VRAM attribution, published by the render thread (GPUDrivenRenderer).
+        vramSnapshot = memory::VramAssetSnapshot::read();
     }
 
     void MemoryDiagnosticsWindow::drawBudgetBar()
@@ -738,5 +836,301 @@ namespace windows
         {
             ImGui::Text("Deferred loads: 0");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // VRAM Assets tab (VK-1539) — per-asset attribution published by the render
+    // thread (GPUDrivenRenderer::publishVramAttribution) into VramAssetSnapshot.
+    // -----------------------------------------------------------------------
+
+    void MemoryDiagnosticsWindow::drawVramTab()
+    {
+        ImGui::Text("Textures: %.2f MB", toMB(vramSnapshot.textureTotalBytes));
+        ImGui::SameLine();
+        ImGui::TextDisabled("(reconciles with Culling Stats -> Texture Mip Streaming)");
+        ImGui::Text("Meshes: %.2f MB   Virtual Texture: %.2f MB",
+            toMB(vramSnapshot.meshTotalBytes), toMB(vramSnapshot.vtTotalBytes));
+        ImGui::Separator();
+
+        const char* filters[] = {"All", "Texture", "Mesh", "Virtual Texture"};
+        ImGui::TextUnformatted("Filter:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(150);
+        ImGui::Combo("##VramFilter", &vramCategoryFilter, filters, IM_ARRAYSIZE(filters));
+
+        if (vramSnapshot.rows.empty())
+        {
+            ImGui::TextDisabled("No resident VRAM assets yet (open a GPU-driven scene with streaming).");
+            return;
+        }
+
+        if (ImGui::BeginTable("##VramAssets", 3,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY,
+            ImVec2(0, ImGui::GetContentRegionAvail().y)))
+        {
+            ImGui::TableSetupColumn("Asset");
+            ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+            ImGui::TableSetupColumn("VRAM (MB)",
+                ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_DefaultSort |
+                ImGuiTableColumnFlags_PreferSortDescending, 90.0f);
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableHeadersRow();
+
+            // Sort the cached rows in place; producer already publishes bytes-desc, so the
+            // default (VRAM column, descending) leaves them as the top-N largest view. Re-sort
+            // only when the user changed the sort spec (SpecsDirty) OR the producer published a
+            // new sample (generation changed) — sorting on every frame is wasted O(n log n), but
+            // a SpecsDirty-only gate would leave a fresh sample unsorted under a non-default column.
+            if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
+            {
+                if (sortSpecs->SpecsCount > 0 &&
+                    (sortSpecs->SpecsDirty || vramSnapshot.generation != lastSortedVramGeneration))
+                {
+                    const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
+                    const bool ascending = spec.SortDirection == ImGuiSortDirection_Ascending;
+                    std::stable_sort(vramSnapshot.rows.begin(), vramSnapshot.rows.end(),
+                        [&spec, ascending](const memory::VramAssetRow& a, const memory::VramAssetRow& b)
+                        {
+                            bool less;
+                            switch (spec.ColumnIndex)
+                            {
+                            case 1: less = static_cast<int>(a.category) < static_cast<int>(b.category); break;
+                            case 2: less = a.bytes < b.bytes; break;
+                            default: less = a.name < b.name; break;
+                            }
+                            return ascending ? less : !less;
+                        });
+                    sortSpecs->SpecsDirty = false;
+                    lastSortedVramGeneration = vramSnapshot.generation;
+                }
+            }
+
+            for (const auto& row : vramSnapshot.rows)
+            {
+                if (vramCategoryFilter > 0 && static_cast<int>(row.category) != (vramCategoryFilter - 1))
+                    continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(row.name.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s", memory::vramAssetCategoryName(row.category));
+                ImGui::TableNextColumn();
+                ImGui::Text("%.2f", toMB(row.bytes));
+            }
+
+            ImGui::EndTable();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshots tab (VK-1539) — named in-memory captures + two-capture diff.
+    // -----------------------------------------------------------------------
+
+    void MemoryDiagnosticsWindow::captureNow(const char* label)
+    {
+        memory::MemorySnapshotCapture cap;
+        cap.label = label;
+        cap.timestampUnixMs = static_cast<int64_t>(std::time(nullptr)) * 1000;
+
+        // CPU axis (from the already-sampled cpuSnapshot).
+        cap.cpuCategories.reserve(cpuSnapshot.categories.size());
+        for (const auto& c : cpuSnapshot.categories)
+            cap.cpuCategories.push_back(memory::CapturedCpuCat{c.name, c.kind, c.bytes, c.peak});
+        cap.cpuTotalTrackedBytes = cpuSnapshot.totalTrackedBytes;
+        cap.cpuBudgetBytes = cpuSnapshot.budgetBytes;
+
+        // GPU heap aggregates (from the process-global GpuAllocationStats atomics).
+        using Stats = memory::GpuAllocationStats;
+        cap.gpuHeaps.push_back({"Device-Local",
+            Stats::deviceLocalUsedBytes.load(std::memory_order_relaxed),
+            Stats::deviceLocalCapacityBytes.load(std::memory_order_relaxed)});
+        cap.gpuHeaps.push_back({"Host-Visible",
+            Stats::hostVisibleUsedBytes.load(std::memory_order_relaxed),
+            Stats::hostVisibleCapacityBytes.load(std::memory_order_relaxed)});
+        cap.gpuHeaps.push_back({"Dedicated",
+            Stats::dedicatedAllocatedBytes.load(std::memory_order_relaxed),
+            Stats::dedicatedAllocatedBytes.load(std::memory_order_relaxed)});
+        cap.gpuHeaps.push_back({"Staging",
+            Stats::stagingRingUsed.load(std::memory_order_relaxed),
+            Stats::stagingRingSize.load(std::memory_order_relaxed)});
+        cap.vramBudgetBytes = Stats::vramBudgetBytes.load(std::memory_order_relaxed);
+        cap.vramUsageBytes = Stats::vramUsageBytes.load(std::memory_order_relaxed);
+
+        // Per-asset VRAM axis (from the already-sampled vramSnapshot).
+        cap.vramAssets = vramSnapshot.rows;
+        cap.vramTextureTotal = vramSnapshot.textureTotalBytes;
+        cap.vramMeshTotal = vramSnapshot.meshTotalBytes;
+        cap.vramVtTotal = vramSnapshot.vtTotalBytes;
+
+        captures.push_back(std::move(cap));
+    }
+
+    void MemoryDiagnosticsWindow::drawSnapshotsTab()
+    {
+        ImGui::TextWrapped("Capture named snapshots and diff two of them to hunt leaks: "
+                           "capture, load or unload a scene, capture again, then diff.");
+        ImGui::Separator();
+
+        ImGui::SetNextItemWidth(200);
+        ImGui::InputTextWithHint("##CapLabel", "snapshot label", captureLabel, sizeof(captureLabel));
+        ImGui::SameLine();
+        if (ImGui::Button("Capture"))
+            captureNow(captureLabel[0] != '\0' ? captureLabel : "snapshot");
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All"))
+        {
+            captures.clear();
+            diffA = diffB = -1;
+        }
+
+        if (captures.empty())
+        {
+            ImGui::TextDisabled("No captures yet.");
+            return;
+        }
+
+        if (ImGui::BeginTable("##Captures", 5,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+            ImVec2(0, std::min(160.0f, 24.0f + captures.size() * 20.0f))))
+        {
+            ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 24.0f);
+            ImGui::TableSetupColumn("Label");
+            ImGui::TableSetupColumn("CPU MB", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableSetupColumn("VRAM MB", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableSetupColumn("Export", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < static_cast<int>(captures.size()); ++i)
+            {
+                const memory::MemorySnapshotCapture& cap = captures[i];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%d", i);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(cap.label.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%.1f", toMB(cap.cpuTotalTrackedBytes));
+                ImGui::TableNextColumn();
+                ImGui::Text("%.1f", toMB(cap.vramUsageBytes));
+                ImGui::TableNextColumn();
+                ImGui::PushID(i);
+                if (ImGui::SmallButton("CSV")) exportCaptureCsv(cap, i);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("JSON")) exportCaptureJson(cap, i);
+                ImGui::PopID();
+            }
+
+            ImGui::EndTable();
+        }
+
+        if (!lastExportPath.empty())
+            ImGui::TextDisabled("Saved: %s", lastExportPath.c_str());
+
+        // Diff selection — clamp indices to the current capture list.
+        const int count = static_cast<int>(captures.size());
+        if (diffA < 0 || diffA >= count) diffA = 0;
+        if (diffB < 0 || diffB >= count) diffB = count - 1;
+
+        std::vector<const char*> labels;
+        labels.reserve(captures.size());
+        for (const auto& c : captures)
+            labels.push_back(c.label.c_str());
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("Diff two captures:");
+        ImGui::SetNextItemWidth(180);
+        ImGui::Combo("Before (A)", &diffA, labels.data(), count);
+        ImGui::SetNextItemWidth(180);
+        ImGui::Combo("After (B)", &diffB, labels.data(), count);
+
+        if (diffA == diffB)
+        {
+            ImGui::TextDisabled("Select two different captures to diff.");
+            return;
+        }
+
+        // Recompute the diff (3 hash maps + 3 sets + deep row copies) only when the selection or
+        // the capture list changed — captures are immutable, so the result is stable between
+        // clicks; running it every frame the tab is open is pure waste.
+        if (diffA != cachedDiffA || diffB != cachedDiffB || captures.size() != cachedDiffCount)
+        {
+            cachedDiff = memory::diff(captures[diffA], captures[diffB]);
+            cachedDiffA = diffA;
+            cachedDiffB = diffB;
+            cachedDiffCount = captures.size();
+        }
+        const memory::MemorySnapshotDiff& d = cachedDiff;
+        ImGui::Separator();
+        ImGui::TextColored(deltaColor(d.cpuTotalDelta), "CPU tracked delta: %+.2f MB",
+            static_cast<double>(d.cpuTotalDelta) / MB);
+        ImGui::TextColored(deltaColor(d.vramUsageDelta), "VRAM usage delta: %+.2f MB",
+            static_cast<double>(d.vramUsageDelta) / MB);
+        drawDeltaTable("##dCpu", "CPU Category Deltas", d.cpuDeltas);
+        drawDeltaTable("##dHeap", "GPU Heap Deltas", d.heapDeltas);
+        drawDeltaTable("##dAsset", "Per-Asset VRAM Deltas (Added / growth = potential leak)", d.assetDeltas);
+    }
+
+    void MemoryDiagnosticsWindow::exportCaptureCsv(const memory::MemorySnapshotCapture& cap, int index)
+    {
+        // Prefix with the session-unique capture index so two captures sharing a label (e.g.
+        // both defaulted to "snapshot") export to distinct files instead of truncating each other.
+        const std::string path =
+            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".csv";
+        std::ofstream out(path, std::ios::trunc);
+        if (!out)
+        {
+            vfLogWarning("MemoryDiagnostics: failed to open {} for export", path);
+            return;
+        }
+
+        out << "section,name,bytes,extra\n";
+        for (const auto& c : cap.cpuCategories)
+            out << "cpu," << csvEscape(c.name) << ',' << c.bytes << ',' << c.peak << "\n";
+        for (const auto& h : cap.gpuHeaps)
+            out << "gpu_heap," << csvEscape(h.name) << ',' << h.usedBytes << ',' << h.capacityBytes << "\n";
+        for (const auto& a : cap.vramAssets)
+            out << "vram_asset," << csvEscape(a.name) << ',' << a.bytes << ',' << memory::vramAssetCategoryName(a.category) << "\n";
+
+        out.close();
+        lastExportPath = path;
+        vfLogInfo("MemoryDiagnostics: exported capture to {}", path);
+    }
+
+    void MemoryDiagnosticsWindow::exportCaptureJson(const memory::MemorySnapshotCapture& cap, int index)
+    {
+        nlohmann::json j;
+        j["schemaVersion"] = cap.schemaVersion;
+        j["label"] = cap.label;
+        j["timestampUnixMs"] = cap.timestampUnixMs;
+        j["cpuTotalTrackedBytes"] = cap.cpuTotalTrackedBytes;
+        j["cpuBudgetBytes"] = cap.cpuBudgetBytes;
+        j["vramBudgetBytes"] = cap.vramBudgetBytes;
+        j["vramUsageBytes"] = cap.vramUsageBytes;
+        j["vramTextureTotal"] = cap.vramTextureTotal;
+        j["vramMeshTotal"] = cap.vramMeshTotal;
+        j["vramVtTotal"] = cap.vramVtTotal;
+        for (const auto& c : cap.cpuCategories)
+            j["cpuCategories"].push_back({{"name", c.name}, {"kind", memory::categoryKindName(c.kind)},
+                                          {"bytes", c.bytes}, {"peak", c.peak}});
+        for (const auto& h : cap.gpuHeaps)
+            j["gpuHeaps"].push_back({{"name", h.name}, {"usedBytes", h.usedBytes},
+                                     {"capacityBytes", h.capacityBytes}});
+        for (const auto& a : cap.vramAssets)
+            j["vramAssets"].push_back({{"name", a.name},
+                                       {"category", memory::vramAssetCategoryName(a.category)},
+                                       {"bytes", a.bytes}});
+
+        const std::string path =
+            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".json";
+        std::ofstream out(path, std::ios::trunc);
+        if (!out)
+        {
+            vfLogWarning("MemoryDiagnostics: failed to open {} for export", path);
+            return;
+        }
+        out << j.dump(2);
+        out.close();
+        lastExportPath = path;
+        vfLogInfo("MemoryDiagnostics: exported capture to {}", path);
     }
 }

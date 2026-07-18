@@ -798,4 +798,26 @@ namespace render::gpudriven
             total += P.residency.residentCount();
         return total;
     }
+
+    void SVTManager::appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& vtTotal) const
+    {
+        if (tileByteSize == 0)
+            return;
+
+        // Tally resident page counts grouped by owning imageId across every pool's residency.
+        std::unordered_map<uint32_t, uint32_t> pagesByImage;
+        for (const auto& P : pools)
+            P.residency.forEachResident([&pagesByImage](uint32_t imageId) { ++pagesByImage[imageId]; });
+
+        out.reserve(out.size() + pagesByImage.size());
+        for (const auto& [imageId, count] : pagesByImage)
+        {
+            if (imageId >= images.size())
+                continue; // tombstoned / stale slot — guard mirrors the rest of SVTManager
+            const uint64_t bytes = static_cast<uint64_t>(count) * tileByteSize;
+            out.push_back(memory::VramAssetRow{images[imageId].path,
+                                               memory::VramAssetCategory::VirtualTexture, bytes});
+            vtTotal += bytes;
+        }
+    }
 }

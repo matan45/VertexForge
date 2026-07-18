@@ -5,6 +5,7 @@
 #include "../../material/MaterialPBRExtractor.hpp"
 #include "../../../core/RenderManager.hpp"
 #include "material/MaterialManager.hpp"
+#include "memory/VramAssetSnapshot.hpp"
 #include <vulkan/vulkan.hpp>
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <entt/entt.hpp>
@@ -134,6 +135,11 @@ namespace render::gpudriven
 
         static constexpr uint32_t vertexStride = 64;
 
+        // VK-1539: resident VRAM bytes for one mesh = sum over its submeshes' LODs that are
+        // actually resident (LODStreamState::Ready) of vertexCount*vertexStride +
+        // indexCount*sizeof(uint32). Co-located with vertexStride, the layout constant it uses.
+        uint64_t residentBytes(const MergedMeshInfo& mesh) const;
+
         std::vector<MergedMeshInfo> registeredMeshes;
         std::vector<size_t> freeMeshSlots;
         std::unordered_map<std::string, size_t> meshPathToIndex;
@@ -239,6 +245,11 @@ namespace render::gpudriven
 
         const std::vector<MergedMeshInfo>& getRegisteredMeshes() const { return registeredMeshes; }
         const std::vector<SubmeshLocation>& getAllSubmeshLocations() const { return allSubmeshLocations; }
+
+        // VK-1539 memory profiler: append one per-mesh VRAM row {meshPath, residentBytes} for each
+        // registered mesh (skipping zero-byte meshes with no resident LOD) and accumulate meshTotal.
+        // Walks registeredMeshes, so it MUST be called on the render thread that owns it.
+        void appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& meshTotal) const;
 
         // Persistent slot mode (play mode streaming)
         void setPersistentMode(bool enabled);

@@ -124,34 +124,38 @@ namespace windows::details
             ImGui::SetTooltip("%s", scriptPath.c_str());
         }
 
-        // Input priority
+        // The live component entry backing this row. Shared by the priority field on this line and
+        // the tick-governor block below it, so the row is only looked up once.
+        components::ScriptEntry* entry = nullptr;
         {
             auto enttEntity = services::internal::fromHandle(handle);
             auto& registry = scene::EntityRegistry::getRegistry();
             if (registry.all_of<components::ScriptComponent>(enttEntity))
             {
                 auto& scriptComp = registry.get<components::ScriptComponent>(enttEntity);
-                auto* entry = scriptComp.findByPath(scriptPath);
-                if (entry)
+                entry = scriptComp.findByPath(scriptPath);
+            }
+        }
+
+        // Input priority
+        if (entry)
+        {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(60.0f);
+            if (ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0))
+            {
+                // Propagate to running instance if loaded
+                if (entry->instanceId != 0)
                 {
-                    ImGui::SameLine();
-                    ImGui::SetNextItemWidth(60.0f);
-                    if (ImGui::InputInt("##Priority", &entry->inputPriority, 0, 0))
-                    {
-                        // Propagate to running instance if loaded
-                        if (entry->instanceId != 0)
-                        {
-                            events::scripting::SetInstancePriorityCommand cmd;
-                            cmd.instanceId = entry->instanceId;
-                            cmd.priority = entry->inputPriority;
-                            dispatcher.execute(cmd);
-                        }
-                    }
-                    if (ImGui::IsItemHovered())
-                    {
-                        ImGui::SetTooltip("Input Priority (higher = handles input first)");
-                    }
+                    events::scripting::SetInstancePriorityCommand cmd;
+                    cmd.instanceId = entry->instanceId;
+                    cmd.priority = entry->inputPriority;
+                    dispatcher.execute(cmd);
                 }
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Input Priority (higher = handles input first)");
             }
         }
 
@@ -163,6 +167,52 @@ namespace windows::details
             removedScript = scriptPath;
         }
         EntityDetailsPanel::popRemoveButtonStyle();
+
+        // VK-1536 tick governor. Collapsed by default — this is opt-in tuning, not everyday state,
+        // and the defaults (interval 0) mean the script ticks every frame exactly as before.
+        // No scriptListDirty needed for any of these: the cached update list is sorted on
+        // inputPriority alone, which these fields do not affect.
+        if (entry)
+        {
+            ImGui::Indent(10.0f);
+            if (ImGui::TreeNodeEx("Tick Governor", ImGuiTreeNodeFlags_SpanAvailWidth))
+            {
+                ImGui::SetNextItemWidth(120.0f);
+                if (ImGui::DragFloat("Update Interval (s)", &entry->updateInterval, 0.005f, 0.0f, 10.0f, "%.3f"))
+                {
+                    entry->updateInterval = entry->updateInterval < 0.0f ? 0.0f : entry->updateInterval;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Seconds between onUpdate calls. 0 = every frame (default).\n\n"
+                        "The script is handed the ACCUMULATED deltaTime and MUST integrate\n"
+                        "against it. Do NOT throttle a script that polls input each frame\n"
+                        "(Input::isKeyDown) — it will miss presses shorter than the interval.");
+                }
+
+                ImGui::SetNextItemWidth(120.0f);
+                ImGui::DragFloat("Significance", &entry->tickSignificance, 0.05f, 0.01f, 100.0f, "%.2f");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Weight for distance rate-scaling (score = significance / distance^2).\n"
+                        "Higher = keeps ticking at its full rate further from the camera.\n"
+                        "Only used when distance scaling is enabled; ignored if Interval is 0.");
+                }
+
+                ImGui::Checkbox("Pin Full Rate", &entry->pinFullRate);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Exempt this script from DISTANCE scaling; the Update Interval above\n"
+                        "still applies. Use for scripts whose pacing must not vary with camera\n"
+                        "distance (movement, root motion, timers).");
+                }
+                ImGui::TreePop();
+            }
+            ImGui::Unindent(10.0f);
+        }
 
         ImGui::PopID();
 

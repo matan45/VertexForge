@@ -57,7 +57,10 @@ namespace core {
 		uint32_t currentFrame = 0;
 		uint64_t globalFrameCounter = 0;
 		inline static std::atomic<uint32_t> imageIndex{0};
-		std::atomic<bool> skipNextImguiRender{false};
+		// Static (like imageIndex) so a render-extent reallocation triggered deep in the offscreen
+		// pass (VK-1531 dynamic resolution) can request the one-frame ImGui skip without a handle to
+		// the RenderManager instance. Single active RenderManager drives frame flow (see imageIndex).
+		inline static std::atomic<bool> skipNextImguiRender{false};
 		inline static DeferredDeletionQueue* globalDeletionQueue;
 
 		void drawPresentClear(const vk::CommandBuffer& commandBuffer, uint32_t imageIdx) const;
@@ -86,6 +89,9 @@ namespace core {
 
 		/// Skip ImGui rendering for the next frame (e.g. after resize invalidates draw data)
 		void skipImguiNextFrame() { skipNextImguiRender.store(true); }
+
+		/// Same one-frame skip, callable without a RenderManager instance (VK-1531).
+		static void requestSkipImguiNextFrame() { skipNextImguiRender.store(true); }
 
 		// Access for systems that need deferred deletion
 		DeferredDeletionQueue* getDeletionQueue() { return deletionQueue.get(); }

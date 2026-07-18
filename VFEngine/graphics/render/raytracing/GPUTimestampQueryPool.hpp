@@ -47,11 +47,16 @@ namespace render::raytracing
 
         bool isValid() const { return valid; }
         uint32_t getQueryCount() const { return queryCount; }
+        double getTimestampPeriod() const { return static_cast<double>(timestampPeriod); }
+        uint32_t getTimestampValidBits() const { return timestampValidBits; }
 
     private:
         vk::QueryPool pools[core::MAX_FRAMES_IN_FLIGHT]{};
         uint32_t queryCount = 0;
         float timestampPeriod = 0.0f; // nanoseconds per tick
+        // Meaningful low bits of each timestamp (spec allows 36..64, and guarantees
+        // the rest read as zero). The counter wraps at 2^timestampValidBits.
+        uint32_t timestampValidBits = 0;
         bool valid = false;
     };
 }

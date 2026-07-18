@@ -1,6 +1,7 @@
 #include "GPUTimestampQueryPool.hpp"
 #include "../../core/Device.hpp"
 #include "../../../utilities/print/Log.hpp"
+#include "stats/GpuTimingMath.hpp"
 
 namespace render::raytracing
 {
@@ -12,7 +13,7 @@ namespace render::raytracing
         // Check if timestamps are supported on the graphics queue family
         auto queueProps = physDevice.getQueueFamilyProperties();
         uint32_t graphicsFamily = device.getQueueFamilyIndices().graphicsAndComputeFamily.value();
-        uint32_t timestampValidBits = queueProps[graphicsFamily].timestampValidBits;
+        timestampValidBits = queueProps[graphicsFamily].timestampValidBits;
 
         if (timestampValidBits == 0)
         {
@@ -35,8 +36,8 @@ namespace render::raytracing
         }
 
         valid = true;
-        vfLogInfo("GPU timestamp query pool created: {} queries, period={:.2f}ns",
-                  queryCount, timestampPeriod);
+        vfLogInfo("GPU timestamp query pool created: {} queries, period={:.2f}ns, validBits={}",
+                  queryCount, timestampPeriod, timestampValidBits);
         return true;
     }
 
@@ -98,8 +99,11 @@ namespace render::raytracing
 
     float GPUTimestampQueryPool::toMilliseconds(uint64_t startTimestamp, uint64_t endTimestamp) const
     {
-        if (!valid || endTimestamp < startTimestamp) return 0.0f;
-        double deltaNs = static_cast<double>(endTimestamp - startTimestamp) * static_cast<double>(timestampPeriod);
-        return static_cast<float>(deltaNs / 1'000'000.0);
+        if (!valid) return 0.0f;
+        // Subtracts modulo the counter's valid width, so an interval straddling a
+        // wrap reports its real duration -- the old `end < start -> 0.0f` guard
+        // reported such a scope as free. Inverted pairs still clamp to 0 there.
+        return timing::boundaryDeltaMs(startTimestamp, endTimestamp,
+                                       getTimestampPeriod(), timestampValidBits);
     }
 }

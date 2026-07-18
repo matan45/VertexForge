@@ -456,4 +456,17 @@ namespace render::gpudriven
     {
         cleanup();
     }
+
+    void TextureStreamManager::appendVramRows(std::vector<memory::VramAssetRow>& out, uint64_t& texTotal) const
+    {
+        out.reserve(out.size() + textures.size());
+        for (const auto& [path, tex] : textures)
+        {
+            out.push_back(memory::VramAssetRow{path, memory::VramAssetCategory::Texture,
+                                               static_cast<uint64_t>(tex.gpuMemoryUsage)});
+        }
+        // Authoritative running total (mirrors currentVRAMUsage) — the exact field
+        // CullingStatsCollector reads as textureStream.vramUsedBytes.
+        texTotal = static_cast<uint64_t>(stats.vramUsedBytes);
+    }
 }

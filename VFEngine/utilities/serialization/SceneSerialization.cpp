@@ -305,19 +305,18 @@ namespace serialization
 
         auto rawData = resource::readFileBytes(std::string(filename));
 
-        // Binary scenes have no incremental path yet - load synchronously.
-        if (BinarySceneSerialization::isBinaryScene(rawData))
-        {
-            state.success =
-                BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, filename, progressCallback);
-            state.finished = true;
-            return false;
-        }
-
         json settingsJson;
         try
         {
-            if (!rawData.empty())
+            // VK-1538: a binary scene decodes to the same snapshot DOM, then runs
+            // the identical DFS-stack path below — so binary scenes are now
+            // frame-budgeted too (the monolithic msgpack decode still happens up
+            // front, exactly as json::parse does for the text path).
+            if (BinarySceneSerialization::isBinaryScene(rawData))
+            {
+                state.sceneJson = BinarySceneSerialization::decodePayload(rawData);
+            }
+            else if (!rawData.empty())
             {
                 state.sceneJson = json::parse(rawData.begin(), rawData.end());
             }

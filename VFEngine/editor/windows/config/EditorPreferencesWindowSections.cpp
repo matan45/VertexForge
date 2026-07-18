@@ -416,9 +416,14 @@ namespace windows
             markDirty();
         drawSettingTooltip("Display frames per second counter in the status bar");
 
+        if (ImGui::Checkbox("Show CPU Time", &settings.debug.showCPUTime))
+            markDirty();
+        drawSettingTooltip("Display the CPU frame time in milliseconds in the status bar");
+
         if (ImGui::Checkbox("Show GPU Time", &settings.debug.showGPUTime))
             markDirty();
-        drawSettingTooltip("Display frame time in milliseconds in the status bar");
+        drawSettingTooltip("Display the timestamp-derived GPU frame time in the status bar "
+                           "(graphics queue only)");
 
         if (ImGui::Checkbox("Show Draw Calls", &settings.debug.showDrawCalls))
             markDirty();
@@ -603,10 +608,17 @@ namespace windows
                 drawSettingTooltip("Display frames per second counter in the status bar");
             }});
 
+        settingsRegistry.push_back({"Show CPU Time", "CPU frame time display", {"cpu", "time", "frame", "performance"}, Debug,
+            [this]() {
+                if (ImGui::Checkbox("Show CPU Time##s", &settings.debug.showCPUTime)) markDirty();
+                drawSettingTooltip("Display the CPU frame time in milliseconds in the status bar");
+            }});
+
         settingsRegistry.push_back({"Show GPU Time", "GPU frame time display", {"gpu", "time", "performance"}, Debug,
             [this]() {
                 if (ImGui::Checkbox("Show GPU Time##s", &settings.debug.showGPUTime)) markDirty();
-                drawSettingTooltip("Display frame time in milliseconds in the status bar");
+                drawSettingTooltip("Display the timestamp-derived GPU frame time in the status bar "
+                                   "(graphics queue only)");
             }});
 
         settingsRegistry.push_back({"Show Draw Calls", "Draw call counter", {"draw", "calls", "performance"}, Debug,

@@ -186,19 +186,22 @@ namespace threading {
 			}
 			const TaskNodeInfo* node = &impl.nodes[i];
 			TaskProfileEntry* entry = &impl.profileData[i];
-			const auto* baseTimePtr = &impl.baseTime;
 			const bool* profilingFlag = &impl.profilingEnabled;
 
 			auto taskSet = std::make_unique<enki::TaskSet>(1u,
-				[node, entry, baseTimePtr, profilingFlag](enki::TaskSetPartition, uint32_t threadNum) {
+				[node, entry, profilingFlag](enki::TaskSetPartition, uint32_t threadNum) {
 					if (*profilingFlag) {
+						// Absolute high_resolution_clock ns: monotonic with a single
+						// process-wide epoch, so these worker bars and the render-thread bar
+						// (RenderController) land on one comparable timeline. Consumers only
+						// ever take differences, which are epoch-invariant.
 						auto start = std::chrono::high_resolution_clock::now();
 						node->fn();
 						auto end = std::chrono::high_resolution_clock::now();
 						entry->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+							std::chrono::duration_cast<std::chrono::nanoseconds>(start.time_since_epoch()).count());
 						entry->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+							std::chrono::duration_cast<std::chrono::nanoseconds>(end.time_since_epoch()).count());
 						entry->threadId = threadNum;
 					}
 					else {
@@ -220,19 +223,19 @@ namespace threading {
 			}
 			const TaskNodeInfo* node = &impl.nodes[i];
 			TaskProfileEntry* entry = &impl.profileData[i];
-			const auto* baseTimePtr = &impl.baseTime;
 			const bool* profilingFlag = &impl.profilingEnabled;
 
 			auto pinned = std::make_unique<enki::LambdaPinnedTask>(0u,
-				[node, entry, baseTimePtr, profilingFlag]() {
+				[node, entry, profilingFlag]() {
 					if (*profilingFlag) {
+						// Absolute high_resolution_clock ns (see non-pinned path above).
 						auto start = std::chrono::high_resolution_clock::now();
 						node->fn();
 						auto end = std::chrono::high_resolution_clock::now();
 						entry->startTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(start - *baseTimePtr).count());
+							std::chrono::duration_cast<std::chrono::nanoseconds>(start.time_since_epoch()).count());
 						entry->endTimeNs = static_cast<uint64_t>(
-							std::chrono::duration_cast<std::chrono::nanoseconds>(end - *baseTimePtr).count());
+							std::chrono::duration_cast<std::chrono::nanoseconds>(end.time_since_epoch()).count());
 						entry->threadId = 0;
 					}
 					else {

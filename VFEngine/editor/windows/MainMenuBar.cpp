@@ -378,7 +378,7 @@ namespace windows
             if (ImGui::MenuItem("VFX Stats") && vfxDebugWindow) vfxDebugWindow->show();
             if (ImGui::MenuItem("Animation Stats") && animationDebugWindow) animationDebugWindow->show();
             if (ImGui::MenuItem("Light Streaming") && lightStreamingDebugWindow) lightStreamingDebugWindow->show();
-            if (ImGui::MenuItem("Task Graph") && taskGraphWindow) taskGraphWindow->show();
+            if (ImGui::MenuItem("Profiler") && taskGraphWindow) taskGraphWindow->showTimelineTab();
             if (ImGui::MenuItem("Memory Diagnostics") && memoryDiagnosticsWindow) memoryDiagnosticsWindow->show();
             if (ImGui::MenuItem("RTT Debug") && rttDebugWindow) rttDebugWindow->show();
             if (ImGui::MenuItem("Audio Debug") && audioDebugWindow) audioDebugWindow->show();

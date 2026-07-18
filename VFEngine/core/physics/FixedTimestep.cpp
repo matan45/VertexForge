@@ -1,28 +1,25 @@
 #include "FixedTimestep.hpp"
-#include <algorithm>
+#include "FixedTimestepMath.hpp"
 
 namespace core::physics
 {
     FixedTimestepResult FixedTimestep::update(double deltaTime, const std::function<void(float)>& physicsStep)
     {
-        deltaTime = std::min(deltaTime, maxAccumulator);
+        // Accumulator + spiral-of-death guards + drop-remainder live in the
+        // Jolt-free, unit-tested FixedTimestepMath.hpp.
+        FixedStepPlan plan = planFixedSteps(accumulator, deltaTime, timestep, maxAccumulator, maxStepsPerFrame);
 
-        accumulator += deltaTime;
-        int stepsTaken = 0;
-
-        while (accumulator >= timestep && stepsTaken < maxStepsPerFrame)
+        for (int i = 0; i < plan.steps; ++i)
         {
             if (physicsStep)
             {
                 physicsStep(static_cast<float>(timestep));
             }
-            accumulator -= timestep;
-            stepsTaken++;
         }
 
         FixedTimestepResult result;
-        result.stepsTaken = stepsTaken;
-        result.alpha = (timestep > 0.0) ? (accumulator / timestep) : 0.0;
+        result.stepsTaken = plan.steps;
+        result.alpha = plan.alpha;
         return result;
     }
 }

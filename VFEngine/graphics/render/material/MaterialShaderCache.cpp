@@ -8,6 +8,7 @@
 #include "resource/PathResolver.hpp"
 #include "print/Log.hpp"
 #include <functional>
+#include <cassert>
 
 namespace render::mesh
 {
@@ -60,45 +61,125 @@ namespace render::mesh
         {
             return nullptr;
         }
-        
+
+        // The compiled pipeline is fully determined by the vertex + fragment SPIR-V.
+        // Blend modes are all pre-created (selected at bind via pipelineForBlendMode) and
+        // opacity/alphaCutoff are runtime uniforms, so material IR changes that don't alter
+        // the shader text don't invalidate the pipeline. The old irHash check compared the
+        // persisted materialData.irHash field, which goes stale on in-memory IR edits (e.g.
+        // switching shadingModel to Toon) and made getOrCreatePipeline recompile every frame
+        // (VK-1493). A shader-affecting change (graph edit, toon defines) already changes the
+        // fragment hash, so dropping the irHash check keeps recompiles correct.
+        const std::string vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
+        const std::string fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
+
+        bool hadEntry = false;
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            auto it = cache.find(materialPath);
+            if (it != cache.end())
+            {
+                hadEntry = true;
+                if (it->second.vertexShaderHash == vertexShaderHash &&
+                    it->second.fragmentShaderHash == fragmentShaderHash &&
+                    it->second.valid)
+                {
+                    return &it->second;
+                }
+                // Shaders changed under this path — drop the stale pipeline and rebuild below.
+                invalidateLocked(materialPath);
+            }
+        }
+
+        // About to build a NEW pipeline synchronously (no prior entry) while a frame is being
+        // recorded on the render thread — a hitch (shader compile + pipeline create inline).
+        // This is legitimate for a material warm-up (VK-1532) never covered: one assigned or
+        // spawned at runtime after warm-up completed, or not present in the .vfpak PSO manifest.
+        // The pipeline IS built correctly below; warn (once per never-seen material) so the
+        // hitch is visible, but do not abort. A rebuild of an existing entry (hadEntry) is an
+        // expected editor live-edit, not a first-time build, so it does not warn.
+        if (!hadEntry && frameRecordingActive.load(std::memory_order_acquire))
+        {
+            vfLogWarning("VK-1532: pipeline for '{}' built on the render thread mid-frame "
+                         "- not warmed up; expect a one-frame hitch", materialPath);
+        }
+
+        MaterialPipelineData data;
+        std::string compileError;
+        const bool ok = compileAndCreatePipeline(materialPath, materialData, data, compileError);
+        lastCompilationError = std::move(compileError);
+        if (!ok)
+        {
+            return nullptr;
+        }
+
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        // A warm-up job may have inserted a matching valid entry while we were building
+        // off-lock; prefer it and discard our duplicate so we don't leak pipelines.
         auto it = cache.find(materialPath);
+        if (it != cache.end() && it->second.valid &&
+            it->second.vertexShaderHash == vertexShaderHash &&
+            it->second.fragmentShaderHash == fragmentShaderHash)
+        {
+            destroyPipelineData(data);
+            return &it->second;
+        }
         if (it != cache.end())
         {
-            const std::string vertexShaderHash = hashShaderSource(materialData.cachedVertexShader);
-            const std::string fragmentShaderHash = hashShaderSource(materialData.cachedFragmentShader);
-
-            // The compiled pipeline is fully determined by the vertex + fragment SPIR-V.
-            // Blend modes are all pre-created (selected at bind via pipelineForBlendMode) and
-            // opacity/alphaCutoff are runtime uniforms, so material IR changes that don't alter
-            // the shader text don't invalidate the pipeline. The old irHash check compared the
-            // persisted materialData.irHash field, which goes stale on in-memory IR edits (e.g.
-            // switching shadingModel to Toon) and made getOrCreatePipeline recompile every frame
-            // (VK-1493). A shader-affecting change (graph edit, toon defines) already changes the
-            // fragment hash, so dropping the irHash check keeps recompiles correct.
-            if (it->second.vertexShaderHash == vertexShaderHash &&
-                it->second.fragmentShaderHash == fragmentShaderHash &&
-                it->second.valid)
-            {
-                return &it->second;
-            }
-
-            invalidate(materialPath);
+            invalidateLocked(materialPath);
         }
-        
-        MaterialPipelineData data;
-        if (compileAndCreatePipeline(materialPath, materialData, data))
+        cache[materialPath] = std::move(data);
+        return &cache[materialPath];
+    }
+
+    bool MaterialShaderCache::warmPipeline(const std::string& materialPath,
+                                           const material::MaterialData& materialData)
+    {
+        if (!initialized)
         {
-            cache[materialPath] = std::move(data);
-            return &cache[materialPath];
+            return false;
+        }
+        if (materialData.cachedVertexShader.empty() || materialData.cachedFragmentShader.empty())
+        {
+            return false;
         }
 
-        return nullptr;
+        {
+            std::lock_guard<std::mutex> lock(cacheMutex);
+            if (hasPipelineLocked(materialPath))
+            {
+                return true; // already warm
+            }
+        }
+
+        // Heavy work off-lock (shader compile in editor mode + 5 pipeline creates). Safe to
+        // run concurrently with other warm-up jobs and the render thread.
+        MaterialPipelineData data;
+        std::string compileError;
+        if (!compileAndCreatePipeline(materialPath, materialData, data, compileError))
+        {
+            // Intentionally do not touch lastCompilationError from a worker thread.
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        if (cache.find(materialPath) != cache.end())
+        {
+            // Another thread already produced an entry for this path while we built. Never
+            // destroy an existing (possibly in-use) pipeline from a worker thread — just drop
+            // our freshly-built, never-bound duplicate.
+            destroyPipelineData(data);
+            return true;
+        }
+        cache[materialPath] = std::move(data);
+        return true;
     }
 
     bool MaterialShaderCache::compileAndCreatePipeline(
         const std::string& materialPath,
         const material::MaterialData& materialData,
-        MaterialPipelineData& outData)
+        MaterialPipelineData& outData,
+        std::string& outError)
     {
         outData.shader = std::make_shared<core::Shader>(device);
 
@@ -129,13 +210,13 @@ namespace render::mesh
 
             if (!success || outData.shader->getShaderStages().empty())
             {
-                lastCompilationError = outData.shader->getLastCompilationError();
+                outError = outData.shader->getLastCompilationError();
                 vfLogError("Failed to compile material shader: {}", materialPath);
                 return false;
             }
         }
 
-        lastCompilationError.clear();
+        outError.clear();
 
         if (!createPipelines(outData))
         {
@@ -236,53 +317,52 @@ namespace render::mesh
         }
     }
 
-    void MaterialShaderCache::invalidate(const std::string& materialPath)
+    void MaterialShaderCache::destroyPipelineData(MaterialPipelineData& data)
+    {
+        auto logicalDevice = device.getLogicalDevice();
+        if (data.opaquePipeline)
+            logicalDevice.destroyPipeline(data.opaquePipeline);
+        if (data.maskedPipeline)
+            logicalDevice.destroyPipeline(data.maskedPipeline);
+        if (data.translucentPipeline)
+            logicalDevice.destroyPipeline(data.translucentPipeline);
+        if (data.additivePipeline)
+            logicalDevice.destroyPipeline(data.additivePipeline);
+        if (data.multiplyPipeline)
+            logicalDevice.destroyPipeline(data.multiplyPipeline);
+
+        if (data.shader)
+            data.shader->cleanUp();
+    }
+
+    void MaterialShaderCache::invalidateLocked(const std::string& materialPath)
     {
         auto it = cache.find(materialPath);
         if (it != cache.end())
         {
             device.getLogicalDevice().waitIdle();
-
-            if (it->second.opaquePipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.opaquePipeline);
-            if (it->second.maskedPipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.maskedPipeline);
-            if (it->second.translucentPipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.translucentPipeline);
-            if (it->second.additivePipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.additivePipeline);
-            if (it->second.multiplyPipeline)
-                device.getLogicalDevice().destroyPipeline(it->second.multiplyPipeline);
-
-            if (it->second.shader)
-                it->second.shader->cleanUp();
-
+            destroyPipelineData(it->second);
             cache.erase(it);
             vfLogInfo("Invalidated material shader cache: {}", materialPath);
         }
     }
 
+    void MaterialShaderCache::invalidate(const std::string& materialPath)
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        invalidateLocked(materialPath);
+    }
+
     void MaterialShaderCache::invalidateAll()
     {
+        std::lock_guard<std::mutex> lock(cacheMutex);
         if (cache.empty()) return;
 
         device.getLogicalDevice().waitIdle();
 
         for (auto& [path, data] : cache)
         {
-            if (data.opaquePipeline)
-                device.getLogicalDevice().destroyPipeline(data.opaquePipeline);
-            if (data.maskedPipeline)
-                device.getLogicalDevice().destroyPipeline(data.maskedPipeline);
-            if (data.translucentPipeline)
-                device.getLogicalDevice().destroyPipeline(data.translucentPipeline);
-            if (data.additivePipeline)
-                device.getLogicalDevice().destroyPipeline(data.additivePipeline);
-            if (data.multiplyPipeline)
-                device.getLogicalDevice().destroyPipeline(data.multiplyPipeline);
-
-            if (data.shader)
-                data.shader->cleanUp();
+            destroyPipelineData(data);
         }
 
         cache.clear();
@@ -296,10 +376,16 @@ namespace render::mesh
         initialized = false;
     }
 
-    bool MaterialShaderCache::hasPipeline(const std::string& materialPath) const
+    bool MaterialShaderCache::hasPipelineLocked(const std::string& materialPath) const
     {
         auto it = cache.find(materialPath);
         return it != cache.end() && it->second.valid;
+    }
+
+    bool MaterialShaderCache::hasPipeline(const std::string& materialPath) const
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        return hasPipelineLocked(materialPath);
     }
 
     std::string MaterialShaderCache::hashShaderSource(const std::string& source)

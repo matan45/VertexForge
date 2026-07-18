@@ -16,6 +16,7 @@
 #include "../../adapters/render/RenderTextureAdapter.hpp"
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
+#include "../../adapters/render/PipelineWarmupAdapter.hpp"
 
 namespace core
 {
@@ -46,6 +47,7 @@ namespace core
             navmeshAdapter->cleanUp();
         }
 
+        pipelineWarmupAdapter.reset();
         pluginTextureAdapter.reset();
         renderTextureAdapter.reset();
         debugDrawAdapter.reset();

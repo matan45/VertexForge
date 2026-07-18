@@ -47,6 +47,11 @@ namespace render
 {
     void RenderPassHandler::draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
+        // VK-1529 tier 1: open the whole-frame GPU span before this frame records
+        // anything, and publish the span this slot already holds. Always on — the
+        // status bar needs a GPU number with the profiler window closed.
+        beginFrameTiming(commandBuffer, imageIndex);
+
         // Plugin texture CPU->GPU uploads — recorded before the frame graph so the
         // copies land outside any render pass and complete before the scene samples them.
         // Publish the previous frame's draw-call total and reset the accumulator for
@@ -83,11 +88,105 @@ namespace render
         importFrameResources(imageIndex);
         buildFrameGraph(commandBuffer, imageIndex);
         frameGraph->compile();
+
+        // VK-1532: flag the scene mesh cache as "recording" so any material pipeline created
+        // synchronously during graph execution (a warm-up miss) is logged/asserted. execute()
+        // records the SceneMeshes pass inline and joins parallel-recording jobs before it
+        // returns, so this single flag covers the render thread and those worker threads.
+        if (meshPipeline) meshPipeline->setFrameRecording(true);
         frameGraph->execute(commandBuffer, imageIndex);
+        if (meshPipeline) meshPipeline->setFrameRecording(false);
 
         // Plugin custom draws are enqueued per frame — drop them whether or not
         // the scene pass consumed them (e.g. GPU-driven renderer disabled).
         if (customPipelineManager) customPipelineManager->endFrame();
+
+        // VK-1529 tier 1: close the span once every command this frame records is in.
+        endFrameTiming(commandBuffer, imageIndex);
+    }
+
+    void RenderPassHandler::beginPipelineWarmup(std::vector<std::string> extraPaths)
+    {
+        if (meshPipeline)
+        {
+            meshPipeline->beginPipelineWarmup(std::move(extraPaths));
+        }
+    }
+
+    services::PipelineWarmupStats RenderPassHandler::getPipelineWarmupStats() const
+    {
+        return meshPipeline ? meshPipeline->getPipelineWarmupStats() : services::PipelineWarmupStats{};
+    }
+
+    void RenderPassHandler::beginFrameTiming(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        frameTimeActiveThisFrame = false;
+        if (frameTimeUnsupported) return;
+
+        auto& sink = GpuPassStats::instance();
+
+        if (!frameTimePoolInitialized)
+        {
+            // Two queries per slot: the frame's opening and closing boundary.
+            if (!frameTimePool.init(device, 2))
+            {
+                frameTimeUnsupported = true;
+                sink.markUnsupported();
+                return;
+            }
+            frameTimePoolInitialized = true;
+        }
+
+        if (!frameTimePool.isValid()) return;
+
+        const uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+
+        // Publish this slot's previous occupant BEFORE resetting it. The pool is
+        // keyed by imageIndex % MAX_FRAMES_IN_FLIGHT — the same modulus
+        // OffScreenViewPort's inFlightFences use, and it waits on that fence before
+        // recording — so the frame that last used this slot is complete and its two
+        // queries are readable. Reading the slot we are about to reset, rather than
+        // inferring a "previous" slot from imageIndex, is what makes every write get
+        // read exactly once (see RenderGraphProfiler::readbackAndUpdate).
+        //
+        // Consequence worth knowing: a slot is revisited on its own cadence, so with
+        // an odd image count two adjacent spans can be published out of order (frame
+        // N+1's slot may come round after frame N+2's). Displacement is bounded by the
+        // image count — 1-2 samples out of the 120-entry ring — which is invisible on
+        // the plot and preferable to the alternative of dropping the later sample and
+        // losing a hitch with it.
+        std::vector<uint64_t> ts;
+        if (frameTimeSlotWritten[fi] &&
+            frameTimePool.readResults(device.getLogicalDevice(), imageIndex, ts, 2) &&
+            ts.size() >= 2)
+        {
+            const float ms = frameTimePool.toMilliseconds(ts[0], ts[1]);
+            emaFrameGpuMs = frameGpuEmaSeeded
+                ? (timing::EMA_ALPHA * ms + (1.0f - timing::EMA_ALPHA) * emaFrameGpuMs)
+                : ms;
+            frameGpuEmaSeeded = true;
+            sink.publishFrameTime(ms, emaFrameGpuMs);
+        }
+
+        // Reset must precede any write and must be outside a render pass — draw()
+        // brackets the whole command buffer, so we are.
+        frameTimePool.resetFrame(commandBuffer, imageIndex);
+        // Top-of-pipe is the right "frame start" here even though it is the wrong
+        // per-pass start: nothing precedes it in this command buffer.
+        frameTimePool.writeTimestamp(commandBuffer, imageIndex, 0,
+                                     vk::PipelineStageFlagBits::eTopOfPipe);
+        frameTimeSlotWritten[fi] = true;
+        frameTimeActiveThisFrame = true;
+    }
+
+    void RenderPassHandler::endFrameTiming(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        if (!frameTimeActiveThisFrame) return;
+
+        // Bottom-of-pipe: latches once everything recorded above has drained.
+        frameTimePool.writeTimestamp(commandBuffer, imageIndex, 1,
+                                     vk::PipelineStageFlagBits::eBottomOfPipe);
+        frameTimeActiveThisFrame = false;
     }
 
     custom::CustomLightingSets RenderPassHandler::buildCustomLightingSets(vk::DescriptorSet iblDescriptorSet) const
@@ -151,7 +250,20 @@ namespace render
         if (graphProfiler->isEnabled() != wanted)
         {
             graphProfiler->setEnabled(wanted);
-            if (!wanted) sink.clear();
+            if (!wanted)
+            {
+                sink.clear();
+                vtEma.clear();
+                droppedGpuSamples = 0;
+                gpuSampleSeen = false;
+                // Nothing resets the VT pool while disabled, so its queries stay
+                // AVAILABLE. Drop the slot bookkeeping too, or a re-enable in a frame
+                // where the GPU-driven mesh path does not run (leaving beginVTTimestamps
+                // uncalled, so the slot is never re-armed) would read pre-disable
+                // timestamps and publish them as current rows.
+                for (auto& count : vtSlotQueryCount) count = 0;
+                for (auto& names : vtSlotScopeNames) names.clear();
+            }
         }
 
         if (!wanted) return;
@@ -166,40 +278,59 @@ namespace render
             vtTimestampPoolInitialized = true;
         }
 
-        graphProfiler->readbackAndUpdate(device.getLogicalDevice(), imageIndex);
+        if (!graphProfiler->readbackAndUpdate(device.getLogicalDevice(), imageIndex))
+        {
+            // Readback is non-blocking, so a frame whose results are not ready
+            // contributes no sample. Republishing the last numbers would make a
+            // dropped sample indistinguishable from a real one in the history
+            // plot — count it and publish nothing instead.
+            if (gpuSampleSeen) ++droppedGpuSamples;
+            return;
+        }
+        gpuSampleSeen = true;
 
-        auto stats = graphProfiler->getStats();
+        const auto& stats = graphProfiler->getStats();
         GpuFrameStats out;
         out.valid = stats.passCount > 0;
         out.totalMs = stats.totalMs;
         out.emaTotalMs = stats.emaTotalMs;
         out.barrierCount = stats.barrierCount;
         out.barrierFlushCount = stats.barrierFlushCount;
+        out.droppedSamples = droppedGpuSamples;
         out.passTimings.reserve(stats.passTimings.size());
         for (const auto& pass : stats.passTimings)
         {
-            out.passTimings.push_back({pass.name, pass.ms, pass.emaMs});
+            out.passTimings.push_back({pass.name, pass.ms, pass.emaMs, false});
         }
 
-        // VK-1480: append the aux VT scope timings for the completed frame slot so they
-        // appear as rows in the same Task Graph Profiler window (raw ms; no EMA — the
-        // window plots its own history). readResults is non-blocking, so a slot whose
-        // frame is still in flight simply contributes no rows this frame.
+        // VK-1480: append the aux VT scope timings for this slot's completed frame so
+        // they appear as rows in the same profiler window. Read the slot we are about
+        // to reset, for the same fence reason as the graph profiler's readback — the
+        // VT bookkeeping is already slot-keyed, and beginVTTimestamps only clears it
+        // later, inside the graph's execute. readResults is non-blocking, so a slot
+        // whose frame is still in flight simply contributes no rows this frame.
         if (vtTimestampPoolInitialized && vtTimestampPool.isValid())
         {
-            uint32_t prevFI = (imageIndex + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
-            uint32_t writtenQueries = vtSlotQueryCount[prevFI];
-            const auto& names = vtSlotScopeNames[prevFI];
+            const uint32_t fi = imageIndex % core::MAX_FRAMES_IN_FLIGHT;
+            uint32_t writtenQueries = vtSlotQueryCount[fi];
+            const auto& names = vtSlotScopeNames[fi];
             if (writtenQueries > 0 && !names.empty())
             {
                 std::vector<uint64_t> ts;
-                if (vtTimestampPool.readResults(device.getLogicalDevice(), prevFI, ts, writtenQueries))
+                if (vtTimestampPool.readResults(device.getLogicalDevice(), imageIndex, ts, writtenQueries))
                 {
+                    ++vtEmaFrame;
                     for (size_t i = 0; i < names.size() && (i * 2 + 1) < ts.size(); ++i)
                     {
                         float ms = vtTimestampPool.toMilliseconds(ts[i * 2], ts[i * 2 + 1]);
-                        out.passTimings.push_back({names[i], ms, ms});
+                        // isAux: every VT scope is recorded INSIDE the SceneMeshes
+                        // pass, so its cost is already in totalMs. Flagged so the UI
+                        // keeps it out of the share-of-frame denominator instead of
+                        // double-counting it as a sibling pass.
+                        out.passTimings.push_back(
+                            {names[i], ms, vtEma.update(names[i], ms, vtEmaFrame), true});
                     }
+                    vtEma.prune(vtEmaFrame, kVtEmaMaxAgeFrames);
                 }
             }
         }

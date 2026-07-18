@@ -61,7 +61,6 @@ namespace controllers {
 		using Clock = std::chrono::high_resolution_clock;
 
 		static uint32_t renderThreadId = threading::TaskProfiler::instance().getMaxThreadId() + 1;
-		auto baseTime = Clock::now();
 
 		std::vector<threading::TaskProfileEntry> entries;
 
@@ -73,10 +72,12 @@ namespace controllers {
 			threading::TaskProfileEntry entry;
 			entry.name = name;
 			entry.threadId = renderThreadId;
+			// Absolute high_resolution_clock ns — same epoch as the task-graph worker
+			// bars (TaskGraphBuilder), so this render-thread bar aligns on the timeline.
 			entry.startTimeNs = static_cast<uint64_t>(
-				std::chrono::duration_cast<std::chrono::nanoseconds>(t0 - baseTime).count());
+				std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count());
 			entry.endTimeNs = static_cast<uint64_t>(
-				std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - baseTime).count());
+				std::chrono::duration_cast<std::chrono::nanoseconds>(t1.time_since_epoch()).count());
 			entries.push_back(entry);
 		};
 
