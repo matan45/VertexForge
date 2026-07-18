@@ -2,8 +2,6 @@
 #include <glm/glm.hpp>
 #include <cmath>
 
-#include "AtmosphereSettings.hpp"
-
 namespace render::atmosphere
 {
     // Euler angles (degrees; X=pitch, Y=yaw, Z=roll) for a directional-light entity whose

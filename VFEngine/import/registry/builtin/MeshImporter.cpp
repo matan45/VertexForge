@@ -71,6 +71,14 @@ namespace import::builtin
                    std::get<bool>(it->second);
         }
 
+        bool isImportMaterialTextures(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("importMaterialTextures");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
         bool isOBJ(std::span<const unsigned char> header)
         {
             const std::vector<std::string> objKeywords = {"# ", "v ", "vn ", "vt ", "f ", "o ", "g "};
@@ -132,6 +140,7 @@ namespace import::builtin
             // file so the controller creates the matching metadata and result.
             // Optionally (VK-55), embedded textures are extracted to .vfImage.
             const bool extractEmbedded = isExtractEmbeddedTextures(context);
+            const bool importMaterialTextures = isImportMaterialTextures(context);
 
             std::vector<std::string> writtenMeshes;
             std::vector<std::string> writtenTextures;
@@ -140,7 +149,7 @@ namespace import::builtin
                                           : types::MeshOutputLayout::Split;
             meshProcessor.loadFromFile(context.file, context.fileName, context.location, outputLayout, meshProgress,
                                        &writtenMeshes,
-                                       extractEmbedded ? &writtenTextures : nullptr);
+                                       (extractEmbedded || importMaterialTextures) ? &writtenTextures : nullptr);
 
             for (auto& path : writtenMeshes)
                 context.outputFiles.push_back({std::move(path), resource::AssetType::Mesh});
@@ -201,6 +210,15 @@ namespace import::builtin
         combineMeshes.type = ImportOptionDesc::Type::Bool;
         combineMeshes.defaultValue = false;
 
-        return {animationOnly, extractEmbeddedTextures, combineMeshes};
+        ImportOptionDesc importMaterialTextures;
+        importMaterialTextures.key = "importMaterialTextures";
+        importMaterialTextures.label = "Import Textures";
+        importMaterialTextures.tooltip =
+            "Import the textures referenced by the model's materials as .vfImage assets (external files "
+            "resolved next to the model, or embedded). Materials are not created automatically.";
+        importMaterialTextures.type = ImportOptionDesc::Type::Bool;
+        importMaterialTextures.defaultValue = false;
+
+        return {animationOnly, extractEmbeddedTextures, combineMeshes, importMaterialTextures};
     }
 }
