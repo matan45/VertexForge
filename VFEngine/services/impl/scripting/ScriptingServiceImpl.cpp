@@ -435,36 +435,6 @@ namespace services
         scriptListDirty = false;
     }
 
-    bool ScriptingServiceImpl::queryCameraPosition(glm::vec3& outPos) const
-    {
-        // VK-1536. updateScripts only runs in play mode (EditorFrameTaskGraph gates on
-        // isPlayMode() && isGameTimeActive(); Runtime is always play), so the primary camera is
-        // always a real ECS entity here. That is why this can use the two-hop query directly and
-        // does not need WorldSectorStreamingOps' isPlayMode ? primary : cachedViewportCamera
-        // hybrid — the edit-mode staleness that WeatherServiceImpl::queryCameraPosition works
-        // around cannot arise on this path.
-        try
-        {
-            auto& dispatcher = ::events::EventDispatcher::instance();
-            auto camOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
-            if (!camOpt.has_value())
-                return false;
-
-            events::scene::GetWorldTransformQuery tq;
-            tq.entity = camOpt.value();
-            auto xformOpt = dispatcher.query(tq);
-            if (!xformOpt.has_value())
-                return false;
-
-            outPos = xformOpt->position;
-            return true;
-        }
-        catch (...)
-        {
-            return false;
-        }
-    }
-
     void ScriptingServiceImpl::updateScripts(float deltaTime)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -479,11 +449,6 @@ namespace services
         {
             rebuildScriptUpdateList(registry);
         }
-
-        // VK-1536 — resolve the camera ONCE per tick, not per script: the two-hop query is far more
-        // expensive than the distance test it feeds. Only needed when distance scaling is on.
-        glm::vec3 cameraPos{0.0f};
-        const bool haveCamera = scriptLOD.enabled && queryCameraPosition(cameraPos);
 
         for (const auto& [entity, scriptIndex, priority] : cachedUpdateList)
         {
@@ -574,26 +539,7 @@ namespace services
             // VK-1536 tick governor. Placed AFTER the load/start blocks above on purpose: a script
             // must still load and receive onStart/onEnable at full rate, so throttling only ever
             // affects how often onUpdate runs, never whether the script comes alive.
-            //
-            // Distance scaling multiplies the AUTHORED interval, and is only reached when the script
-            // already opted in (updateInterval > 0). Gating on the authored value first is what
-            // keeps this off by default: a plain multiply would be a no-op anyway (0 * n == 0), but
-            // more importantly distance must never silently throttle a script whose author never
-            // asked for it.
-            float effInterval = entry.updateInterval;
-            if (effInterval > 0.0f && haveCamera && !entry.pinFullRate &&
-                registry.all_of<components::WorldTransformComponent>(entity))
-            {
-                // WorldTransformComponent, never TransformComponent: the latter is parent-local, so
-                // a child of a moving root would score against the wrong position.
-                const auto& wt = registry.get<components::WorldTransformComponent>(entity);
-                const glm::vec3 diff = glm::vec3(wt.worldMatrix[3]) - cameraPos;
-                const float distSq = glm::dot(diff, diff);
-                effInterval *= scripting::distanceMultiplier(
-                    scriptLOD, scripting::effectiveDistanceSq(distSq, entry.tickSignificance));
-            }
-            // An entity with no WorldTransformComponent (a manager/singleton script) has no position
-            // to score, so it keeps its authored interval and is never distance-throttled.
+            const float effInterval = entry.updateInterval;
 
             scripting::ScriptTickInputs tickIn;
             tickIn.accumulator = entry.tickAccumulator;

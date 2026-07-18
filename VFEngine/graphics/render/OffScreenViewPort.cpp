@@ -433,30 +433,11 @@ namespace render
         if (drEnabled)
         {
             auto& stats = GpuPassStats::instance();
-            const bool haveFrameTime = stats.hasFrameGpuTime();
-            const float ema = stats.emaFrameGpuMs();
-
-            // Deadband hysteresis counter maintenance (mirrors RTShadowProfiler::readbackAndUpdate).
-            if (haveFrameTime && ema > drTargetMs)
-            {
-                drFramesOver++;
-                drFramesUnder = 0;
-            }
-            else if (haveFrameTime && ema < drTargetMs * kRestoreThreshold)
-            {
-                drFramesUnder++;
-                drFramesOver = 0;
-            }
-            else
-            {
-                drFramesOver = 0;
-                drFramesUnder = 0;
-            }
 
             upscaling::DynResInputs in{};
             in.enabled = true;
-            in.haveFrameTime = haveFrameTime;
-            in.emaFrameGpuMs = ema;
+            in.haveFrameTime = stats.hasFrameGpuTime();
+            in.emaFrameGpuMs = stats.emaFrameGpuMs();
             in.targetMs = drTargetMs;
             in.restoreThreshold = kRestoreThreshold;
             in.framesOverBudget = drFramesOver;
@@ -469,6 +450,8 @@ namespace render
             in.downStep = kDownStep;
             in.upStep = kUpStep;
 
+            // The EMA-vs-target comparison and the deadband counter maintenance now live inside the
+            // unit-tested core; the tick only carries the counters + applied scale across frames.
             const upscaling::DynResDecision d = upscaling::evaluateDynamicResolutionCore(in);
             drFramesOver = d.framesOverBudget;
             drFramesUnder = d.framesUnderBudget;

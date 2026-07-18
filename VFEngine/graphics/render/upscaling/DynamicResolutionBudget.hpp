@@ -19,12 +19,13 @@ namespace render::upscaling
     // a pinned upscaler quality mode: scale 1.0 is the mode's nominal render size, scale < 1.0
     // pushes the pre-upscale render resolution lower within the allowed band.
     //
-    // Deadband hysteresis (matches RTShadowProfiler): a streak of framesOverBudget frames strictly
-    // over the target steps the scale DOWN; a streak of framesUnderBudget frames under
-    // target * restoreThreshold steps it UP. The band between (restoreThreshold..1.0 of target)
-    // takes no action, so the scale never flaps around the target. The step-DOWN threshold is
-    // smaller than step-UP (react fast when over budget, creep back slowly) and the counters are
-    // reset by the caller after every action (see the OffScreenViewPort tick).
+    // Deadband hysteresis (matches RTShadowProfiler): a streak of frames strictly over the target
+    // steps the scale DOWN; a streak of frames under target * restoreThreshold steps it UP. The
+    // band between (restoreThreshold..1.0 of target) takes no action, so the scale never flaps
+    // around the target. The step-DOWN threshold is smaller than step-UP (react fast when over
+    // budget, creep back slowly). The EMA-vs-target comparison AND the streak counters are both
+    // maintained inside evaluateDynamicResolutionCore; the caller only carries appliedScale and the
+    // counters across frames, so this one function is the whole decision.
 
     // Smoothed controller state fed into the decision. Plain data, no Vulkan.
     struct DynResInputs
@@ -40,7 +41,8 @@ namespace render::upscaling
         // Step up only once cost drops below target * restoreThreshold (deadband hysteresis).
         float restoreThreshold = 0.7f;
 
-        // Hysteresis counters (maintained by the caller) and thresholds.
+        // Deadband streak counters carried across frames by the caller; incremented / reset here
+        // from the EMA-vs-target comparison. Plus the frame-count action thresholds.
         uint32_t framesOverBudget = 0;
         uint32_t framesUnderBudget = 0;
         uint32_t hysteresisFramesDown = 10;
@@ -79,12 +81,38 @@ namespace render::upscaling
 
         if (!in.enabled || !in.haveFrameTime)
         {
+            // No usable GPU-time signal this frame: hold the scale and clear the streak so a gap in
+            // timing (or the feature being off) never carries a stale partial run across. This
+            // matches the pre-refactor tick, which reset both counters whenever there was no sample.
+            d.framesOverBudget = 0;
+            d.framesUnderBudget = 0;
             d.throttled = computeThrottled();
             return d;
         }
 
+        // Deadband hysteresis counter maintenance: a frame whose EMA-smoothed cost is strictly over
+        // target counts toward a step DOWN; a frame under target * restoreThreshold counts toward a
+        // step UP; the band between resets both, so the scale never flaps around the target. This
+        // comparison used to live in OffScreenViewPort::tickDynamicResolution — it is here now so
+        // this unit-tested function is the true single source of truth for the whole decision.
+        if (in.emaFrameGpuMs > in.targetMs)
+        {
+            d.framesOverBudget = in.framesOverBudget + 1;
+            d.framesUnderBudget = 0;
+        }
+        else if (in.emaFrameGpuMs < in.targetMs * in.restoreThreshold)
+        {
+            d.framesUnderBudget = in.framesUnderBudget + 1;
+            d.framesOverBudget = 0;
+        }
+        else
+        {
+            d.framesOverBudget = 0;
+            d.framesUnderBudget = 0;
+        }
+
         // Throttle down: sustained over budget -> lower the render scale one step.
-        if (in.framesOverBudget >= in.hysteresisFramesDown)
+        if (d.framesOverBudget >= in.hysteresisFramesDown)
         {
             if (in.appliedScale > in.minScale)
             {
@@ -93,7 +121,7 @@ namespace render::upscaling
             d.framesOverBudget = 0; // reset after taking action (even at the floor)
         }
         // Restore: sustained under budget -> raise the render scale one step.
-        else if (in.framesUnderBudget >= in.hysteresisFramesUp)
+        else if (d.framesUnderBudget >= in.hysteresisFramesUp)
         {
             if (in.appliedScale < in.maxScale)
             {

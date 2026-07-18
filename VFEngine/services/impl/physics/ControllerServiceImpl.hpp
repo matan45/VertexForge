@@ -1,5 +1,6 @@
 #pragma once
 #include "../../interfaces/physics/IControllerService.hpp"
+#include "CharacterInterpMath.hpp"
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 #include <unordered_map>
@@ -18,10 +19,11 @@ namespace services
     private:
         IPhysicsProvider* physicsProvider = nullptr;
 
-        // VK-1530: previous rendered sim position per character-controller entity,
-        // used to interpolate the render transform between fixed steps (key is
-        // entt::entity, whose version bump makes reused slots distinct keys).
-        std::unordered_map<entt::entity, glm::vec3> ccLastSimPos;
+        // VK-1530: per character-controller entity, the two persistent sim snapshots the
+        // render transform is interpolated between (prev/curr shift only when a fixed
+        // sub-step runs). Key is entt::entity, whose version bump makes reused slots
+        // distinct keys; pruned for destroyed entities in applyControllerMovement.
+        std::unordered_map<entt::entity, physics::CharacterInterp> ccInterp;
 
     public:
         explicit ControllerServiceImpl(IPhysicsProvider* physicsProvider = nullptr);

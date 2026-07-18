@@ -1,6 +1,5 @@
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -8,7 +7,7 @@ namespace scripting
 {
     // VK-1536: pure script tick-governor math, mirroring the RTShadowBudget.hpp /
     // DynamicResolutionBudget.hpp pattern (Inputs -> pure evaluate*Core -> Decision) so the CPU-only
-    // Tests project can validate the dt accumulation, the stagger and the distance buckets with no
+    // Tests project can validate the dt accumulation and the stagger with no
     // registry, no mType interpreter and no Vulkan device (test_script_tick_governor). Header-only
     // and dependency-free, and the single source of truth ScriptingServiceImpl::updateScripts calls
     // into, so the behavior the tick applies is exactly the behavior the tests pin down.
@@ -23,65 +22,6 @@ namespace scripting
     // A script that ignores deltaTime and assumes per-frame cadence will run in slow motion, and a
     // script that polls level-triggered input (Input::isKeyDown) can miss presses shorter than its
     // interval — such scripts must not be throttled.
-
-    // Guards the significance divide against a zero/negative authored weight.
-    // Matches vfx::kSignificanceEpsilon.
-    inline constexpr float kSignificanceEpsilon = 1e-4f;
-
-    // Distance-derived interval multipliers. Deliberately has NO frozen (0) tier, unlike
-    // AnimationLODConfig::updateIntervals which ends in 0: freezing an animation holds a pose and is
-    // visually benign, but freezing a SCRIPT stops it thinking, which is a behavior change rather
-    // than a level of detail. The furthest tier slows, it never stops.
-    struct ScriptLODConfig
-    {
-        // OFF by default: distance scaling is a second opt-in on top of the per-script interval.
-        bool enabled = false;
-
-        // Bucket edges in world units. Seeded from AnimationLODConfig::distanceThresholds; these are
-        // a starting guess for scripts and only take effect once `enabled` is set.
-        float distanceThresholds[3] = {25.0f, 75.0f, 150.0f};
-
-        // Multiplier applied to the authored interval per bucket. Clamped to >= 1 on read: distance
-        // may only ever slow a script down, never speed it up past what the author asked for.
-        float multipliers[4] = {1.0f, 2.0f, 4.0f, 8.0f};
-    };
-
-    // The ticket's "score = significance / dist^2" re-expressed as a squared distance, which is
-    // algebraically the same test and avoids both the divide-by-zero and the sqrt:
-    //
-    //     score > T  <=>  sig/distSq > T  <=>  distSq/sig < 1/T
-    //
-    // so bucketing distSq/sig against d^2 IS thresholding vfx::significanceScore at T = 1/d^2. This
-    // reuses the VFX scoring semantic exactly without moving VFXSignificance.hpp out of the VFX
-    // subsystem (VFX needs a binary keep/evict against a top-N budget; this needs an interval).
-    //
-    // A non-finite input yields 0 (nearest bucket => full rate). That is the safe direction: a NaN
-    // transform must not silently throttle a script into looking hung. Note vfx::significanceScore
-    // sanitizes NaN to 0 meaning "least significant / evict first"; here the safe outcome is the
-    // opposite, because the cost of over-ticking is a wasted call and the cost of under-ticking is
-    // broken gameplay.
-    [[nodiscard]] inline float effectiveDistanceSq(float distanceSq, float significance) noexcept
-    {
-        if (!std::isfinite(distanceSq) || !std::isfinite(significance))
-            return 0.0f;
-        return distanceSq / std::max(significance, kSignificanceEpsilon);
-    }
-
-    // Interval multiplier for an effective (significance-weighted) squared distance. Returns 1.0
-    // when disabled, so a caller can apply it unconditionally.
-    [[nodiscard]] inline float distanceMultiplier(const ScriptLODConfig& cfg, float effDistSq) noexcept
-    {
-        if (!cfg.enabled || !std::isfinite(effDistSq))
-            return 1.0f;
-
-        for (int i = 0; i < 3; ++i)
-        {
-            const float edge = cfg.distanceThresholds[i];
-            if (effDistSq < edge * edge)
-                return std::max(1.0f, cfg.multipliers[i]);
-        }
-        return std::max(1.0f, cfg.multipliers[3]);
-    }
 
     // Deterministic [0, 1) hash (splitmix64 finalizer). Used to stagger the first tick of scripts
     // that share an interval. Must stay deterministic across runs and platforms: a random phase

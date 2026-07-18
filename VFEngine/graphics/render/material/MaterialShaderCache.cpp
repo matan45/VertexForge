@@ -91,16 +91,17 @@ namespace render::mesh
             }
         }
 
-        // About to build a NEW pipeline synchronously (no prior entry). If a frame is being
-        // recorded on the render thread, warm-up (VK-1532) failed to cover this permutation and
-        // we are hitching the frame. Always log; assert in Debug (no-op under NDEBUG). A rebuild
-        // of an existing entry (hadEntry) is an expected editor live-edit, not a warm-up miss,
-        // so it does not trip the guard.
+        // About to build a NEW pipeline synchronously (no prior entry) while a frame is being
+        // recorded on the render thread — a hitch (shader compile + pipeline create inline).
+        // This is legitimate for a material warm-up (VK-1532) never covered: one assigned or
+        // spawned at runtime after warm-up completed, or not present in the .vfpak PSO manifest.
+        // The pipeline IS built correctly below; warn (once per never-seen material) so the
+        // hitch is visible, but do not abort. A rebuild of an existing entry (hadEntry) is an
+        // expected editor live-edit, not a first-time build, so it does not warn.
         if (!hadEntry && frameRecordingActive.load(std::memory_order_acquire))
         {
-            vfLogWarning("VK-1532: pipeline for '{}' created on the render thread mid-frame "
-                         "- warm-up missed this permutation", materialPath);
-            assert(!"VK-1532: pipeline created on render thread mid-frame");
+            vfLogWarning("VK-1532: pipeline for '{}' built on the render thread mid-frame "
+                         "- not warmed up; expect a one-frame hitch", materialPath);
         }
 
         MaterialPipelineData data;

@@ -56,6 +56,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/render/RuntimeRenderSettingsApply.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "events/save/ConfigEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
@@ -95,32 +96,7 @@ namespace {
             static_cast<int>(dispatcher.query(presentQ)),
             static_cast<int>(dispatcher.query(msaaQ)));
 
-        events::render::ApplyShadowSettingsCommand shadowCmd;
-        shadowCmd.settings = s;
-        dispatcher.execute(shadowCmd);
-
-        events::application::ApplyDisplaySettingsNotification displayNotif;
-        displayNotif.presentMode = s.display.presentMode;
-        displayNotif.msaa = s.display.msaa;
-        dispatcher.publish(displayNotif);
-
-        services::events::vfxruntime::SetVFXLODConfigCommand vfxCmd;
-        vfxCmd.lod0Distance = s.vfxLOD.lod0Distance;
-        vfxCmd.lod1Distance = s.vfxLOD.lod1Distance;
-        vfxCmd.lod2Distance = s.vfxLOD.lod2Distance;
-        vfxCmd.transitionZone = s.vfxLOD.transitionZone;
-        dispatcher.execute(vfxCmd);
-
-        services::events::animation::SetAnimationLODConfigCommand animCmd;
-        animCmd.lod0Distance = s.animationLOD.lod0Distance;
-        animCmd.lod1Distance = s.animationLOD.lod1Distance;
-        animCmd.lod2Distance = s.animationLOD.lod2Distance;
-        animCmd.lod3Distance = s.animationLOD.lod3Distance;
-        animCmd.lod0Interval = s.animationLOD.lod0Interval;
-        animCmd.lod1Interval = s.animationLOD.lod1Interval;
-        animCmd.lod2Interval = s.animationLOD.lod2Interval;
-        animCmd.maxStreamingInitPerFrame = s.animationLOD.maxStreamingInitPerFrame;
-        dispatcher.execute(animCmd);
+        services::render::applyRuntimeRenderSettings(dispatcher, s);
     }
 }
 

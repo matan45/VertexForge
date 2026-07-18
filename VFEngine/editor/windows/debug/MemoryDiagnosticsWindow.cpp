@@ -55,6 +55,25 @@ namespace
         return s;
     }
 
+    // RFC-4180 CSV field escaping: a field containing a comma, quote or newline is wrapped in
+    // double-quotes with any interior quote doubled. Asset paths (VramAssetRow::name) can legally
+    // contain commas on Windows, which would otherwise shift every downstream column.
+    std::string csvEscape(const std::string& field)
+    {
+        if (field.find_first_of(",\"\n\r") == std::string::npos)
+            return field;
+        std::string out;
+        out.reserve(field.size() + 2);
+        out.push_back('"');
+        for (char c : field)
+        {
+            if (c == '"') out.push_back('"'); // double an interior quote
+            out.push_back(c);
+        }
+        out.push_back('"');
+        return out;
+    }
+
     // Render one diff axis (CPU categories / GPU heaps / per-asset) as a colored delta table.
     // Unchanged rows are hidden so the leak hunt focuses on what actually moved.
     template <class Row>
@@ -858,10 +877,14 @@ namespace windows
             ImGui::TableHeadersRow();
 
             // Sort the cached rows in place; producer already publishes bytes-desc, so the
-            // default (VRAM column, descending) leaves them as the top-N largest view.
+            // default (VRAM column, descending) leaves them as the top-N largest view. Re-sort
+            // only when the user changed the sort spec (SpecsDirty) OR the producer published a
+            // new sample (generation changed) — sorting on every frame is wasted O(n log n), but
+            // a SpecsDirty-only gate would leave a fresh sample unsorted under a non-default column.
             if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs())
             {
-                if (sortSpecs->SpecsCount > 0)
+                if (sortSpecs->SpecsCount > 0 &&
+                    (sortSpecs->SpecsDirty || vramSnapshot.generation != lastSortedVramGeneration))
                 {
                     const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
                     const bool ascending = spec.SortDirection == ImGuiSortDirection_Ascending;
@@ -878,6 +901,7 @@ namespace windows
                             return ascending ? less : !less;
                         });
                     sortSpecs->SpecsDirty = false;
+                    lastSortedVramGeneration = vramSnapshot.generation;
                 }
             }
 
@@ -990,9 +1014,9 @@ namespace windows
                 ImGui::Text("%.1f", toMB(cap.vramUsageBytes));
                 ImGui::TableNextColumn();
                 ImGui::PushID(i);
-                if (ImGui::SmallButton("CSV")) exportCaptureCsv(cap);
+                if (ImGui::SmallButton("CSV")) exportCaptureCsv(cap, i);
                 ImGui::SameLine();
-                if (ImGui::SmallButton("JSON")) exportCaptureJson(cap);
+                if (ImGui::SmallButton("JSON")) exportCaptureJson(cap, i);
                 ImGui::PopID();
             }
 
@@ -1025,7 +1049,17 @@ namespace windows
             return;
         }
 
-        const memory::MemorySnapshotDiff d = memory::diff(captures[diffA], captures[diffB]);
+        // Recompute the diff (3 hash maps + 3 sets + deep row copies) only when the selection or
+        // the capture list changed — captures are immutable, so the result is stable between
+        // clicks; running it every frame the tab is open is pure waste.
+        if (diffA != cachedDiffA || diffB != cachedDiffB || captures.size() != cachedDiffCount)
+        {
+            cachedDiff = memory::diff(captures[diffA], captures[diffB]);
+            cachedDiffA = diffA;
+            cachedDiffB = diffB;
+            cachedDiffCount = captures.size();
+        }
+        const memory::MemorySnapshotDiff& d = cachedDiff;
         ImGui::Separator();
         ImGui::TextColored(deltaColor(d.cpuTotalDelta), "CPU tracked delta: %+.2f MB",
             static_cast<double>(d.cpuTotalDelta) / MB);
@@ -1036,9 +1070,12 @@ namespace windows
         drawDeltaTable("##dAsset", "Per-Asset VRAM Deltas (Added / growth = potential leak)", d.assetDeltas);
     }
 
-    void MemoryDiagnosticsWindow::exportCaptureCsv(const memory::MemorySnapshotCapture& cap)
+    void MemoryDiagnosticsWindow::exportCaptureCsv(const memory::MemorySnapshotCapture& cap, int index)
     {
-        const std::string path = "memory_capture_" + sanitizeLabel(cap.label) + ".csv";
+        // Prefix with the session-unique capture index so two captures sharing a label (e.g.
+        // both defaulted to "snapshot") export to distinct files instead of truncating each other.
+        const std::string path =
+            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".csv";
         std::ofstream out(path, std::ios::trunc);
         if (!out)
         {
@@ -1048,18 +1085,18 @@ namespace windows
 
         out << "section,name,bytes,extra\n";
         for (const auto& c : cap.cpuCategories)
-            out << "cpu," << c.name << ',' << c.bytes << ',' << c.peak << "\n";
+            out << "cpu," << csvEscape(c.name) << ',' << c.bytes << ',' << c.peak << "\n";
         for (const auto& h : cap.gpuHeaps)
-            out << "gpu_heap," << h.name << ',' << h.usedBytes << ',' << h.capacityBytes << "\n";
+            out << "gpu_heap," << csvEscape(h.name) << ',' << h.usedBytes << ',' << h.capacityBytes << "\n";
         for (const auto& a : cap.vramAssets)
-            out << "vram_asset," << a.name << ',' << a.bytes << ',' << memory::vramAssetCategoryName(a.category) << "\n";
+            out << "vram_asset," << csvEscape(a.name) << ',' << a.bytes << ',' << memory::vramAssetCategoryName(a.category) << "\n";
 
         out.close();
         lastExportPath = path;
         vfLogInfo("MemoryDiagnostics: exported capture to {}", path);
     }
 
-    void MemoryDiagnosticsWindow::exportCaptureJson(const memory::MemorySnapshotCapture& cap)
+    void MemoryDiagnosticsWindow::exportCaptureJson(const memory::MemorySnapshotCapture& cap, int index)
     {
         nlohmann::json j;
         j["schemaVersion"] = cap.schemaVersion;
@@ -1083,7 +1120,8 @@ namespace windows
                                        {"category", memory::vramAssetCategoryName(a.category)},
                                        {"bytes", a.bytes}});
 
-        const std::string path = "memory_capture_" + sanitizeLabel(cap.label) + ".json";
+        const std::string path =
+            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".json";
         std::ofstream out(path, std::ios::trunc);
         if (!out)
         {

@@ -313,9 +313,10 @@ namespace animation
         std::vector<EvalCandidate> evalCandidates;
 
         // Measure the gather phase so the Task Graph Profiler shows before/after numbers.
-        // Duration-only entry (startTimeNs=0): the per-frame task graph already starts at ~0, so
-        // this neither lowers minStart nor exceeds maxEnd in appendToLatestFrame's frame-duration
-        // recompute (i.e. it does not perturb viewport FPS).
+        // Stamp absolute high_resolution_clock epoch ns for both endpoints — the same time
+        // base the task-graph worker bars (TaskGraphBuilder) and the render-thread bar
+        // (RenderController) now use. A zero/relative start would drag minStart to 0 in
+        // appendToLatestFrame's maxEnd - minStart recompute and corrupt the frame duration.
         auto& profiler = threading::TaskProfiler::instance();
         if (profiler.isEnabled())
         {
@@ -328,9 +329,10 @@ namespace animation
             threading::TaskProfileEntry entry;
             entry.name = "AnimGather";
             entry.threadId = gatherThreadId;
-            entry.startTimeNs = 0;
+            entry.startTimeNs = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count());
             entry.endTimeNs = static_cast<uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+                std::chrono::duration_cast<std::chrono::nanoseconds>(t1.time_since_epoch()).count());
             profiler.appendToLatestFrame({entry});
         }
         else

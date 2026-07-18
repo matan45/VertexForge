@@ -7,7 +7,6 @@
 
 #include <fstream>
 #include <cstring>
-#include <chrono>
 
 namespace serialization
 {
@@ -55,6 +54,10 @@ namespace serialization
 
 	json BinarySceneSerialization::decodePayload(const std::vector<uint8_t>& data)
 	{
+		// Public entry point — guard the header read (mirrors isBinaryScene / peekHeader) so a
+		// short/truncated buffer can never over-read past the allocation via the memcpy below.
+		if (data.size() < HEADER_SIZE) return json{};
+
 		Header header{};
 		std::memcpy(&header, data.data(), HEADER_SIZE);
 
@@ -89,28 +92,13 @@ namespace serialization
 	                                                    std::string_view filename,
 	                                                    SceneLoadProgressCallback progressCallback)
 	{
-		const auto decodeStart = std::chrono::steady_clock::now();
 		json snapshot = decodePayload(data);
-		const auto decodeEnd = std::chrono::steady_clock::now();
 		if (snapshot.is_null())
 		{
 			return false;
 		}
 
-		const bool ok =
-		    SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, filename, progressCallback);
-		const auto deserializeEnd = std::chrono::steady_clock::now();
-
-		// VK-1538 Stage 0: report decode vs registry-build time so `p` (decode's
-		// share of cold load) can be measured on a real scene.
-		Header header{};
-		peekHeader(data, header);
-		const double decodeMs = std::chrono::duration<double, std::milli>(decodeEnd - decodeStart).count();
-		const double deserializeMs =
-		    std::chrono::duration<double, std::milli>(deserializeEnd - decodeEnd).count();
-		vfLogWarning("[VK-1538] BinaryScene load [msgpack]: decode={:.2f} ms, deserialize={:.2f} ms, entities={}",
-		             decodeMs, deserializeMs, header.entityCount);
-		return ok;
+		return SceneSerialization::restoreFromSnapshot(snapshot, sceneGraph, filename, progressCallback);
 	}
 
 	bool BinarySceneSerialization::loadBinarySceneAdditive(const std::vector<uint8_t>& data,

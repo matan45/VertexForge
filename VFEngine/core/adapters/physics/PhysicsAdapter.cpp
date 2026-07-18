@@ -168,8 +168,6 @@ namespace core
     {
         if (!isInitialized()) return;
 
-        // Swap buffers: previous write becomes read (previous frame state)
-        physicsWorld->swapStateBuffers();
         physicsWorld->applyPendingVehicleInputs();
 
         asyncStepFuture = threading::JobSystem::instance().submit(
@@ -180,8 +178,20 @@ namespace core
                     physicsWorld->step(fixedDt);
                 });
 
-                // Capture state snapshot while still on worker thread (Jolt sim is done)
-                physicsWorld->captureState();
+                // Advance the interpolation double-buffer ONLY on a frame that actually stepped.
+                // swap makes the previous frame's write buffer the new read (prev) buffer, then
+                // capture writes the post-step state into the new write (curr) buffer, so the two
+                // buffers bracket [prev step, curr step] (both writes done here on the worker thread,
+                // the Jolt sim is finished, and the sole reader — getInterpolatedTransform — only runs
+                // after syncPhysicsStep joins this job). On a zero-step frame we leave both buffers
+                // untouched so getInterpolatedTransform keeps interpolating from prev toward curr as
+                // alpha grows; swapping+capturing there would collapse read==curr==write and pin the
+                // render to curr, making bodies judder at the physics rate above the display rate.
+                if (result.stepsTaken > 0)
+                {
+                    physicsWorld->swapStateBuffers();
+                    physicsWorld->captureState();
+                }
                 return result;
             }, threading::JobPriority::HIGH);
 

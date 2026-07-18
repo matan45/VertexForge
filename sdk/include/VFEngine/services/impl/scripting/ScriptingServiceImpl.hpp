@@ -28,10 +28,6 @@ namespace services
         // every frame — set by mutators and the ScriptComponent registry hooks
         bool scriptListDirty = true;
 
-        // VK-1536 — distance/significance rate scaling. Disabled by default; the per-script
-        // updateInterval works on its own without this.
-        scripting::ScriptLODConfig scriptLOD;
-
         // VK-1536 — reused scratch so the per-script crash breadcrumb costs no heap traffic.
         // std::string keeps its capacity across clear()/assign(), so these allocate once and then
         // never again, instead of building fresh temporaries for every script every frame.
@@ -40,11 +36,6 @@ namespace services
 
         void rebuildScriptUpdateList(entt::registry& registry);
         void onScriptComponentChanged(entt::registry& registry, entt::entity entity);
-
-        // VK-1536 — camera position for distance scaling, resolved once per updateScripts call.
-        // Returns false when there is no usable camera, in which case nothing is throttled by
-        // distance (the authored interval still applies).
-        bool queryCameraPosition(glm::vec3& outPos) const;
 
         std::string getManifestPath() const;
 

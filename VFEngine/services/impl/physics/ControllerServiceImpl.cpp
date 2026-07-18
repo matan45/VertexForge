@@ -98,6 +98,18 @@ namespace services
             }
             controller.wantsSprint = false;
         }
+
+        // VK-1530: bound ccInterp growth. The view above enumerates only live controllers,
+        // so any stored key that is no longer valid belongs to a destroyed entity; drop it.
+        // (Reused entt slots get a new version, so a stale key never collides with a live
+        // entity.)
+        for (auto it = ccInterp.begin(); it != ccInterp.end();)
+        {
+            if (registry.valid(it->first))
+                ++it;
+            else
+                it = ccInterp.erase(it);
+        }
     }
 
     void ControllerServiceImpl::updateCharacterControllerEntity(entt::entity entity)
@@ -127,12 +139,14 @@ namespace services
 
         const glm::vec3 gravity = physicsProvider->getGravity();
 
-        // Authoritative character position at the start of this frame. On the first
-        // sight of an entity, seed from its current transform (freshly placed).
-        auto lastIt = ccLastSimPos.find(entity);
-        const bool hadPrev = (lastIt != ccLastSimPos.end());
-        glm::vec3 prev = hadPrev ? lastIt->second : transform.position;
-        glm::vec3 curr = prev;
+        // Two persistent sim snapshots for this entity (prev = after sub-step N-1, curr =
+        // after sub-step N). On first sight, seed both onto the current transform (freshly
+        // placed); a fresh entity is never teleport-snap-tested.
+        auto& interp = ccInterp[entity];
+        const bool freshlySeeded = !interp.seeded;
+        if (freshlySeeded)
+            physics::seedCharacterInterp(interp, transform.position);
+        const glm::vec3 beforeFrame = interp.curr;
 
         for (int i = 0; i < steps; ++i)
         {
@@ -177,7 +191,7 @@ namespace services
 
             controller.isGrounded = result.isGrounded;
             controller.currentVelocity = result.linearVelocity;
-            curr = result.position;
+            physics::pushSimStep(interp, result.position);   // shift prev<-curr, curr<-new
         }
 
         // Consume the jump only if a sub-step actually ran this frame.
@@ -190,19 +204,16 @@ namespace services
         controller.currentSpeed = glm::length(glm::vec2(controller.currentVelocity.x, controller.currentVelocity.z));
 
         // Snap (skip interpolation) across teleports / respawns — a character never
-        // legitimately moves this far in one frame; interpolating would streak.
+        // legitimately moves this far in one frame; interpolating would streak. A freshly
+        // seeded entity has no meaningful "before" to compare against, so it is exempt.
         constexpr float CC_TELEPORT_SNAP_DISTANCE2 = 50.0f * 50.0f;
-        if (hadPrev && glm::distance2(prev, curr) > CC_TELEPORT_SNAP_DISTANCE2)
-        {
-            prev = curr;
-        }
-        ccLastSimPos[entity] = curr;
+        if (!freshlySeeded)
+            physics::snapOnTeleport(interp, beforeFrame, CC_TELEPORT_SNAP_DISTANCE2);
 
-        // Render between the previous and current sim positions; the character's
-        // authoritative position (Jolt-side) is always curr — only the rendered
-        // transform lags by the interpolation factor. Clamp alpha defensively.
-        float a = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
-        transform.position = glm::mix(prev, curr, a);
+        // Render between the two persistent sim snapshots; the character's authoritative
+        // position (Jolt-side) is always interp.curr — only the rendered transform lags by
+        // the interpolation factor (alpha is clamped inside interpRenderPos).
+        transform.position = physics::interpRenderPos(interp, alpha);
         transform.isDirty = true;
     }
 

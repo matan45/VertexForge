@@ -7,6 +7,7 @@
 #include "NativeHelpers.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/render/RenderEvents.hpp"
+#include "../../../services/events/render/RuntimeRenderSettingsApply.hpp"
 #include "../../../services/events/project/ApplicationEvents.hpp"
 #include "../../../services/events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../../services/events/vfx/VFXRuntimeEvents.hpp"
@@ -50,34 +51,7 @@ namespace core::api
         // would clobber the scene-authored look).
         void applyRuntimeRenderSettings(const types::RenderSettings& s)
         {
-            auto& dispatcher = events::EventDispatcher::instance();
-
-            events::render::ApplyShadowSettingsCommand shadowCmd;
-            shadowCmd.settings = s;
-            dispatcher.execute(shadowCmd);
-
-            events::application::ApplyDisplaySettingsNotification displayNotif;
-            displayNotif.presentMode = s.display.presentMode;
-            displayNotif.msaa = s.display.msaa;
-            dispatcher.publish(displayNotif);
-
-            services::events::vfxruntime::SetVFXLODConfigCommand vfxCmd;
-            vfxCmd.lod0Distance = s.vfxLOD.lod0Distance;
-            vfxCmd.lod1Distance = s.vfxLOD.lod1Distance;
-            vfxCmd.lod2Distance = s.vfxLOD.lod2Distance;
-            vfxCmd.transitionZone = s.vfxLOD.transitionZone;
-            dispatcher.execute(vfxCmd);
-
-            services::events::animation::SetAnimationLODConfigCommand animCmd;
-            animCmd.lod0Distance = s.animationLOD.lod0Distance;
-            animCmd.lod1Distance = s.animationLOD.lod1Distance;
-            animCmd.lod2Distance = s.animationLOD.lod2Distance;
-            animCmd.lod3Distance = s.animationLOD.lod3Distance;
-            animCmd.lod0Interval = s.animationLOD.lod0Interval;
-            animCmd.lod1Interval = s.animationLOD.lod1Interval;
-            animCmd.lod2Interval = s.animationLOD.lod2Interval;
-            animCmd.maxStreamingInitPerFrame = s.animationLOD.maxStreamingInitPerFrame;
-            dispatcher.execute(animCmd);
+            services::render::applyRuntimeRenderSettings(events::EventDispatcher::instance(), s);
         }
 
         // Current active RenderSettings from the scene graph (runtime-registered via
