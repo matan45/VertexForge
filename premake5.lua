@@ -1647,6 +1647,11 @@ project "basisu"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "BASISD_SUPPORT_KTX2=1", "BASISD_SUPPORT_KTX2_ZSTD=0" }
 
+   -- C4828: vendored basisu headers contain non-UTF-8 bytes in comments, which the
+   -- engine-global /utf-8 flag flags. Harmless (comment text); silence for this
+   -- third-party TU only.
+   disablewarnings { "4828" }
+
    vfStandardConfigs()
 
 
