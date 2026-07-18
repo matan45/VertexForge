@@ -304,13 +304,16 @@ TEST_SUITE("ImporterRegistry")
         CHECK(importer->deriveAssetType(context) == resource::AssetType::Animation);
 
         // The options surface in the import dialog for mesh extensions:
-        // animationOnly (VK-194), extractEmbeddedTextures (VK-55), and combined static meshes.
+        // animationOnly (VK-194), extractEmbeddedTextures (VK-55), combined static
+        // meshes and material-texture import (VK-1641).
         auto options = import::ImporterRegistry::instance().optionsForExtension("fbx");
-        REQUIRE(options.size() == 3);
+        REQUIRE(options.size() == 4);
         CHECK(options[0].key == "animationOnly");
         CHECK(options[1].key == "extractEmbeddedTextures");
         CHECK(options[2].key == "combineMeshes");
         CHECK(std::get<bool>(options[2].defaultValue) == false);
+        CHECK(options[3].key == "importMaterialTextures");
+        CHECK(std::get<bool>(options[3].defaultValue) == false);
     }
 
     TEST_CASE("parallel detection is stable")
