@@ -193,6 +193,53 @@ namespace core::api
                 { s.cycleSpeed = extractFloat(args[0]); });
             }});
 
+        // ── Sun -> scene light feedback (VK-1566) ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_isSunColorFromAtmosphere",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(s.sunColorFromAtmosphere);
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setSunColorFromAtmosphere",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.sunColorFromAtmosphere = extractBool(args[0]); });
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_getSunColorFeedbackStrength",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.sunColorFeedbackStrength));
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setSunColorFeedbackStrength",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.sunColorFeedbackStrength = extractFloat(args[0]); });
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_isCycleControlsSunEntity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(s.cycleControlsSunEntity);
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setCycleControlsSunEntity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.cycleControlsSunEntity = extractBool(args[0]); });
+            }});
+
         // ── Moon ──
 
         interpreter->registerNativeFunction("_native_atmosphere_getMoonBrightness",

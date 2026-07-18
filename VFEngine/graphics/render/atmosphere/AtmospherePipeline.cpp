@@ -127,12 +127,6 @@ namespace render::atmosphere
         cachedTime = time;
     }
 
-    void AtmospherePipeline::updateDayNightCycle(float deltaTime)
-    {
-        if (deltaTime > 0.0f && deltaTime < 1.0f)
-            dayNightController.tick(deltaTime, settings);
-    }
-
     void AtmospherePipeline::createSampler()
     {
         vk::SamplerCreateInfo info{};

@@ -137,6 +137,37 @@ public class Atmosphere {
     }
 
     // ============================================
+    // Sun -> Scene Light Feedback (VK-1566)
+    // ============================================
+
+    // Tint the directional light by the atmospheric sun transmittance (default: false)
+    public static function isSunColorFromAtmosphere(): bool {
+        return _native_atmosphere_isSunColorFromAtmosphere();
+    }
+
+    public static function setSunColorFromAtmosphere(bool enabled): void {
+        _native_atmosphere_setSunColorFromAtmosphere(enabled);
+    }
+
+    // Feedback strength 0..1: 0 = white sun, 1 = full atmospheric tint (default: 1.0)
+    public static function getSunColorFeedbackStrength(): float {
+        return _native_atmosphere_getSunColorFeedbackStrength();
+    }
+
+    public static function setSunColorFeedbackStrength(float strength): void {
+        _native_atmosphere_setSunColorFeedbackStrength(strength);
+    }
+
+    // Day-night cycle rotates the sun light entity so scene lighting + shadows track the sun (default: false)
+    public static function isCycleControlsSunEntity(): bool {
+        return _native_atmosphere_isCycleControlsSunEntity();
+    }
+
+    public static function setCycleControlsSunEntity(bool enabled): void {
+        _native_atmosphere_setCycleControlsSunEntity(enabled);
+    }
+
+    // ============================================
     // Moon
     // ============================================
 

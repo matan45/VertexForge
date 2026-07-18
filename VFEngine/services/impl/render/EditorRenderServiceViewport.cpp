@@ -9,6 +9,7 @@
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "DayNightSync.hpp"
 
 namespace services
 {
@@ -308,6 +309,14 @@ namespace services
             [this](const events::atmosphere::GetAtmosphereEnabledQuery&)
             {
                 return offScreenProvider ? offScreenProvider->getAtmosphereSettings().enabled : false;
+            });
+
+        // VK-1566: per-frame day-night advance + sun-entity sync (dispatched by the SunSync
+        // frame-graph step before the Transforms bake).
+        dispatcher.registerCommandHandler<events::atmosphere::UpdateDayNightCommand>(
+            [this](const events::atmosphere::UpdateDayNightCommand& cmd)
+            {
+                tickDayNightAndSyncSun(offScreenProvider, cmd.deltaTime);
             });
     }
 

@@ -242,7 +242,9 @@ namespace render::lighting
             GPUDirectionalLight& gpuLight = cpuDirectionalLights[directionalCount];
             gpuLight.direction = direction;
             gpuLight.intensity = light.intensity;
-            gpuLight.color = light.color;
+            // VK-1566: the first directional light (index 0) is the sun; tint it by the
+            // atmospheric sun-transmittance multiplier (vec3(1) when the feature is off).
+            gpuLight.color = (directionalCount == 0) ? light.color * sunColorMultiplier : light.color;
             gpuLight.shadowIndex = shadowSystem ? shadowSystem->getShadowViewIndex(entityId) : -1;
             gpuLight.shadowMode = 1; // 1 = VSM clipmap
 

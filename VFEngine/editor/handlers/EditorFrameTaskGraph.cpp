@@ -13,6 +13,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/weather/WeatherEvents.hpp"
 #include "events/terrain/OceanEvents.hpp"
+#include "events/render/AtmosphereEvents.hpp"
 
 #include <chrono>
 
@@ -144,6 +145,16 @@ namespace handlers
             events::EventDispatcher::instance().execute(cmd);
         });
 
+        // VK-1566: advance the day-night cycle + rotate the sun entity BEFORE the Transforms
+        // bake so the sky, sun color, and shadows read the same fresh angles. Ordered after
+        // Weather (which may itself write atmosphere settings) and before Transforms.
+        frameTaskGraph->addTask("SunSync", [this]() {
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            events::atmosphere::UpdateDayNightCommand cmd;
+            cmd.deltaTime = dt;
+            events::EventDispatcher::instance().execute(cmd);
+        });
+
         frameTaskGraph->addTask("Ocean", [this]() {
             float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
             events::ocean::UpdateOceanCommand cmd;
@@ -183,6 +194,7 @@ namespace handlers
 
         frameTaskGraph->addDependency("Weather", "Scene");
         frameTaskGraph->addDependency("Ocean", "Weather");
+        frameTaskGraph->addDependency("SunSync", "Weather");
         frameTaskGraph->addDependency("PhysicsKick", "Scene");
         frameTaskGraph->addDependency("PhysicsKick", "Input");
         frameTaskGraph->addDependency("PhysicsKick", "WindowState");
@@ -235,6 +247,7 @@ namespace handlers
         });
 
         frameTaskGraph->addDependency("Transforms", "Weather");
+        frameTaskGraph->addDependency("Transforms", "SunSync");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "Navmesh");
         frameTaskGraph->addDependency("Transforms", "VFX");

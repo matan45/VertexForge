@@ -204,6 +204,29 @@ namespace windows
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Shifts the moon orbit relative to sun. 0 = full moon at midnight.");
         }
+
+        // VK-1566: sun -> scene light feedback (works with a static sun or the cycle).
+        ImGui::Spacing();
+        ImGui::Text("Scene Lighting Feedback");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Sun Color From Atmosphere", &settings.sunColorFromAtmosphere))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Tint the directional light by the atmospheric sun transmittance\n(warm at sunrise/sunset, dims below the horizon).");
+
+        if (settings.sunColorFromAtmosphere)
+        {
+            if (ImGui::SliderFloat("Feedback Strength", &settings.sunColorFeedbackStrength, 0.0f, 1.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("0 = white sun, 1 = full atmospheric tint.");
+        }
+
+        if (ImGui::Checkbox("Cycle Controls Sun Entity", &settings.cycleControlsSunEntity))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("While the day-night cycle runs, rotate the sun light entity so\nscene lighting and shadows track the moving sun.");
     }
 
     void AtmosphereConfigWindow::drawMoonSection()

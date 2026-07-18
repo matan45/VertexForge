@@ -45,7 +45,11 @@ namespace serialization
                 {"dayNightEnabled", s.dayNightEnabled},
                 {"timeOfDay", s.timeOfDay},
                 {"cycleSpeed", s.cycleSpeed},
-                {"moonPhaseOffset", s.moonPhaseOffset}
+                {"moonPhaseOffset", s.moonPhaseOffset},
+                // Sun -> scene light feedback (VK-1566)
+                {"sunColorFromAtmosphere", s.sunColorFromAtmosphere},
+                {"sunColorFeedbackStrength", s.sunColorFeedbackStrength},
+                {"cycleControlsSunEntity", s.cycleControlsSunEntity}
             };
         }
 
@@ -145,6 +149,14 @@ namespace serialization
                 s.cycleSpeed = std::clamp(a["cycleSpeed"].get<float>(), 0.0f, 100.0f);
             if (a.contains("moonPhaseOffset") && a["moonPhaseOffset"].is_number())
                 s.moonPhaseOffset = std::clamp(a["moonPhaseOffset"].get<float>(), 0.0f, 1.0f);
+
+            // Sun -> scene light feedback (VK-1566)
+            if (a.contains("sunColorFromAtmosphere") && a["sunColorFromAtmosphere"].is_boolean())
+                s.sunColorFromAtmosphere = a["sunColorFromAtmosphere"].get<bool>();
+            if (a.contains("sunColorFeedbackStrength") && a["sunColorFeedbackStrength"].is_number())
+                s.sunColorFeedbackStrength = std::clamp(a["sunColorFeedbackStrength"].get<float>(), 0.0f, 1.0f);
+            if (a.contains("cycleControlsSunEntity") && a["cycleControlsSunEntity"].is_boolean())
+                s.cycleControlsSunEntity = a["cycleControlsSunEntity"].get<bool>();
         }
 
         json serializeCloud(const render::cloud::CloudSettings& s)

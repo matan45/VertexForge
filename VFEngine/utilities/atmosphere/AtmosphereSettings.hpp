@@ -50,6 +50,11 @@ namespace render::atmosphere
         float cycleSpeed = 1.0f;                    // one game-hour per real-time minute at 1.0
         float moonPhaseOffset = 0.0f;               // 0-1, shifts moon azimuth relative to sun (elevation stays opposite)
 
+        // Sun -> scene light feedback (VK-1566, opt-in; both default OFF => bit-identical to legacy)
+        bool sunColorFromAtmosphere = false;        // tint the directional light by the atmospheric sun transmittance
+        float sunColorFeedbackStrength = 1.0f;      // 0 = white sun, 1 = full atmospheric tint (mix factor)
+        bool cycleControlsSunEntity = false;        // day-night cycle rotates the first directional-light entity (moves scene lighting + shadows)
+
         // Ground
         glm::vec3 groundAlbedo{0.3f};
 
