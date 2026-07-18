@@ -242,6 +242,7 @@ project "Import"
 	  "dependencies/freetype/include",   -- FreeType headers
 	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
 	  "dependencies/bcdec",              -- BC7/BC6H block decompression
+	  "dependencies/tinyexr/deps/basisu", -- Basis Universal transcoder (KTX2 decode, VK-1642)
 	  "dependencies/libogg/include",       -- Ogg container format (for Vorbis encoding)
 	  "dependencies/libogg/build/include", -- Ogg generated config headers
 	  "dependencies/libvorbis/include"   -- Vorbis audio compression (encoding at import)
@@ -249,7 +250,7 @@ project "Import"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
 
-   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "AssetDB", "Threading", "CpuMemory" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "basisu", "AssetDB", "Threading", "CpuMemory" }
 
    -- Copy DLLs to Editor output directory (Import is Editor-only)
    postbuildcommands {
@@ -1619,6 +1620,32 @@ project "ispc_texcomp"
    }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   vfStandardConfigs()
+
+
+-- Project: Basis Universal transcoder (KTX2 container decode, VK-1642)
+-- Vendored inside the tinyexr submodule (dependencies/tinyexr/deps/basisu). The
+-- single transcoder TU is compiled here as its own StaticLib (mirrors
+-- ispc_texcomp) and linked into Import. BASISD_SUPPORT_KTX2_ZSTD=0 is MANDATORY:
+-- the real Zstandard amalgamation is not vendored, so Zstd-supercompressed UASTC
+-- KTX2 is unsupported (ETC1S and non-Zstd UASTC still decode). No CMake step.
+project "basisu"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/tinyexr/deps/basisu/basisu_transcoder.h",
+      "dependencies/tinyexr/deps/basisu/basisu_transcoder.cpp"
+   }
+
+   includedirs {
+      "dependencies/tinyexr/deps/basisu"
+   }
+
+   defines { "_CRT_SECURE_NO_WARNINGS", "BASISD_SUPPORT_KTX2=1", "BASISD_SUPPORT_KTX2_ZSTD=0" }
 
    vfStandardConfigs()
 

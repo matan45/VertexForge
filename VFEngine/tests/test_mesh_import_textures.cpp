@@ -84,6 +84,36 @@ namespace
         out.write(reinterpret_cast<const char*>(b.data()), static_cast<std::streamsize>(b.size()));
     }
 
+    // A material that references a DDS diffuse map (VK-1642 routing through the gate).
+    constexpr const char* ddsMtl =
+        "newmtl Textured\nKd 1 1 1\nmap_Kd surface.dds\n";
+
+    // Minimal uncompressed A8R8G8B8 DDS (128-byte header + BGRA pixels). Exercises
+    // Texture::loadDdsFile via the material-import gate.
+    void writeSolidDds(const fs::path& path, uint32_t w, uint32_t h)
+    {
+        std::vector<unsigned char> f;
+        const auto put32 = [&](uint32_t v)
+        {
+            f.push_back(static_cast<unsigned char>(v & 0xFF));
+            f.push_back(static_cast<unsigned char>((v >> 8) & 0xFF));
+            f.push_back(static_cast<unsigned char>((v >> 16) & 0xFF));
+            f.push_back(static_cast<unsigned char>((v >> 24) & 0xFF));
+        };
+        f.push_back('D'); f.push_back('D'); f.push_back('S'); f.push_back(' ');
+        put32(124); put32(0x1007); put32(h); put32(w); put32(w * 4); put32(0); put32(1);
+        for (int i = 0; i < 11; ++i) put32(0);
+        put32(32); put32(0x41); put32(0); put32(32);
+        put32(0x00FF0000u); put32(0x0000FF00u); put32(0x000000FFu); put32(0xFF000000u);
+        put32(0x1000); put32(0); put32(0); put32(0); put32(0);
+        for (uint32_t i = 0; i < w * h; ++i)
+        {
+            f.push_back(0x20); f.push_back(0x40); f.push_back(0x80); f.push_back(0xFF); // B,G,R,A
+        }
+        std::ofstream out(path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(f.data()), static_cast<std::streamsize>(f.size()));
+    }
+
     controllers::ImportResult importModelWithTextures(const fs::path& dir, const fs::path& src,
                                                       bool importTextures)
     {
@@ -120,6 +150,25 @@ TEST_SUITE("MeshTextureImport")
         fs::path vfImageMeta = vfImage;
         vfImageMeta += "." + FileExtension::assetMeta;
         CHECK(fs::exists(vfImageMeta));
+
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    }
+
+    TEST_CASE("importMaterialTextures imports a material-referenced DDS as .vfImage (VK-1642)")
+    {
+        fs::path dir = makeScratchDir("vf_texture_import_dds");
+        writeSolidDds(dir / "surface.dds", 16, 16);
+        writeText(dir / "textured.mtl", ddsMtl);
+        fs::path src = dir / "textured.obj";
+        writeText(src, texturedObj);
+
+        auto result = importModelWithTextures(dir, src, true);
+
+        CHECK(result.failureCount == 0);
+        // The DDS is no longer skipped; it imports next to the model, namespaced.
+        const fs::path vfImage = dir / ("textured_surface." + FileExtension::textrue);
+        CHECK(fs::exists(vfImage));
 
         std::error_code ec;
         fs::remove_all(dir, ec);

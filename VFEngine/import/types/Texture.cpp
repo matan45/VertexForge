@@ -8,6 +8,7 @@
 #include "cpumem/CpuMemoryManager.hpp"
 #include "cpumem/CpuMemoryCategories.hpp"
 #include "cpumem/ScopedCpuMemory.hpp"
+#include "ImportDecodeGuard.hpp"
 
 #include <iostream>
 #define TINYEXR_USE_MINIZ 0
@@ -29,41 +30,6 @@
 #include <filesystem>
 #include <algorithm>
 #include <cstring>
-
-namespace
-{
-    // Maximum number of concurrent heavy import decodes (texture + HDR + mesh)
-    // within the Import module. Default 2 so at most two big scratch buffers
-    // co-exist regardless of how many worker threads submit simultaneously.
-    constexpr int kImportDecodeConcurrency = 2;
-    std::counting_semaphore<kImportDecodeConcurrency> gImportDecodeSem{kImportDecodeConcurrency};
-
-    // RAII acquire/release guard for the import-decode concurrency semaphore.
-    struct ImportDecodeLock
-    {
-        ImportDecodeLock()  { gImportDecodeSem.acquire(); }
-        ~ImportDecodeLock() { gImportDecodeSem.release(); }
-        ImportDecodeLock(const ImportDecodeLock&) = delete;
-        ImportDecodeLock& operator=(const ImportDecodeLock&) = delete;
-    };
-
-    // Category ids: resolved once per module, then reused lock-free.
-    memory::CategoryId texDecodeCategory()
-    {
-        static const memory::CategoryId id =
-            memory::CpuMemoryManager::instance().registerCategory(
-                memory::categories::ImportTextureDecode, memory::CategoryKind::Transient);
-        return id;
-    }
-
-    memory::CategoryId hdrDecodeCategory()
-    {
-        static const memory::CategoryId id =
-            memory::CpuMemoryManager::instance().registerCategory(
-                memory::categories::ImportHdrDecode, memory::CategoryKind::Transient);
-        return id;
-    }
-}
 
 
 namespace types

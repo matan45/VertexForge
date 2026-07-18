@@ -45,7 +45,8 @@ namespace types
         }
 
         // Formats stb_image (used by Texture::loadTextureFile) can decode. Block-
-        // compressed containers (dds/ktx/ktx2) are intentionally excluded — see VK-1642.
+        // compressed containers (dds/ktx/ktx2) are handled separately via
+        // Texture::loadKtxFile / loadDdsFile (VK-1642), not through this list.
         bool isStbSupportedExtension(const std::string& extLower)
         {
             static const std::unordered_set<std::string> supported = {
@@ -82,6 +83,11 @@ namespace types
         const auto outPathFor = [&](const std::string& stem)
         {
             return (std::filesystem::path(location) / (stem + "." + FileExtension::textrue)).string();
+        };
+
+        const auto outPathForExt = [&](const std::string& stem, const std::string& ext)
+        {
+            return (std::filesystem::path(location) / (stem + "." + ext)).string();
         };
 
         for (unsigned int m = 0; m < scene->mNumMaterials; ++m)
@@ -157,23 +163,43 @@ namespace types
                         continue;
 
                     const std::string extLower = toLower(resolved.extension().string());
-                    if (!isStbSupportedExtension(extLower))
+                    const bool isKtx = (extLower == ".ktx" || extLower == ".ktx2");
+                    const bool isDds = (extLower == ".dds");
+                    if (!isStbSupportedExtension(extLower) && !isKtx && !isDds)
                     {
-                        vfLogWarning("Material texture '{}' has unsupported format '{}' (KTX/KTX2/DDS need "
-                                     "conversion, see VK-1642); skipping",
+                        vfLogWarning("Material texture '{}' has unsupported format '{}'; skipping",
                                      resolved.string(), extLower);
                         continue;
                     }
 
                     const std::string stem = uniqueStem(sanitizeStem(resolved.stem().string()));
                     const importConfig::ImportFiles textureFile(resolved.string(), config);
-                    textureWriter.loadTextureFile(textureFile, stem, location);
 
-                    // loadTextureFile returns void and logs its own errors; treat the
-                    // written .vfImage's existence as the success signal.
-                    const std::string outPath = outPathFor(stem);
-                    if (std::filesystem::exists(outPath, ec))
-                        outWrittenTextures.push_back(outPath);
+                    if (isKtx || isDds)
+                    {
+                        // KTX2/KTX1/DDS (VK-1642): decode to .vfImage (LDR) or .vfHdr (HDR).
+                        const TextureImportResult result =
+                            isKtx ? textureWriter.loadKtxFile(textureFile, stem, location)
+                                  : textureWriter.loadDdsFile(textureFile, stem, location);
+                        if (result != TextureImportResult::Failed)
+                        {
+                            const std::string& ext = (result == TextureImportResult::WroteVfHdr)
+                                                         ? FileExtension::hdr : FileExtension::textrue;
+                            const std::string outPath = outPathForExt(stem, ext);
+                            if (std::filesystem::exists(outPath, ec))
+                                outWrittenTextures.push_back(outPath);
+                        }
+                    }
+                    else
+                    {
+                        textureWriter.loadTextureFile(textureFile, stem, location);
+
+                        // loadTextureFile returns void and logs its own errors; treat the
+                        // written .vfImage's existence as the success signal.
+                        const std::string outPath = outPathFor(stem);
+                        if (std::filesystem::exists(outPath, ec))
+                            outWrittenTextures.push_back(outPath);
+                    }
                 }
             }
         }

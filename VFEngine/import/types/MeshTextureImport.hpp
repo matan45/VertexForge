@@ -13,10 +13,11 @@ namespace types
     // assets. External file references are resolved relative to sourceDir (with a
     // filename-only fallback for absolute paths baked by other tools); "*N" references
     // are pulled from the embedded texture array. Each distinct source is imported
-    // once and the written .vfImage path is appended to outWrittenTextures. Formats
-    // stb_image cannot decode (KTX/KTX2/DDS) are skipped with a warning (see VK-1642).
-    // Materials themselves are NOT created or wired — the imported .vfImages are made
-    // available for the user to author materials from.
+    // once and the written .vfImage/.vfHdr path is appended to outWrittenTextures.
+    // stb-decodable formats go through Texture::loadTextureFile; KTX2/KTX1/DDS through
+    // Texture::loadKtxFile / loadDdsFile (VK-1642). Materials themselves are NOT
+    // created or wired — the imported images are made available for the user to
+    // author materials from.
     void importMaterialTextures(const aiScene* scene, const std::filesystem::path& sourceDir,
                                 std::string_view location, std::string_view fileStem,
                                 const importConfig::ImportConfig& config,
