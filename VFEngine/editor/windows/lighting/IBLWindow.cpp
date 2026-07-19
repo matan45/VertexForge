@@ -54,7 +54,7 @@ namespace windows
                     {L"Hdr Files (*.vfHdr)", L"*.vfHdr"}
                 };
 
-                auto picked = fileDialog.openFileDialog(fileTypes);
+                fs::path picked = fileDialog.openFileDialog(fileTypes);
                 std::string pickedPath = StringUtil::wstringToUtf8(picked.wstring());
                 if (!pickedPath.empty())
                 {
