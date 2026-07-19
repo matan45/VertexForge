@@ -252,7 +252,7 @@ TEST_SUITE("KtxImport")
         fs::remove_all(dir, ec);
     }
 
-    TEST_CASE("KTX2 Basis fixture imports to .vfImage" * doctest::skip(true))
+    TEST_CASE("KTX2 Basis fixture imports to .vfImage")
     {
         // Enable by removing skip(true) and dropping a small ETC1S/UASTC .ktx2 at
         // this path (e.g. `toktx --encode etc1s --t2 test.ktx2 img.png`). The Basis
