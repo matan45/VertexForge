@@ -88,8 +88,7 @@ namespace windows
             }
             if (!hasFile) ImGui::EndDisabled();
 
-            ImGui::SetCursorPosX(
-                ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Close").x - ImGui::GetStyle().FramePadding.x * 2);
+            ImGui::Separator();
 
             if (ImGui::Button("Remove", ImVec2(120, 0)))
             {
