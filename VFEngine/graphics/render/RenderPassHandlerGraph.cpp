@@ -98,6 +98,20 @@ namespace render
         // full control over all layout transitions.
         // =====================================================================
 
+        // VK-1577: drive the reflection-probe scene capture (at most one cube face, self-contained
+        // submit) before any pass is registered, so a face captured now is visible to the prefilter
+        // pass added further down this same build.
+        //
+        // This lives here rather than at the render-texture hook because that hook only runs in PLAY
+        // MODE with RenderTexture components present (RenderTexturePlayModeHandler::update early-outs
+        // on !rttActive) — probes must bake in the editor viewport too. buildFrameGraph is the one
+        // entry point that runs every frame in BOTH the Editor and the Runtime.
+        //
+        // Recording the main command buffer is in progress here, but this only SUBMITS separate
+        // command buffers (the RTT viewport's, plus a single-time copy) — the same self-contained
+        // pattern HdrEnvironmentCapture::pollSource already uses at this point in the frame.
+        tickReflectionProbes();
+
         // Scoped MSAA: the pre-resolve passes write the multisampled handles; when
         // MSAA is off these aliases ARE the single-sample handles, so the pass
         // declarations below are unconditional. The SceneMeshes pass resolves into
