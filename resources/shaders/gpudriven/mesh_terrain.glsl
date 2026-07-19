@@ -400,6 +400,11 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 #include "../common/caustic_sampling.glsl"
 #endif
 
+// VK-1577: local reflection probes at set 0, bindings 4/5 (see mesh_shader_gpudriven.glsl).
+#ifdef REFLECTION_PROBES_ENABLED
+#include "../common/reflection_probes.glsl"
+#endif
+
 // Terrain needs higher normal bias than regular meshes to avoid self-shadow artifacts
 float getTerrainNormalBiasScale() {
     return 3.0;
@@ -678,6 +683,14 @@ void main() {
     float NdotV = max(dot(N, V), 0.0);
     vec3 irradiance = texture(irradianceMap, iblRotateY(N, camera.iblRotation.xy)).rgb;
     vec3 prefilteredColor = textureLod(prefilterMap, iblRotateY(R, camera.iblRotation.xy), roughness * MAX_REFLECTION_LOD).rgb;
+#ifdef REFLECTION_PROBES_ENABLED
+    // VK-1577: same probe override as the mesh path — terrain inside a probe (a cave floor, an
+    // interior courtyard) must agree with the meshes standing on it, or the two disagree exactly at
+    // the contact point.
+    float probeRemaining;
+    vec3 probeSpecular = sampleReflectionProbes(R, fragWorldPos, roughness, probeRemaining);
+    prefilteredColor = probeSpecular + prefilteredColor * probeRemaining;
+#endif
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
     vec3 specularScale;

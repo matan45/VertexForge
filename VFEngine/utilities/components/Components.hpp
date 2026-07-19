@@ -50,7 +50,7 @@ namespace components
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,
-                                               FogVolumeComponent,
+                                               FogVolumeComponent, ReflectionProbeComponent,
                                                VolumetricNavVolumeComponent, VolumetricAgentComponent,
                                                WeatherZoneComponent,
                                                DestructibleComponent, FragmentComponent>;

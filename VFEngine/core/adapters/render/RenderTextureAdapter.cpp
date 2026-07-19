@@ -182,6 +182,12 @@ namespace core
             }
         }
 
+        // VK-1577: reflection probe capture. This is the right hook because a probe face IS an
+        // arbitrary-camera scene render — the same thing every controller above just did — and it
+        // must happen before the frame graph, whose prefilter pass consumes the captured faces.
+        // At most one face per frame, and a complete no-op for scenes without probes.
+        passHandler->tickReflectionProbes();
+
         // VK-1334 minimap flicker fix: for every enabled controller (including those that did
         // NOT render this frame), point the external descriptor for the current swapchain slot
         // at the most recently produced RTT view. Cold-slot images were pre-cleared to clearColor

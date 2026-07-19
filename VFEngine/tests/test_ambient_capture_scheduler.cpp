@@ -140,6 +140,85 @@ TEST_CASE("ambient capture: restart on invalidation discards the partial cycle a
     CHECK(s.epoch == 200u);
 }
 
+// VK-1577 — reflection probes reuse this scheduler with irrFaces = 0 (probes are specular-only:
+// diffuse ambient stays on the global IBL + DDGI, so no per-probe irradiance convolution runs).
+// That collapses irrEnd onto envEnd in itemAt(), a branch no VK-1569 caller ever exercises — these
+// cases pin it down so a future edit to itemAt() cannot silently break the probe bake.
+TEST_CASE("ambient capture: probe plan (irrFaces = 0) emits env then prefilter, never irradiance")
+{
+    AmbientCaptureScheduler s;
+    s.plan.irrFaces = 0;
+
+    CHECK(s.plan.totalItems() == 36u); // 6 env + 0 irradiance + 30 prefilter
+    CHECK(s.remaining() == 36u);
+
+    std::vector<WorkItem> items;
+    while (!s.cycleComplete())
+        s.advance(4, [&](const WorkItem& w) { items.push_back(w); });
+
+    REQUIRE(items.size() == 36u);
+
+    SUBCASE("no irradiance item is ever emitted")
+    {
+        for (const WorkItem& w : items)
+            CHECK(w.phase != CapturePhase::Irradiance);
+    }
+
+    SUBCASE("the six env faces come first, in order")
+    {
+        for (uint32_t i = 0; i < 6u; ++i)
+        {
+            CHECK(items[i].phase == CapturePhase::Env);
+            CHECK(items[i].face == i);
+        }
+    }
+
+    SUBCASE("prefilter starts immediately after the env faces and stays mip-major")
+    {
+        CHECK(items[6].phase == CapturePhase::Prefilter);
+        CHECK(items[6].face == 0u);
+        CHECK(items[6].mip == 0u);
+
+        CHECK(items[11].phase == CapturePhase::Prefilter);
+        CHECK(items[11].face == 5u);
+        CHECK(items[11].mip == 0u);
+
+        CHECK(items[12].mip == 1u); // next mip band begins
+        CHECK(items[12].face == 0u);
+
+        CHECK(items[35].phase == CapturePhase::Prefilter);
+        CHECK(items[35].face == 5u);
+        CHECK(items[35].mip == 4u); // last item = last face of the last mip
+    }
+
+    SUBCASE("every (face, mip) pair is covered exactly once")
+    {
+        int prefilter[6][5] = {};
+        for (const WorkItem& w : items)
+        {
+            if (w.phase != CapturePhase::Prefilter) continue;
+            REQUIRE(w.face < 6u);
+            REQUIRE(w.mip < 5u);
+            ++prefilter[w.face][w.mip];
+        }
+        for (int f = 0; f < 6; ++f)
+            for (int m = 0; m < 5; ++m)
+                CHECK(prefilter[f][m] == 1);
+    }
+
+    SUBCASE("publish/restart semantics are unchanged by the shortened plan")
+    {
+        CHECK(s.shouldPublish());
+        s.markPublished();
+        CHECK_FALSE(s.shouldPublish());
+
+        s.restart(7);
+        CHECK(s.cursor == 0u);
+        CHECK(s.remaining() == 36u); // restart must not resurrect the irradiance items
+        CHECK_FALSE(s.shouldPublish());
+    }
+}
+
 TEST_CASE("ambient capture: linear index maps to the right phase/face/mip at the boundaries")
 {
     AmbientCaptureScheduler s;

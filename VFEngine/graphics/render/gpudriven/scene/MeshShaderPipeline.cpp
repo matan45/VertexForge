@@ -6,8 +6,10 @@
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../probe/ReflectionProbeTypes.hpp"
 #include "print/Log.hpp"
 #include <array>
+#include <string>
 
 namespace render::gpudriven
 {
@@ -622,6 +624,14 @@ namespace render::gpudriven
         if (info.selectionCoverageLayout)
         {
             meshShader->addMacroDefinition("SELECTION_COVERAGE_ENABLED");
+        }
+        if (info.reflectionProbesEnabled)
+        {
+            // VK-1577. MAX_REFLECTION_PROBES is injected rather than hardcoded in GLSL so the
+            // shader array length and the set-0 binding-4 descriptorCount cannot drift apart.
+            meshShader->addMacroDefinition("REFLECTION_PROBES_ENABLED");
+            meshShader->addMacroDefinition("MAX_REFLECTION_PROBES",
+                                           std::to_string(probe::MAX_REFLECTION_PROBES));
         }
         meshShader->readShader("../../resources/shaders/gpudriven/task_gpudriven.glsl");
         meshShader->readShader("../../resources/shaders/gpudriven/mesh_shader_gpudriven.glsl");

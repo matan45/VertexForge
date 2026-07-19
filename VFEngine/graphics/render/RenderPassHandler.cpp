@@ -433,6 +433,15 @@ namespace render
             vtEma.clear();
         }
         if (postProcessPipeline) postProcessPipeline->cleanup();
+        // VK-1577: destroy the probe cubes BEFORE meshPipeline::cleanUp, which frees the descriptor
+        // set that binds them. The manager also owns a RenderTextureViewPort, so it must be torn
+        // down while the device and swapchain are still valid.
+        if (reflectionProbes)
+        {
+            reflectionProbes->cleanup();
+            reflectionProbes.reset();
+            reflectionProbePermutationActive = false;
+        }
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();
         iblRenderer->cleanUp();

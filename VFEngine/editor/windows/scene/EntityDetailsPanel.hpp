@@ -62,6 +62,7 @@
 #include "../details/DecalDrawer.hpp"
 #include "../details/ReverbZoneDrawer.hpp"
 #include "../details/FogVolumeDrawer.hpp"
+#include "../details/ReflectionProbeDrawer.hpp"
 #include "../details/NavmeshRootDrawer.hpp"
 #include "../details/WorldSectorDrawer.hpp"
 #include "../details/MetaComponentDrawer.hpp"
@@ -134,6 +135,7 @@ namespace windows
         details::DecalDrawer decalDrawer;
         details::ReverbZoneDrawer reverbZoneDrawer;
         details::FogVolumeDrawer fogVolumeDrawer;
+        details::ReflectionProbeDrawer reflectionProbeDrawer;
         details::NavmeshRootDrawer navmeshRootDrawer;
         details::WorldSectorDrawer worldSectorDrawer;
         details::MetaComponentDrawer metaComponentDrawer;

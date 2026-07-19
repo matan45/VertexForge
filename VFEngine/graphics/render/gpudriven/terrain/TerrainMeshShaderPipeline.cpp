@@ -5,9 +5,11 @@
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
+#include "../../probe/ReflectionProbeTypes.hpp"
 #include "print/Log.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include <array>
+#include <string>
 
 namespace
 {
@@ -535,6 +537,13 @@ namespace render::gpudriven
         if (rtPointShadowEnabled && rtPointShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_POINT_SHADOW_ENABLED");
+        }
+        if (reflectionProbesEnabled)
+        {
+            // VK-1577 — must match MeshShaderPipeline's injection exactly.
+            terrainShader->addMacroDefinition("REFLECTION_PROBES_ENABLED");
+            terrainShader->addMacroDefinition("MAX_REFLECTION_PROBES",
+                                              std::to_string(probe::MAX_REFLECTION_PROBES));
         }
         terrainShader->readShader("../../resources/shaders/gpudriven/task_terrain.glsl");
         terrainShader->readShader("../../resources/shaders/gpudriven/mesh_terrain.glsl");

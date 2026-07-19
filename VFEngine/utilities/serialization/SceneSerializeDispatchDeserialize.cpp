@@ -88,6 +88,11 @@ namespace serialization
             auto& fogComp = entity.addOrReplaceComponent<components::FogVolumeComponent>();
             deserializeFogVolume(c["fogVolume"], fogComp);
         }
+        if (c.contains("reflectionProbe"))
+        {
+            auto& probeComp = entity.addOrReplaceComponent<components::ReflectionProbeComponent>();
+            deserializeReflectionProbe(c["reflectionProbe"], probeComp);
+        }
         if (c.contains("weatherZone"))
         {
             auto& weatherZoneComp = entity.addOrReplaceComponent<components::WeatherZoneComponent>();

@@ -129,6 +129,11 @@ namespace render
         class HdrEnvironmentCapture; // VK-1574: non-blocking HDR IBL bake
     }
 
+    namespace probe
+    {
+        class ReflectionProbeManager; // VK-1577: local reflection probe bake
+    }
+
     namespace mesh
     {
         class StaticMeshPipeline;
@@ -191,6 +196,10 @@ namespace render
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
         std::unique_ptr<atmosphere::SkyEnvironmentCapture> skyEnvCapture; // VK-1569 dynamic sky->IBL ambient
         std::unique_ptr<ibl::HdrEnvironmentCapture> hdrEnvCapture; // VK-1574 non-blocking HDR IBL bake
+        std::unique_ptr<probe::ReflectionProbeManager> reflectionProbes; // VK-1577 local probe bake
+        // Tracks the last permutation the mesh/terrain pipelines were built with, so the 0<->N
+        // transition recreates them exactly once instead of every frame.
+        bool reflectionProbePermutationActive = false;
         // True while the mesh IBL descriptor is bound to the HDR capture's live maps (first-bind gate).
         bool hdrCaptureMeshBound = false;
         // Stored so the HDR capture can retire old source textures without a waitIdle.
@@ -401,6 +410,22 @@ namespace render
         void reinitMeshPipelineWithDynamicAmbient();          // VK-1569: bind the dynamic-ambient live maps
         [[nodiscard]] uint64_t computeAmbientCaptureEpoch() const; // VK-1569: sky-state hash driving recapture
         void reinitMeshPipelineWithHdrCapture();              // VK-1574: bind the HDR capture's live maps
+
+    public:
+        // VK-1577 — reflection probes.
+        // Called at the render-texture point (before the frame graph): renders at most one probe
+        // cube face this frame. Lazily creates the probe manager the first time a scene actually
+        // contains a probe, so probe-free projects pay nothing — not even the ~8 MiB of cubes.
+        void tickReflectionProbes();
+        [[nodiscard]] probe::ReflectionProbeManager* getReflectionProbeManager() const
+        {
+            return reflectionProbes.get();
+        }
+
+    private:
+        // Publishes the probe cubes + SSBO into the mesh pipeline's set 0, and flips the
+        // REFLECTION_PROBES_ENABLED permutation when the scene crosses 0 <-> N baked probes.
+        void syncReflectionProbeResources();
         // VK-1574: non-blocking HDR IBL apply/remove (called by IBLController). applyHdrEnvironment
         // sets the source, blocking-bakes only on the first bind, and rides the per-frame capture on
         // subsequent applies; removeHdrEnvironment reverts the mesh + skybox.

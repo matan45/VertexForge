@@ -220,6 +220,9 @@ namespace serialization
         static json serializeFogVolume(const components::FogVolumeComponent& fog);
         static void deserializeFogVolume(const json& j, components::FogVolumeComponent& fog);
 
+        static json serializeReflectionProbe(const components::ReflectionProbeComponent& probe);
+        static void deserializeReflectionProbe(const json& j, components::ReflectionProbeComponent& probe);
+
         static json serializeWeatherZone(const components::WeatherZoneComponent& zone);
         static void deserializeWeatherZone(const json& j, components::WeatherZoneComponent& zone);
 

@@ -2,6 +2,7 @@
 
 #include "MeshTypes.hpp"
 #include "../ibl/IBLTypes.hpp"
+#include "../probe/ReflectionProbeTypes.hpp"
 #include "material/MaterialTypes.hpp"
 #include "material/MaterialManager.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
@@ -88,6 +89,21 @@ namespace render::mesh
         ibl::ImageData cachedPrefilterMap;
         ibl::ImageData cachedBrdfLUT;
         uint64_t iblDescriptorVersion = 0;
+
+        // VK-1577 — reflection probes at set 0, bindings 4 (cube array of MAX probes) and 5 (SSBO).
+        //
+        // `emptyProbeBuffer` is a zero-filled, full-size probe buffer that always exists. It is what
+        // binding 5 points at before any probe manager appears, AND what every EXTERNAL set gets
+        // (preview / render-texture / probe-capture) — its count of 0 is what structurally prevents
+        // a probe capture from sampling the very cubes it is rendering into.
+        //
+        // Unset entries in `cachedProbeCubes` fall back to `cachedPrefilterMap` (the global
+        // environment) rather than a flat default, so an un-baked probe degrades to the sky instead
+        // of sampling garbage — and that image already has the right format, mip count and sampler.
+        vk::Buffer emptyProbeBuffer;
+        core::VulkanAllocation emptyProbeAllocation;
+        vk::Buffer cachedProbeBuffer;  // null => emptyProbeBuffer
+        std::array<ibl::ImageData, probe::MAX_REFLECTION_PROBES> cachedProbeCubes{};
 
         mutable float currentTime{0.0f};
 
@@ -178,9 +194,22 @@ namespace render::mesh
         // VK-1334: build an additional IBL descriptor set that binds an external CameraUBO at
         // binding 0 (matching `descriptorSetLayout`), reusing the cached IBL images for bindings
         // 1-3. Used by RenderTextureViewPort so RTT passes don't write the shared CameraUBO.
+        //
+        // VK-1577: these sets always get the EMPTY probe buffer at binding 5. Off-screen passes must
+        // not sample reflection probes — most importantly the probe capture itself, which renders the
+        // scene into the very cubes bound at binding 4.
         vk::DescriptorSet createExternalIBLDescriptorSet(vk::Buffer externalCameraUBO,
                                                          vk::DescriptorPool externalPool) const;
         uint64_t getIBLDescriptorVersion() const { return iblDescriptorVersion; }
+
+        // VK-1577: point set 0 bindings 4/5 at the probe manager's live cubes + SSBO. Pass a null
+        // buffer to revert to the empty (count = 0) buffer. Cube slots left with a null imageView
+        // fall back to the global prefilter map. Rewrites the main descriptor set in place; the
+        // image VIEWS are stable for the manager's lifetime, so this is called on
+        // allocation/teardown, never per frame.
+        void setReflectionProbeResources(
+            vk::Buffer probeBuffer,
+            const std::array<ibl::ImageData, probe::MAX_REFLECTION_PROBES>& cubes);
 
         std::string loadMesh(std::string_view meshPath);
         std::string uploadMesh(const std::string& meshId, const resource::MeshesData& meshData);
@@ -220,6 +249,12 @@ namespace render::mesh
                                  const ibl::ImageData& prefilterMap,
                                  const ibl::ImageData& brdfLUT);
         void createCameraUBO();
+        // VK-1577: the always-valid zero-filled probe buffer. Must run before any descriptor set is
+        // written, since every set binds it (directly, or as the fallback for binding 5).
+        void createEmptyProbeBuffer();
+        // VK-1577: THE single place bindings 4 and 5 are written. Both descriptor-set allocation
+        // paths funnel through it so the two can never drift apart.
+        void writeProbeBindings(vk::DescriptorSet target, vk::Buffer probeBuffer) const;
         void createPipelineLayout();
         void createGraphicsPipeline();
 

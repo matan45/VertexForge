@@ -218,6 +218,70 @@ namespace controllers::offscreen
         }
     }
 
+    void DebugFrameBuilder::prepareReflectionProbes(const FrameContext& ctx)
+    {
+        if (ctx.playModeActive || !ctx.showDebugRendering) return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = events::EventDispatcher::instance();
+        auto view = registry.view<components::ReflectionProbeComponent, components::WorldTransformComponent>();
+
+        for (auto entity : view)
+        {
+            if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
+            const auto& probe = view.get<components::ReflectionProbeComponent>(entity);
+            if (!probe.showGizmo) continue;
+            const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
+            glm::vec3 position = glm::vec3(worldTransform.worldMatrix[3]);
+
+            // Outer = the influence bounds (where the probe's contribution reaches zero).
+            // Inner = the blend boundary, i.e. where it reaches FULL strength. Note this is the
+            // opposite nesting from fog volumes, whose falloff extends OUTWARD past the bounds:
+            // a probe's blendDistance eats inward from the surface, so the inner box is smaller.
+            glm::vec4 boundsColor(1.0f, 0.75f, 0.3f, 1.0f);
+            glm::vec4 blendColor(0.5f, 0.38f, 0.15f, 1.0f);
+
+            if (probe.shape == components::ReflectionProbeShape::Sphere)
+            {
+                const float radius = probe.halfExtents.x;
+
+                events::debugdraw::DrawSphereCommand boundsCmd;
+                boundsCmd.center = position;
+                boundsCmd.radius = radius;
+                boundsCmd.color = boundsColor;
+                dispatcher.execute(boundsCmd);
+
+                const float inner = radius - probe.blendDistance;
+                if (inner > 0.0f)
+                {
+                    events::debugdraw::DrawSphereCommand blendCmd;
+                    blendCmd.center = position;
+                    blendCmd.radius = inner;
+                    blendCmd.color = blendColor;
+                    dispatcher.execute(blendCmd);
+                }
+            }
+            else
+            {
+                events::debugdraw::DrawBoxCommand boundsCmd;
+                boundsCmd.center = position;
+                boundsCmd.halfExtents = probe.halfExtents;
+                boundsCmd.color = boundsColor;
+                dispatcher.execute(boundsCmd);
+
+                const glm::vec3 inner = probe.halfExtents - glm::vec3(probe.blendDistance);
+                if (inner.x > 0.0f && inner.y > 0.0f && inner.z > 0.0f)
+                {
+                    events::debugdraw::DrawBoxCommand blendCmd;
+                    blendCmd.center = position;
+                    blendCmd.halfExtents = inner;
+                    blendCmd.color = blendColor;
+                    dispatcher.execute(blendCmd);
+                }
+            }
+        }
+    }
+
     void DebugFrameBuilder::prepareGrid(const FrameContext& ctx)
     {
         if (!ctx.showGrid || ctx.playModeActive) return;

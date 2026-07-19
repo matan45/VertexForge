@@ -24,6 +24,7 @@ namespace controllers::offscreen
         void prepareAudioSpheres(const FrameContext& ctx);
         void prepareReverbZones(const FrameContext& ctx);
         void prepareFogVolumes(const FrameContext& ctx);
+        void prepareReflectionProbes(const FrameContext& ctx);
         void prepareGrid(const FrameContext& ctx);
         void preparePhysicsColliders(const FrameContext& ctx);
         void prepareLightGizmos(const FrameContext& ctx);

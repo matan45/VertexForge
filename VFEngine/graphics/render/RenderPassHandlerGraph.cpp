@@ -10,6 +10,7 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
 #include "ibl/HdrEnvironmentCapture.hpp"
+#include "probe/ReflectionProbeManager.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -181,6 +182,23 @@ namespace render
                     captureBuilder.setSideEffect();
                 }
             }
+        }
+
+        // VK-1577: the GGX-prefilter half of the reflection probe bake. The scene faces themselves
+        // are captured at the render-texture point (their own submits, one face per frame); this
+        // pass convolves the finished env scratch cube and publishes it into the probe's live cube.
+        // Registered before the mesh passes so publish()'s barriers order the live cube ahead of the
+        // fragment reads that sample it. Writes only its own persistent cubemaps => side-effect pass.
+        if (reflectionProbes && reflectionProbes->isInitialized())
+        {
+            auto probeBuilder = frameGraph->addPass("ReflectionProbePrefilter",
+                [this](vk::CommandBuffer cmd, uint32_t) {
+                    // Same budget shape as the sky/HDR captures: a handful of items per frame keeps
+                    // the bake invisible in the frame time.
+                    reflectionProbes->recordGraphWork(cmd, 6u);
+                });
+            probeBuilder.setSegment(graph::HookSegment::Scene);
+            probeBuilder.setSideEffect();
         }
 
         // Atmosphere Sky / IBL

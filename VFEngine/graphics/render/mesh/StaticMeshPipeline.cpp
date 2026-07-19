@@ -173,6 +173,20 @@ namespace render::mesh
             cameraUBOAllocation = {};
         }
 
+        // VK-1577: torn down alongside the descriptor sets that reference it, and recreated by
+        // createDescriptorSet() on the next init. Also drop the cached probe handles — the manager
+        // re-publishes them after a reinit, and holding stale views here would make the next
+        // writeProbeBindings() bind destroyed images.
+        if (emptyProbeBuffer)
+        {
+            device.getLogicalDevice().destroyBuffer(emptyProbeBuffer);
+            emptyProbeBuffer = nullptr;
+            device.getMemoryManager().free(emptyProbeAllocation);
+            emptyProbeAllocation = {};
+        }
+        cachedProbeBuffer = nullptr;
+        cachedProbeCubes = {};
+
         if (graphicsPipeline)
             device.getLogicalDevice().destroyPipeline(graphicsPipeline);
         if (pipelineLayout)

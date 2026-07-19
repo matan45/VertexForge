@@ -357,6 +357,12 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
 #include "../common/caustic_sampling.glsl"
 #endif
 
+// VK-1577: local reflection probes at set 0, bindings 4/5. Compiled in only when the scene actually
+// has at least one baked probe, so a probe-free scene produces byte-identical code to before.
+#ifdef REFLECTION_PROBES_ENABLED
+#include "../common/reflection_probes.glsl"
+#endif
+
 // All three optional RT shadow masks share one descriptor set (set 13) so sets 15/16 stay free,
 // keeping the fragment layout within 14 bound sets. Each binding is declared only under its macro;
 // the matching binding in the shared set is written when that RT type is online (PARTIALLY_BOUND).
@@ -670,6 +676,15 @@ void main() {
     float NdotV = max(dot(N, V), 0.0);
     vec3 irradiance = texture(irradianceMap, iblRotateY(N, camera.iblRotation.xy)).rgb;
     vec3 prefilteredColor = textureLod(prefilterMap, iblRotateY(R, camera.iblRotation.xy), roughness * MAX_REFLECTION_LOD).rgb;
+#ifdef REFLECTION_PROBES_ENABLED
+    // VK-1577: local probes override the GLOBAL specular inside their bounds. Whatever weight the
+    // probes do not claim falls through to the sky term computed just above, so the hand-off at a
+    // probe boundary is a cross-fade rather than a switch. Diffuse `irradiance` is untouched by
+    // design — probes are specular-only; diffuse stays on the global IBL + DDGI.
+    float probeRemaining;
+    vec3 probeSpecular = sampleReflectionProbes(R, fragWorldPos, roughness, probeRemaining);
+    prefilteredColor = probeSpecular + prefilteredColor * probeRemaining;
+#endif
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
     vec3 specularScale;

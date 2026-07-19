@@ -22,6 +22,8 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
 #include "ibl/HdrEnvironmentCapture.hpp"
+#include "probe/ReflectionProbeManager.hpp"
+#include "components/Components.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "IBL.hpp"
@@ -182,6 +184,54 @@ namespace render
     // VK-1574: point the mesh IBL descriptor at the HDR capture's live maps (irradiance + prefilter
     // baked from the equirect HDR) with the capture's own static BRDF LUT. One-time reinit on the
     // first bind; the per-frame HdrEnvCapture pass then renders into these same images (stable views).
+    // VK-1577 — reflection probe frame hook. Runs at the render-texture point, before the frame
+    // graph, because capturing a probe face means rendering the scene from that face's camera and
+    // that is a separate submit.
+    //
+    // The manager is created LAZILY on first sighting of a ReflectionProbeComponent: a project with
+    // no probes never allocates the ~8 MiB of cubes, never creates the capture viewport, and never
+    // compiles the probe shader permutation.
+    void RenderPassHandler::tickReflectionProbes()
+    {
+        if (!meshPipelineInitialized) return;
+
+        if (!reflectionProbes)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            if (registry.view<components::ReflectionProbeComponent>().empty())
+                return; // no probes in this scene — stay completely inert
+
+            reflectionProbes = std::make_unique<probe::ReflectionProbeManager>(device, swapChain);
+            reflectionProbes->init(device.getStagingCommandPool());
+
+            // Bind the (still empty) probe cubes + SSBO into set 0 immediately. Every slot is a
+            // valid image from the moment it exists, so the descriptor never points at nothing.
+            meshPipeline->setReflectionProbeResources(
+                reflectionProbes->getBufferManager().getBuffer(),
+                reflectionProbes->getProbeCubes());
+        }
+
+        reflectionProbes->tickSceneCapture(this);
+        syncReflectionProbeResources();
+    }
+
+    void RenderPassHandler::syncReflectionProbeResources()
+    {
+        if (!reflectionProbes) return;
+
+        // Edge-triggered: the permutation flips at most once per scene, on the first probe to
+        // finish baking (and back again if every probe is removed).
+        const bool wantPermutation = reflectionProbes->hasAnyBakedProbe();
+        if (wantPermutation != reflectionProbePermutationActive)
+        {
+            reflectionProbePermutationActive = wantPermutation;
+            if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            {
+                gpuDrivenRenderer->setReflectionProbesEnabled(wantPermutation);
+            }
+        }
+    }
+
     void RenderPassHandler::reinitMeshPipelineWithHdrCapture()
     {
         if (!meshPipelineInitialized || !hdrEnvCapture || !hdrEnvCapture->isInitialized()) return;
