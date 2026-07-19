@@ -82,9 +82,19 @@ namespace render::atmosphere
             cmd.setScissor(0, 1, &scissor);
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, ds, {});
-            cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
             if (roughness)
-                cmd.pushConstants(layout, vk::ShaderStageFlagBits::eFragment, sizeof(glm::mat4), sizeof(float), roughness);
+            {
+                // The prefilter layout has ONE combined range {vertex|fragment, 0, 68}. VUID-01796
+                // requires the push to name ALL stages of any overlapping range, so viewProj (vertex)
+                // and roughness (fragment) must be pushed together as one blob, not split by stage.
+                struct PushBlob { glm::mat4 viewProj; float roughness; } blob{viewProj, *roughness};
+                cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                                  0, sizeof(glm::mat4) + sizeof(float), &blob);
+            }
+            else
+            {
+                cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+            }
             vk::DeviceSize offset = 0;
             cmd.bindVertexBuffers(0, vbo, offset);
             cmd.draw(vertexCount, 1, 0, 0);
