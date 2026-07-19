@@ -29,6 +29,7 @@
 #include "volumetric/VolumetricPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
+#include "ibl/HdrEnvironmentCapture.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
@@ -436,6 +437,7 @@ namespace render
         if (sharedCameraUBO) sharedCameraUBO->cleanup();
         iblRenderer->cleanUp();
         if (skyEnvCapture) skyEnvCapture->cleanup(); // VK-1569
+        if (hdrEnvCapture) hdrEnvCapture->cleanup(); // VK-1574
         clearColor->cleanUp();
     }
 

@@ -136,6 +136,13 @@ namespace services
                 return setIBL(cmd.hdrPath);
             });
 
+        dispatcher.registerCommandHandler<events::render::SetIBLParamsCommand>(
+            [this](const events::render::SetIBLParamsCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(cmd.intensity, cmd.rotationDeg, cmd.tint);
+            });
+
         dispatcher.registerCommandHandler<events::render::RemoveIBLCommand>(
             [this](const events::render::RemoveIBLCommand&)
             {

@@ -255,6 +255,14 @@ namespace controllers
         iblController->setCameraMatrices(view, projection);
     }
 
+    void OffScreenController::iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        renderHandler->setIBLParams(intensity, rotationDeg, tint);
+    }
+
     void OffScreenController::iblRemove()
     {
         iblController->remove();

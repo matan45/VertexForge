@@ -21,6 +21,7 @@
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
+#include "ibl/HdrEnvironmentCapture.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "IBL.hpp"
@@ -38,6 +39,8 @@ namespace render
 {
     void RenderPassHandler::setDeletionQueue(core::DeferredDeletionQueue* queue)
     {
+        deletionQueue = queue; // VK-1574: reused when retiring old HDR source textures
+        if (hdrEnvCapture) hdrEnvCapture->setDeletionQueue(queue);
         if (gpuDrivenRenderer && gpuDrivenRendererInitialized) gpuDrivenRenderer->setDeletionQueue(queue);
         if (textPipeline) textPipeline->setDeletionQueue(queue);
         if (uiPipeline) uiPipeline->setDeletionQueue(queue);
@@ -127,6 +130,7 @@ namespace render
     void RenderPassHandler::reinitMeshPipelineWithDefaults()
     {
         if (!meshPipelineInitialized) return;
+        hdrCaptureMeshBound = false; // VK-1574: mesh no longer bound to the HDR capture's live maps
         device.getLogicalDevice().waitIdle();
         meshPipeline->cleanUpForReinit();
         meshPipeline->initWithDefaults();
@@ -140,6 +144,7 @@ namespace render
     void RenderPassHandler::reinitMeshPipelineWithIBL()
     {
         if (!meshPipelineInitialized || !iblRenderer->isInitialized()) return;
+        hdrCaptureMeshBound = false; // VK-1574
 
         device.getLogicalDevice().waitIdle();
         meshPipeline->cleanUpForReinit();
@@ -161,6 +166,7 @@ namespace render
     void RenderPassHandler::reinitMeshPipelineWithDynamicAmbient()
     {
         if (!meshPipelineInitialized || !skyEnvCapture || !skyEnvCapture->isInitialized()) return;
+        hdrCaptureMeshBound = false; // VK-1574: sky now owns the mesh ambient (mutually exclusive)
 
         device.getLogicalDevice().waitIdle();
         meshPipeline->cleanUpForReinit();
@@ -171,6 +177,78 @@ namespace render
             gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
         if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
             vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
+    }
+
+    // VK-1574: point the mesh IBL descriptor at the HDR capture's live maps (irradiance + prefilter
+    // baked from the equirect HDR) with the capture's own static BRDF LUT. One-time reinit on the
+    // first bind; the per-frame HdrEnvCapture pass then renders into these same images (stable views).
+    void RenderPassHandler::reinitMeshPipelineWithHdrCapture()
+    {
+        if (!meshPipelineInitialized || !hdrEnvCapture || !hdrEnvCapture->isInitialized()) return;
+
+        device.getLogicalDevice().waitIdle();
+        meshPipeline->cleanUpForReinit();
+        meshPipeline->init(hdrEnvCapture->getIrradianceLive(), hdrEnvCapture->getPrefilterLive(),
+                           hdrEnvCapture->getBrdfLUT());
+
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
+
+        hdrCaptureMeshBound = true;
+    }
+
+    // VK-1574: apply an HDR environment without hitching. The .vfHdr decode is off-thread; the old
+    // environment (skybox + ambient) stays bound until the new bake publishes. On the FIRST bind we
+    // do one blocking full capture (scene load already blocks) so the first frame samples valid
+    // ambient; subsequent applies ride the per-frame time-sliced HdrEnvCapture pass.
+    void RenderPassHandler::applyHdrEnvironment(std::string_view path)
+    {
+        if (!hdrEnvCapture)
+        {
+            hdrEnvCapture = std::make_unique<ibl::HdrEnvironmentCapture>(device);
+            hdrEnvCapture->setDeletionQueue(deletionQueue);
+        }
+        if (!hdrEnvCapture->isInitialized())
+            hdrEnvCapture->init(device.getStagingCommandPool());
+
+        hdrEnvCapture->setSource(std::string(path)); // non-blocking: kicks the off-thread decode
+
+        const bool dynamicAmbient = atmospherePipeline && atmospherePipeline->isInitialized() &&
+                                    atmospherePipeline->getSettings().enabled &&
+                                    atmospherePipeline->getSettings().dynamicAmbient;
+
+        if (dynamicAmbient)
+        {
+            // The dynamic sky owns the mesh ambient AND draws the sky while enabled, so the HDR maps
+            // are not consumed yet. Keep the (already-set) source ready; applyAtmosphereSettings bakes
+            // it and rebinds the mesh + skybox on the dynamicAmbient ON->OFF edge. Baking now would be
+            // wasted work.
+            return;
+        }
+
+        if (!hdrCaptureMeshBound)
+        {
+            // First bind: one-time blocking bake so the first frame samples valid ambient (no gray
+            // flash), then bind the mesh + skybox to the live maps once.
+            hdrEnvCapture->captureBlocking(hdrEnvCapture->currentEpoch());
+            reinitMeshPipelineWithHdrCapture();
+            iblRenderer->initSkybox(hdrEnvCapture->getEnvLive());
+        }
+        // else: subsequent apply — old live maps stay bound; the per-frame HdrEnvCapture pass
+        // time-slices the new bake and publish() swaps env + ambient atomically. No reinit, no hitch.
+    }
+
+    // VK-1574: drop the HDR environment — tear down the skybox and revert mesh ambient BEFORE
+    // destroying the capture's live maps, so no consumer samples a freed image.
+    void RenderPassHandler::removeHdrEnvironment()
+    {
+        iblRenderer->remove();                    // stops + destroys the skybox (was bound to envLive)
+        if (meshPipelineInitialized)
+            reinitMeshPipelineWithDefaults();     // rebinds the mesh IBL descriptor off the hdr live maps
+        if (hdrEnvCapture)
+            hdrEnvCapture->cleanup();             // now safe to destroy env/irradiance/prefilter live maps
     }
 
     // VK-1569: quantized hash of the sky state (sun direction + time-of-day + weather ambient). The
@@ -308,8 +386,16 @@ namespace render
         }
         else
         {
-            // ON -> OFF: revert to the scene's static IBL, or the studio-gray default if none loaded.
-            if (iblRenderer->isInitialized())
+            // ON -> OFF: revert to the scene's HDR IBL (VK-1574 capture) if one is loaded, else the
+            // legacy static IBL, else the studio-gray default. When an HDR is present, bake it
+            // blocking first so the live maps are valid the instant the mesh rebinds (no black pop).
+            if (hdrEnvCapture && hdrEnvCapture->isInitialized() && hdrEnvCapture->hasSource())
+            {
+                hdrEnvCapture->captureBlocking(hdrEnvCapture->currentEpoch());
+                reinitMeshPipelineWithHdrCapture();
+                iblRenderer->initSkybox(hdrEnvCapture->getEnvLive());
+            }
+            else if (iblRenderer->isInitialized())
                 reinitMeshPipelineWithIBL();
             else
                 reinitMeshPipelineWithDefaults();

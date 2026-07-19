@@ -197,6 +197,7 @@ namespace serialization
 
         static json serializeIBL(const components::IBLComponent& ibl);
         static asset::AssetRef deserializeIBLRef(const json& j);
+        static void deserializeIBLParams(const json& j, components::IBLComponent& ibl); // VK-1574 knobs
 
         static json serializeMesh(const components::MeshComponent& mesh);
         static void deserializeMesh(const json& j, components::MeshComponent& mesh);

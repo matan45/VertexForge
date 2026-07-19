@@ -37,6 +37,13 @@ namespace serialization
     {
         json j;
         writeAssetRef(j, "hdrRef", ibl.hdrRef);
+        // VK-1574: omit defaults to keep diffs clean.
+        if (ibl.intensity != 1.0f)
+            j["intensity"] = ibl.intensity;
+        if (ibl.rotationDeg != 0.0f)
+            j["rotationDeg"] = ibl.rotationDeg;
+        if (ibl.tint != glm::vec3(1.0f))
+            j["tint"] = json::array({ibl.tint.x, ibl.tint.y, ibl.tint.z});
         return j;
     }
 
@@ -124,6 +131,17 @@ namespace serialization
     asset::AssetRef SceneSerialization::deserializeIBLRef(const json& j)
     {
         return readAssetRef(j, "hdrRef");
+    }
+
+    void SceneSerialization::deserializeIBLParams(const json& j, components::IBLComponent& ibl)
+    {
+        // VK-1574: neutral fallbacks so pre-existing scenes load unchanged.
+        if (auto it = j.find("intensity"); it != j.end() && it->is_number())
+            ibl.intensity = it->get<float>();
+        if (auto it = j.find("rotationDeg"); it != j.end() && it->is_number())
+            ibl.rotationDeg = it->get<float>();
+        if (auto it = j.find("tint"); it != j.end() && it->is_array() && it->size() >= 3)
+            ibl.tint = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
     }
 
     void SceneSerialization::deserializeMesh(const json& j, components::MeshComponent& mesh)

@@ -33,7 +33,9 @@ namespace render::common
 
         void update(const glm::mat4& view, const glm::mat4& projection,
                     const glm::vec3& cameraPos, float time,
-                    float snowAccumulation = 0.0f, float wetness = 0.0f);
+                    float snowAccumulation = 0.0f, float wetness = 0.0f,
+                    const glm::vec4& iblTintIntensity = glm::vec4(1.0f),          // VK-1574
+                    const glm::vec4& iblRotation = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f));
 
         vk::Buffer getBuffer() const { return buffer; }
     };

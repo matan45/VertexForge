@@ -21,7 +21,11 @@ namespace serialization
         {
             auto iblRef = deserializeIBLRef(c["ibl"]);
             if (iblRef.isValid())
-                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
+            {
+                auto& ibl = entity.addOrReplaceComponent<components::IBLComponent>();
+                ibl.hdrRef = iblRef;
+                deserializeIBLParams(c["ibl"], ibl); // VK-1574 knobs
+            }
         }
         if (c.contains("worldSector"))
         {

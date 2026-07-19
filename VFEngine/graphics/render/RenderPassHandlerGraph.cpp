@@ -9,6 +9,7 @@
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
+#include "ibl/HdrEnvironmentCapture.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -154,6 +155,32 @@ namespace render
             depthH = builder.write(depthH, graph::ResourceUsage::DepthAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
+        }
+
+        // VK-1574: time-sliced non-blocking HDR IBL bake. Mutually exclusive with the VK-1569
+        // dynamic-sky capture (gated !dynamicAmbient). Registered before the sky/IBL and mesh passes
+        // so publish()'s barriers order the live env + irradiance + prefilter ahead of their
+        // consumers (skybox reads envLive; mesh reads irradiance/prefilter). Writes only the
+        // persistent capture cubemaps (manages its own barriers) => side-effect pass.
+        {
+            const bool dynamicAmbient = atmospherePipeline && atmospherePipeline->isEnabled() &&
+                                        atmospherePipeline->getSettings().dynamicAmbient;
+            if (hdrEnvCapture && hdrEnvCapture->isInitialized() && !dynamicAmbient)
+            {
+                hdrEnvCapture->pollSource(); // promote a newly-decoded HDR to resident (self-contained upload)
+                if (hdrEnvCapture->hasSource())
+                {
+                    const uint64_t hdrEpoch = hdrEnvCapture->currentEpoch();
+                    const int itemsPerFrame = atmospherePipeline ? atmospherePipeline->getSettings().ambientItemsPerFrame : 6;
+                    const uint32_t budget = itemsPerFrame > 0 ? static_cast<uint32_t>(itemsPerFrame) : 1u;
+                    auto captureBuilder = frameGraph->addPass("HdrEnvCapture",
+                        [this, hdrEpoch, budget](vk::CommandBuffer cmd, uint32_t) {
+                            hdrEnvCapture->recordCapture(cmd, budget, hdrEpoch);
+                        });
+                    captureBuilder.setSegment(graph::HookSegment::Scene);
+                    captureBuilder.setSideEffect();
+                }
+            }
         }
 
         // Atmosphere Sky / IBL

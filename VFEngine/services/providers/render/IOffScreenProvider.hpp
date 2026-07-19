@@ -220,6 +220,7 @@ namespace services {
 
         virtual void iblSet(std::string_view iblPath) = 0;
         virtual void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) = 0;
+        virtual void iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint) = 0; // VK-1574
         virtual void iblRemove() = 0;
 
         virtual std::string meshLoad(std::string_view meshPath) = 0;

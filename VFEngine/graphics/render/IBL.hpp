@@ -65,6 +65,12 @@ namespace render
                                                             vk::DescriptorPool externalPool) const;
 
         void init(std::string_view path);
+
+        // VK-1574: initialize only the SkyboxRenderer, bound to an externally-owned live env cube
+        // (HdrEnvironmentCapture), without the blocking generator bake. The env view is stable, so
+        // this runs once; later HDR applies swap the cube's CONTENT via the capture's publish().
+        void initSkybox(const ibl::ImageData& envCube);
+
         void remove();
         void cleanUp();
 

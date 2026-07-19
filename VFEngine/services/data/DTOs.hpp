@@ -48,6 +48,10 @@ namespace services
     struct IBLData
     {
         asset::AssetRef hdrRef;
+        // VK-1574: global IBL knobs (mirror components::IBLComponent).
+        float intensity = 1.0f;
+        float rotationDeg = 0.0f;
+        glm::vec3 tint{1.0f};
     };
 
     struct NavmeshRootData

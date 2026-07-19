@@ -236,6 +236,11 @@ layout(set = 0, binding = 1) uniform samplerCube irradianceMap;
 layout(set = 0, binding = 2) uniform samplerCube prefilterMap;
 layout(set = 0, binding = 3) uniform sampler2D brdfLUT;
 
+// VK-1574: Y-axis rotation of an IBL sample direction (cs = vec2(cos(theta), sin(theta))).
+vec3 iblRotateY(vec3 v, vec2 cs) {
+    return vec3(cs.x * v.x + cs.y * v.z, v.y, -cs.y * v.x + cs.x * v.z);
+}
+
 layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
@@ -663,8 +668,8 @@ void main() {
     vec3 R = reflect(-V, N);
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
     float NdotV = max(dot(N, V), 0.0);
-    vec3 irradiance = texture(irradianceMap, N).rgb;
-    vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec3 irradiance = texture(irradianceMap, iblRotateY(N, camera.iblRotation.xy)).rgb;
+    vec3 prefilteredColor = textureLod(prefilterMap, iblRotateY(R, camera.iblRotation.xy), roughness * MAX_REFLECTION_LOD).rgb;
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
 
     vec3 specularScale;
@@ -791,6 +796,9 @@ void main() {
         ambient = irradiance * albedo * toonProfile.diffParams.w; // giScale
         giContribution = vec3(0.0);
     }
+
+    // VK-1574: global IBL intensity + tint (applied once; covers both PBR and toon ambient).
+    ambient *= camera.iblTintIntensity.a * camera.iblTintIntensity.rgb;
 
     vec3 color = ambient + directLighting + giContribution + emissive;
 

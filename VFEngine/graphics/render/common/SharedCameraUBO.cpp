@@ -41,7 +41,8 @@ namespace render::common
 
     void SharedCameraUBO::update(const glm::mat4& view, const glm::mat4& projection,
                                   const glm::vec3& cameraPos, float time,
-                                  float snowAccumulation, float wetness)
+                                  float snowAccumulation, float wetness,
+                                  const glm::vec4& iblTintIntensity, const glm::vec4& iblRotation)
     {
         if (!mapped) return;
 
@@ -52,6 +53,8 @@ namespace render::common
         ubo.time = time;
         ubo.snowAccumulation = snowAccumulation;
         ubo.wetness = wetness;
+        ubo.iblTintIntensity = iblTintIntensity; // VK-1574
+        ubo.iblRotation = iblRotation;           // VK-1574
         math::extractFrustumPlanes(projection * view, ubo.frustumPlanes);
 
         std::memcpy(mapped, &ubo, sizeof(CameraUBO));

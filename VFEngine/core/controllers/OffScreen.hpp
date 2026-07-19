@@ -64,6 +64,7 @@ namespace controllers
 
         void iblSet(std::string_view iblPath);
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
+        void iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint); // VK-1574
         void iblRemove();
 
         std::string meshLoad(std::string_view meshPath);

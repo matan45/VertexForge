@@ -26,6 +26,9 @@ namespace services {
         auto& comp = sceneEntity.getComponent<components::IBLComponent>();
         IBLData data;
         data.hdrRef = comp.hdrRef;
+        data.intensity = comp.intensity;
+        data.rotationDeg = comp.rotationDeg;
+        data.tint = comp.tint;
 
         return data;
     }
@@ -37,13 +40,13 @@ namespace services {
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
-        if (sceneEntity.hasComponent<components::IBLComponent>()) {
-            auto& comp = sceneEntity.getComponent<components::IBLComponent>();
-            comp.hdrRef = ibl.hdrRef;
-        }
-        else {
-            sceneEntity.addComponent<components::IBLComponent>(ibl.hdrRef);
-        }
+        components::IBLComponent& comp = sceneEntity.hasComponent<components::IBLComponent>()
+            ? sceneEntity.getComponent<components::IBLComponent>()
+            : sceneEntity.addComponent<components::IBLComponent>();
+        comp.hdrRef = ibl.hdrRef;
+        comp.intensity = ibl.intensity;
+        comp.rotationDeg = ibl.rotationDeg;
+        comp.tint = ibl.tint;
 
         return true;
     }

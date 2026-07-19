@@ -19,6 +19,7 @@
 #include "gpudriven/billboard/BillboardGPUTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <string_view>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -123,6 +124,11 @@ namespace render
     class IBL;
     class DebugRenderer;
 
+    namespace ibl
+    {
+        class HdrEnvironmentCapture; // VK-1574: non-blocking HDR IBL bake
+    }
+
     namespace mesh
     {
         class StaticMeshPipeline;
@@ -184,6 +190,11 @@ namespace render
         std::unique_ptr<ssr::SSRPipeline> ssrPipeline;
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
         std::unique_ptr<atmosphere::SkyEnvironmentCapture> skyEnvCapture; // VK-1569 dynamic sky->IBL ambient
+        std::unique_ptr<ibl::HdrEnvironmentCapture> hdrEnvCapture; // VK-1574 non-blocking HDR IBL bake
+        // True while the mesh IBL descriptor is bound to the HDR capture's live maps (first-bind gate).
+        bool hdrCaptureMeshBound = false;
+        // Stored so the HDR capture can retire old source textures without a waitIdle.
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
         std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
@@ -207,6 +218,9 @@ namespace render
         std::unique_ptr<common::SharedCameraUBO> sharedCameraUBO;
         float currentSnowAccumulation = 0.0f;
         float currentWetness = 0.0f;
+        // VK-1574: global IBL knobs pushed live into the set-0 CameraUBO each frame.
+        glm::vec4 currentIblTintIntensity{1.0f};              // rgb = tint, a = intensity
+        glm::vec4 currentIblRotation{1.0f, 0.0f, 0.0f, 0.0f}; // x = cos(theta), y = sin(theta)
 
         bool meshPipelineInitialized = false;
         std::vector<mesh::MeshRenderData> currentMeshDrawList;
@@ -386,6 +400,13 @@ namespace render
         void reinitMeshPipelineWithIBL();
         void reinitMeshPipelineWithDynamicAmbient();          // VK-1569: bind the dynamic-ambient live maps
         [[nodiscard]] uint64_t computeAmbientCaptureEpoch() const; // VK-1569: sky-state hash driving recapture
+        void reinitMeshPipelineWithHdrCapture();              // VK-1574: bind the HDR capture's live maps
+        // VK-1574: non-blocking HDR IBL apply/remove (called by IBLController). applyHdrEnvironment
+        // sets the source, blocking-bakes only on the first bind, and rides the per-frame capture on
+        // subsequent applies; removeHdrEnvironment reverts the mesh + skybox.
+        void applyHdrEnvironment(std::string_view path);
+        void removeHdrEnvironment();
+        bool isHdrEnvironmentActive() const { return hdrCaptureMeshBound; }
 
         void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
@@ -477,6 +498,14 @@ namespace render
 
         void setSnowAccumulation(float value) { currentSnowAccumulation = value; }
         void setWetness(float value) { currentWetness = value; }
+
+        // VK-1574: precompute the env Y-rotation cos/sin once per change (cheap, no re-bake).
+        void setIBLParams(float intensity, float rotationDeg, const glm::vec3& tint)
+        {
+            currentIblTintIntensity = glm::vec4(tint, intensity);
+            const float r = glm::radians(rotationDeg);
+            currentIblRotation = glm::vec4(glm::cos(r), glm::sin(r), 0.0f, 0.0f);
+        }
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

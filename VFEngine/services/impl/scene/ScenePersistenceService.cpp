@@ -593,6 +593,13 @@ namespace services
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.hdrRef.resolve();
                     dispatcher.execute(setIblCmd);
+
+                    // VK-1574: apply persisted IBL knobs on load (editor + runtime).
+                    events::render::SetIBLParamsCommand paramsCmd;
+                    paramsCmd.intensity = ibl.intensity;
+                    paramsCmd.rotationDeg = ibl.rotationDeg;
+                    paramsCmd.tint = ibl.tint;
+                    dispatcher.execute(paramsCmd);
                 }
             }
 

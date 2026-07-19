@@ -186,3 +186,85 @@ TEST_CASE("ambient capture: a budget larger than the remainder emits only the re
     CHECK(none == 0u);
     CHECK(s.cursor == 42u);
 }
+
+// VK-1574 — the non-blocking HDR IBL bake (HdrEnvironmentCapture) drives the same scheduler with
+// prefilterMips = 10 (512^2 x 10-mip prefilter, roughness m/9), giving env(6) + irradiance(6) +
+// prefilter(6 x 10 = 60) = 72 items. This must stay a purely additive knob: the default (5 mips /
+// 42 items, VK-1569) is unchanged, and the mip-major ordering must match the generator loop order.
+TEST_CASE("ambient capture: 10-mip HDR plan (VK-1574) yields 72 items, mip-major")
+{
+    AmbientCapturePlan plan;
+    plan.prefilterMips = 10;
+    CHECK(plan.envFaces == 6u);
+    CHECK(plan.irrFaces == 6u);
+    CHECK(plan.prefilterFaces == 6u);
+    CHECK(plan.prefilterItems() == 60u);
+    CHECK(plan.totalItems() == 72u);
+
+    AmbientCaptureScheduler s;
+    s.plan.prefilterMips = 10;
+    CHECK(s.totalItems() == 72u);
+
+    // Env 0..5, Irradiance 6..11, then Prefilter mip-major (mip 0 faces 0..5, mip 1 faces 0..5, ...).
+    CHECK(s.itemAt(0).phase == CapturePhase::Env);
+    CHECK(s.itemAt(0).face == 0u);
+    CHECK(s.itemAt(5).phase == CapturePhase::Env);
+    CHECK(s.itemAt(5).face == 5u);
+    CHECK(s.itemAt(6).phase == CapturePhase::Irradiance);
+    CHECK(s.itemAt(6).face == 0u);
+    CHECK(s.itemAt(11).phase == CapturePhase::Irradiance);
+    CHECK(s.itemAt(11).face == 5u);
+    CHECK(s.itemAt(12).phase == CapturePhase::Prefilter);
+    CHECK(s.itemAt(12).face == 0u);
+    CHECK(s.itemAt(12).mip == 0u);
+    CHECK(s.itemAt(17).face == 5u);
+    CHECK(s.itemAt(17).mip == 0u);
+    CHECK(s.itemAt(18).face == 0u);
+    CHECK(s.itemAt(18).mip == 1u);
+    // Last item: prefilter, mip 9, face 5.
+    CHECK(s.itemAt(71).phase == CapturePhase::Prefilter);
+    CHECK(s.itemAt(71).face == 5u);
+    CHECK(s.itemAt(71).mip == 9u);
+
+    // Drain at budget 6 (12 exact advances): every item is emitted exactly once, never overrunning.
+    int envFace[6] = {0, 0, 0, 0, 0, 0};
+    int irrFace[6] = {0, 0, 0, 0, 0, 0};
+    int prefilter[6][10] = {};
+    uint32_t total = 0;
+    while (!s.cycleComplete())
+    {
+        const uint32_t n = s.advance(6, [&](const WorkItem& w) {
+            switch (w.phase)
+            {
+            case CapturePhase::Env: REQUIRE(w.face < 6u); ++envFace[w.face]; break;
+            case CapturePhase::Irradiance: REQUIRE(w.face < 6u); ++irrFace[w.face]; break;
+            case CapturePhase::Prefilter:
+                REQUIRE(w.face < 6u);
+                REQUIRE(w.mip < 10u);
+                ++prefilter[w.face][w.mip];
+                break;
+            }
+            ++total;
+        });
+        CHECK(n >= 1u);
+        CHECK(n <= 6u);
+    }
+    CHECK(total == 72u);
+    for (int f = 0; f < 6; ++f)
+    {
+        CHECK(envFace[f] == 1);
+        CHECK(irrFace[f] == 1);
+        for (int m = 0; m < 10; ++m)
+            CHECK(prefilter[f][m] == 1);
+    }
+
+    // publish-once semantics hold on the larger plan.
+    CHECK(s.cycleComplete());
+    CHECK(s.shouldPublish());
+    s.markPublished();
+    CHECK_FALSE(s.shouldPublish());
+
+    // The default plan is untouched (VK-1569 stays 5 mips / 42 items).
+    CHECK(AmbientCapturePlan{}.prefilterMips == 5u);
+    CHECK(AmbientCapturePlan{}.totalItems() == 42u);
+}

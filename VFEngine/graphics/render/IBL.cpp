@@ -41,7 +41,9 @@ namespace render
     void IBL::renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
                                     const ibl::SkyboxTargetParams& target) const
     {
-        if (skyboxRenderer && iblInitialized)
+        // Guard on the skybox renderer directly (not iblInitialized) so RTT works with the VK-1574
+        // live env cube too (initSkybox path, where iblInitialized stays false).
+        if (skyboxRenderer && skyboxRenderer->isInitialized())
         {
             skyboxRenderer->renderToTarget(commandBuffer, target);
         }
@@ -51,7 +53,7 @@ namespace render
                                     const ibl::SkyboxTargetParams& target,
                                     vk::DescriptorSet targetDescriptorSet) const
     {
-        if (skyboxRenderer && iblInitialized)
+        if (skyboxRenderer && skyboxRenderer->isInitialized())
         {
             skyboxRenderer->renderToTarget(commandBuffer, target, targetDescriptorSet);
         }
@@ -60,7 +62,7 @@ namespace render
     vk::DescriptorSet IBL::createExternalSkyboxDescriptorSet(vk::Buffer externalCameraUBO,
                                                               vk::DescriptorPool externalPool) const
     {
-        if (!skyboxRenderer || !iblInitialized)
+        if (!skyboxRenderer || !skyboxRenderer->isInitialized())
         {
             return {};
         }
@@ -89,6 +91,17 @@ namespace render
         iblInitialized = true;
     }
 
+    void IBL::initSkybox(const ibl::ImageData& envCube)
+    {
+        // Bind the skybox to the externally-owned live env cube. The view is stable (written once by
+        // HdrEnvironmentCapture), so init runs a single time; subsequent HDR applies only change the
+        // cube's contents via the capture's atomic publish(), needing no rebind here. iblInitialized
+        // stays false — the blocking generator maps were never produced, so the mesh IBL path (which
+        // reads them) must not treat this as a full IBL bake.
+        if (!skyboxRenderer->isInitialized())
+            skyboxRenderer->init(envCube);
+    }
+
     void IBL::remove()
     {
         if (iblInitialized)
@@ -106,6 +119,15 @@ namespace render
             irradianceGen->cleanUp();
             brdfLUTGen->cleanUp();
             prefilteredGen->cleanUp();
+        }
+        else if (skyboxRenderer->isInitialized())
+        {
+            // VK-1574 initSkybox-only path: no generators ran (iblInitialized stayed false), so just
+            // tear down the skybox that was bound to the externally-owned live env cube. Callers
+            // destroy that cube (HdrEnvironmentCapture) only after this returns.
+            device.getLogicalDevice().waitIdle();
+            skyboxRenderer->disable();
+            skyboxRenderer->cleanUp();
         }
     }
 

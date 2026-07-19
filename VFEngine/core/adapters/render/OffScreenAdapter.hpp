@@ -40,6 +40,7 @@ namespace core
 
         void iblSet(std::string_view iblPath) override;
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) override;
+        void iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint) override; // VK-1574
         void iblRemove() override;
 
         std::string meshLoad(std::string_view meshPath) override;

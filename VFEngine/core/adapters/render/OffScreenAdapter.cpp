@@ -66,6 +66,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint) {
+        if (offScreen) {
+            offScreen->iblSetParams(intensity, rotationDeg, tint);
+        }
+    }
+
     void OffScreenAdapter::iblRemove() {
         if (offScreen) {
             offScreen->iblRemove();
