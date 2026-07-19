@@ -411,7 +411,6 @@ namespace render
         [[nodiscard]] uint64_t computeAmbientCaptureEpoch() const; // VK-1569: sky-state hash driving recapture
         void reinitMeshPipelineWithHdrCapture();              // VK-1574: bind the HDR capture's live maps
 
-    public:
         // VK-1577 — reflection probes.
         // Called at the render-texture point (before the frame graph): renders at most one probe
         // cube face this frame. Lazily creates the probe manager the first time a scene actually
@@ -421,11 +420,10 @@ namespace render
         {
             return reflectionProbes.get();
         }
-
-    private:
         // Publishes the probe cubes + SSBO into the mesh pipeline's set 0, and flips the
         // REFLECTION_PROBES_ENABLED permutation when the scene crosses 0 <-> N baked probes.
         void syncReflectionProbeResources();
+
         // VK-1574: non-blocking HDR IBL apply/remove (called by IBLController). applyHdrEnvironment
         // sets the source, blocking-bakes only on the first bind, and rides the per-frame capture on
         // subsequent applies; removeHdrEnvironment reverts the mesh + skybox.

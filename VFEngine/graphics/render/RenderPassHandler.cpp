@@ -30,6 +30,9 @@
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SkyEnvironmentCapture.hpp"
 #include "ibl/HdrEnvironmentCapture.hpp"
+// VK-1577: the complete type is needed here for reflectionProbes->cleanup() and, more subtly, for
+// ~RenderPassHandler to instantiate the unique_ptr deleter.
+#include "probe/ReflectionProbeManager.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
