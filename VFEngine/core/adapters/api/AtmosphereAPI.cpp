@@ -240,6 +240,53 @@ namespace core::api
                 { s.cycleControlsSunEntity = extractBool(args[0]); });
             }});
 
+        // ── Dynamic sky -> IBL ambient (VK-1569) ──
+
+        interpreter->registerNativeFunction("_native_atmosphere_isDynamicAmbient",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(s.dynamicAmbient);
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setDynamicAmbient",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.dynamicAmbient = extractBool(args[0]); });
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_getAmbientIntensity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<double>(s.ambientIntensity));
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setAmbientIntensity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.ambientIntensity = extractFloat(args[0]); });
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_getAmbientItemsPerFrame",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value
+            {
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.ambientItemsPerFrame));
+            }});
+
+        interpreter->registerNativeFunction("_native_atmosphere_setAmbientItemsPerFrame",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value
+            {
+                return modifyAtmosphere(events::EventDispatcher::instance(), [&](render::atmosphere::AtmosphereSettings& s)
+                { s.ambientItemsPerFrame = static_cast<int>(extractInt64(args[0])); });
+            }});
+
         // ── Moon ──
 
         interpreter->registerNativeFunction("_native_atmosphere_getMoonBrightness",

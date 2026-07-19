@@ -227,6 +227,29 @@ namespace windows
             isDirty = true;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("While the day-night cycle runs, rotate the sun light entity so\nscene lighting and shadows track the moving sun.");
+
+        // VK-1569: dynamic sky -> IBL ambient (time-sliced atmosphere capture).
+        ImGui::Spacing();
+        ImGui::Text("Dynamic Sky Ambient");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Dynamic Sky Ambient", &settings.dynamicAmbient))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Capture the atmosphere sky into IBL cubemaps so diffuse/specular ambient\ntracks time-of-day and weather. Overrides the scene's static IBL while on.");
+
+        if (settings.dynamicAmbient)
+        {
+            if (ImGui::SliderFloat("Ambient Intensity", &settings.ambientIntensity, 0.0f, 10.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Multiplier on the captured ambient (weather routes its ambient light\nmultiplier here).");
+
+            if (ImGui::SliderInt("Capture Items / Frame", &settings.ambientItemsPerFrame, 1, 32))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Time-slicing budget. 42 items make one full refresh\n(6 => ~7 frames per update).");
+        }
     }
 
     void AtmosphereConfigWindow::drawMoonSection()

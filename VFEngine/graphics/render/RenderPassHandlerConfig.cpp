@@ -20,6 +20,7 @@
 #include "transparency/WBOITPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "atmosphere/SkyEnvironmentCapture.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "occlusion/CameraOcclusionManager.hpp"
 #include "IBL.hpp"
@@ -154,6 +155,57 @@ namespace render
             vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
     }
 
+    // VK-1569: point the mesh IBL descriptor at the dynamic-ambient live maps (irradiance + prefilter
+    // captured from the atmosphere) with the capture's own static BRDF LUT. One-time reinit on the
+    // OFF->ON toggle; per-frame capture then renders into these same images (stable views).
+    void RenderPassHandler::reinitMeshPipelineWithDynamicAmbient()
+    {
+        if (!meshPipelineInitialized || !skyEnvCapture || !skyEnvCapture->isInitialized()) return;
+
+        device.getLogicalDevice().waitIdle();
+        meshPipeline->cleanUpForReinit();
+        meshPipeline->init(skyEnvCapture->getIrradianceLive(), skyEnvCapture->getPrefilterLive(),
+                           skyEnvCapture->getBrdfLUT());
+
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
+        if (vfxRuntimeProvider && vfxRuntimeProvider->isInitialized())
+            vfxRuntimeProvider->recreate(swapChain.getSceneColorFormat(), swapChain.getSwapchainDepthStencilFormat());
+    }
+
+    // VK-1569: quantized hash of the sky state (sun direction + time-of-day + weather ambient). The
+    // capture starts a fresh cycle only when this changes after the previous cycle published, so a
+    // static sky is captured once while a changing sky rolls with ~1-cycle latency.
+    uint64_t RenderPassHandler::computeAmbientCaptureEpoch() const
+    {
+        glm::vec3 sunDir{0.0f, 1.0f, 0.0f};
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            if (auto* lbm = gpuDrivenRenderer->getLightBufferManager())
+            {
+                if (auto d = lbm->getFirstDirectionalLightDirection())
+                    sunDir = *d;
+            }
+        }
+        float timeOfDay = 12.0f;
+        float ambient = 1.0f;
+        if (atmospherePipeline)
+        {
+            const auto s = atmospherePipeline->getSettings();
+            timeOfDay = s.timeOfDay;
+            ambient = s.ambientIntensity;
+        }
+        auto quant = [](float v, float step) { return static_cast<int64_t>(v / step); };
+        uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
+        auto mixIn = [&](int64_t x) { h ^= static_cast<uint64_t>(x); h *= 1099511628211ull; };
+        mixIn(quant(sunDir.x, 0.01f));
+        mixIn(quant(sunDir.y, 0.01f));
+        mixIn(quant(sunDir.z, 0.01f));
+        mixIn(quant(timeOfDay, 0.02f));
+        mixIn(quant(ambient, 0.01f));
+        return h;
+    }
+
     void RenderPassHandler::resetVolumetricFogComposite() { if (volumetricFogComposite) { volumetricFogComposite->cleanup(); volumetricFogComposite.reset(); } }
     void RenderPassHandler::initVolumetricFogComposite(volumetric::VolumetricPipeline* volPipeline)
     {
@@ -225,7 +277,44 @@ namespace render
 
     void RenderPassHandler::initAtmosphere() { if (atmospherePipeline && atmospherePipeline->isInitialized()) return; if (!atmospherePipeline) atmospherePipeline = std::make_unique<atmosphere::AtmospherePipeline>(device, swapChain, offscreenResources); atmospherePipeline->init(); }
     void RenderPassHandler::resetAtmosphere() { if (atmospherePipeline) { atmospherePipeline->cleanup(); atmospherePipeline.reset(); } }
-    void RenderPassHandler::applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings) { if (settings.enabled) initAtmosphere(); if (atmospherePipeline) atmospherePipeline->updateSettings(settings); }
+    void RenderPassHandler::applyAtmosphereSettings(const atmosphere::AtmosphereSettings& settings)
+    {
+        // Detect the dynamic-ambient mode edge BEFORE updating settings so we only rebuild the mesh
+        // IBL descriptor once per toggle (never per-frame). (VK-1569)
+        const bool wasDynamic = atmospherePipeline && atmospherePipeline->isInitialized() &&
+                                atmospherePipeline->getSettings().enabled &&
+                                atmospherePipeline->getSettings().dynamicAmbient;
+
+        if (settings.enabled) initAtmosphere();
+        if (atmospherePipeline) atmospherePipeline->updateSettings(settings);
+
+        const bool nowDynamic = settings.enabled && settings.dynamicAmbient;
+        if (wasDynamic == nowDynamic || !meshPipelineInitialized)
+            return;
+
+        if (nowDynamic)
+        {
+            // OFF -> ON: allocate + init the capture, do one blocking full capture so the first frame
+            // samples valid ambient (no black pop), then bind the live maps once.
+            if (!skyEnvCapture)
+                skyEnvCapture = std::make_unique<atmosphere::SkyEnvironmentCapture>(device);
+            if (!skyEnvCapture->isInitialized() && atmospherePipeline && atmospherePipeline->isInitialized())
+                skyEnvCapture->init(device.getStagingCommandPool(), *atmospherePipeline);
+            if (skyEnvCapture->isInitialized())
+            {
+                skyEnvCapture->captureBlocking(computeAmbientCaptureEpoch());
+                reinitMeshPipelineWithDynamicAmbient();
+            }
+        }
+        else
+        {
+            // ON -> OFF: revert to the scene's static IBL, or the studio-gray default if none loaded.
+            if (iblRenderer->isInitialized())
+                reinitMeshPipelineWithIBL();
+            else
+                reinitMeshPipelineWithDefaults();
+        }
+    }
 
     void RenderPassHandler::initCloud()
     {

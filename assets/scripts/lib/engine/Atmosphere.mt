@@ -168,6 +168,37 @@ public class Atmosphere {
     }
 
     // ============================================
+    // Dynamic Sky -> IBL Ambient (VK-1569)
+    // ============================================
+
+    // Capture the atmosphere sky into IBL cubemaps so ambient tracks time-of-day/weather (default: false)
+    public static function isDynamicAmbient(): bool {
+        return _native_atmosphere_isDynamicAmbient();
+    }
+
+    public static function setDynamicAmbient(bool enabled): void {
+        _native_atmosphere_setDynamicAmbient(enabled);
+    }
+
+    // Multiplier on the captured ambient (default: 1.0)
+    public static function getAmbientIntensity(): float {
+        return _native_atmosphere_getAmbientIntensity();
+    }
+
+    public static function setAmbientIntensity(float intensity): void {
+        _native_atmosphere_setAmbientIntensity(intensity);
+    }
+
+    // Time-slicing budget: capture work-items processed per frame, 42 = one full refresh (default: 6)
+    public static function getAmbientItemsPerFrame(): int {
+        return _native_atmosphere_getAmbientItemsPerFrame();
+    }
+
+    public static function setAmbientItemsPerFrame(int items): void {
+        _native_atmosphere_setAmbientItemsPerFrame(items);
+    }
+
+    // ============================================
     // Moon
     // ============================================
 

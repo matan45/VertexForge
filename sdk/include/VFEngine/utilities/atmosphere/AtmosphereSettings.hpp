@@ -61,5 +61,10 @@ namespace render::atmosphere
         // Aerial perspective
         float aerialMaxDist = 100000.0f;            // meters
         float aerialIntensity = 1.0f;
+
+        // Dynamic sky -> IBL ambient (VK-1569, opt-in; default OFF => bit-identical to legacy)
+        bool dynamicAmbient = false;                // time-sliced atmosphere capture drives PBR ambient (overrides scene IBLComponent.hdrRef)
+        float ambientIntensity = 1.0f;              // multiplier on the captured ambient (weather routes WeatherState.ambientLightMult here)
+        int ambientItemsPerFrame = 6;               // capture work-items processed per frame (env(6)->irr(6)->prefilter(30)=42 total => full refresh ~7 frames)
     };
 }

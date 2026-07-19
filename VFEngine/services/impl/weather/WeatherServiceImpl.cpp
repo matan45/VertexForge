@@ -245,11 +245,14 @@ namespace services
             {
                 baseSunIrradiance = settings.sunIrradiance;
                 baseAerialIntensity = settings.aerialIntensity;
+                baseAmbientIntensity = settings.ambientIntensity;
                 basesAtmosCaptured = true;
             }
 
             settings.sunIrradiance = baseSunIrradiance * ws.atmosphereTint;
             settings.aerialIntensity = baseAerialIntensity * ws.ambientLightMult;
+            // VK-1569: give ambientLightMult a true ambient meaning when dynamic ambient is on.
+            settings.ambientIntensity = baseAmbientIntensity * ws.ambientLightMult;
 
             auto lightning = lightningGenerator.getOutput();
             if (lightning.flashIntensity > 0.0f)
@@ -431,6 +434,7 @@ namespace services
                 auto settings = dispatcher.query(events::atmosphere::GetAtmosphereSettingsQuery{});
                 settings.sunIrradiance = baseSunIrradiance;
                 settings.aerialIntensity = baseAerialIntensity;
+                settings.ambientIntensity = baseAmbientIntensity;
                 events::atmosphere::ApplyAtmosphereSettingsCommand cmd;
                 cmd.settings = settings;
                 dispatcher.execute(cmd);

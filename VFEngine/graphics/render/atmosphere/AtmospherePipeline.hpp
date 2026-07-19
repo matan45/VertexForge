@@ -177,6 +177,11 @@ namespace render::atmosphere
         [[nodiscard]] vk::ImageView getTransmittanceView() const { return transmittanceView; }
         [[nodiscard]] vk::Sampler getLUTSampler() const { return lutSampler; }
 
+        // VK-1569: expose the sky-view LUT + params UBO for dynamic sky->IBL ambient capture.
+        // Both are created in init() and untouched by recreate(), so the handles are stable.
+        [[nodiscard]] vk::ImageView getSkyViewView() const { return skyViewView; }
+        [[nodiscard]] vk::Buffer getParamsBuffer() const { return paramsBuffer; }
+
     private:
         void createSampler();
         void createParamsBuffer();

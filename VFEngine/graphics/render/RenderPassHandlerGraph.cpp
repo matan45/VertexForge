@@ -8,6 +8,7 @@
 #include "ssr/SSRPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "atmosphere/SkyEnvironmentCapture.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -179,6 +180,23 @@ namespace render
             colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
+
+            // VK-1569: time-sliced dynamic sky -> IBL ambient capture, recorded right after the sky
+            // LUTs are refreshed. It writes only the persistent capture cubemaps (managing their own
+            // barriers) and does not touch scene color, so it stays a side-effect pass.
+            if (skyEnvCapture && skyEnvCapture->isInitialized() &&
+                atmospherePipeline->getSettings().dynamicAmbient)
+            {
+                const uint64_t ambientEpoch = computeAmbientCaptureEpoch();
+                const int itemsPerFrame = atmospherePipeline->getSettings().ambientItemsPerFrame;
+                const uint32_t budget = itemsPerFrame > 0 ? static_cast<uint32_t>(itemsPerFrame) : 1u;
+                auto captureBuilder = frameGraph->addPass("SkyAmbientCapture",
+                    [this, ambientEpoch, budget](vk::CommandBuffer cmd, uint32_t) {
+                        skyEnvCapture->recordCapture(cmd, budget, ambientEpoch);
+                    });
+                captureBuilder.setSegment(graph::HookSegment::Scene);
+                captureBuilder.setSideEffect();
+            }
         }
         else
         {

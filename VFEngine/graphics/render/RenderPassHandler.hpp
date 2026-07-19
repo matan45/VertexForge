@@ -107,6 +107,7 @@ namespace render::graph
 namespace render::atmosphere
 {
     class AtmospherePipeline;
+    class SkyEnvironmentCapture;
     struct AtmosphereSettings;
 }
 
@@ -182,6 +183,7 @@ namespace render
         std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
         std::unique_ptr<ssr::SSRPipeline> ssrPipeline;
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
+        std::unique_ptr<atmosphere::SkyEnvironmentCapture> skyEnvCapture; // VK-1569 dynamic sky->IBL ambient
         std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
@@ -382,6 +384,8 @@ namespace render
         void initMeshPipeline(bool enableGPUDriven = true);
         void reinitMeshPipelineWithDefaults();
         void reinitMeshPipelineWithIBL();
+        void reinitMeshPipelineWithDynamicAmbient();          // VK-1569: bind the dynamic-ambient live maps
+        [[nodiscard]] uint64_t computeAmbientCaptureEpoch() const; // VK-1569: sky-state hash driving recapture
 
         void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }

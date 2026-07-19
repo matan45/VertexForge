@@ -52,6 +52,7 @@ namespace services
 
         glm::vec3 baseSunIrradiance{0.0f};
         float baseAerialIntensity = 0.0f;
+        float baseAmbientIntensity = 0.0f; // VK-1569: base for dynamic-ambient weather multiplier
         bool basesAtmosCaptured = false;
 
         IVFXRuntimeProvider* vfxProvider = nullptr;
