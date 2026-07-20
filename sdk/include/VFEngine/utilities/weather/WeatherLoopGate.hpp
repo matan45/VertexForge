@@ -20,10 +20,8 @@
 // threshold: how long the target has actually been silent, independent of how loud the loop
 // happened to be when it went quiet.
 //
-// Header-only and dependency-free, following FadePolicy.hpp. That is a requirement, not a
-// preference: Tests does not link Weather (see premake5.lua) but does carry
-// VFEngine/utilities on its include path, so this is the only shape in which the decision
-// can be tested at all.
+// Header-only and dependency-free, following FadePolicy.hpp, so the start/stop decision
+// stays independently testable without pulling in the controller's audio/event machinery.
 
 namespace weather
 {

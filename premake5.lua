@@ -1246,7 +1246,7 @@ project "Tests"
    }
 
    links {
-      "Utilities", "Memory", "CpuMemory", "Destruction", "Terrain", "World", "Serialization",
+      "Utilities", "Memory", "CpuMemory", "Destruction", "Weather", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "AssetDB", "Threading", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "lz4", "recast",

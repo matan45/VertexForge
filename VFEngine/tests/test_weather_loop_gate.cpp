@@ -15,8 +15,8 @@
 // Before VK-1521 the stop gate watched the smoothed follower instead of the raw target, so
 // the follower's decay was an accidental debounce. These pin the explicit replacement.
 //
-// CPU-only, and header-only by necessity: Tests does not link Weather (premake5.lua), but
-// does carry VFEngine/utilities on its include path.
+// CPU-only and header-only: this TU stays focused on the pure gate rather than the
+// controller's audio/event machinery.
 // ============================================================
 
 namespace

@@ -66,8 +66,8 @@ namespace weather
                                              const std::string& path)
     {
         // The decision itself is pure and lives in WeatherLoopGate.hpp; this function is
-        // only the part that talks to the engine. The split is what makes the stacking bug
-        // testable at all — Tests cannot link Weather.
+        // only the part that talks to the engine. The split keeps the stacking regression
+        // independently testable without audio/event machinery.
         LoopGateState gate;
         gate.volume = volume;
         gate.silentTime = silentTime;
