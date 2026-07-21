@@ -17,15 +17,20 @@ namespace render::common
         float disableShadows; // 1.0 = skip shadow sampling for this pass (e.g. RTT/minimap)
         float _pad;
         alignas(16) glm::vec4 frustumPlanes[6];
+        // VK-1574: global IBL knobs (default-neutral so every `CameraUBO{}` writer is byte-identical).
+        alignas(16) glm::vec4 iblTintIntensity = glm::vec4(1.0f);              // rgb = tint, a = intensity
+        alignas(16) glm::vec4 iblRotation = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f); // x = cos(theta), y = sin(theta)
     };
 
-    static_assert(sizeof(CameraUBO) == 256, "CameraUBO must be 256 bytes to match GLSL CameraData");
+    static_assert(sizeof(CameraUBO) == 288, "CameraUBO must be 288 bytes to match GLSL CameraData");
     static_assert(offsetof(CameraUBO, view) == 0, "CameraUBO::view offset mismatch");
     static_assert(offsetof(CameraUBO, projection) == 64, "CameraUBO::projection offset mismatch");
     static_assert(offsetof(CameraUBO, cameraPos) == 128, "CameraUBO::cameraPos offset mismatch");
     static_assert(offsetof(CameraUBO, time) == 140, "CameraUBO::time offset mismatch");
     static_assert(offsetof(CameraUBO, snowAccumulation) == 144, "CameraUBO::snowAccumulation offset mismatch");
     static_assert(offsetof(CameraUBO, frustumPlanes) == 160, "CameraUBO::frustumPlanes offset mismatch");
+    static_assert(offsetof(CameraUBO, iblTintIntensity) == 256, "CameraUBO::iblTintIntensity offset mismatch");
+    static_assert(offsetof(CameraUBO, iblRotation) == 272, "CameraUBO::iblRotation offset mismatch");
 
     struct alignas(16) GPUCameraData
     {

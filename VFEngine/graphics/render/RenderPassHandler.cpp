@@ -28,6 +28,11 @@
 #include "custom/PluginTextureManager.hpp"
 #include "volumetric/VolumetricPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "atmosphere/SkyEnvironmentCapture.hpp"
+#include "ibl/HdrEnvironmentCapture.hpp"
+// VK-1577: the complete type is needed here for reflectionProbes->cleanup() and, more subtly, for
+// ~RenderPassHandler to instantiate the unique_ptr deleter.
+#include "probe/ReflectionProbeManager.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "material/MaterialTextureCache.hpp"
 #include "../../services/providers/vfx/IVFXRuntimeProvider.hpp"
@@ -431,9 +436,20 @@ namespace render
             vtEma.clear();
         }
         if (postProcessPipeline) postProcessPipeline->cleanup();
+        // VK-1577: destroy the probe cubes BEFORE meshPipeline::cleanUp, which frees the descriptor
+        // set that binds them. The manager also owns a RenderTextureViewPort, so it must be torn
+        // down while the device and swapchain are still valid.
+        if (reflectionProbes)
+        {
+            reflectionProbes->cleanup();
+            reflectionProbes.reset();
+            reflectionProbePermutationActive = false;
+        }
         meshPipeline->cleanUp();
         if (sharedCameraUBO) sharedCameraUBO->cleanup();
         iblRenderer->cleanUp();
+        if (skyEnvCapture) skyEnvCapture->cleanup(); // VK-1569
+        if (hdrEnvCapture) hdrEnvCapture->cleanup(); // VK-1574
         clearColor->cleanUp();
     }
 

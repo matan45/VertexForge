@@ -8,6 +8,7 @@
 #include "events/physics/IKEvents.hpp"
 #include "events/scene/ReverbZoneEvents.hpp"
 #include "events/scene/FogVolumeEvents.hpp"
+#include "events/scene/ReflectionProbeEvents.hpp"
 #include <imgui.h>
 #include <cctype>
 #include <cstring>
@@ -536,6 +537,19 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Localized fog region (Box, Sphere, or Cylinder) with density control");
+        }
+
+        if (!c.hasReflectionProbe && matchesFilter("Reflection Probe", filter))
+        {
+            if (ImGui::Selectable("  Reflection Probe"))
+            {
+                events::scene::AddReflectionProbeComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Local environment capture; overrides IBL specular reflections\n"
+                                  "inside its bounds so interiors stop mirroring the sky");
         }
     }
 }

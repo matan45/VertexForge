@@ -585,6 +585,22 @@ namespace services
 
         {
             scene::Entity& root = sceneGraph->GetRoot();
+
+            // VK-1574: apply persisted IBL knobs on load (editor + runtime).
+            //
+            // These live in RenderPassHandler and are uploaded into the shared CameraUBO every
+            // frame, so they are process-global and survive a scene swap. They must therefore be
+            // written on EVERY load, not only when the incoming scene has a valid IBL — otherwise a
+            // scene with no IBLComponent inherits the previous scene's intensity/rotation/tint and
+            // renders too bright, rotated and tinted, with nothing in its own data explaining why.
+            // Defaulting from a fresh IBLComponent keeps the neutral values in sync with the
+            // component's own declared defaults.
+            const components::IBLComponent neutralIbl{};
+            events::render::SetIBLParamsCommand paramsCmd;
+            paramsCmd.intensity = neutralIbl.intensity;
+            paramsCmd.rotationDeg = neutralIbl.rotationDeg;
+            paramsCmd.tint = neutralIbl.tint;
+
             if (root.hasComponent<components::IBLComponent>())
             {
                 const auto& ibl = root.getComponent<components::IBLComponent>();
@@ -593,8 +609,13 @@ namespace services
                     events::render::SetIBLCommand setIblCmd;
                     setIblCmd.hdrPath = ibl.hdrRef.resolve();
                     dispatcher.execute(setIblCmd);
+
+                    paramsCmd.intensity = ibl.intensity;
+                    paramsCmd.rotationDeg = ibl.rotationDeg;
+                    paramsCmd.tint = ibl.tint;
                 }
             }
+            dispatcher.execute(paramsCmd);
 
             if (root.hasComponent<components::NavmeshComponent>())
             {

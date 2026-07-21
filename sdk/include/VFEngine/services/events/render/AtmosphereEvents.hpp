@@ -27,4 +27,14 @@ namespace events::atmosphere
     {
         std::string_view getName() const override { return "GetAtmosphereEnabled"; }
     };
+
+    // VK-1566: per-frame day-night advance. Dispatched from the SunSync frame-graph step
+    // (before the Transforms/worldMatrix bake). The handler advances the cycle on the live
+    // atmosphere settings and, when cycleControlsSunEntity is set, rotates the sun entity.
+    struct UpdateDayNightCommand : ICommand<>
+    {
+        float deltaTime = 0.0f;
+
+        std::string_view getName() const override { return "UpdateDayNight"; }
+    };
 }

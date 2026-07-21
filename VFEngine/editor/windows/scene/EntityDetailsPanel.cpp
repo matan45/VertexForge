@@ -118,6 +118,7 @@ namespace windows
         bool hasDecal = decalDrawer.draw(handle);
         bool hasReverbZone = reverbZoneDrawer.draw(handle);
         bool hasFogVolume = fogVolumeDrawer.draw(handle);
+        bool hasReflectionProbe = reflectionProbeDrawer.draw(handle);
 
         // Terrain components (read-only display)
         terrainDrawer.draw(handle);
@@ -162,7 +163,8 @@ namespace windows
                                 hasUIProgressBar, hasSocketAttachment, hasNavmeshAgent,
                                 hasOffMeshLink, hasNavmeshObstacle, hasNavmeshModifierVolume,
                                 hasRenderTexture, hasController, hasIK, hasBehaviorTree,
-                                hasDecal, hasReverbZone, hasFogVolume, hasUIAnimation, hasUIMask,
+                                hasDecal, hasReverbZone, hasFogVolume, hasReflectionProbe,
+                                hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget, hasNavInvoker,
                                 hasVolumetricNavVolume, hasVolumetricAgent,
                                 hasDestructible, hasBuoyancy, hasUIStyle, hasUITooltip, hasUIWindow,

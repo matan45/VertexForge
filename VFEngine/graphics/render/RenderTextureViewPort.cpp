@@ -208,7 +208,10 @@ namespace render
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
         auto* ibl = mainPassHandler->getIBL();
-        if (ibl && ibl->isInitialized() &&
+        // isSkyboxInitialized(), not isInitialized(): the VK-1574 apply path binds the skybox via
+        // initSkybox() and leaves iblInitialized false, which would make this branch permanently
+        // dead and every render texture fall through to a plain clear.
+        if (ibl && ibl->isSkyboxInitialized() &&
             imageIndex < rttSkyboxDescSets.size() && rttSkyboxDescSets[imageIndex])
         {
             ibl->renderSkyboxToTarget(commandBuffer, {
@@ -597,14 +600,19 @@ namespace render
         const uint32_t imageCount = swapChain.getImageCount();
         const auto logicalDevice = device.getLogicalDevice();
 
-        // Mesh IBL descriptor pool sized for `imageCount` mirror sets
-        // (1 CameraUBO + 3 image samplers each).
+        // Mesh IBL descriptor pool sized for `imageCount` mirror sets. Each set is
+        // 1 CameraUBO + 3 IBL image samplers + VK-1577's MAX_REFLECTION_PROBES probe cube slots
+        // + 1 probe metadata SSBO. The sizing MUST track the set-0 layout in
+        // StaticMeshPipelineSetup.cpp::createDescriptorSetLayout — under-sizing here fails at
+        // allocation time, at runtime, on whichever scene first opens a render texture.
         {
-            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            std::array<vk::DescriptorPoolSize, 3> poolSizes{};
             poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
             poolSizes[0].descriptorCount = imageCount;
             poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
-            poolSizes[1].descriptorCount = imageCount * 3;
+            poolSizes[1].descriptorCount = imageCount * (3 + render::probe::MAX_REFLECTION_PROBES);
+            poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
+            poolSizes[2].descriptorCount = imageCount;
 
             vk::DescriptorPoolCreateInfo poolInfo{};
             poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -622,7 +630,7 @@ namespace render
         }
 
         auto* ibl = mainPassHandler->getIBL();
-        if (ibl && ibl->isInitialized())
+        if (ibl && ibl->isSkyboxInitialized()) // see the note at the skybox draw above
         {
             std::array<vk::DescriptorPoolSize, 2> poolSizes{};
             poolSizes[0].type = vk::DescriptorType::eUniformBuffer;

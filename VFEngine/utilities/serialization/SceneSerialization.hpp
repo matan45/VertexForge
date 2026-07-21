@@ -197,6 +197,7 @@ namespace serialization
 
         static json serializeIBL(const components::IBLComponent& ibl);
         static asset::AssetRef deserializeIBLRef(const json& j);
+        static void deserializeIBLParams(const json& j, components::IBLComponent& ibl); // VK-1574 knobs
 
         static json serializeMesh(const components::MeshComponent& mesh);
         static void deserializeMesh(const json& j, components::MeshComponent& mesh);
@@ -218,6 +219,9 @@ namespace serialization
 
         static json serializeFogVolume(const components::FogVolumeComponent& fog);
         static void deserializeFogVolume(const json& j, components::FogVolumeComponent& fog);
+
+        static json serializeReflectionProbe(const components::ReflectionProbeComponent& probe);
+        static void deserializeReflectionProbe(const json& j, components::ReflectionProbeComponent& probe);
 
         static json serializeWeatherZone(const components::WeatherZoneComponent& zone);
         static void deserializeWeatherZone(const json& j, components::WeatherZoneComponent& zone);

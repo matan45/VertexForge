@@ -47,6 +47,7 @@ namespace windows::details {
         bool hasDecal = false;
         bool hasReverbZone = false;
         bool hasFogVolume = false;
+        bool hasReflectionProbe = false;
         bool hasUIAnimation = false;
         bool hasUIMask = false;
         bool hasUIDraggable = false;

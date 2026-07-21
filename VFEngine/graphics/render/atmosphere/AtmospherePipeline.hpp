@@ -1,7 +1,6 @@
 #pragma once
 
 #include "AtmosphereTypes.hpp"
-#include "atmosphere/DayNightCycleController.hpp"
 #include "../../core/VulkanMemoryManager.hpp"
 #include <vulkan/vulkan.hpp>
 #include <memory>
@@ -122,7 +121,6 @@ namespace render::atmosphere
         float cachedFar = 1000.0f;
         float cachedTime = 0.0f;
         float lastFrameTime = 0.0f;
-        DayNightCycleController dayNightController;
         glm::vec3 sunDirectionOverride{0.0f, 1.0f, 0.0f};
         bool hasSunOverride = false;
 
@@ -144,9 +142,6 @@ namespace render::atmosphere
         void setCameraData(const glm::mat4& view, const glm::mat4& projection,
                            const glm::vec3& cameraPos, float nearPlane, float farPlane,
                            float time = 0.0f);
-
-        // Advance day-night cycle; call once per frame from the main loop before rendering
-        void updateDayNightCycle(float deltaTime);
 
         // Override sun direction from directional light (takes priority over azimuth/elevation)
         // Ignored when day-night cycle is active (cycle controls sun position)
@@ -181,6 +176,11 @@ namespace render::atmosphere
         // Expose transmittance LUT for cloud lighting
         [[nodiscard]] vk::ImageView getTransmittanceView() const { return transmittanceView; }
         [[nodiscard]] vk::Sampler getLUTSampler() const { return lutSampler; }
+
+        // VK-1569: expose the sky-view LUT + params UBO for dynamic sky->IBL ambient capture.
+        // Both are created in init() and untouched by recreate(), so the handles are stable.
+        [[nodiscard]] vk::ImageView getSkyViewView() const { return skyViewView; }
+        [[nodiscard]] vk::Buffer getParamsBuffer() const { return paramsBuffer; }
 
     private:
         void createSampler();

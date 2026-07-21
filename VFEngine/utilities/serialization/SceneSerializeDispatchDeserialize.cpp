@@ -21,7 +21,11 @@ namespace serialization
         {
             auto iblRef = deserializeIBLRef(c["ibl"]);
             if (iblRef.isValid())
-                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
+            {
+                auto& ibl = entity.addOrReplaceComponent<components::IBLComponent>();
+                ibl.hdrRef = iblRef;
+                deserializeIBLParams(c["ibl"], ibl); // VK-1574 knobs
+            }
         }
         if (c.contains("worldSector"))
         {
@@ -83,6 +87,11 @@ namespace serialization
         {
             auto& fogComp = entity.addOrReplaceComponent<components::FogVolumeComponent>();
             deserializeFogVolume(c["fogVolume"], fogComp);
+        }
+        if (c.contains("reflectionProbe"))
+        {
+            auto& probeComp = entity.addOrReplaceComponent<components::ReflectionProbeComponent>();
+            deserializeReflectionProbe(c["reflectionProbe"], probeComp);
         }
         if (c.contains("weatherZone"))
         {

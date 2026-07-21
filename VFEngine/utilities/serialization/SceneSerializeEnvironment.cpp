@@ -45,7 +45,15 @@ namespace serialization
                 {"dayNightEnabled", s.dayNightEnabled},
                 {"timeOfDay", s.timeOfDay},
                 {"cycleSpeed", s.cycleSpeed},
-                {"moonPhaseOffset", s.moonPhaseOffset}
+                {"moonPhaseOffset", s.moonPhaseOffset},
+                // Sun -> scene light feedback (VK-1566)
+                {"sunColorFromAtmosphere", s.sunColorFromAtmosphere},
+                {"sunColorFeedbackStrength", s.sunColorFeedbackStrength},
+                {"cycleControlsSunEntity", s.cycleControlsSunEntity},
+                // Dynamic sky -> IBL ambient (VK-1569)
+                {"dynamicAmbient", s.dynamicAmbient},
+                {"ambientIntensity", s.ambientIntensity},
+                {"ambientItemsPerFrame", s.ambientItemsPerFrame}
             };
         }
 
@@ -145,6 +153,22 @@ namespace serialization
                 s.cycleSpeed = std::clamp(a["cycleSpeed"].get<float>(), 0.0f, 100.0f);
             if (a.contains("moonPhaseOffset") && a["moonPhaseOffset"].is_number())
                 s.moonPhaseOffset = std::clamp(a["moonPhaseOffset"].get<float>(), 0.0f, 1.0f);
+
+            // Sun -> scene light feedback (VK-1566)
+            if (a.contains("sunColorFromAtmosphere") && a["sunColorFromAtmosphere"].is_boolean())
+                s.sunColorFromAtmosphere = a["sunColorFromAtmosphere"].get<bool>();
+            if (a.contains("sunColorFeedbackStrength") && a["sunColorFeedbackStrength"].is_number())
+                s.sunColorFeedbackStrength = std::clamp(a["sunColorFeedbackStrength"].get<float>(), 0.0f, 1.0f);
+            if (a.contains("cycleControlsSunEntity") && a["cycleControlsSunEntity"].is_boolean())
+                s.cycleControlsSunEntity = a["cycleControlsSunEntity"].get<bool>();
+
+            // Dynamic sky -> IBL ambient (VK-1569)
+            if (a.contains("dynamicAmbient") && a["dynamicAmbient"].is_boolean())
+                s.dynamicAmbient = a["dynamicAmbient"].get<bool>();
+            if (a.contains("ambientIntensity") && a["ambientIntensity"].is_number())
+                s.ambientIntensity = std::clamp(a["ambientIntensity"].get<float>(), 0.0f, 10.0f);
+            if (a.contains("ambientItemsPerFrame") && a["ambientItemsPerFrame"].is_number())
+                s.ambientItemsPerFrame = std::clamp(a["ambientItemsPerFrame"].get<int>(), 1, 32);
         }
 
         json serializeCloud(const render::cloud::CloudSettings& s)

@@ -393,7 +393,9 @@ namespace serialization
             auto iblRef = SceneSerialization::deserializeIBLRef(componentsJson["ibl"]);
             if (iblRef.isValid())
             {
-                entity.addOrReplaceComponent<components::IBLComponent>().hdrRef = iblRef;
+                auto& ibl = entity.addOrReplaceComponent<components::IBLComponent>();
+                ibl.hdrRef = iblRef;
+                SceneSerialization::deserializeIBLParams(componentsJson["ibl"], ibl); // VK-1574 knobs
             }
         }
 

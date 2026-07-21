@@ -19,6 +19,7 @@
 #include "gpudriven/billboard/BillboardGPUTypes.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <string_view>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -107,6 +108,7 @@ namespace render::graph
 namespace render::atmosphere
 {
     class AtmospherePipeline;
+    class SkyEnvironmentCapture;
     struct AtmosphereSettings;
 }
 
@@ -121,6 +123,16 @@ namespace render
     class ClearColor;
     class IBL;
     class DebugRenderer;
+
+    namespace ibl
+    {
+        class HdrEnvironmentCapture; // VK-1574: non-blocking HDR IBL bake
+    }
+
+    namespace probe
+    {
+        class ReflectionProbeManager; // VK-1577: local reflection probe bake
+    }
 
     namespace mesh
     {
@@ -182,6 +194,16 @@ namespace render
         std::unique_ptr<gi::SSGIPipeline> ssgiPipeline;
         std::unique_ptr<ssr::SSRPipeline> ssrPipeline;
         std::unique_ptr<atmosphere::AtmospherePipeline> atmospherePipeline;
+        std::unique_ptr<atmosphere::SkyEnvironmentCapture> skyEnvCapture; // VK-1569 dynamic sky->IBL ambient
+        std::unique_ptr<ibl::HdrEnvironmentCapture> hdrEnvCapture; // VK-1574 non-blocking HDR IBL bake
+        std::unique_ptr<probe::ReflectionProbeManager> reflectionProbes; // VK-1577 local probe bake
+        // Tracks the last permutation the mesh/terrain pipelines were built with, so the 0<->N
+        // transition recreates them exactly once instead of every frame.
+        bool reflectionProbePermutationActive = false;
+        // True while the mesh IBL descriptor is bound to the HDR capture's live maps (first-bind gate).
+        bool hdrCaptureMeshBound = false;
+        // Stored so the HDR capture can retire old source textures without a waitIdle.
+        core::DeferredDeletionQueue* deletionQueue = nullptr;
         std::unique_ptr<cloud::CloudPipeline> cloudPipeline;
         std::unique_ptr<transparency::WBOITPipeline> wboitPipeline;
         bool wboitEnabled = true;
@@ -205,6 +227,9 @@ namespace render
         std::unique_ptr<common::SharedCameraUBO> sharedCameraUBO;
         float currentSnowAccumulation = 0.0f;
         float currentWetness = 0.0f;
+        // VK-1574: global IBL knobs pushed live into the set-0 CameraUBO each frame.
+        glm::vec4 currentIblTintIntensity{1.0f};              // rgb = tint, a = intensity
+        glm::vec4 currentIblRotation{1.0f, 0.0f, 0.0f, 0.0f}; // x = cos(theta), y = sin(theta)
 
         bool meshPipelineInitialized = false;
         std::vector<mesh::MeshRenderData> currentMeshDrawList;
@@ -382,6 +407,38 @@ namespace render
         void initMeshPipeline(bool enableGPUDriven = true);
         void reinitMeshPipelineWithDefaults();
         void reinitMeshPipelineWithIBL();
+        void reinitMeshPipelineWithDynamicAmbient();          // VK-1569: bind the dynamic-ambient live maps
+        [[nodiscard]] uint64_t computeAmbientCaptureEpoch() const; // VK-1569: sky-state hash driving recapture
+        void reinitMeshPipelineWithHdrCapture();              // VK-1574: bind the HDR capture's live maps
+
+        // VK-1577 — reflection probes.
+        // Called at the render-texture point (before the frame graph): renders at most one probe
+        // cube face this frame. Lazily creates the probe manager the first time a scene actually
+        // contains a probe, so probe-free projects pay nothing — not even the ~8 MiB of cubes.
+        void tickReflectionProbes();
+        [[nodiscard]] probe::ReflectionProbeManager* getReflectionProbeManager() const
+        {
+            return reflectionProbes.get();
+        }
+        // Publishes the probe cubes + SSBO into the mesh pipeline's set 0, and flips the
+        // REFLECTION_PROBES_ENABLED permutation when the scene crosses 0 <-> N baked probes.
+        void syncReflectionProbeResources();
+        // Re-binds the probe cubes + SSBO into set 0 after a mesh-pipeline reinit. cleanUpForReinit()
+        // drops the cached handles, so every reinitMeshPipeline* path MUST call this once the new
+        // descriptor set exists or local reflections silently fall back to the global environment.
+        void republishProbeResources();
+
+        // VK-1574: non-blocking HDR IBL apply/remove (called by IBLController). applyHdrEnvironment
+        // sets the source, blocking-bakes only on the first bind, and rides the per-frame capture on
+        // subsequent applies; removeHdrEnvironment reverts the mesh + skybox.
+        void applyHdrEnvironment(std::string_view path);
+        void removeHdrEnvironment();
+        bool isHdrEnvironmentActive() const { return hdrCaptureMeshBound; }
+        // VK-1569/VK-1574: the dynamic sky and the HDR capture are mutually exclusive owners of the
+        // mesh IBL descriptor. Both apply and remove have to respect this, or one silently unbinds
+        // the other's ambient with no path back (applyAtmosphereSettings only reacts to the toggle
+        // edge, so it never restores it).
+        [[nodiscard]] bool isDynamicAmbientOwningMeshIbl() const;
 
         void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }
@@ -473,6 +530,14 @@ namespace render
 
         void setSnowAccumulation(float value) { currentSnowAccumulation = value; }
         void setWetness(float value) { currentWetness = value; }
+
+        // VK-1574: precompute the env Y-rotation cos/sin once per change (cheap, no re-bake).
+        void setIBLParams(float intensity, float rotationDeg, const glm::vec3& tint)
+        {
+            currentIblTintIntensity = glm::vec4(tint, intensity);
+            const float r = glm::radians(rotationDeg);
+            currentIblRotation = glm::vec4(glm::cos(r), glm::sin(r), 0.0f, 0.0f);
+        }
 
         void setVisibleLightsFromBVH(const std::vector<uint32_t>& visibleLights);
         void clearVisibleLights();

@@ -66,6 +66,12 @@ TEST_SUITE("ImporterRegistry")
         CHECK(detect(headerFromText("glTF")) == "GLB");
         CHECK(detect(headerFromText("OTTO")) == "OTF");
         CHECK(detect(headerFromBytes({0x76, 0x2F, 0x31, 0x01})) == "EXR");
+        // KTX2 / KTX1 / DDS (VK-1642). 12-byte KTX ids differ at bytes 5-6.
+        CHECK(detect(headerFromBytes({0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB,
+                                      0x0D, 0x0A, 0x1A, 0x0A})) == "KTX2");
+        CHECK(detect(headerFromBytes({0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB,
+                                      0x0D, 0x0A, 0x1A, 0x0A})) == "KTX1");
+        CHECK(detect(headerFromBytes({0x44, 0x44, 0x53, 0x20})) == "DDS"); // "DDS "
     }
 
     TEST_CASE("heuristic formats detect exactly as before")
@@ -113,6 +119,9 @@ TEST_SUITE("ImporterRegistry")
             {"TGA", "vfImage", resource::AssetType::Texture},
             {"HDR", "vfHdr", resource::AssetType::HDR},
             {"EXR", "vfHdr", resource::AssetType::HDR},
+            {"KTX2", "vfImage", resource::AssetType::Texture}, // VK-1642 (HDR -> .vfHdr at process time)
+            {"KTX1", "vfImage", resource::AssetType::Texture},
+            {"DDS", "vfImage", resource::AssetType::Texture},
             {"MP3", "vfAudio", resource::AssetType::Audio},
             {"WAV", "vfAudio", resource::AssetType::Audio},
             {"OGG", "vfAudio", resource::AssetType::Audio},
@@ -154,6 +163,7 @@ TEST_SUITE("ImporterRegistry")
         };
 
         for (const char* ext : {"png", "jpg", "jpeg", "bmp", "tga", "hdr", "exr",
+                                "ktx2", "ktx", "dds",
                                 "mp3", "wav", "ogg", "obj", "fbx", "dae", "gltf", "glb",
                                 "ttf", "otf"})
         {
@@ -169,6 +179,9 @@ TEST_SUITE("ImporterRegistry")
         CHECK(files::FileUtils::isTextureFile("a.jpeg"));
         CHECK(files::FileUtils::isTextureFile("a.bmp"));
         CHECK(files::FileUtils::isTextureFile("a.tga"));
+        CHECK(files::FileUtils::isTextureFile("a.ktx2")); // VK-1642
+        CHECK(files::FileUtils::isTextureFile("a.ktx"));
+        CHECK(files::FileUtils::isTextureFile("a.DDS"));
         CHECK_FALSE(files::FileUtils::isTextureFile("a.hdr"));
 
         CHECK(files::FileUtils::isHDRFile("a.hdr"));
@@ -304,11 +317,16 @@ TEST_SUITE("ImporterRegistry")
         CHECK(importer->deriveAssetType(context) == resource::AssetType::Animation);
 
         // The options surface in the import dialog for mesh extensions:
-        // animationOnly (VK-194) and extractEmbeddedTextures (VK-55).
+        // animationOnly (VK-194), extractEmbeddedTextures (VK-55), combined static
+        // meshes and material-texture import (VK-1641).
         auto options = import::ImporterRegistry::instance().optionsForExtension("fbx");
-        REQUIRE(options.size() == 2);
+        REQUIRE(options.size() == 4);
         CHECK(options[0].key == "animationOnly");
         CHECK(options[1].key == "extractEmbeddedTextures");
+        CHECK(options[2].key == "combineMeshes");
+        CHECK(std::get<bool>(options[2].defaultValue) == false);
+        CHECK(options[3].key == "importMaterialTextures");
+        CHECK(std::get<bool>(options[3].defaultValue) == false);
     }
 
     TEST_CASE("parallel detection is stable")

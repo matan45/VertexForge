@@ -8,6 +8,9 @@
 #include "ssr/SSRPipeline.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "atmosphere/SkyEnvironmentCapture.hpp"
+#include "ibl/HdrEnvironmentCapture.hpp"
+#include "probe/ReflectionProbeManager.hpp"
 #include "cloud/CloudPipeline.hpp"
 #include "ClearColor.hpp"
 #include "IBL.hpp"
@@ -95,6 +98,20 @@ namespace render
         // full control over all layout transitions.
         // =====================================================================
 
+        // VK-1577: drive the reflection-probe scene capture (at most one cube face, self-contained
+        // submit) before any pass is registered, so a face captured now is visible to the prefilter
+        // pass added further down this same build.
+        //
+        // This lives here rather than at the render-texture hook because that hook only runs in PLAY
+        // MODE with RenderTexture components present (RenderTexturePlayModeHandler::update early-outs
+        // on !rttActive) — probes must bake in the editor viewport too. buildFrameGraph is the one
+        // entry point that runs every frame in BOTH the Editor and the Runtime.
+        //
+        // Recording the main command buffer is in progress here, but this only SUBMITS separate
+        // command buffers (the RTT viewport's, plus a single-time copy) — the same self-contained
+        // pattern HdrEnvironmentCapture::pollSource already uses at this point in the frame.
+        tickReflectionProbes();
+
         // Scoped MSAA: the pre-resolve passes write the multisampled handles; when
         // MSAA is off these aliases ARE the single-sample handles, so the pass
         // declarations below are unconditional. The SceneMeshes pass resolves into
@@ -155,6 +172,49 @@ namespace render
             builder.setSideEffect();
         }
 
+        // VK-1574: time-sliced non-blocking HDR IBL bake. Mutually exclusive with the VK-1569
+        // dynamic-sky capture (gated !dynamicAmbient). Registered before the sky/IBL and mesh passes
+        // so publish()'s barriers order the live env + irradiance + prefilter ahead of their
+        // consumers (skybox reads envLive; mesh reads irradiance/prefilter). Writes only the
+        // persistent capture cubemaps (manages its own barriers) => side-effect pass.
+        {
+            const bool dynamicAmbient = atmospherePipeline && atmospherePipeline->isEnabled() &&
+                                        atmospherePipeline->getSettings().dynamicAmbient;
+            if (hdrEnvCapture && hdrEnvCapture->isInitialized() && !dynamicAmbient)
+            {
+                hdrEnvCapture->pollSource(); // promote a newly-decoded HDR to resident (self-contained upload)
+                if (hdrEnvCapture->hasSource())
+                {
+                    const uint64_t hdrEpoch = hdrEnvCapture->currentEpoch();
+                    const int itemsPerFrame = atmospherePipeline ? atmospherePipeline->getSettings().ambientItemsPerFrame : 6;
+                    const uint32_t budget = itemsPerFrame > 0 ? static_cast<uint32_t>(itemsPerFrame) : 1u;
+                    auto captureBuilder = frameGraph->addPass("HdrEnvCapture",
+                        [this, hdrEpoch, budget](vk::CommandBuffer cmd, uint32_t) {
+                            hdrEnvCapture->recordCapture(cmd, budget, hdrEpoch);
+                        });
+                    captureBuilder.setSegment(graph::HookSegment::Scene);
+                    captureBuilder.setSideEffect();
+                }
+            }
+        }
+
+        // VK-1577: the GGX-prefilter half of the reflection probe bake. The scene faces themselves
+        // are captured at the render-texture point (their own submits, one face per frame); this
+        // pass convolves the finished env scratch cube and publishes it into the probe's live cube.
+        // Registered before the mesh passes so publish()'s barriers order the live cube ahead of the
+        // fragment reads that sample it. Writes only its own persistent cubemaps => side-effect pass.
+        if (reflectionProbes && reflectionProbes->isInitialized())
+        {
+            auto probeBuilder = frameGraph->addPass("ReflectionProbePrefilter",
+                [this](vk::CommandBuffer cmd, uint32_t) {
+                    // Same budget shape as the sky/HDR captures: a handful of items per frame keeps
+                    // the bake invisible in the frame time.
+                    reflectionProbes->recordGraphWork(cmd, 6u);
+                });
+            probeBuilder.setSegment(graph::HookSegment::Scene);
+            probeBuilder.setSideEffect();
+        }
+
         // Atmosphere Sky / IBL
         if (atmospherePipeline && atmospherePipeline->isEnabled())
         {
@@ -179,6 +239,27 @@ namespace render
             colorH = builder.write(colorH, graph::ResourceUsage::ColorAttachmentWrite);
             builder.setSegment(graph::HookSegment::Scene);
             builder.setSideEffect();
+
+            // VK-1569: time-sliced dynamic sky -> IBL ambient capture, recorded right after the sky
+            // LUTs are refreshed. It writes only the persistent capture cubemaps (managing their own
+            // barriers) and does not touch scene color, so it stays a side-effect pass.
+            if (skyEnvCapture && skyEnvCapture->isInitialized() &&
+                atmospherePipeline->getSettings().dynamicAmbient)
+            {
+                const uint64_t ambientEpoch = computeAmbientCaptureEpoch();
+                // VK-1569: scales the captured env cube (and so both derived ambient maps). Safe to
+                // set every frame — it only takes effect on the next capture cycle, and
+                // computeAmbientCaptureEpoch() folds the same value in, so a change starts one.
+                skyEnvCapture->setAmbientIntensity(atmospherePipeline->getSettings().ambientIntensity);
+                const int itemsPerFrame = atmospherePipeline->getSettings().ambientItemsPerFrame;
+                const uint32_t budget = itemsPerFrame > 0 ? static_cast<uint32_t>(itemsPerFrame) : 1u;
+                auto captureBuilder = frameGraph->addPass("SkyAmbientCapture",
+                    [this, ambientEpoch, budget](vk::CommandBuffer cmd, uint32_t) {
+                        skyEnvCapture->recordCapture(cmd, budget, ambientEpoch);
+                    });
+                captureBuilder.setSegment(graph::HookSegment::Scene);
+                captureBuilder.setSideEffect();
+            }
         }
         else
         {

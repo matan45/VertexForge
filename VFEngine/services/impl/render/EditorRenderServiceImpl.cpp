@@ -340,10 +340,23 @@ namespace services
                 return setIBL(cmd.hdrPath);
             });
 
+        dispatcher.registerCommandHandler<events::render::SetIBLParamsCommand>(
+            [this](const events::render::SetIBLParamsCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(cmd.intensity, cmd.rotationDeg, cmd.tint);
+            });
+
         dispatcher.registerCommandHandler<events::render::RemoveIBLCommand>(
             [this](const events::render::RemoveIBLCommand&)
             {
                 removeIBL();
+                // The knobs live in RenderPassHandler and are uploaded into the shared CameraUBO
+                // every frame, so removing the environment without resetting them would leave the
+                // removed IBL's intensity/rotation/tint multiplying whatever ambient is bound next.
+                // Neutral values mirror IBLComponent's defaults (utilities/components/CoreComponents.hpp).
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(1.0f, 0.0f, glm::vec3(1.0f));
             });
 
         dispatcher.registerCommandHandler<events::render::RemoveCameraCommand>(

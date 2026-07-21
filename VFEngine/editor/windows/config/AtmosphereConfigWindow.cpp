@@ -204,6 +204,52 @@ namespace windows
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Shifts the moon orbit relative to sun. 0 = full moon at midnight.");
         }
+
+        // VK-1566: sun -> scene light feedback (works with a static sun or the cycle).
+        ImGui::Spacing();
+        ImGui::Text("Scene Lighting Feedback");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Sun Color From Atmosphere", &settings.sunColorFromAtmosphere))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Tint the directional light by the atmospheric sun transmittance\n(warm at sunrise/sunset, dims below the horizon).");
+
+        if (settings.sunColorFromAtmosphere)
+        {
+            if (ImGui::SliderFloat("Feedback Strength", &settings.sunColorFeedbackStrength, 0.0f, 1.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("0 = white sun, 1 = full atmospheric tint.");
+        }
+
+        if (ImGui::Checkbox("Cycle Controls Sun Entity", &settings.cycleControlsSunEntity))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("While the day-night cycle runs, rotate the sun light entity so\nscene lighting and shadows track the moving sun.");
+
+        // VK-1569: dynamic sky -> IBL ambient (time-sliced atmosphere capture).
+        ImGui::Spacing();
+        ImGui::Text("Dynamic Sky Ambient");
+        ImGui::Separator();
+
+        if (ImGui::Checkbox("Dynamic Sky Ambient", &settings.dynamicAmbient))
+            isDirty = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Capture the atmosphere sky into IBL cubemaps so diffuse/specular ambient\ntracks time-of-day and weather. Overrides the scene's static IBL while on.");
+
+        if (settings.dynamicAmbient)
+        {
+            if (ImGui::SliderFloat("Ambient Intensity", &settings.ambientIntensity, 0.0f, 10.0f, "%.2f"))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Multiplier on the captured ambient (weather routes its ambient light\nmultiplier here).");
+
+            if (ImGui::SliderInt("Capture Items / Frame", &settings.ambientItemsPerFrame, 1, 32))
+                isDirty = true;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Time-slicing budget. 42 items make one full refresh\n(6 => ~7 frames per update).");
+        }
     }
 
     void AtmosphereConfigWindow::drawMoonSection()

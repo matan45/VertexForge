@@ -50,11 +50,21 @@ namespace render::atmosphere
         float cycleSpeed = 1.0f;                    // one game-hour per real-time minute at 1.0
         float moonPhaseOffset = 0.0f;               // 0-1, shifts moon azimuth relative to sun (elevation stays opposite)
 
+        // Sun -> scene light feedback (VK-1566, opt-in; both default OFF => bit-identical to legacy)
+        bool sunColorFromAtmosphere = false;        // tint the directional light by the atmospheric sun transmittance
+        float sunColorFeedbackStrength = 1.0f;      // 0 = white sun, 1 = full atmospheric tint (mix factor)
+        bool cycleControlsSunEntity = false;        // day-night cycle rotates the first directional-light entity (moves scene lighting + shadows)
+
         // Ground
         glm::vec3 groundAlbedo{0.3f};
 
         // Aerial perspective
         float aerialMaxDist = 100000.0f;            // meters
         float aerialIntensity = 1.0f;
+
+        // Dynamic sky -> IBL ambient (VK-1569, opt-in; default OFF => bit-identical to legacy)
+        bool dynamicAmbient = false;                // time-sliced atmosphere capture drives PBR ambient (overrides scene IBLComponent.hdrRef)
+        float ambientIntensity = 1.0f;              // multiplier on the captured ambient (weather routes WeatherState.ambientLightMult here)
+        int ambientItemsPerFrame = 6;               // capture work-items processed per frame (env(6)->irr(6)->prefilter(30)=42 total => full refresh ~7 frames)
     };
 }

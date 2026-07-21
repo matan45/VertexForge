@@ -52,7 +52,14 @@ namespace services
 
         glm::vec3 baseSunIrradiance{0.0f};
         float baseAerialIntensity = 0.0f;
+        float baseAmbientIntensity = 0.0f; // VK-1569: base for dynamic-ambient weather multiplier
         bool basesAtmosCaptured = false;
+        // What applyAtmosphereWeather last wrote into ambientIntensity. If the live value differs on
+        // the next tick, some other writer (the Atmosphere slider, a script native, a scene load)
+        // moved it, and that value becomes the new base — otherwise weather would pin the field to a
+        // snapshot taken once and the user could never tune ambient while weather runs.
+        // NOTE: baseSunIrradiance/baseAerialIntensity have the same one-shot-snapshot behavior.
+        float lastWrittenAmbient = -1.0f; // <0 = nothing written yet
 
         IVFXRuntimeProvider* vfxProvider = nullptr;
         std::unique_ptr<PrecipitationController> rainController;

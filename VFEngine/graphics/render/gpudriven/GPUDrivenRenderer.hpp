@@ -248,6 +248,12 @@ namespace render::gpudriven
         GPUDrivenStats stats{};
 
         vk::DescriptorSetLayout cachedIBLLayout;
+        // VK-1577: whether the mesh/terrain shaders are compiled with the reflection-probe path.
+        // Probe resources ride the shared set-0 IBL layout, so this changes only the SHADER
+        // permutation, never the descriptor layout — but it still requires a pipeline recreate.
+        bool reflectionProbesEnabled = false;
+        // Forces updateFormats() past its early-out when only the permutation changed.
+        bool pipelinePermutationDirty = false;
         // Dynamic rendering formats (Vulkan 1.3) - replaces cached render passes
         std::vector<vk::Format> cachedColorFormats;
         vk::Format cachedDepthFormat = vk::Format::eUndefined;
@@ -558,6 +564,12 @@ namespace render::gpudriven
 
         void updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                           vk::DescriptorSetLayout newIBLLayout = nullptr);
+
+        // VK-1577: toggle the reflection-probe shader permutation. A no-op unless the value actually
+        // changes, so it is safe to call every frame; when it does change it recreates the mesh,
+        // transparent, WBOIT and terrain pipelines exactly once.
+        void setReflectionProbesEnabled(bool enabled);
+        [[nodiscard]] bool areReflectionProbesEnabled() const { return reflectionProbesEnabled; }
 
         uint32_t getMergedVertexCount() const;
         uint32_t getMergedIndexCount() const;

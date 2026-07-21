@@ -13,12 +13,11 @@ namespace controllers::offscreen
 
     void IBLController::set(std::string_view iblPath)
     {
-        renderHandler.getIBL()->init(iblPath);
-
-        if (renderHandler.isMeshPipelineInitialized())
-        {
-            renderHandler.reinitMeshPipelineWithIBL();
-        }
+        // VK-1574: non-blocking HDR IBL bake. The old blocking IBL::init (~73 serialized submits) is
+        // replaced by HdrEnvironmentCapture: the first bind does one blocking full capture (scene
+        // load already blocks), subsequent applies ride the per-frame time-sliced capture and the
+        // previous environment stays visible until the new bake publishes (no hitch, no gray flash).
+        renderHandler.applyHdrEnvironment(iblPath);
     }
 
     void IBLController::setCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
@@ -28,11 +27,6 @@ namespace controllers::offscreen
 
     void IBLController::remove()
     {
-        renderHandler.getIBL()->remove();
-
-        if (renderHandler.isMeshPipelineInitialized())
-        {
-            renderHandler.reinitMeshPipelineWithDefaults();
-        }
+        renderHandler.removeHdrEnvironment();
     }
 }

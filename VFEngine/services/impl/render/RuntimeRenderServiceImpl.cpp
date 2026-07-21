@@ -1,6 +1,8 @@
 #include "RuntimeRenderServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
+#include "../../events/render/AtmosphereEvents.hpp"
+#include "DayNightSync.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 #include <utility>
@@ -134,10 +136,22 @@ namespace services
                 return setIBL(cmd.hdrPath);
             });
 
+        dispatcher.registerCommandHandler<events::render::SetIBLParamsCommand>(
+            [this](const events::render::SetIBLParamsCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(cmd.intensity, cmd.rotationDeg, cmd.tint);
+            });
+
         dispatcher.registerCommandHandler<events::render::RemoveIBLCommand>(
             [this](const events::render::RemoveIBLCommand&)
             {
                 removeIBL();
+                // See EditorRenderServiceImpl: the knobs are process-global, so they have to be
+                // reset alongside the environment or they leak onto the next one. Neutral values
+                // mirror IBLComponent's defaults (utilities/components/CoreComponents.hpp).
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(1.0f, 0.0f, glm::vec3(1.0f));
             });
 
         dispatcher.registerCommandHandler<events::render::UpdateIBLCameraCommand>(
@@ -203,6 +217,31 @@ namespace services
             [this](const events::postprocess::GetPostProcessEnabledQuery&)
             {
                 return postProcessProvider ? postProcessProvider->isPostProcessEnabled() : true;
+            });
+
+        // VK-1566 / runtime parity: the editor registers these in EditorRenderServiceImpl, but
+        // runtime had no atmosphere handlers, so a scene's atmosphere + day-night cycle never
+        // reached the runtime pipeline. Register the apply/query here (no editor-only auto-"Sun"
+        // creation) plus the per-frame day-night advance dispatched by the SunSync frame step.
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsCommand>(
+            [this](const events::atmosphere::ApplyAtmosphereSettingsCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->applyAtmosphereSettings(cmd.settings);
+            });
+
+        dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereSettingsQuery>(
+            [this](const events::atmosphere::GetAtmosphereSettingsQuery&)
+            {
+                return offScreenProvider
+                           ? offScreenProvider->getAtmosphereSettings()
+                           : render::atmosphere::AtmosphereSettings{};
+            });
+
+        dispatcher.registerCommandHandler<events::atmosphere::UpdateDayNightCommand>(
+            [this](const events::atmosphere::UpdateDayNightCommand& cmd)
+            {
+                tickDayNightAndSyncSun(offScreenProvider, cmd.deltaTime);
             });
 
         meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(

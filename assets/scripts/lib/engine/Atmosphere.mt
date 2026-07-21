@@ -137,6 +137,68 @@ public class Atmosphere {
     }
 
     // ============================================
+    // Sun -> Scene Light Feedback (VK-1566)
+    // ============================================
+
+    // Tint the directional light by the atmospheric sun transmittance (default: false)
+    public static function isSunColorFromAtmosphere(): bool {
+        return _native_atmosphere_isSunColorFromAtmosphere();
+    }
+
+    public static function setSunColorFromAtmosphere(bool enabled): void {
+        _native_atmosphere_setSunColorFromAtmosphere(enabled);
+    }
+
+    // Feedback strength 0..1: 0 = white sun, 1 = full atmospheric tint (default: 1.0)
+    public static function getSunColorFeedbackStrength(): float {
+        return _native_atmosphere_getSunColorFeedbackStrength();
+    }
+
+    public static function setSunColorFeedbackStrength(float strength): void {
+        _native_atmosphere_setSunColorFeedbackStrength(strength);
+    }
+
+    // Day-night cycle rotates the sun light entity so scene lighting + shadows track the sun (default: false)
+    public static function isCycleControlsSunEntity(): bool {
+        return _native_atmosphere_isCycleControlsSunEntity();
+    }
+
+    public static function setCycleControlsSunEntity(bool enabled): void {
+        _native_atmosphere_setCycleControlsSunEntity(enabled);
+    }
+
+    // ============================================
+    // Dynamic Sky -> IBL Ambient (VK-1569)
+    // ============================================
+
+    // Capture the atmosphere sky into IBL cubemaps so ambient tracks time-of-day/weather (default: false)
+    public static function isDynamicAmbient(): bool {
+        return _native_atmosphere_isDynamicAmbient();
+    }
+
+    public static function setDynamicAmbient(bool enabled): void {
+        _native_atmosphere_setDynamicAmbient(enabled);
+    }
+
+    // Multiplier on the captured ambient (default: 1.0)
+    public static function getAmbientIntensity(): float {
+        return _native_atmosphere_getAmbientIntensity();
+    }
+
+    public static function setAmbientIntensity(float intensity): void {
+        _native_atmosphere_setAmbientIntensity(intensity);
+    }
+
+    // Time-slicing budget: capture work-items processed per frame, 42 = one full refresh (default: 6)
+    public static function getAmbientItemsPerFrame(): int {
+        return _native_atmosphere_getAmbientItemsPerFrame();
+    }
+
+    public static function setAmbientItemsPerFrame(int items): void {
+        _native_atmosphere_setAmbientItemsPerFrame(items);
+    }
+
+    // ============================================
     // Moon
     // ============================================
 

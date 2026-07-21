@@ -55,6 +55,8 @@ namespace serialization
             out["reverbZone"] = serializeReverbZone(entity.getComponent<components::ReverbZoneComponent>());
         if (entity.hasComponent<components::FogVolumeComponent>())
             out["fogVolume"] = serializeFogVolume(entity.getComponent<components::FogVolumeComponent>());
+        if (entity.hasComponent<components::ReflectionProbeComponent>())
+            out["reflectionProbe"] = serializeReflectionProbe(entity.getComponent<components::ReflectionProbeComponent>());
         if (entity.hasComponent<components::WeatherZoneComponent>())
             out["weatherZone"] = serializeWeatherZone(entity.getComponent<components::WeatherZoneComponent>());
         if (entity.hasComponent<components::ScriptComponent>())

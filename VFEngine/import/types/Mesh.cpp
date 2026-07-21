@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "Mesh.hpp"
 #include "Texture.hpp"
+#include "MeshTextureImport.hpp"
 #include "MeshLODGenerator.hpp"
 #include "MeshSerializer.hpp"
 #include "FractureProcessor.hpp"
@@ -18,9 +19,14 @@
 #include <fstream>
 #include <filesystem>
 #include <unordered_set>
+#include <map>
+#include <variant>
+#include <iterator>
 #include <cctype>
+#include <cmath>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
+#include <assimp/material.h>
 #include <assimp/postprocess.h>
 
 namespace
@@ -343,12 +349,11 @@ namespace
         resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(resource::MeshCompressionFlags::ALL));
     }
 
-    void writeSubmeshHeader(std::ofstream& outFile, const aiMesh* assimpMesh)
+    void writeSubmeshHeader(std::ofstream& outFile, std::string_view meshName,
+                            size_t vertexCount, size_t triangleCount)
     {
-        std::string meshName = assimpMesh->mName.C_Str();
-
         vfLogDebug("Processing submesh '{}' ({} vertices, {} triangles)...",
-                  meshName, assimpMesh->mNumVertices, assimpMesh->mNumFaces);
+                   meshName, vertexCount, triangleCount);
 
         uint32_t nameLength = static_cast<uint32_t>(meshName.length());
         resource::endian::writeLE<uint32_t>(outFile, nameLength);
@@ -391,6 +396,16 @@ namespace
         return s;
     }
 
+    // Reads a bool import option by key from ImportConfig::customOptions (missing or
+    // non-bool => false). Lets the mesh saver gate texture extraction on the specific
+    // option rather than on the shared out-pointer being non-null.
+    bool readBoolOption(const importConfig::ImportConfig& config, std::string_view key)
+    {
+        const auto it = config.customOptions.find(std::string(key));
+        return it != config.customOptions.end() && std::holds_alternative<bool>(it->second) &&
+               std::get<bool>(it->second);
+    }
+
     // Per-mesh output stem. A single-mesh model keeps the bare file name
     // (preserves existing references); multi-mesh models append the (sanitized)
     // mesh name, falling back to the index when empty, and dedup collisions
@@ -413,6 +428,269 @@ namespace
             unique = candidate + "_" + std::to_string(counter++);
 
         return unique;
+    }
+
+    struct StaticMeshInstance
+    {
+        const aiMesh* mesh = nullptr;
+        glm::mat4 transform{1.0f};
+        std::string nodeName;
+    };
+
+    // Combine is a STATIC-mesh feature: it bakes each node's aiNode::mTransformation
+    // (the default/bind pose) into world space. A scene-level animation stack (e.g.
+    // Bistro's wind props) leaves that default pose intact and is irrelevant to the
+    // bake, matching UE5's static-mesh import. Only genuinely skinned meshes (HasBones)
+    // must fall back to split output.
+    bool isStaticScene(const aiScene* scene)
+    {
+        if (!scene)
+            return false;
+
+        for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+        {
+            if (scene->mMeshes[i] && scene->mMeshes[i]->HasBones())
+                return false;
+        }
+
+        return true;
+    }
+
+    void collectStaticMeshInstances(const aiScene* scene, const aiNode* node,
+                                    const glm::mat4& parentTransform,
+                                    std::vector<StaticMeshInstance>& instances,
+                                    std::vector<bool>& referencedMeshes)
+    {
+        if (!scene || !node)
+            return;
+
+        const glm::mat4 nodeTransform = parentTransform * convertMatrix(node->mTransformation);
+        for (uint32_t i = 0; i < node->mNumMeshes; ++i)
+        {
+            const uint32_t meshIndex = node->mMeshes[i];
+            if (meshIndex >= scene->mNumMeshes || !scene->mMeshes[meshIndex])
+            {
+                vfLogWarning("Node '{}' references invalid mesh index {}", node->mName.C_Str(), meshIndex);
+                continue;
+            }
+
+            instances.push_back({scene->mMeshes[meshIndex], nodeTransform, node->mName.C_Str()});
+            referencedMeshes[meshIndex] = true;
+        }
+
+        for (uint32_t i = 0; i < node->mNumChildren; ++i)
+            collectStaticMeshInstances(scene, node->mChildren[i], nodeTransform, instances, referencedMeshes);
+    }
+
+    std::vector<StaticMeshInstance> buildStaticMeshInstances(const aiScene* scene)
+    {
+        std::vector<StaticMeshInstance> instances;
+        if (!scene || !scene->mRootNode)
+            return instances;
+
+        instances.reserve(scene->mNumMeshes);
+        std::vector<bool> referencedMeshes(scene->mNumMeshes, false);
+        collectStaticMeshInstances(scene, scene->mRootNode, glm::mat4(1.0f),
+                                   instances, referencedMeshes);
+
+        // Assimp scenes normally reference every mesh from a node. Preserve any
+        // malformed-but-readable unreferenced meshes instead of silently dropping them.
+        for (uint32_t i = 0; i < scene->mNumMeshes; ++i)
+        {
+            if (!referencedMeshes[i] && scene->mMeshes[i])
+            {
+                vfLogWarning("Mesh '{}' is not referenced by the scene hierarchy; importing with identity transform",
+                             scene->mMeshes[i]->mName.C_Str());
+                instances.push_back({scene->mMeshes[i], glm::mat4(1.0f), {}});
+            }
+        }
+
+        return instances;
+    }
+
+    void applyStaticTransform(types::LODMeshData& meshData, const glm::mat4& transform)
+    {
+        const glm::mat3 linearTransform(transform);
+        const float determinant = glm::determinant(linearTransform);
+        const bool invertible = std::abs(determinant) > 1.0e-8f;
+        const glm::mat3 normalTransform = invertible
+                                              ? glm::transpose(glm::inverse(linearTransform))
+                                              : linearTransform;
+
+        if (!invertible)
+            vfLogWarning("Combined mesh instance has a singular node transform; degenerate normals may be produced");
+
+        for (auto& vertex : meshData.vertices)
+        {
+            vertex.position = glm::vec3(transform * glm::vec4(vertex.position, 1.0f));
+
+            const glm::vec3 transformedNormal = normalTransform * vertex.normal;
+            const float normalLengthSquared = glm::dot(transformedNormal, transformedNormal);
+            vertex.normal = normalLengthSquared > 1.0e-12f
+                                ? transformedNormal / std::sqrt(normalLengthSquared)
+                                : glm::vec3(0.0f);
+        }
+
+        if (determinant < 0.0f)
+        {
+            for (size_t i = 0; i + 2 < meshData.indices.size(); i += 3)
+                std::swap(meshData.indices[i + 1], meshData.indices[i + 2]);
+        }
+    }
+
+    // --- Combined per-material section helpers (VK-1641 phase C) --------------
+    // Mirror the reader's per-submesh, per-LOD caps (MeshStreamHandle.hpp:62-64,
+    // which are private and cannot be referenced across the DLL boundary). LOD0 is
+    // the largest LOD, so bounding it bounds every generated LOD.
+    constexpr uint64_t kMaxSectionVertexCount = 10'000'000;
+    constexpr uint64_t kMaxSectionIndexCount = 30'000'000;
+    constexpr size_t kMaxCombinedSections = 10'000; // == MeshStreamHandle maxSubmeshCount
+
+    // Section name = the sanitized material name. Assimp's ScenePreprocessor injects a
+    // "DefaultMaterial" for material-less scenes, so the Material_<idx> fallback is
+    // effectively unreachable for real scenes but kept for null-safety.
+    std::string materialSectionName(const aiScene* scene, unsigned int materialIndex)
+    {
+        std::string name;
+        if (scene && scene->mMaterials && materialIndex < scene->mNumMaterials &&
+            scene->mMaterials[materialIndex])
+        {
+            aiString aiName;
+            if (scene->mMaterials[materialIndex]->Get(AI_MATKEY_NAME, aiName) == AI_SUCCESS)
+                name = sanitizeFileStem(aiName.C_Str());
+        }
+        if (name.empty())
+            name = "Material_" + std::to_string(materialIndex);
+        return name;
+    }
+
+    // Case-insensitive unique section name (Windows-path parity with the mesh-file
+    // stems). Oversized material groups split naturally into "<mat>", "<mat>_1", ...
+    std::string makeUniqueSectionName(const std::string& candidate,
+                                      std::unordered_set<std::string>& usedLower)
+    {
+        std::string unique = candidate;
+        unsigned int counter = 1;
+        while (!usedLower.insert(toLowerCopy(unique)).second)
+            unique = candidate + "_" + std::to_string(counter++);
+        return unique;
+    }
+
+    // Append an already-transformed instance into a material group's buffers, rebasing
+    // its (local, 0-based) indices by the group's current vertex count. Mirrors
+    // HLODGenerator::collectSectorGeometry's baseVertex rebase; kept local so Import
+    // does not link utilities/world.
+    void appendTransformedInstance(types::LODMeshData& group, types::LODMeshData part)
+    {
+        const uint32_t baseVertex = static_cast<uint32_t>(group.vertices.size());
+        group.vertices.insert(group.vertices.end(),
+                              std::make_move_iterator(part.vertices.begin()),
+                              std::make_move_iterator(part.vertices.end()));
+        group.indices.reserve(group.indices.size() + part.indices.size());
+        for (uint32_t idx : part.indices)
+            group.indices.push_back(baseVertex + idx);
+    }
+
+    struct MaterialSection
+    {
+        unsigned int materialIndex = 0;
+        std::vector<size_t> instanceIndices;
+    };
+
+    // Pass 1: group instances by material index (ascending => deterministic output),
+    // splitting a material into multiple sections when the merged vertex/index totals
+    // would exceed the reader caps. Merging never dedups vertices, so summing
+    // mNumVertices / face-index counts is EXACT and reproduces the same flush
+    // boundaries pass 2 hits — the header section count therefore cannot drift. An
+    // instance too large to fit even alone is logged and skipped (dropped from both
+    // passes), matching the existing overflow handling.
+    std::vector<MaterialSection> buildSectionPlan(const std::vector<StaticMeshInstance>& instances,
+                                                  std::string_view fileName)
+    {
+        std::map<unsigned int, std::vector<size_t>> byMaterial;
+        for (size_t i = 0; i < instances.size(); ++i)
+        {
+            const unsigned int materialIndex = instances[i].mesh ? instances[i].mesh->mMaterialIndex : 0u;
+            byMaterial[materialIndex].push_back(i);
+        }
+
+        std::vector<MaterialSection> plan;
+        for (const auto& [materialIndex, list] : byMaterial)
+        {
+            MaterialSection current{materialIndex, {}};
+            uint64_t currentVerts = 0;
+            uint64_t currentIndices = 0;
+
+            for (size_t inst : list)
+            {
+                const aiMesh* mesh = instances[inst].mesh;
+                if (!mesh)
+                    continue;
+
+                const uint64_t verts = mesh->mNumVertices;
+                uint64_t indices = 0;
+                for (unsigned int f = 0; f < mesh->mNumFaces; ++f)
+                    indices += mesh->mFaces[f].mNumIndices;
+
+                if (verts > kMaxSectionVertexCount || indices > kMaxSectionIndexCount)
+                {
+                    vfLogError("Combined mesh '{}': instance '{}' ({} verts / {} indices) exceeds the "
+                               "per-submesh limits ({} / {}); skipping",
+                               fileName, instances[inst].nodeName, verts, indices,
+                               kMaxSectionVertexCount, kMaxSectionIndexCount);
+                    continue;
+                }
+
+                const bool overflow = !current.instanceIndices.empty() &&
+                    (currentVerts + verts > kMaxSectionVertexCount ||
+                     currentIndices + indices > kMaxSectionIndexCount);
+                if (overflow)
+                {
+                    plan.push_back(std::move(current));
+                    current = MaterialSection{materialIndex, {}};
+                    currentVerts = 0;
+                    currentIndices = 0;
+                }
+
+                current.instanceIndices.push_back(inst);
+                currentVerts += verts;
+                currentIndices += indices;
+            }
+
+            if (!current.instanceIndices.empty())
+                plan.push_back(std::move(current));
+        }
+
+        return plan;
+    }
+
+    // generateConvexData=false writes an empty ConvexDecompositionData (a single 0 byte
+    // the reader accepts) and skips V-HACD. Combined static meshes bucket many
+    // instances per material, so a scene-wide convex decomposition is meaningless and
+    // slow; collision for merged scenes is deferred.
+    void writeProcessedSubmesh(std::ofstream& outFile, std::string_view name,
+                               types::LODMeshData lod0,
+                               const importConfig::MeshImportConfig& config,
+                               const types::MeshLODGenerator& lodGen,
+                               const types::MeshSerializer& serializer,
+                               bool generateConvexData = true)
+    {
+        writeSubmeshHeader(outFile, name, lod0.vertices.size(), lod0.indices.size() / 3);
+        auto lodLevels = lodGen.generateLODLevels(lod0);
+
+        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
+
+        vfLogDebug("  Generating meshlets...");
+        std::array<types::MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
+        for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
+            meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
+        serializer.writeMeshletData(outFile, meshletResults);
+
+        const resource::ConvexDecompositionData convexData =
+            generateConvexData ? lodGen.generateConvexDecomposition(lod0, config)
+                               : resource::ConvexDecompositionData{};
+        serializer.writeConvexDecompositionData(outFile, convexData);
     }
 
     // Mesh decode semaphore: separate from the texture/HDR semaphore in Texture.cpp.
@@ -443,7 +721,8 @@ namespace
 namespace types
 {
     void Mesh::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
-                            std::string_view location, MeshProgressCallback progressCallback,
+                            std::string_view location, MeshOutputLayout outputLayout,
+                            MeshProgressCallback progressCallback,
                             std::vector<std::string>* outWrittenFiles,
                             std::vector<std::string>* outWrittenTextures) const
     {
@@ -473,7 +752,19 @@ namespace types
 
         if (progressCallback) progressCallback(0.2f);
 
-        saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        if (outputLayout == MeshOutputLayout::CombinedStatic && isStaticScene(scene))
+        {
+            saveCombinedStaticMesh(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        }
+        else
+        {
+            if (outputLayout == MeshOutputLayout::CombinedStatic)
+            {
+                vfLogWarning("Combine Meshes requested for skinned model '{}'; using split mesh output",
+                             fileName);
+            }
+            saveToFileStreamingWithLOD(location, fileName, scene, file.config, progressCallback, outWrittenFiles);
+        }
 
         if (file.config.meshConfig.fractureConfig.generateFractureData)
         {
@@ -487,11 +778,20 @@ namespace types
             }
         }
 
-        // VK-55: extract textures embedded in the model (gated by the importer
-        // option, surfaced here via a non-null out-pointer).
+        // Texture extraction — both write into the shared out-pointer, which the
+        // importer makes non-null when either option is on. Each is gated on its own
+        // import option (not merely on the pointer):
+        //   - VK-55: textures embedded in the model file (aiScene->mTextures).
+        //   - VK-1641: textures referenced by the scene's materials, resolved relative
+        //     to the source model (or *N embedded). Materials themselves are not created.
         if (outWrittenTextures)
         {
-            extractEmbeddedTextures(scene, location, fileName, file.config, *outWrittenTextures);
+            if (readBoolOption(file.config, "extractEmbeddedTextures"))
+                extractEmbeddedTextures(scene, location, fileName, file.config, *outWrittenTextures);
+
+            if (readBoolOption(file.config, "importMaterialTextures"))
+                importMaterialTextures(scene, std::filesystem::path(file.path).parent_path(),
+                                       location, fileName, file.config, *outWrittenTextures);
         }
 
         // decodeGuard and decodeLock release here; then importer RAII frees aiScene.
@@ -615,23 +915,9 @@ namespace types
 
             // One mesh per file => numMeshes == 1.
             writeFileHeader(outFile, 1);
-            writeSubmeshHeader(outFile, scene->mMeshes[i]);
-
             LODMeshData lod0 = convertAssimpMesh(scene->mMeshes[i], skeleton);
-            auto lodLevels = lodGen.generateLODLevels(lod0);
-
-            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                serializer.writeLODLevelCompressed(outFile, lodLevels[lod]);
-
-            vfLogDebug("  Generating meshlets...");
-            std::array<MeshletBuildResult, resource::LOD_LEVEL_COUNT> meshletResults;
-            for (uint32_t lod = 0; lod < resource::LOD_LEVEL_COUNT; ++lod)
-                meshletResults[lod] = lodGen.buildMeshletsForLOD(lodLevels[lod]);
-
-            serializer.writeMeshletData(outFile, meshletResults);
-
-            resource::ConvexDecompositionData convexData = lodGen.generateConvexDecomposition(lod0, config.meshConfig);
-            serializer.writeConvexDecompositionData(outFile, convexData);
+            writeProcessedSubmesh(outFile, scene->mMeshes[i]->mName.C_Str(), std::move(lod0),
+                                  config.meshConfig, lodGen, serializer);
 
             serializer.writeSkeletonData(outFile, skeleton);
 
@@ -648,6 +934,96 @@ namespace types
                 progressCallback(progress);
             }
         }
+    }
+
+    void Mesh::saveCombinedStaticMesh(std::string_view location, std::string_view fileName,
+                                      const aiScene* scene, const importConfig::ImportConfig& config,
+                                      MeshProgressCallback progressCallback,
+                                      std::vector<std::string>* outWrittenFiles) const
+    {
+        auto instances = buildStaticMeshInstances(scene);
+        if (instances.empty())
+        {
+            vfLogWarning("No mesh instances found in '{}'; nothing to write", fileName);
+            return;
+        }
+
+        // One section per material (UE5 parity): Bistro's ~1,296 instances collapse to
+        // ~132 material sections / draw calls. buildSectionPlan also splits any material
+        // whose merged geometry would exceed the reader's per-submesh caps.
+        const std::vector<MaterialSection> plan = buildSectionPlan(instances, fileName);
+        if (plan.empty())
+        {
+            vfLogWarning("No writable mesh sections in '{}'; nothing to write", fileName);
+            return;
+        }
+        if (plan.size() > kMaxCombinedSections)
+        {
+            vfLogError("Combined mesh '{}' has {} sections, exceeding the supported limit of {}",
+                       fileName, plan.size(), kMaxCombinedSections);
+            return;
+        }
+
+        const std::filesystem::path outputPath =
+            std::filesystem::path(location) / (std::string(fileName) + "." + FileExtension::mesh);
+        std::ofstream outFile(outputPath, std::ios::binary);
+        if (!outFile)
+        {
+            vfLogError("Failed to open file for writing: {}", outputPath.string());
+            return;
+        }
+
+        writeFileHeader(outFile, static_cast<uint32_t>(plan.size()));
+
+        MeshLODGenerator lodGen;
+        MeshSerializer serializer;
+        ExtractedSkeleton emptySkeleton;
+        std::unordered_set<std::string> usedLower;
+        usedLower.reserve(plan.size());
+
+        vfLogDebug("Merging {} instance(s) into {} material section(s) for '{}'...",
+                   instances.size(), plan.size(), fileName);
+        for (size_t s = 0; s < plan.size(); ++s)
+        {
+            // Merge every instance in this section into one vertex/index buffer. Order:
+            // convert -> bake node transform (per-instance winding swap on the
+            // instance's LOCAL indices) -> rebase into the group buffer. Swapping before
+            // the baseVertex offset keeps the corrected winding intact.
+            LODMeshData group;
+            for (size_t inst : plan[s].instanceIndices)
+            {
+                const auto& instance = instances[inst];
+                LODMeshData part = convertAssimpMesh(instance.mesh, emptySkeleton);
+                applyStaticTransform(part, instance.transform);
+                appendTransformedInstance(group, std::move(part));
+            }
+
+            const std::string name =
+                makeUniqueSectionName(materialSectionName(scene, plan[s].materialIndex), usedLower);
+            writeProcessedSubmesh(outFile, name, std::move(group),
+                                  config.meshConfig, lodGen, serializer,
+                                  /*generateConvexData=*/false);
+
+            if (progressCallback)
+            {
+                const float progress = 0.2f +
+                    (static_cast<float>(s + 1) / static_cast<float>(plan.size())) * 0.75f;
+                progressCallback(progress);
+            }
+        }
+
+        serializer.writeSkeletonData(outFile, emptySkeleton);
+        outFile.close();
+        if (!outFile)
+        {
+            vfLogError("Failed while writing combined mesh: {}", outputPath.string());
+            return;
+        }
+
+        if (outWrittenFiles)
+            outWrittenFiles->push_back(outputPath.string());
+
+        vfLogInfo("Combined mesh saved to: {} ({} material section(s))", outputPath.string(), plan.size());
     }
 
     void Mesh::generateAndSaveFracturedMesh(std::string_view location, std::string_view fileName,

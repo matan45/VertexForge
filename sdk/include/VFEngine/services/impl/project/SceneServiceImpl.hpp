@@ -34,6 +34,7 @@ namespace services
     class BakeInfoComponentService;
     class DecalComponentService;
     class FogVolumeComponentService;
+    class ReflectionProbeComponentService;
 
     // New extracted services
     class HierarchyService;
@@ -66,6 +67,7 @@ namespace services
         std::unique_ptr<BakeInfoComponentService> bakeInfoService;
         std::unique_ptr<DecalComponentService> decalService;
         std::unique_ptr<FogVolumeComponentService> fogVolumeService;
+        std::unique_ptr<ReflectionProbeComponentService> reflectionProbeService;
 
         // New extracted services
         std::unique_ptr<HierarchyService> hierarchyService;

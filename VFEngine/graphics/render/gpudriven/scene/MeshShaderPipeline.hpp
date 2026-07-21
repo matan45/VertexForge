@@ -41,6 +41,11 @@ namespace render::gpudriven
         vk::DescriptorSetLayout rtPointShadowMaskLayout;
         // Editor selection coverage (fixed set 15 when present).
         vk::DescriptorSetLayout selectionCoverageLayout;
+        // VK-1577: compile the reflection-probe path in. Probe resources live on the SHARED set-0
+        // IBL layout, so unlike the other optional features this is a plain bool, not a layout —
+        // there is no extra set to bind. Flipping it recreates the pipeline, which is why it is
+        // driven by "does the scene have >= 1 baked probe" and not by a per-frame count.
+        bool reflectionProbesEnabled = false;
         // Dynamic rendering formats (Vulkan 1.3)
         std::vector<vk::Format> colorAttachmentFormats;
         vk::Format depthAttachmentFormat = vk::Format::eUndefined;

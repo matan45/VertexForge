@@ -48,6 +48,10 @@ namespace services
     struct IBLData
     {
         asset::AssetRef hdrRef;
+        // VK-1574: global IBL knobs (mirror components::IBLComponent).
+        float intensity = 1.0f;
+        float rotationDeg = 0.0f;
+        glm::vec3 tint{1.0f};
     };
 
     struct NavmeshRootData
@@ -270,6 +274,22 @@ namespace services
         float edgeFalloff = 0.5f;
         uint8_t blendMode = 0; // 0=Additive, 1=Subtractive
         bool showGizmo = false;
+    };
+
+    // VK-1577 — mirrors components::ReflectionProbeComponent. `dirty` is intentionally absent:
+    // bake state is owned by the renderer, not authored through the inspector (the editor requests
+    // a bake with BakeReflectionProbesCommand instead).
+    struct ReflectionProbeData
+    {
+        uint8_t shape = 0; // 0=Box, 1=Sphere
+        glm::vec3 halfExtents{5.0f};
+        float blendDistance = 1.0f;
+        float intensity = 1.0f;
+        float nearPlane = 0.1f;
+        float farPlane = 100.0f;
+        int32_t priority = 0;
+        bool captureShadows = false;
+        bool showGizmo = true;
     };
 
     struct ColliderComponentData

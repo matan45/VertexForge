@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/render/RenderEvents.hpp"
+#include <glm/glm.hpp>
 #include <imgui.h>
 
 namespace windows::details {
@@ -48,6 +49,35 @@ namespace windows::details {
         {
             ImGui::Indent(10.0f);
             ImGui::Text("File: %s", iblOpt->hdrRef.resolve().c_str());
+
+            // VK-1574: live IBL knobs — an edit updates both the scene component and the
+            // renderer (SetIBLParamsCommand) without re-baking the environment.
+            float intensity = iblOpt->intensity;
+            float rotationDeg = iblOpt->rotationDeg;
+            float tint[3] = {iblOpt->tint.x, iblOpt->tint.y, iblOpt->tint.z};
+
+            bool changed = false;
+            changed |= ImGui::SliderFloat("Intensity", &intensity, 0.0f, 5.0f);
+            changed |= ImGui::SliderFloat("Rotation", &rotationDeg, 0.0f, 360.0f);
+            changed |= ImGui::ColorEdit3("Tint", tint);
+
+            if (changed)
+            {
+                events::scene::SetIBLDataCommand dataCmd;
+                dataCmd.entity = handle;
+                dataCmd.iblData = *iblOpt; // keep hdrRef
+                dataCmd.iblData.intensity = intensity;
+                dataCmd.iblData.rotationDeg = rotationDeg;
+                dataCmd.iblData.tint = glm::vec3(tint[0], tint[1], tint[2]);
+                dispatcher.execute(dataCmd);
+
+                events::render::SetIBLParamsCommand paramsCmd;
+                paramsCmd.intensity = intensity;
+                paramsCmd.rotationDeg = rotationDeg;
+                paramsCmd.tint = glm::vec3(tint[0], tint[1], tint[2]);
+                dispatcher.execute(paramsCmd);
+            }
+
             ImGui::Unindent(10.0f);
         }
 

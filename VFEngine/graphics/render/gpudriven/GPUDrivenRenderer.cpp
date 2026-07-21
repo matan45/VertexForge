@@ -165,6 +165,9 @@ namespace render::gpudriven
                 .shadowDataLayout = shadowSystem->getShadowDataLayout(),
                 .shadowTextureLayout = shadowSystem->getShadowTextureLayout(),
                 .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
+                // VK-1577: normally false at init; non-false only when a scene with baked probes is
+                // reloaded and the flag was set before the renderer came up.
+                .reflectionProbesEnabled = reflectionProbesEnabled,
                 .colorAttachmentFormats = colorFormats,
                 .depthAttachmentFormat = depthFormat
             };
@@ -422,6 +425,18 @@ namespace render::gpudriven
         initialized = false;
     }
 
+    void GPUDrivenRenderer::setReflectionProbesEnabled(bool enabled)
+    {
+        if (reflectionProbesEnabled == enabled) return;
+        reflectionProbesEnabled = enabled;
+
+        // Before init the flag is simply remembered; the first pipeline build picks it up.
+        if (!initialized) return;
+
+        pipelinePermutationDirty = true;
+        updateFormats(cachedColorFormats, cachedDepthFormat, cachedIBLLayout);
+    }
+
     void GPUDrivenRenderer::updateFormats(const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
                                           vk::DescriptorSetLayout newIBLLayout)
     {
@@ -430,7 +445,9 @@ namespace render::gpudriven
         bool formatsChanged = (cachedColorFormats != colorFormats) || (cachedDepthFormat != depthFormat);
         bool iblLayoutChanged = (newIBLLayout && cachedIBLLayout != newIBLLayout);
 
-        if (!formatsChanged && !iblLayoutChanged) return;
+        if (!formatsChanged && !iblLayoutChanged && !pipelinePermutationDirty) return;
+
+        pipelinePermutationDirty = false;
 
         vfLogInfo("GPUDrivenRenderer: Updating formats/IBL layout, recreating pipelines");
 
@@ -500,6 +517,7 @@ namespace render::gpudriven
                 .causticLayout = causticLayout,
                 .worldMaskLayout = currentWorldMaskLayout(),
                 .selectionCoverageLayout = selectionMaskPipeline->getDescriptorSetLayout(),
+                .reflectionProbesEnabled = reflectionProbesEnabled, // VK-1577
                 .colorAttachmentFormats = cachedColorFormats,
                 .depthAttachmentFormat = cachedDepthFormat
             };
@@ -544,6 +562,9 @@ namespace render::gpudriven
 
             if (terrain.pipeline)
             {
+                // VK-1577: terrain must track the mesh permutation, or a probe-lit floor and the
+                // objects standing on it disagree exactly where they meet.
+                terrain.pipeline->setReflectionProbesEnabled(reflectionProbesEnabled);
                 terrain.pipeline->recreate(cachedIBLLayout,
                                           bindlessTextures->getDescriptorSetLayout(),
                                           meshShaderPipeline->getMeshletDataLayout(),

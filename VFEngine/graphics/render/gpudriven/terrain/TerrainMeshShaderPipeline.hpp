@@ -94,6 +94,11 @@ namespace render::gpudriven
         // keeps the disabled render/sampling path equivalent with RVT off.
         bool rvtSampleEnabled = false;
         bool detailMapsEnabled = false;
+        // VK-1577: compile the reflection-probe path into the terrain shader. Terrain shares the
+        // set-0 IBL layout with meshes, so this needs no extra descriptor set — but terrain MUST
+        // track the mesh path, or a cave floor and the crates standing on it disagree exactly where
+        // they touch.
+        bool reflectionProbesEnabled = false;
         bool rvtSampleResourcesReady = false;
         vk::DescriptorSetLayout rvtSampleLayout;
         vk::DescriptorPool rvtSamplePool;
@@ -280,6 +285,16 @@ namespace render::gpudriven
                 rvtSampleResourcesReady = false;
         }
         bool areDetailMapsEnabled() const { return detailMapsEnabled; }
+        // VK-1577: returns true when the flag actually changed, so the caller knows a pipeline
+        // recreate is required (the macro is baked into the compiled shader).
+        bool setReflectionProbesEnabled(bool enabled)
+        {
+            if (reflectionProbesEnabled == enabled)
+                return false;
+            reflectionProbesEnabled = enabled;
+            return true;
+        }
+        bool areReflectionProbesEnabled() const { return reflectionProbesEnabled; }
         bool areRVTSampleResourcesReady() const { return rvtSampleResourcesReady; }
         void invalidateRVTSampleResources() { rvtSampleResourcesReady = false; }
         void updateRVTSampleResources(vk::Buffer pageTableBuffer, vk::ImageView albedoView,

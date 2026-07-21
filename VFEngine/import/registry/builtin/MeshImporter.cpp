@@ -1,5 +1,7 @@
 #include "MeshImporter.hpp"
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <ranges>
 #include <variant>
 
@@ -8,6 +10,18 @@ namespace import::builtin
     namespace
     {
         constexpr unsigned char glbSig[] = {0x67, 0x6C, 0x54, 0x46};
+
+        // VK-1642: a material texture that decodes as HDR is written as .vfHdr, not .vfImage, so the
+        // written extension — not the fact that it came from the texture list — decides the asset
+        // type. Registering a .vfHdr as Texture would put a BC6H payload behind the LDR texture path.
+        // Compared lowercase against FileExtension::hdr ("vfHdr").
+        bool isVfHdrPath(const std::string& path)
+        {
+            std::string ext = std::filesystem::path(path).extension().string();
+            std::ranges::transform(ext, ext.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return ext == ".vfhdr";
+        }
 
         bool matchesSignature(std::span<const unsigned char> header, std::span<const unsigned char> signature)
         {
@@ -59,6 +73,22 @@ namespace import::builtin
         {
             const auto& options = context.file.config.customOptions;
             auto it = options.find("extractEmbeddedTextures");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
+        bool isCombineMeshes(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("combineMeshes");
+            return it != options.end() && std::holds_alternative<bool>(it->second) &&
+                   std::get<bool>(it->second);
+        }
+
+        bool isImportMaterialTextures(const pipeline::ImportContext& context)
+        {
+            const auto& options = context.file.config.customOptions;
+            auto it = options.find("importMaterialTextures");
             return it != options.end() && std::holds_alternative<bool>(it->second) &&
                    std::get<bool>(it->second);
         }
@@ -119,23 +149,31 @@ namespace import::builtin
                 };
             }
 
-            // The model may contain several meshes; each is written to its own
-            // .vfMesh. Optionally (VK-55) embedded textures are extracted to
-            // .vfImage. Surface every produced file so the controller creates a
-            // .vfmeta and an ImportFileResult per asset (with the right type).
+            // Split layout writes one .vfMesh per Assimp mesh. Combined static
+            // layout writes one multi-submesh .vfMesh. Surface every produced
+            // file so the controller creates the matching metadata and result.
+            // Optionally (VK-55), embedded textures are extracted to .vfImage.
             const bool extractEmbedded = isExtractEmbeddedTextures(context);
+            const bool importMaterialTextures = isImportMaterialTextures(context);
 
             std::vector<std::string> writtenMeshes;
             std::vector<std::string> writtenTextures;
-            meshProcessor.loadFromFile(context.file, context.fileName, context.location, meshProgress,
+            const auto outputLayout = isCombineMeshes(context)
+                                          ? types::MeshOutputLayout::CombinedStatic
+                                          : types::MeshOutputLayout::Split;
+            meshProcessor.loadFromFile(context.file, context.fileName, context.location, outputLayout, meshProgress,
                                        &writtenMeshes,
-                                       extractEmbedded ? &writtenTextures : nullptr);
+                                       (extractEmbedded || importMaterialTextures) ? &writtenTextures : nullptr);
 
             for (auto& path : writtenMeshes)
                 context.outputFiles.push_back({std::move(path), resource::AssetType::Mesh});
 
             for (auto& path : writtenTextures)
-                context.outputFiles.push_back({std::move(path), resource::AssetType::Texture});
+            {
+                const resource::AssetType type = isVfHdrPath(path) ? resource::AssetType::HDR
+                                                                   : resource::AssetType::Texture;
+                context.outputFiles.push_back({std::move(path), type});
+            }
         }
 
         types::AnimationProgressCallback animProgress = nullptr;
@@ -182,6 +220,23 @@ namespace import::builtin
         extractEmbeddedTextures.type = ImportOptionDesc::Type::Bool;
         extractEmbeddedTextures.defaultValue = false;
 
-        return {animationOnly, extractEmbeddedTextures};
+        ImportOptionDesc combineMeshes;
+        combineMeshes.key = "combineMeshes";
+        combineMeshes.label = "Combine Meshes";
+        combineMeshes.tooltip =
+            "Write one multi-submesh .vfMesh for static models so one Mesh Component renders the complete model";
+        combineMeshes.type = ImportOptionDesc::Type::Bool;
+        combineMeshes.defaultValue = false;
+
+        ImportOptionDesc importMaterialTextures;
+        importMaterialTextures.key = "importMaterialTextures";
+        importMaterialTextures.label = "Import Textures";
+        importMaterialTextures.tooltip =
+            "Import the textures referenced by the model's materials as .vfImage assets (external files "
+            "resolved next to the model, or embedded). Materials are not created automatically.";
+        importMaterialTextures.type = ImportOptionDesc::Type::Bool;
+        importMaterialTextures.defaultValue = false;
+
+        return {animationOnly, extractEmbeddedTextures, combineMeshes, importMaterialTextures};
     }
 }

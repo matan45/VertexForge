@@ -18,6 +18,15 @@ namespace events::render {
         std::string_view getName() const override { return "SetIBL"; }
     };
 
+    // VK-1574: live IBL knobs (no re-bake) — applied in the ambient block via the set-0 CameraUBO.
+    struct SetIBLParamsCommand : ICommand<> {
+        float intensity = 1.0f;
+        float rotationDeg = 0.0f;
+        glm::vec3 tint{1.0f};
+
+        std::string_view getName() const override { return "SetIBLParams"; }
+    };
+
     struct RemoveIBLCommand : ICommand<> {
         std::string_view getName() const override { return "RemoveIBL"; }
     };

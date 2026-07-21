@@ -6,22 +6,56 @@
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
+#include "atmosphere/SunTransmittance.hpp"
 #include "print/Log.hpp"
+#include <optional>
+#include <algorithm>
 
 namespace render
 {
     void RenderPassHandler::setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane,
                                                    float time)
     {
-        float deltaTime = time - currentTime;
         currentCameraPosition = cameraPos;
         currentNearPlane = nearPlane;
         currentFarPlane = farPlane;
         currentTime = time;
 
-        // Tick day-night cycle once per frame (before draw/async compute paths)
+        // VK-1566: tint the sun (index-0 directional light) by the atmospheric transmittance.
+        // Runs once per frame, upstream of both the sync and async-compute paths. The day-night
+        // cycle is advanced earlier in the frame by the Services SunSync step (before the
+        // transform bake), so settings.sunAzimuth/sunElevation are already fresh here.
+        glm::vec3 sunTint(1.0f);
         if (atmospherePipeline && atmospherePipeline->isEnabled())
-            atmospherePipeline->updateDayNightCycle(deltaTime);
+        {
+            const atmosphere::AtmosphereSettings s = atmospherePipeline->getSettings();
+            if (s.sunColorFromAtmosphere)
+            {
+                glm::vec3 dirToSun;
+                if (s.dayNightEnabled)
+                {
+                    // Cycle on: sun direction comes from the freshly-advanced angles.
+                    dirToSun = atmosphere::sunDirectionFromAngles(s.sunAzimuth, s.sunElevation);
+                }
+                else
+                {
+                    // Cycle off: derive from the first directional light (negated: light-travel -> to-sun).
+                    std::optional<glm::vec3> firstDir;
+                    if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+                        firstDir = gpuDrivenRenderer->getLightBufferManager()->getFirstDirectionalLightDirection();
+                    dirToSun = firstDir ? -*firstDir
+                                        : atmosphere::sunDirectionFromAngles(s.sunAzimuth, s.sunElevation);
+                }
+
+                const glm::vec3 transmittance =
+                    atmosphere::evaluateSunTransmittance(s, dirToSun, std::max(0.0f, currentCameraPosition.y));
+                sunTint = glm::mix(glm::vec3(1.0f), transmittance,
+                                   glm::clamp(s.sunColorFeedbackStrength, 0.0f, 1.0f));
+            }
+        }
+        // Always push (resets to vec3(1) when the feature/atmosphere is off, so no stale tint persists).
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+            gpuDrivenRenderer->getLightBufferManager()->setSunColorMultiplier(sunTint);
     }
 
     void RenderPassHandler::updateSharedCameraUBO(const glm::mat4& view, const glm::mat4& projection,
@@ -29,7 +63,8 @@ namespace render
     {
         if (sharedCameraUBO)
         {
-            sharedCameraUBO->update(view, projection, cameraPos, time, currentSnowAccumulation, currentWetness);
+            sharedCameraUBO->update(view, projection, cameraPos, time, currentSnowAccumulation, currentWetness,
+                                    currentIblTintIntensity, currentIblRotation);
         }
     }
 

@@ -340,6 +340,70 @@ namespace serialization
         }
     }
 
+    // VK-1577 — reflection probe. `dirty` is deliberately NOT serialized: a freshly loaded scene has
+    // no baked cubemaps in memory (probes are baked at runtime, there is no on-disk cubemap format),
+    // so every probe must come back from disk needing a bake. The component's default (dirty = true)
+    // already says that, and writing the field would let a saved `false` suppress the load-time bake.
+    json SceneSerialization::serializeReflectionProbe(const components::ReflectionProbeComponent& probe)
+    {
+        json j;
+        j["shape"] = static_cast<int>(probe.shape);
+        j["halfExtents"] = json::array({probe.halfExtents.x, probe.halfExtents.y, probe.halfExtents.z});
+        j["blendDistance"] = probe.blendDistance;
+        j["intensity"] = probe.intensity;
+        j["nearPlane"] = probe.nearPlane;
+        j["farPlane"] = probe.farPlane;
+        j["priority"] = probe.priority;
+        j["captureShadows"] = probe.captureShadows;
+        j["showGizmo"] = probe.showGizmo;
+        return j;
+    }
+
+    void SceneSerialization::deserializeReflectionProbe(const json& j, components::ReflectionProbeComponent& probe)
+    {
+        if (auto it = j.find("shape"); it != j.end() && it->is_number())
+        {
+            int val = std::clamp(it->get<int>(), 0, 1);
+            probe.shape = static_cast<components::ReflectionProbeShape>(val);
+        }
+        if (j.contains("halfExtents") && j["halfExtents"].is_array() && j["halfExtents"].size() == 3)
+        {
+            probe.halfExtents.x = j["halfExtents"][0].get<float>();
+            probe.halfExtents.y = j["halfExtents"][1].get<float>();
+            probe.halfExtents.z = j["halfExtents"][2].get<float>();
+        }
+        if (auto it = j.find("blendDistance"); it != j.end() && it->is_number())
+        {
+            probe.blendDistance = it->get<float>();
+        }
+        if (auto it = j.find("intensity"); it != j.end() && it->is_number())
+        {
+            probe.intensity = it->get<float>();
+        }
+        if (auto it = j.find("nearPlane"); it != j.end() && it->is_number())
+        {
+            probe.nearPlane = it->get<float>();
+        }
+        if (auto it = j.find("farPlane"); it != j.end() && it->is_number())
+        {
+            probe.farPlane = it->get<float>();
+        }
+        if (auto it = j.find("priority"); it != j.end() && it->is_number())
+        {
+            probe.priority = it->get<int>();
+        }
+        if (auto it = j.find("captureShadows"); it != j.end() && it->is_boolean())
+        {
+            probe.captureShadows = it->get<bool>();
+        }
+        if (auto it = j.find("showGizmo"); it != j.end() && it->is_boolean())
+        {
+            probe.showGizmo = it->get<bool>();
+        }
+        // Always needs a (re)bake after load — see the note on serializeReflectionProbe.
+        probe.dirty = true;
+    }
+
     json SceneSerialization::serializeWeatherZone(const components::WeatherZoneComponent& zone)
     {
         json j;

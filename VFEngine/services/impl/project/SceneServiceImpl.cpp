@@ -17,6 +17,7 @@
 #include "../components/BakeInfoComponentService.hpp"
 #include "../components/DecalComponentService.hpp"
 #include "../components/FogVolumeComponentService.hpp"
+#include "../components/ReflectionProbeComponentService.hpp"
 #include "../scene/HierarchyService.hpp"
 #include "../scene/EntityQueryService.hpp"
 #include "../scene/TransformComponentService.hpp"
@@ -49,6 +50,7 @@ namespace services
         , bakeInfoService(std::make_unique<BakeInfoComponentService>())
         , decalService(std::make_unique<DecalComponentService>(sceneGraph))
         , fogVolumeService(std::make_unique<FogVolumeComponentService>(sceneGraph))
+        , reflectionProbeService(std::make_unique<ReflectionProbeComponentService>(sceneGraph))
         , hierarchyService(std::make_unique<HierarchyService>(sceneGraph))
         , entityQueryService(std::make_unique<EntityQueryService>(sceneGraph))
         , transformService(std::make_unique<TransformComponentService>(sceneGraph))
@@ -92,6 +94,7 @@ namespace services
         bakeInfoService->registerEventHandlers(dispatcher);
         decalService->registerEventHandlers(dispatcher);
         fogVolumeService->registerEventHandlers(dispatcher);
+        reflectionProbeService->registerEventHandlers(dispatcher);
 
         // New extracted services
         hierarchyService->registerEventHandlers(dispatcher);

@@ -57,6 +57,10 @@ namespace components
     struct IBLComponent
     {
         asset::AssetRef hdrRef;
+        // VK-1574: global IBL knobs applied live in the ambient block (no re-bake).
+        float intensity = 1.0f;    // multiplies ambient irradiance + specular
+        float rotationDeg = 0.0f;  // Y-rotation of the environment sample direction
+        glm::vec3 tint{1.0f};      // per-channel ambient tint
     };
 
     struct WorldSectorComponent

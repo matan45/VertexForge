@@ -88,6 +88,15 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<ReflectionProbeComponent>(ReflectionProbeComponent& c)
+    {
+        // VK-1577: mirror the deserialize reset in SceneSerializePhysics.cpp. Probe cubemaps are
+        // baked at runtime and live only in GPU memory, so a duplicated probe owns no capture —
+        // it must re-bake even when the source it was cloned from was already clean.
+        c.dirty = true;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<UIScrollComponent>(UIScrollComponent& c)
     {
         c.scrollOffset = {0.0f, 0.0f};

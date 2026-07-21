@@ -88,6 +88,7 @@ namespace render::lighting
 
         shadow::ShadowSystem* shadowSystem = nullptr;
         float shadowIntensity = 0.5f;
+        glm::vec3 sunColorMultiplier{1.0f}; // VK-1566: atmospheric tint for the index-0 directional light
         bool rtShadowActive = false;
         bool rtSpotShadowActive = false;
         bool rtPointShadowActive = false;
@@ -165,6 +166,12 @@ namespace render::lighting
         void setShadowSystem(shadow::ShadowSystem* system) { shadowSystem = system; }
         void setShadowIntensity(float intensity);
         float getShadowIntensity() const { return shadowIntensity; }
+
+        // VK-1566: multiplier applied to the FIRST directional light's color (index 0 = the
+        // sun, by engine convention). Fed each frame with the atmospheric sun-transmittance
+        // tint; vec3(1) leaves the light unchanged. Applied in collectDirectionalLights, so
+        // detectChanges() picks up the change and re-uploads for free.
+        void setSunColorMultiplier(const glm::vec3& multiplier) { sunColorMultiplier = multiplier; }
         void setRTShadowActive(bool active);
         void setRTSpotShadowActive(bool active);
         void setRTPointShadowActive(bool active);

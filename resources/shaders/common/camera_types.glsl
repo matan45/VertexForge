@@ -1,7 +1,7 @@
 #ifndef CAMERA_TYPES_GLSL
 #define CAMERA_TYPES_GLSL
 
-// Must match CameraUBO in CameraTypes.hpp (256 bytes)
+// Must match CameraUBO in CameraTypes.hpp (288 bytes)
 struct CameraData {
     mat4 view;
     mat4 projection;
@@ -12,6 +12,8 @@ struct CameraData {
     float disableShadows; // 1.0 = skip shadow sampling for this pass (e.g. RTT/minimap)
     float _pad2;
     vec4 frustumPlanes[6];
+    vec4 iblTintIntensity; // VK-1574: rgb = tint, a = intensity
+    vec4 iblRotation;      // VK-1574: x = cos(theta), y = sin(theta) for env Y-rotation
 };
 
 // Must match GPUCameraData in GPUDrivenTypes.hpp (544 bytes)
