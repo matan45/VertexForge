@@ -35,10 +35,17 @@ namespace windows
                 // Update local state from scene if different
                 std::string currentPath = StringUtil::wstringToUtf8(selectedIBLFile.wstring());
                 std::string iblPath = iblData->hdrRef.resolve();
-                if (currentPath != iblPath)
+                const bool pathChanged = (currentPath != iblPath);
+                if (pathChanged)
                 {
-                    // New IBL from scene/load: sync local UI state (path + knobs).
                     selectedIBLFile = iblPath;
+                }
+                // Syncing only on a path change is not enough: IBLDrawer (Entity Details) writes the
+                // same three fields, so keeping the stale locals would make the next knob nudge
+                // push 1.0/white back over the user's authored intensity and tint — in the renderer
+                // AND in the saved scene. Re-read every frame, except while a knob is being dragged.
+                if (pathChanged || !knobEditing)
+                {
                     iblIntensity = iblData->intensity;
                     iblRotationDeg = iblData->rotationDeg;
                     iblTint[0] = iblData->tint.x;
@@ -79,9 +86,14 @@ namespace windows
             if (!hasFile) ImGui::BeginDisabled();
 
             bool knobChanged = false;
+            bool knobActive = false;
             knobChanged |= ImGui::SliderFloat("Intensity", &iblIntensity, 0.0f, 5.0f);
+            knobActive |= ImGui::IsItemActive();
             knobChanged |= ImGui::SliderFloat("Rotation", &iblRotationDeg, 0.0f, 360.0f);
+            knobActive |= ImGui::IsItemActive();
             knobChanged |= ImGui::ColorEdit3("Tint", iblTint);
+            knobActive |= ImGui::IsItemActive();
+            knobEditing = knobActive; // consumed by the component re-read at the top of the next frame
             if (knobChanged)
             {
                 applyEnvironment(rootHandle, filePath, false);

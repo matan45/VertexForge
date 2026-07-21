@@ -247,6 +247,10 @@ namespace render
                 atmospherePipeline->getSettings().dynamicAmbient)
             {
                 const uint64_t ambientEpoch = computeAmbientCaptureEpoch();
+                // VK-1569: scales the captured env cube (and so both derived ambient maps). Safe to
+                // set every frame — it only takes effect on the next capture cycle, and
+                // computeAmbientCaptureEpoch() folds the same value in, so a change starts one.
+                skyEnvCapture->setAmbientIntensity(atmospherePipeline->getSettings().ambientIntensity);
                 const int itemsPerFrame = atmospherePipeline->getSettings().ambientItemsPerFrame;
                 const uint32_t budget = itemsPerFrame > 0 ? static_cast<uint32_t>(itemsPerFrame) : 1u;
                 auto captureBuilder = frameGraph->addPass("SkyAmbientCapture",

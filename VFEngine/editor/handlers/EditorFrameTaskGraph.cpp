@@ -148,8 +148,17 @@ namespace handlers
         // VK-1566: advance the day-night cycle + rotate the sun entity BEFORE the Transforms
         // bake so the sky, sun color, and shadows read the same fresh angles. Ordered after
         // Weather (which may itself write atmosphere settings) and before Transforms.
+        //
+        // Gameplay-gated, unlike Weather: when cycleControlsSunEntity is set this WRITES the sun
+        // entity's TransformComponent. Running it in edit mode would rotate the authored
+        // directional light continuously and bake whatever angle the clock reached into the next
+        // save. dt == 0.0f makes tickDayNightAndSyncSun a no-op via its own deltaTime guard.
         frameTaskGraph->addTask("SunSync", [this]() {
-            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            const bool gameplayActive = editorModeService &&
+                editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+            float dt = gameplayActive
+                ? static_cast<float>(engineTime::Timer::getGameDeltaTime())
+                : 0.0f;
             events::atmosphere::UpdateDayNightCommand cmd;
             cmd.deltaTime = dt;
             events::EventDispatcher::instance().execute(cmd);

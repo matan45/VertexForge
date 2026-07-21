@@ -16,6 +16,7 @@ namespace render::probe
     {
         cpuProbes.reserve(MAX_REFLECTION_PROBES);
         resolved.reserve(MAX_REFLECTION_PROBES);
+        slotOwner.fill(entt::null); // entity 0 is a valid handle — never leave these value-initialized
     }
 
     ReflectionProbeBufferManager::~ReflectionProbeBufferManager()
@@ -128,6 +129,16 @@ namespace render::probe
             const bool isSphere = p.shape == components::ReflectionProbeShape::Sphere;
             const glm::vec3 capturePos = glm::vec3(world.worldMatrix[3]);
             const auto slot = static_cast<uint32_t>(i);
+
+            // The slot is a pure function of this frame's sort position, so removing or inserting a
+            // probe silently hands this cube to a different probe. The cube still holds the previous
+            // owner's capture, so readiness has to be dropped until the bake scheduler refills it —
+            // otherwise the probe renders someone else's environment indefinitely.
+            if (slotOwner[slot] != entity)
+            {
+                slotOwner[slot] = entity;
+                slotReady[slot] = false;
+            }
 
             GPUReflectionProbe gpu{};
             gpu.worldToLocal = buildWorldToLocal(world.worldMatrix, p.halfExtents);

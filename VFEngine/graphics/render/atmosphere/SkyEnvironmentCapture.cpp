@@ -60,7 +60,7 @@ namespace render::atmosphere
         void renderCubeFace(const vk::CommandBuffer& cmd, vk::Pipeline pipeline,
                             vk::PipelineLayout layout, vk::DescriptorSet ds, vk::Buffer vbo,
                             uint32_t vertexCount, vk::ImageView targetView, uint32_t size,
-                            const glm::mat4& viewProj, const float* roughness)
+                            const glm::mat4& viewProj, const float* extraFloat)
         {
             vk::Viewport vp{};
             vp.x = 0.0f;
@@ -82,12 +82,13 @@ namespace render::atmosphere
             cmd.setScissor(0, 1, &scissor);
             cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
             cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, ds, {});
-            if (roughness)
+            if (extraFloat)
             {
-                // The prefilter layout has ONE combined range {vertex|fragment, 0, 68}. VUID-01796
-                // requires the push to name ALL stages of any overlapping range, so viewProj (vertex)
-                // and roughness (fragment) must be pushed together as one blob, not split by stage.
-                struct PushBlob { glm::mat4 viewProj; float roughness; } blob{viewProj, *roughness};
+                // Passes that need a fragment-stage scalar alongside viewProj — the prefilter
+                // (roughness) and the sky capture (ambientIntensity) — declare ONE combined range
+                // {vertex|fragment, 0, 68}. VUID-01796 requires the push to name ALL stages of any
+                // overlapping range, so the two must go as a single blob, not split by stage.
+                struct PushBlob { glm::mat4 viewProj; float value; } blob{viewProj, *extraFloat};
                 cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
                                   0, sizeof(glm::mat4) + sizeof(float), &blob);
             }
@@ -314,11 +315,18 @@ namespace render::atmosphere
 
         // Pipeline layouts + push-constant ranges.
         vk::PushConstantRange vpRange{vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4)};
+
+        // The sky capture carries ambientIntensity into the fragment stage alongside viewProj, so it
+        // needs the same combined vertex|fragment range shape as the prefilter (see VUID-01796 note
+        // in renderCubeFace) — NOT the vertex-only vpRange the irradiance pass uses.
+        vk::PushConstantRange skyRange{
+            vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
+            sizeof(glm::mat4) + sizeof(float)};
         vk::PipelineLayoutCreateInfo skyLayoutInfo{};
         skyLayoutInfo.setLayoutCount = 1;
         skyLayoutInfo.pSetLayouts = &skyDSLayout;
         skyLayoutInfo.pushConstantRangeCount = 1;
-        skyLayoutInfo.pPushConstantRanges = &vpRange;
+        skyLayoutInfo.pPushConstantRanges = &skyRange;
         skyPipelineLayout = dev.createPipelineLayout(skyLayoutInfo);
 
         vk::PipelineLayoutCreateInfo irrLayoutInfo{};
@@ -407,7 +415,8 @@ namespace render::atmosphere
     {
         const glm::mat4 viewProj = ibl::CameraViewMatrix::captureProjection * ibl::CameraViewMatrix::captureViews[face];
         renderCubeFace(cmd, skyPipeline, skyPipelineLayout, skyDS, cubeVertexBuffer,
-                       static_cast<uint32_t>(ibl::cubeVertices.size()), helperHi.view, ENV_SIZE, viewProj, nullptr);
+                       static_cast<uint32_t>(ibl::cubeVertices.size()), helperHi.view, ENV_SIZE, viewProj,
+                       &ambientIntensity);
 
         imageBarrier(cmd, helperHi.image, eColorAttachmentOutput, eColorAttachmentWrite,
                      eTransfer, eTransferRead, vk::ImageLayout::eColorAttachmentOptimal,
@@ -546,13 +555,22 @@ namespace render::atmosphere
         }
     }
 
-    void SkyEnvironmentCapture::captureBlocking(uint64_t epoch)
+    void SkyEnvironmentCapture::captureBlocking(uint64_t epoch, AtmospherePipeline& atmosphere)
     {
         if (!initialized)
             return;
 
+        ambientIntensity = atmosphere.getSettings().ambientIntensity;
+
         scheduler.restart(epoch);
         auto cmd = core::Utilities::beginSingleTimeCommands(device.getLogicalDevice(), commandPool);
+
+        // Compute the sky LUTs into this same submit before sampling them. This mirrors the
+        // per-frame ordering exactly — the frame graph records the Atmosphere pass (dispatchCompute)
+        // immediately before the SkyAmbientCapture pass — and dispatchCompute's trailing
+        // compute->fragment barrier is what makes the sampled reads below safe.
+        atmosphere.dispatchCompute(cmd.get());
+
         scheduler.advance(scheduler.totalItems(), [&](const WorkItem& item) { recordItem(cmd.get(), item); });
         publish(cmd.get());
         scheduler.markPublished();

@@ -337,6 +337,31 @@ namespace types
             return mip;
         }
 
+        // Bytes one mip level MUST occupy on disk for the given mode/dimensions, so a level whose
+        // declared imageSize is short can be rejected before any branch reads past it. Rows are
+        // padded to 4 bytes (KTX1 UNPACK_ALIGNMENT=4) — buildUncompressedMip strides by exactly
+        // align4(lw * bpp), so the check has to use the padded stride, not lw * lh * bpp.
+        // Returns 0 for the passthrough modes: those consume exactly imageSize, which the caller
+        // has already bounds-checked against the file, so there is nothing extra to validate.
+        uint64_t ktx1LevelBytes(Ktx1Mode mode, BcKind bcKind, uint32_t lw, uint32_t lh)
+        {
+            auto align4 = [](uint64_t v) { return (v + 3u) & ~3ull; };
+            const uint64_t w = lw;
+            const uint64_t h = lh;
+            switch (mode)
+            {
+            case Ktx1Mode::PassBC7:
+            case Ktx1Mode::PassBC6H: return 0;
+            case Ktx1Mode::DecodeBC: return bcLevelByteSize(lw, lh, bcKind);
+            case Ktx1Mode::Rgba8:
+            case Ktx1Mode::Bgra8:    return align4(w * 4) * h;
+            case Ktx1Mode::Rgb8:     return align4(w * 3) * h;
+            case Ktx1Mode::Float16:  return w * h * 4 * sizeof(uint16_t);
+            case Ktx1Mode::Float32:  return w * h * 4 * sizeof(float);
+            default:                 return 0;
+            }
+        }
+
         DecodedTexture decodeKtx1(const std::vector<uint8_t>& bytes)
         {
             DecodedTexture result;
@@ -375,6 +400,16 @@ namespace types
                 return result;
             }
             if (numMips == 0) numMips = 1; // 0 = "generate at load"; one base level is stored.
+
+            // Same defensive bounds the KTX2 path applies: reject implausible dimensions/levels so a
+            // malformed header that still parses can't drive a huge reserve() before the per-level
+            // truncation checks ever run.
+            if (pixelWidth > 65536 || pixelHeight > 65536 || numMips > 24)
+            {
+                vfLogWarning("KTX1: implausible dimensions {}x{} ({} levels); skipping",
+                             pixelWidth, pixelHeight, numMips);
+                return result;
+            }
 
             BcKind bcKind = BcKind::BC1;
             const Ktx1Mode mode = classifyKtx1(glType, glFormat, glInternalFormat, bcKind);
@@ -421,6 +456,16 @@ namespace types
                 const uint32_t lw = std::max(1u, pixelWidth >> level);
                 const uint32_t lh = std::max(1u, pixelHeight >> level);
 
+                // The guard above only proves imageSize bytes are present. Every non-passthrough
+                // branch below reads a size derived from lw/lh instead, so a level that declares a
+                // smaller imageSize than its dimensions imply would read past the end of `bytes`.
+                if (const uint64_t need = ktx1LevelBytes(mode, bcKind, lw, lh); imageSize < need)
+                {
+                    vfLogError("KTX1: level {} truncated ({}x{} needs {} bytes, imageSize is {})",
+                               level, lw, lh, need, imageSize);
+                    return DecodedTexture{};
+                }
+
                 resource::MipLevelData mip;
                 switch (mode)
                 {
@@ -434,13 +479,7 @@ namespace types
 
                 case Ktx1Mode::DecodeBC:
                 {
-                    const uint32_t need = bcLevelByteSize(lw, lh, bcKind);
-                    if (imageSize < need)
-                    {
-                        vfLogError("KTX1: level {} data too small for {} ({} < {})", level,
-                                   static_cast<int>(bcKind), imageSize, need);
-                        return DecodedTexture{};
-                    }
+                    // Size already validated by the ktx1LevelBytes check above.
                     auto rgba = decodeBcToRgba8(levelData, lw, lh, bcKind);
                     if (rgba.empty())
                     {

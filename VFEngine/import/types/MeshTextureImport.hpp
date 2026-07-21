@@ -14,8 +14,10 @@ namespace types
     // filename-only fallback for absolute paths baked by other tools); "*N" references
     // are pulled from the embedded texture array. Each distinct source is imported
     // once and the written .vfImage/.vfHdr path is appended to outWrittenTextures.
-    // stb-decodable formats go through Texture::loadTextureFile; KTX2/KTX1/DDS through
-    // Texture::loadKtxFile / loadDdsFile (VK-1642). Materials themselves are NOT
+    // stb-decodable LDR formats go through Texture::loadTextureFile; .hdr through
+    // Texture::loadHDRFile (float -> .vfHdr, never the 8-bit writer); KTX2/KTX1/DDS through
+    // Texture::loadKtxFile / loadDdsFile (VK-1642). Callers must derive the asset type from the
+    // written extension — the list mixes .vfImage and .vfHdr. Materials themselves are NOT
     // created or wired — the imported images are made available for the user to
     // author materials from.
     void importMaterialTextures(const aiScene* scene, const std::filesystem::path& sourceDir,

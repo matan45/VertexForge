@@ -54,6 +54,19 @@ namespace render::probe
         // blending in an empty cube. Phase 4 (the bake) is what sets these.
         std::array<bool, MAX_REFLECTION_PROBES> slotReady{};
 
+        // Which probe each cube slot was last baked FOR. Slots are re-derived from the sort order
+        // every frame, so deleting or inserting a probe shifts every probe after it into a
+        // different cube. Readiness is a property of (slot, probe) — not of the slot alone — and
+        // without this the shifted probe would sample the previous occupant's capture forever.
+        // Filled with entt::null by the constructor — value-initializing would give every slot
+        // entity 0, which is a VALID handle and would falsely match a real probe.
+        std::array<entt::entity, MAX_REFLECTION_PROBES> slotOwner;
+
+        // World position each slot's cube was actually captured FROM. Moving a probe changes the
+        // SSBO (so parallax and the blend volume follow immediately) but not the cube contents, so
+        // without this a dragged probe keeps reflecting the room it was baked in.
+        std::array<glm::vec3, MAX_REFLECTION_PROBES> slotBakedPos{};
+
         bool initialized = false;
 
     public:
@@ -85,7 +98,22 @@ namespace render::probe
         {
             return slot < MAX_REFLECTION_PROBES && slotReady[slot];
         }
-        void clearSlotReadiness() { slotReady = {}; }
+
+        // Records where a slot's cube was captured from — call this when a bake publishes.
+        void setSlotBakedPos(uint32_t slot, const glm::vec3& pos)
+        {
+            if (slot < MAX_REFLECTION_PROBES) slotBakedPos[slot] = pos;
+        }
+        [[nodiscard]] const glm::vec3& getSlotBakedPos(uint32_t slot) const
+        {
+            static constexpr glm::vec3 origin{0.0f};
+            return slot < MAX_REFLECTION_PROBES ? slotBakedPos[slot] : origin;
+        }
+        void clearSlotReadiness()
+        {
+            slotReady = {};
+            slotOwner.fill(entt::null);
+        }
 
         // Number of probes actually visible to the shader this frame (ready ones only).
         [[nodiscard]] uint32_t getUploadedCount() const;

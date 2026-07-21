@@ -83,5 +83,12 @@ namespace render
 
         // Check if IBL textures have been generated (init() was called)
         bool isInitialized() const { return iblInitialized; }
+
+        // Check if the skybox is drawable. NOT the same as isInitialized(): the VK-1574 initSkybox()
+        // path binds a live env cube without running the irradiance/prefilter generators, so
+        // iblInitialized stays false while the skybox is perfectly renderable. Anything gating a
+        // skybox DRAW must use this; only consumers of getIrradiance/getPrefilter/getBrdfLUT want
+        // isInitialized().
+        bool isSkyboxInitialized() const;
     };
 }

@@ -19,6 +19,10 @@ namespace windows
         float iblIntensity = 1.0f;
         float iblRotationDeg = 0.0f;
         float iblTint[3] = {1.0f, 1.0f, 1.0f};
+        // True while one of the knob widgets is being dragged. IBLComponent has a second writer
+        // (IBLDrawer in the Entity Details panel), so the knobs are re-read from the component every
+        // frame EXCEPT mid-drag — re-reading mid-drag would fight the user's own input.
+        bool knobEditing = false;
 
         // VK-1574: single apply path — writes the component, drives the renderer,
         // and pushes live params. `bake` re-runs the (blocking today) HDR bake; the

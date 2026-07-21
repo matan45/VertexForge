@@ -1,5 +1,7 @@
 #include "MeshImporter.hpp"
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <ranges>
 #include <variant>
 
@@ -8,6 +10,18 @@ namespace import::builtin
     namespace
     {
         constexpr unsigned char glbSig[] = {0x67, 0x6C, 0x54, 0x46};
+
+        // VK-1642: a material texture that decodes as HDR is written as .vfHdr, not .vfImage, so the
+        // written extension — not the fact that it came from the texture list — decides the asset
+        // type. Registering a .vfHdr as Texture would put a BC6H payload behind the LDR texture path.
+        // Compared lowercase against FileExtension::hdr ("vfHdr").
+        bool isVfHdrPath(const std::string& path)
+        {
+            std::string ext = std::filesystem::path(path).extension().string();
+            std::ranges::transform(ext, ext.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return ext == ".vfhdr";
+        }
 
         bool matchesSignature(std::span<const unsigned char> header, std::span<const unsigned char> signature)
         {
@@ -155,7 +169,11 @@ namespace import::builtin
                 context.outputFiles.push_back({std::move(path), resource::AssetType::Mesh});
 
             for (auto& path : writtenTextures)
-                context.outputFiles.push_back({std::move(path), resource::AssetType::Texture});
+            {
+                const resource::AssetType type = isVfHdrPath(path) ? resource::AssetType::HDR
+                                                                   : resource::AssetType::Texture;
+                context.outputFiles.push_back({std::move(path), type});
+            }
         }
 
         types::AnimationProgressCallback animProgress = nullptr;

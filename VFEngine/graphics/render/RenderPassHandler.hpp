@@ -423,6 +423,10 @@ namespace render
         // Publishes the probe cubes + SSBO into the mesh pipeline's set 0, and flips the
         // REFLECTION_PROBES_ENABLED permutation when the scene crosses 0 <-> N baked probes.
         void syncReflectionProbeResources();
+        // Re-binds the probe cubes + SSBO into set 0 after a mesh-pipeline reinit. cleanUpForReinit()
+        // drops the cached handles, so every reinitMeshPipeline* path MUST call this once the new
+        // descriptor set exists or local reflections silently fall back to the global environment.
+        void republishProbeResources();
 
         // VK-1574: non-blocking HDR IBL apply/remove (called by IBLController). applyHdrEnvironment
         // sets the source, blocking-bakes only on the first bind, and rides the per-frame capture on
@@ -430,6 +434,11 @@ namespace render
         void applyHdrEnvironment(std::string_view path);
         void removeHdrEnvironment();
         bool isHdrEnvironmentActive() const { return hdrCaptureMeshBound; }
+        // VK-1569/VK-1574: the dynamic sky and the HDR capture are mutually exclusive owners of the
+        // mesh IBL descriptor. Both apply and remove have to respect this, or one silently unbinds
+        // the other's ambient with no path back (applyAtmosphereSettings only reacts to the toggle
+        // edge, so it never restores it).
+        [[nodiscard]] bool isDynamicAmbientOwningMeshIbl() const;
 
         void setMeshDrawList(std::vector<mesh::MeshRenderData>&& meshes);
         void setCurrentFrustum(const math::Frustum* frustum) { currentFrustum = frustum; }

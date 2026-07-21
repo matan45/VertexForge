@@ -147,6 +147,11 @@ namespace services
             [this](const events::render::RemoveIBLCommand&)
             {
                 removeIBL();
+                // See EditorRenderServiceImpl: the knobs are process-global, so they have to be
+                // reset alongside the environment or they leak onto the next one. Neutral values
+                // mirror IBLComponent's defaults (utilities/components/CoreComponents.hpp).
+                if (offScreenProvider)
+                    offScreenProvider->iblSetParams(1.0f, 0.0f, glm::vec3(1.0f));
             });
 
         dispatcher.registerCommandHandler<events::render::UpdateIBLCameraCommand>(

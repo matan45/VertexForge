@@ -248,11 +248,19 @@ namespace services
                 baseAmbientIntensity = settings.ambientIntensity;
                 basesAtmosCaptured = true;
             }
+            else if (lastWrittenAmbient >= 0.0f &&
+                     std::abs(settings.ambientIntensity - lastWrittenAmbient) > 1e-6f)
+            {
+                // The live value is not what we wrote last tick, so an external writer changed it.
+                // Adopt it as the new base instead of overwriting the user's edit on every frame.
+                baseAmbientIntensity = settings.ambientIntensity;
+            }
 
             settings.sunIrradiance = baseSunIrradiance * ws.atmosphereTint;
             settings.aerialIntensity = baseAerialIntensity * ws.ambientLightMult;
             // VK-1569: give ambientLightMult a true ambient meaning when dynamic ambient is on.
             settings.ambientIntensity = baseAmbientIntensity * ws.ambientLightMult;
+            lastWrittenAmbient = settings.ambientIntensity;
 
             auto lightning = lightningGenerator.getOutput();
             if (lightning.flashIntensity > 0.0f)

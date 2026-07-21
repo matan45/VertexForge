@@ -328,6 +328,14 @@ namespace render::probe
         captureViewport->init(CUBE_SIZE, CUBE_SIZE);
     }
 
+    namespace
+    {
+        // Squared metres a probe must move before its cube is re-baked. 1 cm — well below anything
+        // that visibly changes a 128^2 reflection, but far above float noise in the transform bake,
+        // which would otherwise re-bake every frame and never converge.
+        constexpr float PROBE_REBAKE_DIST_SQ = 0.01f * 0.01f;
+    }
+
     bool ReflectionProbeManager::selectNextDirtyProbe()
     {
         const auto& probes = bufferManager.getResolvedProbes();
@@ -347,7 +355,21 @@ namespace render::probe
 
         for (const auto& p : probes)
         {
-            if (!p.dirty) continue;
+            // ReflectionProbeComponent::dirty covers the authored capture settings, but moving the
+            // probe entity does not touch it — the transform is mutated directly by the gizmo, and
+            // the component service only watches nearPlane/farPlane/captureShadows. Compare the
+            // live capture point against where the slot's cube was actually baked from, so dragging
+            // a probe into another room re-bakes it instead of reflecting the old one forever.
+            // Only position matters: captureSceneFace uses probe.capturePos and nothing else, and
+            // the parallax box already follows the transform through the SSBO every frame.
+            bool moved = false;
+            if (!p.dirty && bufferManager.isSlotReady(p.slot))
+            {
+                const glm::vec3 delta = p.capturePos - bufferManager.getSlotBakedPos(p.slot);
+                moved = glm::dot(delta, delta) > PROBE_REBAKE_DIST_SQ;
+            }
+            if (!p.dirty && !moved) continue;
+
             activeSlot = static_cast<int32_t>(p.slot);
             activeEntity = p.entity;
             scheduler.restart(scheduler.epoch + 1); // any restart value works; probes bake on demand
@@ -544,6 +566,19 @@ namespace render::probe
 
             bufferManager.setSlotReady(slot, true);
             anySlotReady = true;
+
+            // Remember where this cube was captured from, so a later move re-triggers the bake.
+            // Read from the live resolved set rather than a value cached at selection time: the six
+            // faces are captured over six frames, so the position that actually shaped the cube is
+            // the current one, not the one it started at.
+            for (const auto& p : bufferManager.getResolvedProbes())
+            {
+                if (p.entity == activeEntity)
+                {
+                    bufferManager.setSlotBakedPos(slot, p.capturePos);
+                    break;
+                }
+            }
 
             // Clear the component's dirty flag so this probe is not re-picked next frame.
             auto& registry = scene::EntityRegistry::getRegistry();

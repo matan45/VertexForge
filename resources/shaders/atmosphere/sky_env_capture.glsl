@@ -10,8 +10,10 @@
 layout(location = 0) in vec3 position;
 layout(location = 0) out vec3 WorldPos;
 
+// Must match the FRAGMENT declaration exactly — one combined vertex|fragment range.
 layout(push_constant) uniform PushConstants {
     mat4 viewProj;
+    float ambientIntensity;
 } pc;
 
 void main()
@@ -28,6 +30,11 @@ void main()
 
 layout(location = 0) in vec3 WorldPos;
 layout(location = 0) out vec4 outColor;
+
+layout(push_constant) uniform PushConstants {
+    mat4 viewProj;
+    float ambientIntensity;
+} pc;
 
 layout(set = 0, binding = 0) uniform sampler2D skyViewLUT;
 layout(set = 0, binding = 1) uniform sampler2D transmittanceLUT;
@@ -85,5 +92,11 @@ void main()
     float nightFactor = 1.0 - smoothstep(-0.15, 0.0, sunElev);
     skyColor += vec3(params.moonParams.z) * nightFactor;
 
-    outColor = vec4(max(skyColor, vec3(0.0)), 1.0);
+    // VK-1569: AtmosphereSettings::ambientIntensity. Applied HERE, on the env cube, because both the
+    // irradiance convolution and the GGX prefilter derive from it — so this one multiply scales
+    // diffuse and specular ambient together and stays energy-consistent between them. This is also
+    // what routes WeatherState::ambientLightMult into PBR ambient (a storm darkens the scene).
+    // Scaling here and not in the sky render is deliberate: the visible sky is drawn by the
+    // atmosphere pipeline, and this cube is consumed only as ambient.
+    outColor = vec4(max(skyColor, vec3(0.0)) * max(pc.ambientIntensity, 0.0), 1.0);
 }

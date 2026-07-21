@@ -54,6 +54,16 @@ namespace types
             };
             return supported.contains(extLower);
         }
+
+        // The subset of the above that carries float data and must go through
+        // Texture::loadHDRFile (-> .vfHdr) instead of the 8-bit .vfImage writer. Deliberately does
+        // NOT include ".pic": that is Softimage PIC, which is 8-bit, and loadHDRFile would reject
+        // it. ".exr" is also HDR and loadHDRFile handles it, but it is absent from the stb list
+        // above, so material .exr references are still skipped as unsupported.
+        bool isHdrSourceExtension(const std::string& extLower)
+        {
+            return extLower == ".hdr";
+        }
     }
 
     void importMaterialTextures(const aiScene* scene, const std::filesystem::path& sourceDir,
@@ -189,6 +199,18 @@ namespace types
                             if (std::filesystem::exists(outPath, ec))
                                 outWrittenTextures.push_back(outPath);
                         }
+                    }
+                    else if (isHdrSourceExtension(extLower))
+                    {
+                        // Radiance .hdr is float data. Sending it through loadTextureFile would
+                        // decode it with stb's LDR path and write an 8-bit .vfImage, silently
+                        // clamping and gamma-mapping the range with no way to recover it.
+                        // loadHDRFile is the same writer HdrImporter uses for this exact format.
+                        textureWriter.loadHDRFile(textureFile, stem, location);
+
+                        const std::string outPath = outPathForExt(stem, FileExtension::hdr);
+                        if (std::filesystem::exists(outPath, ec))
+                            outWrittenTextures.push_back(outPath);
                     }
                     else
                     {

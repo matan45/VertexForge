@@ -208,7 +208,10 @@ namespace render
         // Phase 1: Skybox / clear pass (color-only, eClear)
         // Renders the IBL skybox if available, otherwise just clears the color image.
         auto* ibl = mainPassHandler->getIBL();
-        if (ibl && ibl->isInitialized() &&
+        // isSkyboxInitialized(), not isInitialized(): the VK-1574 apply path binds the skybox via
+        // initSkybox() and leaves iblInitialized false, which would make this branch permanently
+        // dead and every render texture fall through to a plain clear.
+        if (ibl && ibl->isSkyboxInitialized() &&
             imageIndex < rttSkyboxDescSets.size() && rttSkyboxDescSets[imageIndex])
         {
             ibl->renderSkyboxToTarget(commandBuffer, {
@@ -627,7 +630,7 @@ namespace render
         }
 
         auto* ibl = mainPassHandler->getIBL();
-        if (ibl && ibl->isInitialized())
+        if (ibl && ibl->isSkyboxInitialized()) // see the note at the skybox draw above
         {
             std::array<vk::DescriptorPoolSize, 2> poolSizes{};
             poolSizes[0].type = vk::DescriptorType::eUniformBuffer;

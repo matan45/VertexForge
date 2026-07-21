@@ -50,12 +50,16 @@ namespace services
         {
             if (!scene::Entity::isEffectivelyActive(registry, entity))
                 continue;
-            auto* transform = registry.try_get<components::TransformComponent>(entity);
-            if (!transform)
-                continue;
-            transform->rotation = render::atmosphere::directionalLightEulerForSun(settings.sunAzimuth,
-                                                                                  settings.sunElevation);
-            transform->isDirty = true; // SceneGraphSystem re-bakes worldMatrix for dirty entities
+            // Stop at the FIRST effectively-active directional light whether or not it has a
+            // transform. GPULightBufferManager treats that entity as the sun regardless, so
+            // skipping past it to the next one would rotate a different light than the one the
+            // sky and the sun-color feedback are driving.
+            if (auto* transform = registry.try_get<components::TransformComponent>(entity))
+            {
+                transform->rotation = render::atmosphere::directionalLightEulerForSun(settings.sunAzimuth,
+                                                                                      settings.sunElevation);
+                transform->isDirty = true; // SceneGraphSystem re-bakes worldMatrix for dirty entities
+            }
             break;
         }
     }

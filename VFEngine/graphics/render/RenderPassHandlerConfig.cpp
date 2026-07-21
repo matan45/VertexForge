@@ -1,4 +1,5 @@
 #include "RenderPassHandler.hpp"
+#include <bit> // std::bit_cast — exact float hashing in computeAmbientCaptureEpoch
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "vegetation/VegetationTypes.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -136,6 +137,7 @@ namespace render
         device.getLogicalDevice().waitIdle();
         meshPipeline->cleanUpForReinit();
         meshPipeline->initWithDefaults();
+        republishProbeResources(); // VK-1577: the reinit dropped the probe bindings
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
@@ -155,6 +157,7 @@ namespace render
         const auto& prefilter = iblRenderer->getPrefilterImage();
         const auto& brdfLUT = iblRenderer->getBrdfLUTImage();
         meshPipeline->init(irradiance, prefilter, brdfLUT);
+        republishProbeResources(); // VK-1577: the reinit dropped the probe bindings
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
@@ -174,6 +177,7 @@ namespace render
         meshPipeline->cleanUpForReinit();
         meshPipeline->init(skyEnvCapture->getIrradianceLive(), skyEnvCapture->getPrefilterLive(),
                            skyEnvCapture->getBrdfLUT());
+        republishProbeResources(); // VK-1577: the reinit dropped the probe bindings
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
@@ -206,13 +210,24 @@ namespace render
 
             // Bind the (still empty) probe cubes + SSBO into set 0 immediately. Every slot is a
             // valid image from the moment it exists, so the descriptor never points at nothing.
-            meshPipeline->setReflectionProbeResources(
-                reflectionProbes->getBufferManager().getBuffer(),
-                reflectionProbes->getProbeCubes());
+            republishProbeResources();
         }
 
         reflectionProbes->tickSceneCapture(this);
         syncReflectionProbeResources();
+    }
+
+    // The probe cubes + SSBO outlive the mesh pipeline, but cleanUpForReinit() clears the handles
+    // the pipeline caches for them, and the fresh descriptor set is written with an empty probe
+    // buffer. Re-publishing here is what keeps local reflections alive across an IBL/atmosphere
+    // change; setReflectionProbeResources rewrites the live descriptor set when one already exists,
+    // so this is safe to call at any point after meshPipeline->init*().
+    void RenderPassHandler::republishProbeResources()
+    {
+        if (!reflectionProbes || !meshPipelineInitialized) return;
+        meshPipeline->setReflectionProbeResources(
+            reflectionProbes->getBufferManager().getBuffer(),
+            reflectionProbes->getProbeCubes());
     }
 
     void RenderPassHandler::syncReflectionProbeResources()
@@ -240,6 +255,7 @@ namespace render
         meshPipeline->cleanUpForReinit();
         meshPipeline->init(hdrEnvCapture->getIrradianceLive(), hdrEnvCapture->getPrefilterLive(),
                            hdrEnvCapture->getBrdfLUT());
+        republishProbeResources(); // VK-1577: the reinit dropped the probe bindings
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
             gpuDrivenRenderer->updateFormats({swapChain.getSceneColorFormat()}, swapChain.getSwapchainDepthStencilFormat(), meshPipeline->getIBLDescriptorSetLayout());
@@ -265,11 +281,7 @@ namespace render
 
         hdrEnvCapture->setSource(std::string(path)); // non-blocking: kicks the off-thread decode
 
-        const bool dynamicAmbient = atmospherePipeline && atmospherePipeline->isInitialized() &&
-                                    atmospherePipeline->getSettings().enabled &&
-                                    atmospherePipeline->getSettings().dynamicAmbient;
-
-        if (dynamicAmbient)
+        if (isDynamicAmbientOwningMeshIbl())
         {
             // The dynamic sky owns the mesh ambient AND draws the sky while enabled, so the HDR maps
             // are not consumed yet. Keep the (already-set) source ready; applyAtmosphereSettings bakes
@@ -290,20 +302,49 @@ namespace render
         // time-slices the new bake and publish() swaps env + ambient atomically. No reinit, no hitch.
     }
 
+    bool RenderPassHandler::isDynamicAmbientOwningMeshIbl() const
+    {
+        return atmospherePipeline && atmospherePipeline->isInitialized() &&
+               atmospherePipeline->getSettings().enabled &&
+               atmospherePipeline->getSettings().dynamicAmbient;
+    }
+
     // VK-1574: drop the HDR environment — tear down the skybox and revert mesh ambient BEFORE
     // destroying the capture's live maps, so no consumer samples a freed image.
     void RenderPassHandler::removeHdrEnvironment()
     {
+        // Whether the dynamic sky owns the mesh ambient has to be sampled BEFORE the teardown,
+        // and decides what we rebind to: reverting to the studio-gray defaults here would drop the
+        // sky ambient that applyHdrEnvironment deliberately left in place, and nothing would ever
+        // restore it.
+        // The sky capture must actually be usable, not merely enabled: reinitMeshPipelineWithDynamicAmbient
+        // early-returns when it is not, which would leave the descriptor on the HDR maps that
+        // cleanup() below is about to destroy. Falling back to the defaults is always safe.
+        const bool skyOwnsAmbient = isDynamicAmbientOwningMeshIbl() &&
+                                    skyEnvCapture && skyEnvCapture->isInitialized();
+
         iblRenderer->remove();                    // stops + destroys the skybox (was bound to envLive)
         if (meshPipelineInitialized)
-            reinitMeshPipelineWithDefaults();     // rebinds the mesh IBL descriptor off the hdr live maps
+        {
+            if (skyOwnsAmbient)
+                reinitMeshPipelineWithDynamicAmbient(); // sky keeps the mesh ambient it already owned
+            else
+                reinitMeshPipelineWithDefaults();       // rebinds the mesh IBL descriptor off the hdr live maps
+        }
         if (hdrEnvCapture)
             hdrEnvCapture->cleanup();             // now safe to destroy env/irradiance/prefilter live maps
     }
 
-    // VK-1569: quantized hash of the sky state (sun direction + time-of-day + weather ambient). The
-    // capture starts a fresh cycle only when this changes after the previous cycle published, so a
-    // static sky is captured once while a changing sky rolls with ~1-cycle latency.
+    // VK-1569: hash of everything the sky bake depends on. The capture starts a fresh cycle only
+    // when this changes after the previous cycle published, so a static sky is captured once while a
+    // changing sky rolls with ~1-cycle latency.
+    //
+    // Two hashing strategies, deliberately:
+    //  - Continuously-varying inputs (sun direction, time-of-day, sun angles, the weather-driven
+    //    ambient) are QUANTIZED, so float noise and sub-visible drift do not restart a 42-item bake.
+    //  - Authored scattering/planet constants are hashed BIT-EXACT. Quantizing them would be worse
+    //    than useless: rayleighScattering is ~5.8e-6, so quant(v, 0.01f) truncates every possible
+    //    value to 0 and the parameter could never invalidate the capture at all.
     uint64_t RenderPassHandler::computeAmbientCaptureEpoch() const
     {
         glm::vec3 sunDir{0.0f, 1.0f, 0.0f};
@@ -315,22 +356,51 @@ namespace render
                     sunDir = *d;
             }
         }
-        float timeOfDay = 12.0f;
-        float ambient = 1.0f;
+
+        uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
+        auto mixIn = [&](uint64_t x) { h ^= x; h *= 1099511628211ull; };
+        auto quant = [&](float v, float step) { mixIn(static_cast<uint64_t>(static_cast<int64_t>(v / step))); };
+        auto exact = [&](float v) { mixIn(std::bit_cast<uint32_t>(v)); };
+        auto exact3 = [&](const glm::vec3& v) { exact(v.x); exact(v.y); exact(v.z); };
+
+        quant(sunDir.x, 0.01f);
+        quant(sunDir.y, 0.01f);
+        quant(sunDir.z, 0.01f);
+
         if (atmospherePipeline)
         {
             const auto s = atmospherePipeline->getSettings();
-            timeOfDay = s.timeOfDay;
-            ambient = s.ambientIntensity;
+
+            quant(s.timeOfDay, 0.02f);
+            quant(s.ambientIntensity, 0.01f);
+            // The sky-view LUT is built from the SETTINGS sun angles, which are independent of the
+            // scene light direction above whenever cycleControlsSunEntity is off — with the cycle
+            // disabled these are the only thing that moves the sun, so they must be in the hash.
+            quant(s.sunAzimuth, 0.01f);
+            quant(s.sunElevation, 0.01f);
+            quant(s.moonAzimuth, 0.01f);
+            quant(s.moonElevation, 0.01f);
+
+            // Planet + scattering medium.
+            exact(s.planetRadius);
+            exact(s.atmosphereRadius);
+            exact3(s.rayleighScattering);
+            exact(s.rayleighDensityExpScale);
+            exact(s.mieScattering);
+            exact(s.mieAbsorption);
+            exact(s.mieAnisotropy);
+            exact(s.mieDensityExpScale);
+            exact3(s.ozoneAbsorption);
+            exact(s.ozoneCenterAlt);
+            exact(s.ozoneWidth);
+
+            // Sun/moon radiance and the ground bounce all feed the captured irradiance.
+            exact3(s.sunIrradiance);
+            exact(s.sunAngularRadius);
+            exact(s.moonBrightness);
+            exact(s.nightSkyBrightness);
+            exact3(s.groundAlbedo);
         }
-        auto quant = [](float v, float step) { return static_cast<int64_t>(v / step); };
-        uint64_t h = 1469598103934665603ull; // FNV-1a offset basis
-        auto mixIn = [&](int64_t x) { h ^= static_cast<uint64_t>(x); h *= 1099511628211ull; };
-        mixIn(quant(sunDir.x, 0.01f));
-        mixIn(quant(sunDir.y, 0.01f));
-        mixIn(quant(sunDir.z, 0.01f));
-        mixIn(quant(timeOfDay, 0.02f));
-        mixIn(quant(ambient, 0.01f));
         return h;
     }
 
@@ -428,9 +498,14 @@ namespace render
                 skyEnvCapture = std::make_unique<atmosphere::SkyEnvironmentCapture>(device);
             if (!skyEnvCapture->isInitialized() && atmospherePipeline && atmospherePipeline->isInitialized())
                 skyEnvCapture->init(device.getStagingCommandPool(), *atmospherePipeline);
-            if (skyEnvCapture->isInitialized())
+            // atmospherePipeline is also required (not just skyEnvCapture): the capture can still be
+            // initialized from an earlier ON cycle after resetAtmosphere() destroyed the pipeline.
+            if (skyEnvCapture->isInitialized() && atmospherePipeline && atmospherePipeline->isInitialized())
             {
-                skyEnvCapture->captureBlocking(computeAmbientCaptureEpoch());
+                // Passes the pipeline so the capture can dispatch the sky LUTs itself — initAtmosphere()
+                // above only allocated them, the frame graph has not run, and sampling them now would
+                // bake the entire ambient from undefined memory.
+                skyEnvCapture->captureBlocking(computeAmbientCaptureEpoch(), *atmospherePipeline);
                 reinitMeshPipelineWithDynamicAmbient();
             }
         }

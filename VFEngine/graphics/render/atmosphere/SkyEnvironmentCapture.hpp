@@ -52,13 +52,25 @@ namespace render::atmosphere
 
         // Blocking full-cycle capture + publish (used once on the OFF->ON toggle so the first scene
         // frame samples valid ambient instead of black).
-        void captureBlocking(uint64_t epoch);
+        //
+        // Takes the atmosphere pipeline because it must DISPATCH the sky LUTs itself first:
+        // AtmospherePipeline::init() only allocates the LUT images, and their contents are computed
+        // by dispatchCompute() from inside the frame graph — which has not run yet at the point this
+        // is called. Without that dispatch the whole bake samples an undefined skyViewLUT, and
+        // because a static sky never changes the epoch, the garbage result is never refreshed.
+        void captureBlocking(uint64_t epoch, AtmospherePipeline& atmosphere);
 
         // Per-frame time-sliced capture recorded onto the frame-graph command buffer. Advances at
         // most `budget` work items; publishes staging->live once a full cycle completes; starts a
         // fresh cycle only when `epoch` changes after the previous cycle published (a static sky is
         // captured once, a changing sky rolls with ~1-cycle latency and never stalls).
         void recordCapture(const vk::CommandBuffer& cmd, uint32_t budget, uint64_t epoch);
+
+        // AtmosphereSettings::ambientIntensity, applied to the env cube the irradiance + prefilter
+        // are derived from. Push it before recordCapture each frame; captureBlocking reads it from
+        // the pipeline itself. Changing it must also change the capture epoch, or the new value is
+        // pushed but no fresh cycle ever runs to bake it in.
+        void setAmbientIntensity(float intensity) { ambientIntensity = intensity; }
 
     private:
         // Per-work-item recording (all onto the given command buffer; no per-face fences).
@@ -74,6 +86,7 @@ namespace render::atmosphere
 
         core::Device& device;
         bool initialized = false;
+        float ambientIntensity = 1.0f; // pushed to the sky capture fragment stage; 1.0 = neutral
 
         // Stable atmosphere handles captured at init (created in AtmospherePipeline::init, untouched
         // by recreate()).

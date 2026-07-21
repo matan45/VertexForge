@@ -38,6 +38,11 @@ namespace render
         skyboxRenderer->renderSkyGraphManaged(commandBuffer, imageIndex);
     }
 
+    bool IBL::isSkyboxInitialized() const
+    {
+        return skyboxRenderer && skyboxRenderer->isInitialized();
+    }
+
     void IBL::renderSkyboxToTarget(const vk::CommandBuffer& commandBuffer,
                                     const ibl::SkyboxTargetParams& target) const
     {
