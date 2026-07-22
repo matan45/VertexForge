@@ -1,6 +1,7 @@
 #include "MeshBrushServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
+#include "../../events/editor/UndoRedoEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
@@ -10,12 +11,17 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../data/DTOs.hpp"
 #include "../../data/EntityConversion.hpp"
+#include "../../data/MeshBrushUndoCommands.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
 #include <asset/AssetRef.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <cmath>
+#include <limits>
+#include <stdexcept>
+#include <unordered_set>
 
 namespace services
 {
@@ -27,6 +33,8 @@ namespace services
             dispatcher.unsubscribe(modeChangedToken);
         if (sceneClearedToken.isValid())
             dispatcher.unsubscribe(sceneClearedToken);
+        if (entityDeletedToken.isValid())
+            dispatcher.unsubscribe(entityDeletedToken);
     }
 
     void MeshBrushServiceImpl::registerEventHandlers()
@@ -39,12 +47,15 @@ namespace services
                 currentParams = cmd.params;
                 currentParams.validate();
                 spatialGrid.setCellSize(currentParams.spacing);
+                rebuildSpatialGrid();
                 publishParamsChanged();
             });
 
         dispatcher.registerCommandHandler<events::meshBrush::SetMeshBrushModeCommand>(
             [this](const events::meshBrush::SetMeshBrushModeCommand& cmd)
             {
+                if (currentMode != cmd.mode)
+                    finalizeStroke();
                 currentMode = cmd.mode;
             });
 
@@ -78,6 +89,18 @@ namespace services
                 }
             });
 
+        dispatcher.registerCommandHandler<events::meshBrush::FinalizeMeshBrushCommand>(
+            [this](const events::meshBrush::FinalizeMeshBrushCommand&)
+            {
+                finalizeStroke();
+            });
+
+        dispatcher.registerCommandHandler<events::meshBrush::ApplyMeshBrushInstanceDeltaCommand>(
+            [this](const events::meshBrush::ApplyMeshBrushInstanceDeltaCommand& cmd)
+            {
+                applyInstanceDelta(cmd.removeIds, cmd.respawnSpecs);
+            });
+
         dispatcher.registerQueryHandler<events::meshBrush::GetMeshBrushParamsQuery>(
             [this](const events::meshBrush::GetMeshBrushParamsQuery&)
             {
@@ -99,6 +122,8 @@ namespace services
         modeChangedToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
             {
+                if (meshBrushModeActive && !n.isActive)
+                    finalizeStroke();
                 meshBrushModeActive = n.isActive;
             });
 
@@ -110,7 +135,18 @@ namespace services
                 hasLastPlacement = false;
                 groupEntities.clear();
                 instanceEntities.clear();
+                entityInstanceIds.clear();
+                instanceSpecs.clear();
+                discardStroke();
                 aabbYOffsetCache.clear();
+            });
+
+        entityDeletedToken = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
+            [this](const events::scene::EntityDeletedNotification& n)
+            {
+                auto it = entityInstanceIds.find(n.entity);
+                if (it != entityInstanceIds.end())
+                    forgetInstance(it->second);
             });
     }
 
@@ -121,6 +157,8 @@ namespace services
 
         if (isFirst)
         {
+            if (!strokeCreated.empty() || !strokeRemoved.empty())
+                finalizeStroke();
             hasLastPlacement = false;
         }
 
@@ -259,33 +297,89 @@ namespace services
                 }
             }
 
-            auto groupEntity = ensureGroupEntity(paletteIdx, candidatePos);
+            if (nextInstanceId == 0 || nextInstanceId == std::numeric_limits<uint64_t>::max())
+                throw std::overflow_error("Mesh brush instance ID space exhausted");
 
-            uint64_t instanceId = nextInstanceId++;
+            meshbrush::MeshBrushInstanceSpec spec;
+            spec.instanceId = nextInstanceId++;
+            spec.paletteIndex = paletteIdx;
+            spec.worldPosition = candidatePos;
+            spec.rotation = rotation;
+            spec.scale = glm::vec3(scale);
+            spec.meshPath = entry.meshPath;
+            spec.materialPath = entry.materialPath;
+            spec.useCollider = entry.useCollider;
 
-            events::scene::CreateEntityCommand createCmd;
-            createCmd.name = "Brush_" + std::to_string(instanceId);
-            auto entity = dispatcher.execute(createCmd);
-            if (!entity.isValid()) continue;
+            auto entity = spawnInstance(spec);
+            if (!entity.isValid())
+                continue;
 
+            strokeCreated.push_back(spec);
+            ++placedCount;
+        }
+
+        if (placedCount > 0)
+        {
+            events::meshBrush::MeshBrushAppliedNotification notification;
+            notification.position = worldPos;
+            notification.count = placedCount;
+            dispatcher.publish(notification);
+        }
+    }
+
+    void MeshBrushServiceImpl::eraseInstances(const glm::vec3& worldPos)
+    {
+        auto entries = spatialGrid.queryRadius(worldPos, currentParams.radius);
+
+        for (const auto& entry : entries)
+        {
+            auto specIt = instanceSpecs.find(entry.entityId);
+            if (specIt == instanceSpecs.end())
+                continue;
+
+            auto spec = specIt->second;
+            if (removeInstance(entry.entityId))
+                strokeRemoved.push_back(std::move(spec));
+        }
+    }
+
+    EntityHandle MeshBrushServiceImpl::spawnInstance(const meshbrush::MeshBrushInstanceSpec& spec)
+    {
+        if (spec.instanceId == 0 || spec.instanceId == std::numeric_limits<uint64_t>::max())
+            return EntityHandle::invalid();
+        if (instanceEntities.contains(spec.instanceId) || instanceSpecs.contains(spec.instanceId))
+            return EntityHandle::invalid();
+
+        auto groupEntity = ensureGroupEntity(spec.paletteIndex, spec.worldPosition);
+        if (!groupEntity.isValid())
+            return EntityHandle::invalid();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        events::scene::CreateEntityCommand createCmd;
+        createCmd.name = "Brush_" + std::to_string(spec.instanceId);
+        auto entity = dispatcher.execute(createCmd);
+        if (!entity.isValid())
+            return EntityHandle::invalid();
+
+        try
+        {
             events::scene::ReparentEntityCommand reparentCmd;
             reparentCmd.entity = entity;
             reparentCmd.newParent = groupEntity;
-            dispatcher.execute(reparentCmd);
+            if (!dispatcher.execute(reparentCmd))
+                throw std::runtime_error("Failed to parent mesh brush instance");
 
-            // Compute local position relative to the group entity's sector center
-            int32_t sx = static_cast<int32_t>(std::floor(candidatePos.x / sectorSize));
-            int32_t sz = static_cast<int32_t>(std::floor(candidatePos.z / sectorSize));
+            int32_t sx = static_cast<int32_t>(std::floor(spec.worldPosition.x / sectorSize));
+            int32_t sz = static_cast<int32_t>(std::floor(spec.worldPosition.z / sectorSize));
             glm::vec3 sectorCenter(
                 (static_cast<float>(sx) + 0.5f) * sectorSize,
                 0.0f,
-                (static_cast<float>(sz) + 0.5f) * sectorSize
-            );
+                (static_cast<float>(sz) + 0.5f) * sectorSize);
 
             TransformData transform;
-            transform.position = candidatePos - sectorCenter;
-            transform.rotation = rotation;
-            transform.scale = glm::vec3(scale);
+            transform.position = spec.worldPosition - sectorCenter;
+            transform.rotation = spec.rotation;
+            transform.scale = spec.scale;
             events::scene::SetTransformCommand transformCmd;
             transformCmd.entity = entity;
             transformCmd.transform = transform;
@@ -296,13 +390,13 @@ namespace services
             dispatcher.execute(meshCmd);
 
             MeshData meshData;
-            meshData.meshRef = asset::AssetRef::fromPath(entry.meshPath);
+            meshData.meshRef = asset::AssetRef::fromPath(spec.meshPath);
             events::scene::SetMeshDataCommand meshDataCmd;
             meshDataCmd.entity = entity;
             meshDataCmd.meshData = meshData;
             dispatcher.execute(meshDataCmd);
 
-            if (!entry.materialPath.empty())
+            if (!spec.materialPath.empty())
             {
                 events::material::AddMaterialComponentCommand matCmd;
                 matCmd.entity = entity;
@@ -310,16 +404,16 @@ namespace services
 
                 events::material::SetDefaultMaterialCommand defaultMatCmd;
                 defaultMatCmd.entity = entity;
-                defaultMatCmd.materialPath = entry.materialPath;
+                defaultMatCmd.materialPath = spec.materialPath;
                 dispatcher.execute(defaultMatCmd);
             }
 
-            if (entry.useCollider)
+            if (spec.useCollider)
             {
                 glm::vec3 colliderSize(0.5f);
                 glm::vec3 colliderOffset(0.0f);
                 events::render::GetMeshBoundingBoxQuery bbQuery;
-                bbQuery.meshPath = entry.meshPath;
+                bbQuery.meshPath = spec.meshPath;
                 auto bbResult = dispatcher.query(bbQuery);
                 if (bbResult.has_value())
                 {
@@ -352,38 +446,147 @@ namespace services
                 dispatcher.execute(setRbCmd);
             }
 
-            spatialGrid.insert(instanceId, candidatePos);
-            instanceEntities[instanceId] = entity;
+            auto [specIt, specInserted] = instanceSpecs.emplace(spec.instanceId, spec);
+            auto [entityIt, entityInserted] = instanceEntities.emplace(spec.instanceId, entity);
+            auto [reverseIt, reverseInserted] = entityInstanceIds.emplace(entity, spec.instanceId);
+            if (!specInserted || !entityInserted || !reverseInserted)
+                throw std::logic_error("Duplicate mesh brush instance tracking state");
 
-            ++placedCount;
+            spatialGrid.insert(spec.instanceId, spec.worldPosition);
+            nextInstanceId = std::max(nextInstanceId, spec.instanceId + 1);
+            return entity;
         }
-
-        if (placedCount > 0)
+        catch (...)
         {
-            events::meshBrush::MeshBrushAppliedNotification notification;
-            notification.position = worldPos;
-            notification.count = placedCount;
-            dispatcher.publish(notification);
+            forgetInstance(spec.instanceId);
+            try
+            {
+                events::scene::DeleteEntityCommand deleteCmd;
+                deleteCmd.entity = entity;
+                dispatcher.execute(deleteCmd);
+            }
+            catch (...)
+            {
+            }
+            return EntityHandle::invalid();
         }
     }
 
-    void MeshBrushServiceImpl::eraseInstances(const glm::vec3& worldPos)
+    bool MeshBrushServiceImpl::removeInstance(uint64_t instanceId)
     {
-        auto entries = spatialGrid.queryRadius(worldPos, currentParams.radius);
-
-        for (const auto& entry : entries)
+        auto it = instanceEntities.find(instanceId);
+        if (it == instanceEntities.end())
         {
-            spatialGrid.remove(entry.entityId);
+            forgetInstance(instanceId);
+            return false;
+        }
 
-            auto it = instanceEntities.find(entry.entityId);
-            if (it != instanceEntities.end())
+        const auto entity = it->second;
+        events::scene::DeleteEntityCommand deleteCmd;
+        deleteCmd.entity = entity;
+        const bool deleted = events::EventDispatcher::instance().execute(deleteCmd);
+        forgetInstance(instanceId);
+        return deleted;
+    }
+
+    void MeshBrushServiceImpl::forgetInstance(uint64_t instanceId)
+    {
+        spatialGrid.remove(instanceId);
+        auto entityIt = instanceEntities.find(instanceId);
+        if (entityIt != instanceEntities.end())
+        {
+            entityInstanceIds.erase(entityIt->second);
+            instanceEntities.erase(entityIt);
+        }
+        instanceSpecs.erase(instanceId);
+    }
+
+    void MeshBrushServiceImpl::applyInstanceDelta(
+        const std::vector<uint64_t>& removeIds,
+        const std::vector<meshbrush::MeshBrushInstanceSpec>& respawnSpecs)
+    {
+        std::unordered_set<uint64_t> removeSet(removeIds.begin(), removeIds.end());
+        if (removeSet.size() != removeIds.size())
+            throw std::invalid_argument("Mesh brush delta contains duplicate removal IDs");
+
+        std::unordered_set<uint64_t> respawnIds;
+        respawnIds.reserve(respawnSpecs.size());
+        for (const auto& spec : respawnSpecs)
+        {
+            if (spec.instanceId == 0 || spec.instanceId == std::numeric_limits<uint64_t>::max())
+                throw std::invalid_argument("Mesh brush delta contains an invalid instance ID");
+            if (!respawnIds.insert(spec.instanceId).second)
+                throw std::invalid_argument("Mesh brush delta contains duplicate respawn IDs");
+            if ((instanceEntities.contains(spec.instanceId) || instanceSpecs.contains(spec.instanceId)) &&
+                !removeSet.contains(spec.instanceId))
+                throw std::invalid_argument("Mesh brush delta would respawn a live instance ID");
+        }
+
+        std::vector<meshbrush::MeshBrushInstanceSpec> removedSpecs;
+        std::vector<uint64_t> spawnedIds;
+        removedSpecs.reserve(removeIds.size());
+        spawnedIds.reserve(respawnSpecs.size());
+
+        try
+        {
+            for (uint64_t id : removeIds)
             {
-                events::scene::DeleteEntityCommand deleteCmd;
-                deleteCmd.entity = it->second;
-                events::EventDispatcher::instance().execute(deleteCmd);
-                instanceEntities.erase(it);
+                auto specIt = instanceSpecs.find(id);
+                if (specIt == instanceSpecs.end())
+                    continue;
+                auto snapshot = specIt->second;
+                if (removeInstance(id))
+                    removedSpecs.push_back(std::move(snapshot));
+            }
+
+            for (const auto& spec : respawnSpecs)
+            {
+                if (!spawnInstance(spec).isValid())
+                    throw std::runtime_error("Failed to respawn a mesh brush instance");
+                spawnedIds.push_back(spec.instanceId);
             }
         }
+        catch (...)
+        {
+            for (auto it = spawnedIds.rbegin(); it != spawnedIds.rend(); ++it)
+            {
+                try { removeInstance(*it); } catch (...) {}
+            }
+            for (const auto& spec : removedSpecs)
+            {
+                if (!instanceSpecs.contains(spec.instanceId))
+                    spawnInstance(spec);
+            }
+            throw;
+        }
+    }
+
+    void MeshBrushServiceImpl::rebuildSpatialGrid()
+    {
+        spatialGrid.clear();
+        for (const auto& [id, spec] : instanceSpecs)
+            spatialGrid.insert(id, spec.worldPosition);
+    }
+
+    void MeshBrushServiceImpl::finalizeStroke()
+    {
+        if (strokeCreated.empty() && strokeRemoved.empty())
+            return;
+
+        auto undoCommand = std::make_shared<MeshBrushStrokeUndoCommand>(strokeCreated, strokeRemoved);
+        if (!undoCommand->hasChanges())
+            return;
+
+        events::undoredo::PushUndoableCommand pushCommand;
+        pushCommand.command = std::move(undoCommand);
+        events::EventDispatcher::instance().execute(pushCommand);
+        discardStroke();
+    }
+
+    void MeshBrushServiceImpl::discardStroke()
+    {
+        strokeCreated.clear();
+        strokeRemoved.clear();
     }
 
     EntityHandle MeshBrushServiceImpl::ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos)
@@ -417,21 +620,39 @@ namespace services
         events::scene::CreateEntityCommand createCmd;
         createCmd.name = entityName;
         auto entity = dispatcher.execute(createCmd);
+        if (!entity.isValid())
+            return EntityHandle::invalid();
 
-        // Position the group entity at the center of its sector in world space
-        TransformData groupTransform;
-        groupTransform.position = glm::vec3(
-            (static_cast<float>(sx) + 0.5f) * sectorSize,
-            0.0f,
-            (static_cast<float>(sz) + 0.5f) * sectorSize
-        );
-        events::scene::SetTransformCommand transformCmd;
-        transformCmd.entity = entity;
-        transformCmd.transform = groupTransform;
-        dispatcher.execute(transformCmd);
+        try
+        {
+            // Position the group entity at the center of its sector in world space
+            TransformData groupTransform;
+            groupTransform.position = glm::vec3(
+                (static_cast<float>(sx) + 0.5f) * sectorSize,
+                0.0f,
+                (static_cast<float>(sz) + 0.5f) * sectorSize
+            );
+            events::scene::SetTransformCommand transformCmd;
+            transformCmd.entity = entity;
+            transformCmd.transform = groupTransform;
+            dispatcher.execute(transformCmd);
 
-        groupEntities[key] = entity;
-        return entity;
+            groupEntities[key] = entity;
+            return entity;
+        }
+        catch (...)
+        {
+            try
+            {
+                events::scene::DeleteEntityCommand deleteCmd;
+                deleteCmd.entity = entity;
+                dispatcher.execute(deleteCmd);
+            }
+            catch (...)
+            {
+            }
+            return EntityHandle::invalid();
+        }
     }
 
     float MeshBrushServiceImpl::getAABBYOffset(const std::string& meshPath)

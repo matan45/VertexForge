@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cstdint>
 #include <glm/glm.hpp>
 #include "../terrain/BrushTypes.hpp"
 
@@ -21,6 +22,20 @@ namespace meshbrush
         float maxSlope = 90.0f; // degrees
         float yOffset = 0.0f; // Manual vertical offset from terrain surface
         bool useCollider = false; // Add static box collider per instance
+    };
+
+    // Complete in-memory description of an entity placed by the mesh brush.
+    // instanceId is stable across undo/redo; the ECS entity handle is not.
+    struct MeshBrushInstanceSpec
+    {
+        uint64_t instanceId = 0;
+        uint32_t paletteIndex = 0;
+        glm::vec3 worldPosition{0.0f};
+        glm::vec3 rotation{0.0f};
+        glm::vec3 scale{1.0f};
+        std::string meshPath;
+        std::string materialPath;
+        bool useCollider = false;
     };
 
     struct MeshBrushParams

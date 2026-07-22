@@ -26,6 +26,7 @@ namespace services
 
         ::events::SubscriptionToken modeChangedToken;
         ::events::SubscriptionToken sceneClearedToken;
+        ::events::SubscriptionToken entityDeletedToken;
 
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
@@ -58,6 +59,11 @@ namespace services
         EntityHandle ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
 
         std::unordered_map<uint64_t, EntityHandle> instanceEntities;
+        std::unordered_map<EntityHandle, uint64_t, EntityHandle::Hash> entityInstanceIds;
+        std::unordered_map<uint64_t, meshbrush::MeshBrushInstanceSpec> instanceSpecs;
+
+        std::vector<meshbrush::MeshBrushInstanceSpec> strokeCreated;
+        std::vector<meshbrush::MeshBrushInstanceSpec> strokeRemoved;
 
         // AABB Y-offset cache (meshPath -> -aabb.min.y)
         std::unordered_map<std::string, float> aabbYOffsetCache;
@@ -73,6 +79,14 @@ namespace services
         void applyBrush(const glm::vec3& worldPos, const glm::vec3& normal, float deltaTime, bool isFirst);
         void placeMeshes(const glm::vec3& worldPos, const glm::vec3& normal);
         void eraseInstances(const glm::vec3& worldPos);
+        EntityHandle spawnInstance(const meshbrush::MeshBrushInstanceSpec& spec);
+        bool removeInstance(uint64_t instanceId);
+        void forgetInstance(uint64_t instanceId);
+        void applyInstanceDelta(const std::vector<uint64_t>& removeIds,
+                                const std::vector<meshbrush::MeshBrushInstanceSpec>& respawnSpecs);
+        void rebuildSpatialGrid();
+        void finalizeStroke();
+        void discardStroke();
 
         void publishParamsChanged();
     };

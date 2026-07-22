@@ -50,6 +50,19 @@ namespace events::meshBrush {
         std::string_view getName() const override { return "ApplyMeshBrush"; }
     };
 
+    struct FinalizeMeshBrushCommand : ICommand<> {
+        std::string_view getName() const override { return "FinalizeMeshBrush"; }
+    };
+
+    // Internal service transaction used by mesh-brush undo/redo. Removals are
+    // applied before respawns so a stable ID can be replaced atomically.
+    struct ApplyMeshBrushInstanceDeltaCommand : ICommand<> {
+        std::vector<uint64_t> removeIds;
+        std::vector<meshbrush::MeshBrushInstanceSpec> respawnSpecs;
+
+        std::string_view getName() const override { return "ApplyMeshBrushInstanceDelta"; }
+    };
+
     // ============================================
     // Queries
     // ============================================

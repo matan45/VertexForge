@@ -811,6 +811,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{}) || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl) {
+            if (meshBrushDragging) {
+                events::meshBrush::FinalizeMeshBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             meshBrushDragging = false;
             return;
         }
@@ -826,6 +830,10 @@ namespace windows
                 meshBrushDragging = true;
             }
         } else {
+            if (meshBrushDragging) {
+                events::meshBrush::FinalizeMeshBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             meshBrushDragging = false;
         }
     }
