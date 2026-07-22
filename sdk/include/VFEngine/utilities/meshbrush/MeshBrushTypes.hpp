@@ -36,6 +36,9 @@ namespace meshbrush
         std::string meshPath;
         std::string materialPath;
         bool useCollider = false;
+        // Surface normal at placement time (already flipped upward). Persisted via
+        // MeshBrushInstanceComponent so undo/redo respawn and scene-load rebuild keep it.
+        glm::vec3 surfaceNormal{0.0f, 1.0f, 0.0f};
     };
 
     struct MeshBrushParams
@@ -46,6 +49,8 @@ namespace meshbrush
         bool continuousMode = true;
         float positionJitter = 0.5f;
         terrain::BrushFalloff falloff = terrain::BrushFalloff::Smooth;
+        // When true, Erase only removes instances of the currently-selected palette entry.
+        bool eraseSelectedTypeOnly = false;
 
         void validate()
         {

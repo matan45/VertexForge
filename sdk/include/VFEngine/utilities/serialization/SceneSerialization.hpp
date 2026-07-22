@@ -328,6 +328,9 @@ namespace serialization
         static json serializeOcean(const components::OceanComponent& ocean);
         static void deserializeOcean(const json& j, components::OceanComponent& ocean);
 
+        static json serializeMeshBrushInstance(const components::MeshBrushInstanceComponent& brush);
+        static void deserializeMeshBrushInstance(const json& j, components::MeshBrushInstanceComponent& brush);
+
         static json serializeUICanvas(const components::UICanvasComponent& canvas);
         static void deserializeUICanvas(const json& j, components::UICanvasComponent& canvas);
 

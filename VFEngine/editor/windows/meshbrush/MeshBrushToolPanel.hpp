@@ -17,6 +17,7 @@ namespace windows
         bool continuousMode = true;
         float positionJitter = 0.5f;
         int falloffIndex = 2;
+        bool eraseSelectedTypeOnly = false;
 
         int selectedPaletteIndex = -1; // -1 = All (weighted random)
         bool paletteDirty = false;

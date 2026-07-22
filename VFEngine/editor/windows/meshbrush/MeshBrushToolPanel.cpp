@@ -55,6 +55,12 @@ namespace windows
             events::EventDispatcher::instance().execute(cmd);
         }
 
+        if (selectedMode == static_cast<int>(meshbrush::MeshBrushMode::Erase))
+        {
+            if (ImGui::Checkbox("Erase Selected Type Only", &eraseSelectedTypeOnly))
+                pushParams();
+        }
+
         ImGui::Separator();
         drawBrushSettings();
 
@@ -292,6 +298,7 @@ namespace windows
         params.continuousMode = continuousMode;
         params.positionJitter = positionJitter;
         params.falloff = static_cast<terrain::BrushFalloff>(falloffIndex);
+        params.eraseSelectedTypeOnly = eraseSelectedTypeOnly;
 
         events::meshBrush::SetMeshBrushParamsCommand cmd;
         cmd.params = params;

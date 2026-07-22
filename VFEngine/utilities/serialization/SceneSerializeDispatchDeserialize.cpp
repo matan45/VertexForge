@@ -210,6 +210,11 @@ namespace serialization
             auto& oceanComp = entity.addOrReplaceComponent<components::OceanComponent>();
             deserializeOcean(c["ocean"], oceanComp);
         }
+        if (c.contains("meshBrushInstance"))
+        {
+            auto& brushComp = entity.addOrReplaceComponent<components::MeshBrushInstanceComponent>();
+            deserializeMeshBrushInstance(c["meshBrushInstance"], brushComp);
+        }
     }
 
     void SceneSerialization::deserializeUIStructuralComponents(const json& c, scene::Entity& entity)

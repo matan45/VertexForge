@@ -27,6 +27,7 @@ namespace services
         ::events::SubscriptionToken modeChangedToken;
         ::events::SubscriptionToken sceneClearedToken;
         ::events::SubscriptionToken entityDeletedToken;
+        ::events::SubscriptionToken sceneLoadedToken;
 
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
@@ -85,6 +86,9 @@ namespace services
         void applyInstanceDelta(const std::vector<uint64_t>& removeIds,
                                 const std::vector<meshbrush::MeshBrushInstanceSpec>& respawnSpecs);
         void rebuildSpatialGrid();
+        // Rebuild all in-RAM tracking (specs/entities/grid/group parents) from the entities
+        // carrying MeshBrushInstanceComponent after a scene load. See SceneLoadedNotification.
+        void rebuildTrackingFromScene();
         void finalizeStroke();
         void discardStroke();
 

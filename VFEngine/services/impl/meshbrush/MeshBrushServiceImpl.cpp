@@ -9,10 +9,12 @@
 #include "../../events/render/MaterialEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../data/DTOs.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../data/MeshBrushUndoCommands.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
+#include "../../../utilities/components/Components.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
 #include <asset/AssetRef.hpp>
 #include <glm/gtc/constants.hpp>
@@ -35,6 +37,8 @@ namespace services
             dispatcher.unsubscribe(sceneClearedToken);
         if (entityDeletedToken.isValid())
             dispatcher.unsubscribe(entityDeletedToken);
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
     }
 
     void MeshBrushServiceImpl::registerEventHandlers()
@@ -147,6 +151,18 @@ namespace services
                 auto it = entityInstanceIds.find(n.entity);
                 if (it != entityInstanceIds.end())
                     forgetInstance(it->second);
+            });
+
+        // SceneCleared wipes the RAM tracking; SceneLoaded fires as the last step of a
+        // successful load/snapshot-restore (once all entities+components are restored) and
+        // rebuilds tracking from the entities carrying MeshBrushInstanceComponent so erase
+        // and paint-spacing work against reloaded instances. NOTE: additive scene loads fire
+        // AdditiveSceneLoadedNotification instead and are intentionally not handled (VK-1570
+        // scope) — painted meshes in additive sub-scenes render/persist but are not tracked.
+        sceneLoadedToken = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+            [this](const events::scene::SceneLoadedNotification&)
+            {
+                rebuildTrackingFromScene();
             });
     }
 
@@ -309,6 +325,7 @@ namespace services
             spec.meshPath = entry.meshPath;
             spec.materialPath = entry.materialPath;
             spec.useCollider = entry.useCollider;
+            spec.surfaceNormal = surfaceNormal;
 
             auto entity = spawnInstance(spec);
             if (!entity.isValid())
@@ -335,6 +352,11 @@ namespace services
         {
             auto specIt = instanceSpecs.find(entry.entityId);
             if (specIt == instanceSpecs.end())
+                continue;
+
+            // Erase-selected-type: skip instances whose palette entry isn't the selected one.
+            if (currentParams.eraseSelectedTypeOnly && selectedPaletteIndex >= 0 &&
+                specIt->second.paletteIndex != static_cast<uint32_t>(selectedPaletteIndex))
                 continue;
 
             auto spec = specIt->second;
@@ -384,6 +406,15 @@ namespace services
             transformCmd.entity = entity;
             transformCmd.transform = transform;
             dispatcher.execute(transformCmd);
+
+            // Persistent tracking metadata. brushGroupId is a stable per-(palette,sector)
+            // hash kept for provenance only — rebuild-on-load recovers grouping from the
+            // entity's parent, not from this field (clones copy it verbatim).
+            const uint32_t brushGroupId =
+                static_cast<uint32_t>(GroupKeyHash{}(GroupKey{spec.paletteIndex, sx, sz}));
+            scene::EntityRegistry::getRegistry().emplace_or_replace<components::MeshBrushInstanceComponent>(
+                internal::fromHandle(entity),
+                components::MeshBrushInstanceComponent{brushGroupId, spec.paletteIndex, spec.surfaceNormal});
 
             events::scene::AddMeshComponentCommand meshCmd;
             meshCmd.entity = entity;
@@ -566,6 +597,103 @@ namespace services
         spatialGrid.clear();
         for (const auto& [id, spec] : instanceSpecs)
             spatialGrid.insert(id, spec.worldPosition);
+    }
+
+    void MeshBrushServiceImpl::rebuildTrackingFromScene()
+    {
+        // Defensive full reset — idempotent whether or not SceneCleared ran first.
+        spatialGrid.clear();
+        groupEntities.clear();
+        instanceEntities.clear();
+        entityInstanceIds.clear();
+        instanceSpecs.clear();
+        discardStroke();
+        hasLastPlacement = false;
+        nextInstanceId = 1;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Cache each group parent's local position (== sector center) so instances sharing a
+        // group don't each re-query the parent transform.
+        std::unordered_map<EntityHandle, glm::vec3, EntityHandle::Hash> parentCenterCache;
+
+        uint64_t syntheticId = 1; // instanceId is not persisted — mint fresh, collision-free ids
+        for (entt::entity e : registry.view<components::MeshBrushInstanceComponent>())
+        {
+            const auto& comp = registry.get<components::MeshBrushInstanceComponent>(e);
+            EntityHandle handle = internal::toHandle(e);
+
+            // Local transform reads the serialized TransformComponent directly. We must NOT use
+            // the world transform here: WorldTransformComponent isn't serialized and is only
+            // propagated by the per-frame Level::update(), which has not run yet at SceneLoaded.
+            events::scene::GetTransformQuery localQuery;
+            localQuery.entity = handle;
+            auto localOpt = dispatcher.query(localQuery);
+            if (!localOpt.has_value())
+                continue;
+
+            meshbrush::MeshBrushInstanceSpec spec;
+            spec.instanceId = syntheticId++;
+            spec.paletteIndex = comp.paletteIndex;
+            spec.surfaceNormal = comp.surfaceNormal;
+            spec.rotation = localOpt->rotation; // group has identity rotation → local == world
+            spec.scale = localOpt->scale;       // group has unit scale     → local == world
+
+            // Reconstruct world position as parent(sector center) + instance(local offset).
+            // Groups are pure-translation entities parented to the scene root (ensureGroupEntity),
+            // so this recovers the exact painted world position without any world-transform pass.
+            glm::vec3 worldPos = localOpt->position;
+            events::scene::GetEntityQuery entityQuery;
+            entityQuery.entity = handle;
+            if (auto entityOpt = dispatcher.query(entityQuery);
+                entityOpt.has_value() && entityOpt->parent.has_value())
+            {
+                EntityHandle parent = *entityOpt->parent;
+                glm::vec3 center;
+                if (auto it = parentCenterCache.find(parent); it != parentCenterCache.end())
+                {
+                    center = it->second;
+                }
+                else
+                {
+                    events::scene::GetTransformQuery parentQuery;
+                    parentQuery.entity = parent;
+                    auto parentOpt = dispatcher.query(parentQuery);
+                    center = parentOpt.has_value() ? parentOpt->position : glm::vec3(0.0f);
+                    parentCenterCache.emplace(parent, center);
+                }
+                worldPos = center + localOpt->position;
+
+                // Re-nest: derive the sector from the group center (not the child position) so a
+                // later paint in this sector reuses the existing group instead of duplicating it.
+                int32_t sx = static_cast<int32_t>(std::floor(center.x / sectorSize));
+                int32_t sz = static_cast<int32_t>(std::floor(center.z / sectorSize));
+                groupEntities[GroupKey{spec.paletteIndex, sx, sz}] = parent;
+            }
+            spec.worldPosition = worldPos;
+
+            // Full-fidelity recovery from the entity's own components so undo-of-erase after a
+            // reload can respawn a faithful instance (mesh/material/collider), not an empty one.
+            events::scene::GetMeshDataQuery meshQuery;
+            meshQuery.entity = handle;
+            if (auto meshOpt = dispatcher.query(meshQuery); meshOpt.has_value())
+                spec.meshPath = meshOpt->meshRef.resolve();
+
+            events::material::GetMaterialDataQuery materialQuery;
+            materialQuery.entity = handle;
+            if (auto matOpt = dispatcher.query(materialQuery); matOpt.has_value())
+                spec.materialPath = matOpt->defaultMaterialRef.resolve();
+
+            spec.useCollider = registry.all_of<components::ColliderComponent>(e);
+
+            instanceSpecs.emplace(spec.instanceId, spec);
+            instanceEntities.emplace(spec.instanceId, handle);
+            entityInstanceIds.emplace(handle, spec.instanceId);
+            nextInstanceId = std::max(nextInstanceId, spec.instanceId + 1);
+        }
+
+        rebuildSpatialGrid();
     }
 
     void MeshBrushServiceImpl::finalizeStroke()
