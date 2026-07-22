@@ -113,6 +113,7 @@ namespace controllers::offscreen
             matInfo.iblSpecular = pbrValues->iblSpecular;
             matInfo.shadingModel = pbrValues->shadingModel;
             matInfo.toonProfileIndex = pbrValues->toonProfileIndex;
+            matInfo.receiveWind = pbrValues->receiveWind;  // VK-1580
         }
     }
 

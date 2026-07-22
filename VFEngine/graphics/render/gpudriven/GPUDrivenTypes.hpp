@@ -151,6 +151,16 @@ namespace render::gpudriven
             flags |= (static_cast<uint32_t>(shadingModel) & ShadingModelMask) << ShadingModelShift;
             flags |= (static_cast<uint32_t>(profileIndex) & ProfileIndexMask) << ProfileIndexShift;
         }
+
+        // VK-1580: foliage wind. A single gate bit (bit 8, free) marking a mesh as
+        // wind-receiving foliage. Sway amplitude/direction/time are GLOBAL — read from the
+        // shared grass WindSystem UBO — so no per-object wind parameters are stored. Set
+        // from a per-material "Foliage Wind" flag. Does NOT collide with any packed field
+        // (blend 4-12, Instanced 15, Category 13-16, ShadowStatic 17, Layer 18-22,
+        // ShadingModel 23-24, ProfileIndex 25-31). `makePerDrawData` copies flags verbatim,
+        // so no PerDrawData change is needed. Must match FLAG_FOLIAGE_WIND in
+        // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
+        constexpr uint32_t FoliageWind = 1 << 8;
     }
 
     namespace ObjectCategory

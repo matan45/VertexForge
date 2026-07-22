@@ -233,6 +233,24 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(toonWrite, {});
     }
 
+    void MeshShaderPipeline::updateWindDescriptor(vk::Buffer windUboBuffer)
+    {
+        if (!perDrawDataDescriptorSet || !windUboBuffer)
+            return;
+
+        vk::DescriptorBufferInfo windInfo{windUboBuffer, 0, VK_WHOLE_SIZE};
+
+        vk::WriteDescriptorSet windWrite{};
+        windWrite.dstSet = perDrawDataDescriptorSet;
+        windWrite.dstBinding = 7;
+        windWrite.dstArrayElement = 0;
+        windWrite.descriptorCount = 1;
+        windWrite.descriptorType = vk::DescriptorType::eStorageBuffer;
+        windWrite.pBufferInfo = &windInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(windWrite, {});
+    }
+
     void MeshShaderPipeline::updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer,
                                                 vk::Buffer imageInfoBuffer)
     {
@@ -428,11 +446,12 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
 
-        // Binding 2: GPUObjectData SSBO (read by task shader for per-instance LOD + culling)
+        // Binding 2: GPUObjectData SSBO (read by task shader for per-instance LOD + culling;
+        // VK-1580 also read by the mesh shader for the foliage-wind height AABB)
         bindings[2].binding = 2;
         bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
 
         // VK-1209: SVT page table (3) / feedback (4) / image info (5), fragment stage. Always declared
         // so the layout matches the shader whether SVT_ENABLED is compiled in or not (a runtime toggle
@@ -461,6 +480,25 @@ namespace render::gpudriven
             tb.descriptorCount = 1;
             tb.stageFlags = vk::ShaderStageFlagBits::eFragment;
             bindings.push_back(tb);
+        }
+
+        // VK-1580: foliage wind. Binding 7 = the global wind buffer (GPUWindData, reused
+        // from the grass WindSystem), read in the MESH stage. Bound as a STORAGE buffer so
+        // it uses the same update-after-bind storage path as toon binding 6 (createUpdate-
+        // AfterBindLayout stamps eUpdateAfterBind on every binding, so a uniform buffer here
+        // would add a uniform-buffer-UAB device-feature dependency; storage avoids it — the
+        // std140/std430 layout of 2×vec4 is identical). Like toon, the wind branch is
+        // compiled unconditionally, so binding 7 is STATICALLY USED and must always point at
+        // a live buffer (no ePartiallyBound). The renderer binds the WindSystem buffer once
+        // (updateWindDescriptor); it defaults to zero speed, so it's a valid no-op before
+        // any wind is authored.
+        {
+            vk::DescriptorSetLayoutBinding wb{};
+            wb.binding = 7;
+            wb.descriptorType = vk::DescriptorType::eStorageBuffer;
+            wb.descriptorCount = 1;
+            wb.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
+            bindings.push_back(wb);
         }
 
         perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(

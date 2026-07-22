@@ -216,6 +216,10 @@ namespace render::gpudriven
             initWaterSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat, sceneDepthView);
             initVegetationSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
             initBillboardSubsystems(iblDescriptorSetLayout, colorFormats, depthFormat);
+
+            // VK-1580: bind the global wind UBO (set-1 binding 7) on the opaque + transparent
+            // pipelines now that the WindSystem exists. WBOIT is wired in initWBOITPipeline.
+            wireWindPipelines();
         }
         else
         {
@@ -312,6 +316,10 @@ namespace render::gpudriven
         // VK-1493: bind the toon profile table on the freshly-created WBOIT pipeline
         // (re-wires opaque/transparent too, harmless — the buffer handle is stable).
         wireToonProfilePipelines();
+
+        // VK-1580: bind the global wind UBO on the freshly-created WBOIT pipeline
+        // (WindSystem exists by now; re-wiring opaque/transparent is harmless).
+        wireWindPipelines();
     }
 
     void GPUDrivenRenderer::cleanup()

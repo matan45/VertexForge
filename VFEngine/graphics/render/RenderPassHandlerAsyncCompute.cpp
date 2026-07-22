@@ -81,6 +81,14 @@ namespace render
                                                           terrainRenderProvider->getAllLoadedTiles(),
                                                           currentCameraPosition);
 
+        }
+
+        // VK-1580: update the GLOBAL wind every frame — outside the terrain block — so
+        // foliage-mesh sway works even in scenes without active terrain (previously the wind
+        // buffer only updated when terrain was present). Config comes from grass when a grass
+        // provider exists, else a sensible default so painted foliage still sways.
+        if (gpuDrivenRenderer)
+        {
             if (grassRenderProvider)
             {
                 auto grassConfig = grassRenderProvider->getGrassRenderConfig();

@@ -30,6 +30,10 @@ namespace render::mesh
         uint8_t shadingModel = 0;
         uint8_t toonProfileIndex = 0;
 
+        // VK-1580 foliage wind gate. True => this material's meshes sway using the
+        // global grass WindSystem (no per-material wind parameters).
+        bool receiveWind = false;
+
         // Texture paths (empty = use scalar value)
         std::string albedoTexturePath;
         std::string normalTexturePath;

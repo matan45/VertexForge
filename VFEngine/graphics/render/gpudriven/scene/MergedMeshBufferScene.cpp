@@ -277,6 +277,29 @@ namespace render::gpudriven
             ObjectFlags::packShadingFlags(obj.flags, shadingModel, toonProfileIndex);
         }
 
+        // VK-1580: set the foliage-wind gate bit (bit 8) when the material opts in.
+        // Pre-resolved on the main thread (subMat or the pbrCache fallback), so this
+        // stays a pure read — safe in the parallel object phase.
+        {
+            bool receiveWind = false;
+            if (subMat)
+            {
+                receiveWind = subMat->receiveWind;
+            }
+            else if (!materialPath.empty())
+            {
+                auto it = pbrCache.find(materialPath);
+                if (it != pbrCache.end())
+                {
+                    receiveWind = it->second.receiveWind;
+                }
+            }
+            if (receiveWind)
+            {
+                obj.flags |= ObjectFlags::FoliageWind;
+            }
+        }
+
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
         obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;

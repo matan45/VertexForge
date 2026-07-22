@@ -157,6 +157,7 @@ namespace render::mesh
         float iblSpecular = 0.5f;
         uint8_t shadingModel = 0;      // VK-1493: material::ShadingModel (2 = Toon)
         uint8_t toonProfileIndex = 0;  // VK-1493: resolved toon profile GPU slot (0-127)
+        bool receiveWind = false;      // VK-1580: foliage-wind gate (global wind params)
     };
 
     struct MeshRenderData
