@@ -142,12 +142,20 @@ TEST_SUITE("VegetationScatter")
         ScatterProfile p = oneRuleProfile(1.0f, 1.0f, 0.5f);
         std::vector<BillboardPaletteEntry> palette(1);
 
-        // One 16-wide region vs two adjacent 8-wide tiles covering the same span.
+        // One 16x16 region vs four adjacent 8x8 quadrant tiles covering the same area.
+        // Tiles are square, so it takes four quadrants (not two halves) to tile a 16x16 span.
         auto big = bakeScatterForTile(p, palette, 42u, 0, 0, 16.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
-        auto left = bakeScatterForTile(p, palette, 42u, 0, 0, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
-        auto right = bakeScatterForTile(p, palette, 42u, 8.0f, 0, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
+        auto q00 = bakeScatterForTile(p, palette, 42u, 0, 0, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
+        auto q10 = bakeScatterForTile(p, palette, 42u, 8.0f, 0, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
+        auto q01 = bakeScatterForTile(p, palette, 42u, 0, 8.0f, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
+        auto q11 = bakeScatterForTile(p, palette, 42u, 8.0f, 8.0f, 8.0f, flatHeight, flatNormal, fullLayer, 1u << 20);
 
-        CHECK(left.instances.size() + right.instances.size() == big.instances.size());
+        std::vector<BillboardInstance> merged = q00.instances;
+        merged.insert(merged.end(), q10.instances.begin(), q10.instances.end());
+        merged.insert(merged.end(), q01.instances.begin(), q01.instances.end());
+        merged.insert(merged.end(), q11.instances.begin(), q11.instances.end());
+
+        CHECK(merged.size() == big.instances.size());
 
         auto keys = [](const std::vector<BillboardInstance>& v) {
             std::vector<std::pair<float, float>> k;
@@ -155,8 +163,6 @@ TEST_SUITE("VegetationScatter")
             std::sort(k.begin(), k.end());
             return k;
         };
-        std::vector<BillboardInstance> merged = left.instances;
-        merged.insert(merged.end(), right.instances.begin(), right.instances.end());
         CHECK(keys(merged) == keys(big.instances));
     }
 
