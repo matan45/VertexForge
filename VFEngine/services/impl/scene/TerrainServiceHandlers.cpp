@@ -15,6 +15,7 @@
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
+#include "../../events/foliage/FoliageEvents.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
@@ -35,6 +36,7 @@ namespace services
         registerTerrainCoreHandlers(dispatcher);
         registerBrushHandlers(dispatcher);
         registerVegetationBrushHandlers(dispatcher);
+        registerFoliageBrushHandlers(dispatcher);
         registerCaveBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
@@ -733,6 +735,110 @@ namespace services
                     tile->billboardInstances = cmd.instances;
                     tile->billboardInstancesDirty = true;
                     tile->billboardInstancesGPUDirty = true;
+                    return;
+                }
+            });
+    }
+
+    void TerrainService::registerFoliageBrushHandlers(::events::EventDispatcher& dispatcher)
+    {
+        // Palette (owned by TerrainService; read by the graphics collector via getFoliagePalette()).
+        dispatcher.registerCommandHandler<events::foliage::SetFoliagePaletteCommand>(
+            [this](const events::foliage::SetFoliagePaletteCommand& cmd)
+            {
+                setFoliagePalette(cmd.palette);
+            });
+
+        dispatcher.registerQueryHandler<events::foliage::GetFoliagePaletteQuery>(
+            [this](const events::foliage::GetFoliagePaletteQuery&)
+                -> std::vector<foliage::FoliageType>
+            {
+                return foliagePalette;
+            });
+
+        // Clear all foliage instances across every tile.
+        dispatcher.registerCommandHandler<events::foliage::ClearAllFoliageInstancesCommand>(
+            [this](const events::foliage::ClearAllFoliageInstancesCommand&)
+            {
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        tile->foliageInstances.clear();
+                        tile->foliageInstancesDirty = true;
+                        tile->foliageInstancesGPUDirty = true;
+                    }
+                }
+            });
+
+        // Add foliage instances to a tile.
+        dispatcher.registerCommandHandler<events::foliage::AddFoliageInstancesToTileCommand>(
+            [this](const events::foliage::AddFoliageInstancesToTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->foliageInstances.insert(tile->foliageInstances.end(),
+                                                  cmd.instances.begin(), cmd.instances.end());
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Remove foliage instances from a tile (indices must be sorted descending).
+        dispatcher.registerCommandHandler<events::foliage::RemoveFoliageInstancesFromTileCommand>(
+            [this](const events::foliage::RemoveFoliageInstancesFromTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    // Swap-and-pop (indices must be sorted descending).
+                    for (uint32_t idx : cmd.indicesToRemove)
+                    {
+                        if (idx < tile->foliageInstances.size())
+                        {
+                            tile->foliageInstances[idx] = tile->foliageInstances.back();
+                            tile->foliageInstances.pop_back();
+                        }
+                    }
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Get foliage instances for a tile (spatial-grid rebuild + undo snapshots).
+        dispatcher.registerQueryHandler<events::foliage::GetTileFoliageInstancesQuery>(
+            [this](const events::foliage::GetTileFoliageInstancesQuery& query)
+                -> std::vector<foliage::FoliageInstance>
+            {
+                terrain::TileCoord coord{query.tileX, query.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile) return tile->foliageInstances;
+                }
+                return {};
+            });
+
+        // Replace a tile's foliage instances wholesale (undo/redo snapshots).
+        dispatcher.registerCommandHandler<events::foliage::SetTileFoliageInstancesCommand>(
+            [this](const events::foliage::SetTileFoliageInstancesCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->foliageInstances = cmd.instances;
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
                     return;
                 }
             });

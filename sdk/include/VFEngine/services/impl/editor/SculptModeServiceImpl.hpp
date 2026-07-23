@@ -17,6 +17,7 @@ namespace services
         ::events::SubscriptionToken holeModeToken;
         ::events::SubscriptionToken caveModeToken;
         ::events::SubscriptionToken vegetationBrushModeToken;
+        ::events::SubscriptionToken foliageBrushModeToken;
 
     public:
         SculptModeServiceImpl() = default;

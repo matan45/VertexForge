@@ -5,6 +5,7 @@
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/CaveModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
+#include "../../events/foliage/FoliageBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -42,6 +43,10 @@ namespace services
         if (vegetationBrushModeToken.isValid())
         {
             dispatcher.unsubscribe(vegetationBrushModeToken);
+        }
+        if (foliageBrushModeToken.isValid())
+        {
+            dispatcher.unsubscribe(foliageBrushModeToken);
         }
     }
 
@@ -137,6 +142,16 @@ namespace services
         // Auto-deactivate when vegetation brush mode activates
         vegetationBrushModeToken = dispatcher.subscribe<events::vegetationBrush::VegetationBrushModeChangedNotification>(
             [this](const events::vegetationBrush::VegetationBrushModeChangedNotification& n)
+            {
+                if (n.isActive && sculptActive)
+                {
+                    deactivate();
+                }
+            });
+
+        // Auto-deactivate when foliage brush mode activates
+        foliageBrushModeToken = dispatcher.subscribe<events::foliageBrush::FoliageBrushModeChangedNotification>(
+            [this](const events::foliageBrush::FoliageBrushModeChangedNotification& n)
             {
                 if (n.isActive && sculptActive)
                 {

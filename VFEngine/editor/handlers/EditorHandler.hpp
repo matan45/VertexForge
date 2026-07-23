@@ -36,6 +36,8 @@
 #include "interfaces/vegetation/IVegetationBrushModeService.hpp"
 #include "interfaces/meshbrush/IMeshBrushService.hpp"
 #include "interfaces/meshbrush/IMeshBrushModeService.hpp"
+#include "interfaces/foliage/IFoliageBrushService.hpp"
+#include "interfaces/foliage/IFoliageBrushModeService.hpp"
 #include "interfaces/physics/IPhysicsAnimationService.hpp"
 #include "interfaces/render/IRenderTextureService.hpp"
 #include "interfaces/physics/IControllerService.hpp"
@@ -162,6 +164,8 @@ namespace handlers {
 		std::shared_ptr<services::IVegetationBrushModeService> vegetationBrushModeService;
 		std::shared_ptr<services::IMeshBrushService> meshBrushService;
 		std::shared_ptr<services::IMeshBrushModeService> meshBrushModeService;
+		std::shared_ptr<services::IFoliageBrushService> foliageBrushService;
+		std::shared_ptr<services::IFoliageBrushModeService> foliageBrushModeService;
 		std::shared_ptr<services::IBillboardRenderService> billboardRenderService;
 		std::shared_ptr<services::IDecalRenderService> decalRenderService;
 		std::shared_ptr<services::ILightStreamingService> lightStreamingService;
@@ -215,6 +219,7 @@ namespace handlers {
 		void createOceanServices();
 		void createVegetationServices();
 		void createMeshBrushServices();
+		void createFoliageBrushServices();
 		void createAIServices();
 		void createWeatherServices();
 		void registerAllEventHandlers();

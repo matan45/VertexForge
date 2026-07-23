@@ -248,7 +248,14 @@ namespace services
         bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
+        // VK-1575: per-tile foliage sidecars (tile_x_z.vfFoliage) + foliage_palette.json,
+        // saved/loaded next to the vegetation sidecars.
+        bool saveFoliage(uint64_t terrainEntityId, const std::string& terrainPath);
+        bool loadFoliage(uint64_t terrainEntityId, const std::string& terrainPath);
+        static std::string getFoliageDirectory(const std::string& terrainPath);
+
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
+        void registerFoliageBrushHandlers(::events::EventDispatcher& dispatcher);
 
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);

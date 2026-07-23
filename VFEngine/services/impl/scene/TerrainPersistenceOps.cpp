@@ -221,6 +221,7 @@ namespace services
         size_t savedCount = cache.getDirtyCount();
 
         saveVegetation(terrainEntityId, path);
+        saveFoliage(terrainEntityId, path);
 
         auto& comp = registry.get<components::TerrainComponent>(ent);
         comp.saveDirty = false;
@@ -311,6 +312,7 @@ namespace services
         if (result)
         {
             saveVegetation(terrainEntityId, path);
+            saveFoliage(terrainEntityId, path);
 
             auto& mutableComp = registry.get<components::TerrainComponent>(ent);
             mutableComp.savePath = path;
@@ -523,6 +525,7 @@ namespace services
             vfLogInfo("TerrainService: Loaded terrain with {} tiles from {}", header.tileCount, path);
 
         loadVegetation(parentHandle.id, path);
+        loadFoliage(parentHandle.id, path);
 
         // If world mode is already active with loaded sectors, activate their terrain tiles
         activateTilesForLoadedSectors();

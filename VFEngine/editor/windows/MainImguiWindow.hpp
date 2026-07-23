@@ -24,6 +24,7 @@
 #include "terrain/CaveToolPanel.hpp"
 #include "vegetation/GrassDensityPanel.hpp"
 #include "meshbrush/MeshBrushToolPanel.hpp"
+#include "foliage/FoliageBrushToolPanel.hpp"
 #include "config/GIConfigWindow.hpp"
 #include "config/VolumetricFogConfigWindow.hpp"
 #include "config/AtmosphereConfigWindow.hpp"
@@ -87,6 +88,7 @@ namespace windows
         CaveToolPanel caveToolPanel;
         GrassDensityPanel grassDensityPanel;
         MeshBrushToolPanel meshBrushToolPanel;
+        FoliageBrushToolPanel foliageBrushToolPanel;
         GIConfigWindow giConfigWindow;
         VolumetricFogConfigWindow volumetricFogConfigWindow;
         AtmosphereConfigWindow atmosphereConfigWindow;

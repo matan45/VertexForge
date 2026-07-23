@@ -36,6 +36,7 @@ namespace windows
         bool caveDragging = false;
         bool vegetationDragging = false;
         bool meshBrushDragging = false;
+        bool foliageBrushDragging = false;
 
     public:
         explicit ViewPort();
@@ -70,6 +71,8 @@ namespace windows
         void handleVegetationBrush();
         void updateMeshBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleMeshBrush();
+        void updateFoliageBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
+        void handleFoliageBrush();
         void handleSplineTool();
     };
 }

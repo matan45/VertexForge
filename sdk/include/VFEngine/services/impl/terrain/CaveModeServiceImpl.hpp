@@ -20,6 +20,7 @@ namespace services
         ::events::SubscriptionToken holeModeToken;
         ::events::SubscriptionToken vegetationBrushModeToken;
         ::events::SubscriptionToken meshBrushModeToken;
+        ::events::SubscriptionToken foliageBrushModeToken;
 
     public:
         CaveModeServiceImpl() = default;

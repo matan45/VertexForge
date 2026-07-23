@@ -6,6 +6,7 @@
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
+#include "../../events/foliage/FoliageBrushEvents.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -24,6 +25,7 @@ namespace services
         if (holeModeToken.isValid()) dispatcher.unsubscribe(holeModeToken);
         if (vegetationBrushModeToken.isValid()) dispatcher.unsubscribe(vegetationBrushModeToken);
         if (meshBrushModeToken.isValid()) dispatcher.unsubscribe(meshBrushModeToken);
+        if (foliageBrushModeToken.isValid()) dispatcher.unsubscribe(foliageBrushModeToken);
     }
 
     void CaveModeServiceImpl::registerEventHandlers()
@@ -102,6 +104,12 @@ namespace services
 
         meshBrushModeToken = dispatcher.subscribe<events::meshBrush::MeshBrushModeChangedNotification>(
             [this](const events::meshBrush::MeshBrushModeChangedNotification& n)
+            {
+                if (n.isActive && caveActive) deactivate();
+            });
+
+        foliageBrushModeToken = dispatcher.subscribe<events::foliageBrush::FoliageBrushModeChangedNotification>(
+            [this](const events::foliageBrush::FoliageBrushModeChangedNotification& n)
             {
                 if (n.isActive && caveActive) deactivate();
             });

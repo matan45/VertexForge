@@ -17,6 +17,7 @@ namespace services
         ::events::SubscriptionToken paintModeToken;
         ::events::SubscriptionToken holeModeToken;
         ::events::SubscriptionToken meshBrushModeToken;
+        ::events::SubscriptionToken foliageBrushModeToken;
 
     public:
         VegetationBrushModeServiceImpl() = default;
