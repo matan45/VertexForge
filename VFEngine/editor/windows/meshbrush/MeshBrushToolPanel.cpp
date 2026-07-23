@@ -3,6 +3,9 @@
 #include "events/meshbrush/MeshBrushEvents.hpp"
 #include <imgui.h>
 #include <cstring>
+#include <cstdint>
+#include <cmath>
+#include <glm/glm.hpp>
 
 namespace windows
 {
@@ -92,6 +95,34 @@ namespace windows
 
         const char* falloffTypes[] = {"Constant", "Linear", "Smooth", "Sharp"};
         changed |= ImGui::Combo("Falloff", &falloffIndex, falloffTypes, IM_ARRAYSIZE(falloffTypes));
+
+        const char* placementModes[] = {"Spray", "Single"};
+        changed |= ImGui::Combo("Placement", &placementModeIndex, placementModes, IM_ARRAYSIZE(placementModes));
+
+        ImGui::Separator();
+        ImGui::TextDisabled("Placement Masks");
+
+        changed |= ImGui::Checkbox("Slope Mask", &useSlopeMask);
+        if (useSlopeMask)
+        {
+            changed |= ImGui::DragFloat("Min Slope", &minSlopeDeg, 1.0f, 0.0f, 90.0f, "%.0f deg");
+            changed |= ImGui::DragFloat("Max Slope##mask", &maxSlopeDeg, 1.0f, 0.0f, 90.0f, "%.0f deg");
+        }
+
+        changed |= ImGui::Checkbox("Height Mask", &useHeightMask);
+        if (useHeightMask)
+        {
+            changed |= ImGui::DragFloat("Height Min", &heightMin, 0.5f, -10000.0f, 10000.0f);
+            changed |= ImGui::DragFloat("Height Max", &heightMax, 0.5f, -10000.0f, 10000.0f);
+        }
+
+        changed |= ImGui::Checkbox("Noise Mask", &useNoiseMask);
+        if (useNoiseMask)
+        {
+            changed |= ImGui::DragFloat("Noise Frequency", &noiseFrequency, 0.001f, 0.0001f, 10.0f, "%.4f");
+            changed |= ImGui::DragFloat("Noise Threshold", &noiseThreshold, 0.01f, 0.0f, 1.0f);
+            changed |= ImGui::InputInt("Noise Seed", &noiseSeed);
+        }
 
         if (changed)
         {
@@ -274,6 +305,7 @@ namespace windows
             changed |= ImGui::DragFloat("Max Slope", &entry.maxSlope, 1.0f, 0.0f, 90.0f, "%.0f deg");
             changed |= ImGui::DragFloat("Y Offset", &entry.yOffset, 0.1f, -100.0f, 100.0f);
             changed |= ImGui::Checkbox("Use Collider", &entry.useCollider);
+            changed |= ImGui::DragFloat("Cull Distance", &entry.cullDistance, 1.0f, 0.0f, 100000.0f, "%.0f (0=off)");
 
             if (changed) paletteDirty = true;
 
@@ -299,6 +331,21 @@ namespace windows
         params.positionJitter = positionJitter;
         params.falloff = static_cast<terrain::BrushFalloff>(falloffIndex);
         params.eraseSelectedTypeOnly = eraseSelectedTypeOnly;
+
+        // VK-1578: placement mode + masks. Slope is authored in degrees (0=flat, 90=vertical)
+        // and stored as surface-normal cosine; cos decreases over [0,90] so the bounds invert
+        // (max degrees -> min cosine). validate() re-clamps/normalizes on the service side.
+        params.placementMode = static_cast<meshbrush::MeshBrushPlacementMode>(placementModeIndex);
+        params.useSlopeMask = useSlopeMask;
+        params.slopeMinCos = std::cos(glm::radians(maxSlopeDeg));
+        params.slopeMaxCos = std::cos(glm::radians(minSlopeDeg));
+        params.useHeightMask = useHeightMask;
+        params.heightMin = heightMin;
+        params.heightMax = heightMax;
+        params.useNoiseMask = useNoiseMask;
+        params.noiseFrequency = noiseFrequency;
+        params.noiseThreshold = noiseThreshold;
+        params.noiseSeed = static_cast<uint32_t>(noiseSeed < 0 ? 0 : noiseSeed);
 
         events::meshBrush::SetMeshBrushParamsCommand cmd;
         cmd.params = params;

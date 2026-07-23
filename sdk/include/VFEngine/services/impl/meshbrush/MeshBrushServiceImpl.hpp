@@ -79,6 +79,15 @@ namespace services
     private:
         void applyBrush(const glm::vec3& worldPos, const glm::vec3& normal, float deltaTime, bool isFirst);
         void placeMeshes(const glm::vec3& worldPos, const glm::vec3& normal);
+        // Single-instance placement mode: one instance at the cursor (masks/spacing still apply).
+        void placeSingleMesh(const glm::vec3& worldPos, const glm::vec3& normal);
+        // Build the enabled palette indices + weights (selected entry, or all non-empty). False if empty.
+        bool selectEnabledEntries(std::vector<uint32_t>& enabledIndices, std::vector<float>& weights) const;
+        // Per-candidate terrain normal via central finite differences (for the slope mask / align).
+        glm::vec3 sampleTerrainNormal(float worldX, float worldZ) const;
+        // Shared post-acceptance placement: slope/mask gate, randomized transform, spawn + track.
+        // Returns true if an instance was spawned. candidatePos taken by value (locally offset).
+        bool placeOneCandidate(glm::vec3 candidatePos, uint32_t paletteIdx, const glm::vec3& surfaceNormal);
         void eraseInstances(const glm::vec3& worldPos);
         EntityHandle spawnInstance(const meshbrush::MeshBrushInstanceSpec& spec);
         bool removeInstance(uint64_t instanceId);

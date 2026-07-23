@@ -16,6 +16,8 @@
 #include "../../../utilities/scene/EntityRegistry.hpp"
 #include "../../../utilities/components/Components.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
+#include "../../../utilities/terrain/BrushFalloff.hpp"
+#include "../../../utilities/meshbrush/MeshBrushMasks.hpp"
 #include <asset/AssetRef.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -178,6 +180,24 @@ namespace services
             hasLastPlacement = false;
         }
 
+        // Single-instance mode: one hero prop per click / per full-spacing move. Placed before
+        // the spray rate-limit so it uses the full spacing gate (parity with the vegetation brush).
+        if (currentMode == meshbrush::MeshBrushMode::Paint &&
+            currentParams.placementMode == meshbrush::MeshBrushPlacementMode::Single)
+        {
+            if (hasLastPlacement)
+            {
+                float moved = glm::length(glm::vec2(worldPos.x - lastPlacementPos.x,
+                                                    worldPos.z - lastPlacementPos.z));
+                if (moved < currentParams.spacing)
+                    return;
+            }
+            placeSingleMesh(worldPos, normal);
+            lastPlacementPos = worldPos;
+            hasLastPlacement = true;
+            return;
+        }
+
         // Rate limit: only place when brush has moved at least half the spacing distance
         if (hasLastPlacement && currentMode == meshbrush::MeshBrushMode::Paint)
         {
@@ -212,26 +232,7 @@ namespace services
         // Build weight distribution from enabled entries only
         std::vector<uint32_t> enabledIndices;
         std::vector<float> weights;
-
-        if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(palette.size()))
-        {
-            const auto& entry = palette[selectedPaletteIndex];
-            if (entry.meshPath.empty()) return;
-            enabledIndices.push_back(static_cast<uint32_t>(selectedPaletteIndex));
-            weights.push_back(1.0f);
-        }
-        else
-        {
-            for (uint32_t idx = 0; idx < palette.size(); ++idx)
-            {
-                if (!palette[idx].meshPath.empty())
-                {
-                    enabledIndices.push_back(idx);
-                    weights.push_back(palette[idx].weight);
-                }
-            }
-        }
-        if (enabledIndices.empty()) return;
+        if (!selectEnabledEntries(enabledIndices, weights)) return;
         std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
 
         float radius = currentParams.radius;
@@ -242,6 +243,7 @@ namespace services
         std::uniform_real_distribution<float> angleDist(0.0f, glm::two_pi<float>());
         std::uniform_real_distribution<float> radiusDist(0.0f, 1.0f);
         std::uniform_real_distribution<float> jitterDist(-0.5f, 0.5f);
+        std::uniform_real_distribution<float> unitDist(0.0f, 1.0f);
 
         uint32_t placedCount = 0;
         auto& dispatcher = events::EventDispatcher::instance();
@@ -250,6 +252,12 @@ namespace services
         {
             float angle = angleDist(rng);
             float r = radius * std::sqrt(radiusDist(rng));
+
+            // Density falloff: probabilistically thin toward the brush edge per the selected
+            // curve (Constant = no thinning). Done before the height query so rejects are cheap.
+            float normDist = std::clamp(r / std::max(radius, 0.001f), 0.0f, 1.0f);
+            if (unitDist(rng) > terrain::applyFalloff(normDist, currentParams.falloff))
+                continue;
 
             glm::vec3 candidatePos = worldPos;
             candidatePos.x += r * std::cos(angle);
@@ -269,70 +277,9 @@ namespace services
                 continue;
             }
 
-            uint32_t enabledIdx = paletteDist(rng);
-            uint32_t paletteIdx = enabledIndices[enabledIdx];
-            const auto& entry = palette[paletteIdx];
-
-            float slopeAngle = std::acos(std::clamp(glm::dot(surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
-            if (glm::degrees(slopeAngle) > entry.maxSlope) continue;
-
-            candidatePos.y += getAABBYOffset(entry.meshPath);
-            candidatePos.y += entry.yOffset;
-
-            std::uniform_real_distribution<float> scaleDist(entry.scaleRange.x, entry.scaleRange.y);
-            float scale = scaleDist(rng);
-
-            std::uniform_real_distribution<float> rotYDist(entry.rotationYRange.x, entry.rotationYRange.y);
-            float rotY = rotYDist(rng);
-
-            float rotX = 0.0f, rotZ = 0.0f;
-            if (entry.randomRotationX)
-            {
-                std::uniform_real_distribution<float> d(0.0f, 360.0f);
-                rotX = d(rng);
-            }
-            if (entry.randomRotationZ)
-            {
-                std::uniform_real_distribution<float> d(0.0f, 360.0f);
-                rotZ = d(rng);
-            }
-
-            glm::vec3 rotation(rotX, rotY, rotZ);
-
-            if (entry.alignToNormal && glm::length(surfaceNormal) > 0.001f)
-            {
-                glm::vec3 up(0.0f, 1.0f, 0.0f);
-                glm::vec3 n = glm::normalize(surfaceNormal);
-                float alignAngle = glm::degrees(std::acos(std::clamp(glm::dot(n, up), -1.0f, 1.0f)));
-                glm::vec3 axis = glm::cross(up, n);
-                if (glm::length(axis) > 0.001f)
-                {
-                    axis = glm::normalize(axis);
-                    rotation.x = alignAngle * axis.x;
-                    rotation.z = alignAngle * axis.z;
-                }
-            }
-
-            if (nextInstanceId == 0 || nextInstanceId == std::numeric_limits<uint64_t>::max())
-                throw std::overflow_error("Mesh brush instance ID space exhausted");
-
-            meshbrush::MeshBrushInstanceSpec spec;
-            spec.instanceId = nextInstanceId++;
-            spec.paletteIndex = paletteIdx;
-            spec.worldPosition = candidatePos;
-            spec.rotation = rotation;
-            spec.scale = glm::vec3(scale);
-            spec.meshPath = entry.meshPath;
-            spec.materialPath = entry.materialPath;
-            spec.useCollider = entry.useCollider;
-            spec.surfaceNormal = surfaceNormal;
-
-            auto entity = spawnInstance(spec);
-            if (!entity.isValid())
-                continue;
-
-            strokeCreated.push_back(spec);
-            ++placedCount;
+            uint32_t paletteIdx = enabledIndices[paletteDist(rng)];
+            if (placeOneCandidate(candidatePos, paletteIdx, surfaceNormal))
+                ++placedCount;
         }
 
         if (placedCount > 0)
@@ -342,6 +289,159 @@ namespace services
             notification.count = placedCount;
             dispatcher.publish(notification);
         }
+    }
+
+    void MeshBrushServiceImpl::placeSingleMesh(const glm::vec3& worldPos, const glm::vec3& normal)
+    {
+        // Ensure normal points upward (terrain raycast may return inverted normals)
+        glm::vec3 surfaceNormal = normal;
+        if (surfaceNormal.y < 0.0f)
+            surfaceNormal = -surfaceNormal;
+
+        std::vector<uint32_t> enabledIndices;
+        std::vector<float> weights;
+        if (!selectEnabledEntries(enabledIndices, weights)) return;
+        std::discrete_distribution<uint32_t> paletteDist(weights.begin(), weights.end());
+        uint32_t paletteIdx = enabledIndices[paletteDist(rng)];
+
+        // One instance at the cursor. worldPos.y is already the terrain hit; spacing is enforced
+        // by the moved-distance gate in applyBrush, and masks + the per-entry slope cap still
+        // apply inside placeOneCandidate.
+        if (placeOneCandidate(worldPos, paletteIdx, surfaceNormal))
+        {
+            events::meshBrush::MeshBrushAppliedNotification notification;
+            notification.position = worldPos;
+            notification.count = 1;
+            events::EventDispatcher::instance().publish(notification);
+        }
+    }
+
+    bool MeshBrushServiceImpl::selectEnabledEntries(std::vector<uint32_t>& enabledIndices,
+                                                    std::vector<float>& weights) const
+    {
+        if (selectedPaletteIndex >= 0 && selectedPaletteIndex < static_cast<int>(palette.size()))
+        {
+            if (palette[selectedPaletteIndex].meshPath.empty())
+                return false;
+            enabledIndices.push_back(static_cast<uint32_t>(selectedPaletteIndex));
+            weights.push_back(1.0f);
+        }
+        else
+        {
+            for (uint32_t idx = 0; idx < palette.size(); ++idx)
+            {
+                if (!palette[idx].meshPath.empty())
+                {
+                    enabledIndices.push_back(idx);
+                    weights.push_back(palette[idx].weight);
+                }
+            }
+        }
+        return !enabledIndices.empty();
+    }
+
+    glm::vec3 MeshBrushServiceImpl::sampleTerrainNormal(float worldX, float worldZ) const
+    {
+        const float eps = 0.5f;
+        auto sample = [](float x, float z, float fallback) -> float {
+            events::terrain::GetTerrainHeightAtQuery q;
+            q.worldX = x;
+            q.worldZ = z;
+            try
+            {
+                auto r = events::EventDispatcher::instance().query(q);
+                return r.valid ? r.height : fallback;
+            }
+            catch (...)
+            {
+                return fallback;
+            }
+        };
+        float hC = sample(worldX, worldZ, 0.0f);
+        float hL = sample(worldX - eps, worldZ, hC);
+        float hR = sample(worldX + eps, worldZ, hC);
+        float hD = sample(worldX, worldZ - eps, hC);
+        float hU = sample(worldX, worldZ + eps, hC);
+        glm::vec3 n(hL - hR, 2.0f * eps, hD - hU);
+        return glm::normalize(n);
+    }
+
+    bool MeshBrushServiceImpl::placeOneCandidate(glm::vec3 candidatePos, uint32_t paletteIdx,
+                                                 const glm::vec3& surfaceNormal)
+    {
+        const auto& entry = palette[paletteIdx];
+
+        // Per-entry slope cap (uses the brush-center normal, preserving the original behavior).
+        float slopeAngle = std::acos(std::clamp(glm::dot(surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f));
+        if (glm::degrees(slopeAngle) > entry.maxSlope)
+            return false;
+
+        // Slope/height/noise masks: compute the per-candidate terrain normal only when the
+        // slope mask actually needs it (height/noise masks read position only).
+        glm::vec3 candNormal(0.0f, 1.0f, 0.0f);
+        if (currentParams.useSlopeMask)
+            candNormal = sampleTerrainNormal(candidatePos.x, candidatePos.z);
+        if (!meshbrush::passesMasks(currentParams, candidatePos.y, candNormal, candidatePos.x, candidatePos.z))
+            return false;
+
+        candidatePos.y += getAABBYOffset(entry.meshPath);
+        candidatePos.y += entry.yOffset;
+
+        std::uniform_real_distribution<float> scaleDist(entry.scaleRange.x, entry.scaleRange.y);
+        float scale = scaleDist(rng);
+
+        std::uniform_real_distribution<float> rotYDist(entry.rotationYRange.x, entry.rotationYRange.y);
+        float rotY = rotYDist(rng);
+
+        float rotX = 0.0f, rotZ = 0.0f;
+        if (entry.randomRotationX)
+        {
+            std::uniform_real_distribution<float> d(0.0f, 360.0f);
+            rotX = d(rng);
+        }
+        if (entry.randomRotationZ)
+        {
+            std::uniform_real_distribution<float> d(0.0f, 360.0f);
+            rotZ = d(rng);
+        }
+
+        glm::vec3 rotation(rotX, rotY, rotZ);
+
+        if (entry.alignToNormal && glm::length(surfaceNormal) > 0.001f)
+        {
+            glm::vec3 up(0.0f, 1.0f, 0.0f);
+            glm::vec3 n = glm::normalize(surfaceNormal);
+            float alignAngle = glm::degrees(std::acos(std::clamp(glm::dot(n, up), -1.0f, 1.0f)));
+            glm::vec3 axis = glm::cross(up, n);
+            if (glm::length(axis) > 0.001f)
+            {
+                axis = glm::normalize(axis);
+                rotation.x = alignAngle * axis.x;
+                rotation.z = alignAngle * axis.z;
+            }
+        }
+
+        if (nextInstanceId == 0 || nextInstanceId == std::numeric_limits<uint64_t>::max())
+            throw std::overflow_error("Mesh brush instance ID space exhausted");
+
+        meshbrush::MeshBrushInstanceSpec spec;
+        spec.instanceId = nextInstanceId++;
+        spec.paletteIndex = paletteIdx;
+        spec.worldPosition = candidatePos;
+        spec.rotation = rotation;
+        spec.scale = glm::vec3(scale);
+        spec.meshPath = entry.meshPath;
+        spec.materialPath = entry.materialPath;
+        spec.useCollider = entry.useCollider;
+        spec.surfaceNormal = surfaceNormal;
+        spec.cullDistance = entry.cullDistance;
+
+        auto entity = spawnInstance(spec);
+        if (!entity.isValid())
+            return false;
+
+        strokeCreated.push_back(spec);
+        return true;
     }
 
     void MeshBrushServiceImpl::eraseInstances(const glm::vec3& worldPos)
@@ -422,6 +522,9 @@ namespace services
 
             MeshData meshData;
             meshData.meshRef = asset::AssetRef::fromPath(spec.meshPath);
+            // Per-type cull distance (0 = never cull). It is part of the render batch merge key,
+            // so distinct values fragment instanced draws by design — this is per palette-type.
+            meshData.maxDrawDistance = spec.cullDistance;
             events::scene::SetMeshDataCommand meshDataCmd;
             meshDataCmd.entity = entity;
             meshDataCmd.meshData = meshData;
@@ -678,7 +781,10 @@ namespace services
             events::scene::GetMeshDataQuery meshQuery;
             meshQuery.entity = handle;
             if (auto meshOpt = dispatcher.query(meshQuery); meshOpt.has_value())
+            {
                 spec.meshPath = meshOpt->meshRef.resolve();
+                spec.cullDistance = meshOpt->maxDrawDistance;
+            }
 
             events::material::GetMaterialDataQuery materialQuery;
             materialQuery.entity = handle;
