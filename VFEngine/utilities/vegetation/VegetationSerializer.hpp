@@ -10,7 +10,8 @@ namespace vegetation
 {
     static constexpr std::array<char, 4> VEGETATION_INSTANCE_MAGIC = {'V', 'F', 'V', 'I'};
     // v2: added per-instance heightScale, tint, and surface normal.
-    static constexpr uint32_t VEGETATION_INSTANCE_FORMAT_VERSION = 2;
+    // v3: added per-instance source (Painted/Procedural, u8). v2 files load with source=Painted.
+    static constexpr uint32_t VEGETATION_INSTANCE_FORMAT_VERSION = 3;
 
     class VegetationSerializer
     {

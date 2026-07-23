@@ -24,8 +24,25 @@
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "terrain/TileHeightSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/PaintBrushTypes.hpp"
+#include "vegetation/ScatterBaker.hpp"
+#include "../../data/VegetationUndoCommands.hpp"
+#include "../../events/editor/UndoRedoEvents.hpp"
+
+namespace
+{
+    // Assign a tile's billboard set and set BOTH dirty flags (CPU-save + GPU-rebuild).
+    // Single choke point so no mutation can forget a flag (VK-1581 dirty-flag contract).
+    void writeTileBillboards(terrain::TerrainTile& tile,
+                             std::vector<vegetation::BillboardInstance> instances)
+    {
+        tile.billboardInstances = std::move(instances);
+        tile.billboardInstancesDirty = true;
+        tile.billboardInstancesGPUDirty = true;
+    }
+}
 
 namespace services
 {
@@ -732,11 +749,141 @@ namespace services
                 {
                     auto* tile = grid->getTile(coord);
                     if (!tile) continue;
-                    tile->billboardInstances = cmd.instances;
-                    tile->billboardInstancesDirty = true;
-                    tile->billboardInstancesGPUDirty = true;
+                    writeTileBillboards(*tile, cmd.instances);
                     return;
                 }
+            });
+
+        // VK-1581: deterministic procedural scatter bake — one undoable stroke.
+        // Reads each tile's height/weight arrays directly (no per-candidate queries),
+        // keeps hand-painted instances, and (when replaceProcedural) regenerates the
+        // procedural set idempotently from the profile + seed.
+        dispatcher.registerCommandHandler<events::vegetation::GenerateVegetationScatterCommand>(
+            [this](const events::vegetation::GenerateVegetationScatterCommand& cmd)
+            {
+                // GPU instance budget: mirror of initialGrassCapacity in
+                // GPUDrivenRendererVegetation.cpp (billboards upload as GrassInstanceGPU).
+                constexpr size_t MAX_BILLBOARD_INSTANCES = 512 * 1024;
+
+                auto& bus = events::EventDispatcher::instance();
+
+                // Appearance palette (scale/height/tint per entry) — same source the panel edits.
+                std::vector<vegetation::BillboardPaletteEntry> palette;
+                try {
+                    palette = bus.query(events::vegetation::GetBillboardPaletteQuery{});
+                } catch (...) {}
+
+                auto tileInRegion = [&cmd](float originX, float originZ, float size) -> bool
+                {
+                    if (!cmd.region) return true; // nullopt = whole terrain
+                    const auto& rg = *cmd.region;
+                    return !(originX + size < rg.minX || originX > rg.maxX ||
+                             originZ + size < rg.minZ || originZ > rg.maxZ);
+                };
+
+                // Pass 1: how many instances survive the bake terrain-wide → budget headroom.
+                size_t surviving = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        const float originX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize;
+                        if (tileInRegion(originX, originZ, tile->config.worldTileSize))
+                        {
+                            for (const auto& inst : tile->billboardInstances)
+                                if (!(cmd.replaceProcedural && inst.source == vegetation::InstanceSource::Procedural))
+                                    ++surviving;
+                        }
+                        else
+                        {
+                            surviving += tile->billboardInstances.size();
+                        }
+                    }
+                }
+                size_t genBudget = (surviving >= MAX_BILLBOARD_INSTANCES)
+                                       ? 0 : (MAX_BILLBOARD_INSTANCES - surviving);
+
+                auto undoCmd = std::make_shared<VegetationTileSnapshotUndoCommand>("Procedural Scatter Bake");
+                uint32_t placedCount = 0;
+                bool budgetExceeded = false;
+
+                // Pass 2: bake per tile.
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile || !tile->hasHeightData()) continue;
+
+                        const float tileSize = tile->config.worldTileSize;
+                        const float originX = static_cast<float>(tile->coord.x) * tileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tileSize;
+                        if (!tileInRegion(originX, originZ, tileSize)) continue;
+
+                        std::vector<vegetation::BillboardInstance> before = tile->billboardInstances;
+
+                        // Keep hand-painted; drop procedural when regenerating.
+                        std::vector<vegetation::BillboardInstance> merged;
+                        merged.reserve(before.size());
+                        for (const auto& inst : before)
+                        {
+                            if (cmd.replaceProcedural && inst.source == vegetation::InstanceSource::Procedural)
+                                continue;
+                            merged.push_back(inst);
+                        }
+
+                        // Direct-tile samplers (O(1), close over this tile's arrays).
+                        const float* heights = tile->heightData.data();
+                        const uint32_t vpt = tile->config.getVertexCount();
+                        const float vertexSpacing = tile->config.getVertexSpacing();
+                        const float eps = vertexSpacing * 0.5f;
+                        const terrain::TileWeightMapData& wm = tile->weightMap;
+
+                        auto result = vegetation::bakeScatterForTile(
+                            cmd.profile, palette, cmd.seed,
+                            originX, originZ, tileSize,
+                            [heights, vpt, vertexSpacing](float lx, float lz) {
+                                return terrain::sampleTileHeightBilinear(heights, vpt, vertexSpacing, lx, lz);
+                            },
+                            [heights, vpt, vertexSpacing, eps](float lx, float lz) {
+                                return terrain::sampleTileNormalCentralDiff(heights, vpt, vertexSpacing, lx, lz, eps);
+                            },
+                            [&wm, vertexSpacing](uint8_t layer, float lx, float lz) {
+                                return terrain::sampleTileLayerWeightBilinear(wm, layer, lx, lz, vertexSpacing);
+                            },
+                            genBudget);
+
+                        genBudget -= result.instances.size();
+                        placedCount += static_cast<uint32_t>(result.instances.size());
+                        if (result.budgetExceeded) budgetExceeded = true;
+
+                        merged.insert(merged.end(), result.instances.begin(), result.instances.end());
+                        writeTileBillboards(*tile, std::move(merged));
+
+                        undoCmd->addTile(tile->coord.x, tile->coord.z,
+                                         std::move(before), tile->billboardInstances);
+                    }
+                }
+
+                if (undoCmd->hasChanges())
+                {
+                    events::undoredo::PushUndoableCommand pushCmd;
+                    pushCmd.command = undoCmd;
+                    bus.execute(pushCmd);
+                }
+
+                // Report placed/total + budget warning for the panel.
+                uint32_t totalAfter = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                    for (auto* tile : grid->getAllTiles())
+                        if (tile) totalAfter += static_cast<uint32_t>(tile->billboardInstances.size());
+
+                events::vegetation::ScatterBakeCompletedNotification note;
+                note.placedCount = placedCount;
+                note.totalCount = totalAfter;
+                note.budgetExceeded = budgetExceeded;
+                bus.publish(note);
             });
     }
 

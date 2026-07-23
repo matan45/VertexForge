@@ -14,6 +14,8 @@ namespace services
         dispatcher.unregisterQueryHandler<events::vegetation::GetGrassConfigQuery>();
         dispatcher.unregisterCommandHandler<events::vegetation::SetGlobalGrassConfigCommand>();
         dispatcher.unregisterQueryHandler<events::vegetation::GetGlobalGrassConfigQuery>();
+        dispatcher.unregisterCommandHandler<events::vegetation::SetGlobalScatterProfileCommand>();
+        dispatcher.unregisterQueryHandler<events::vegetation::GetGlobalScatterProfileQuery>();
     }
 
     void GrassServiceImpl::registerEventHandlers()
@@ -38,6 +40,16 @@ namespace services
         dispatcher.registerQueryHandler<events::vegetation::GetGlobalGrassConfigQuery>(
             [this](const events::vegetation::GetGlobalGrassConfigQuery&) {
                 return getGlobalGrassConfig();
+            });
+
+        dispatcher.registerCommandHandler<events::vegetation::SetGlobalScatterProfileCommand>(
+            [this](const events::vegetation::SetGlobalScatterProfileCommand& cmd) {
+                setGlobalScatterProfile(cmd.profile);
+            });
+
+        dispatcher.registerQueryHandler<events::vegetation::GetGlobalScatterProfileQuery>(
+            [this](const events::vegetation::GetGlobalScatterProfileQuery&) {
+                return getGlobalScatterProfile();
             });
 
         // Billboard palette handlers moved to VegetationBrushServiceImpl
@@ -114,6 +126,38 @@ namespace services
         {
             const auto& comp = view.get<components::GrassComponent>(entity);
             return comp.config;
+        }
+        return {};
+    }
+
+    void GrassServiceImpl::setGlobalScatterProfile(const vegetation::ScatterProfile& profile)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+
+        entt::entity target = entt::null;
+        for (auto entity : view)
+        {
+            target = entity;
+            break;
+        }
+
+        if (target == entt::null)
+        {
+            target = registry.create();
+            registry.emplace<components::GrassComponent>(target);
+        }
+
+        registry.get<components::GrassComponent>(target).scatterProfile = profile;
+    }
+
+    vegetation::ScatterProfile GrassServiceImpl::getGlobalScatterProfile() const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::GrassComponent>();
+        for (auto entity : view)
+        {
+            return view.get<components::GrassComponent>(entity).scatterProfile;
         }
         return {};
     }

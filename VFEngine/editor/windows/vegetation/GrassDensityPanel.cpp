@@ -5,7 +5,10 @@
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <filesystem>
+#include <algorithm>
 #include <cmath>
+#include <optional>
+#include <string>
 
 namespace
 {
@@ -20,6 +23,7 @@ namespace windows
         {
             auto& dispatcher = events::EventDispatcher::instance();
             dispatcher.unsubscribe(modeToken);
+            dispatcher.unsubscribe(scatterToken);
         }
     }
 
@@ -35,6 +39,14 @@ namespace windows
                 visible = n.isActive;
                 if (visible)
                     configLoaded = false; // Force reload palette when panel opens
+            });
+
+        scatterToken = dispatcher.subscribe<events::vegetation::ScatterBakeCompletedNotification>(
+            [this](const events::vegetation::ScatterBakeCompletedNotification& n)
+            {
+                lastPlacedCount = static_cast<int>(n.placedCount);
+                lastTotalCount = static_cast<int>(n.totalCount);
+                lastBudgetExceeded = n.budgetExceeded;
             });
 
         subscribed = true;
@@ -59,6 +71,8 @@ namespace windows
         ensureConfigLoaded();
         drawWindControls();
         drawSSSControls();
+        ImGui::Separator();
+        drawScatterControls();
         ImGui::End();
 
         if (!visible)
@@ -370,6 +384,12 @@ namespace windows
                     events::vegetation::GetBillboardPaletteQuery{});
             } catch (...) {}
 
+            try {
+                scatterProfile = events::EventDispatcher::instance().query(
+                    events::vegetation::GetGlobalScatterProfileQuery{});
+                scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+            } catch (...) {}
+
             configLoaded = true;
         }
     }
@@ -387,6 +407,161 @@ namespace windows
         events::vegetation::SetBillboardPaletteCommand cmd;
         cmd.entries = billboardEntries;
         cmd.activeEntry = -1; // All active entries render (controlled by per-entry checkbox)
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::drawScatterControls()
+    {
+        if (!ImGui::CollapsingHeader("Scatter Rules"))
+            return;
+
+        ImGui::TextDisabled("Rule-driven procedural placement (bake).");
+
+        bool changed = false;
+
+        if (ImGui::DragInt("Global Seed", &scatterSeed, 1.0f, 0, 1000000))
+        {
+            if (scatterSeed < 0) scatterSeed = 0;
+            scatterProfile.globalSeed = static_cast<uint32_t>(scatterSeed);
+            changed = true;
+        }
+        changed |= ImGui::SliderFloat("Density Scale", &scatterProfile.globalDensityScale, 0.0f, 1.0f, "%.2f");
+
+        int removeIndex = -1;
+        for (int i = 0; i < static_cast<int>(scatterProfile.rules.size()); ++i)
+            drawScatterRule(i, removeIndex, changed);
+
+        if (removeIndex >= 0)
+        {
+            scatterProfile.rules.erase(scatterProfile.rules.begin() + removeIndex);
+            changed = true;
+        }
+
+        if (ImGui::Button("Add Rule"))
+        {
+            scatterProfile.rules.emplace_back();
+            changed = true;
+        }
+
+        if (changed)
+            pushScatterProfile();
+
+        ImGui::Separator();
+        if (ImGui::Button("Bake / Regenerate Scatter"))
+            generateScatter(true);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Regenerate procedural instances across the whole terrain; hand-painted are kept");
+
+        if (lastPlacedCount >= 0)
+        {
+            ImGui::Text("Placed %d (total %d)", lastPlacedCount, lastTotalCount);
+            if (lastBudgetExceeded)
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.2f, 1.0f),
+                                   "Budget exceeded - some instances skipped");
+        }
+    }
+
+    void GrassDensityPanel::drawScatterRule(int index, int& removeIndex, bool& changed)
+    {
+        ImGui::PushID(2000 + index);
+        auto& r = scatterProfile.rules[index];
+
+        std::string label = "Rule " + std::to_string(index) +
+                            " -> entry " + std::to_string(r.paletteEntryIndex);
+        if (ImGui::TreeNode("Rule", "%s", label.c_str()))
+        {
+            int pe = static_cast<int>(r.paletteEntryIndex);
+            const int maxEntry = billboardEntries.empty() ? 0 : static_cast<int>(billboardEntries.size()) - 1;
+            if (ImGui::DragInt("Palette Entry", &pe, 0.1f, 0, maxEntry))
+            {
+                r.paletteEntryIndex = static_cast<uint32_t>(std::clamp(pe, 0, maxEntry));
+                changed = true;
+            }
+
+            changed |= ImGui::SliderFloat("Density", &r.density, 0.0f, 1.0f, "%.2f");
+            changed |= ImGui::SliderFloat("Spacing", &r.spacing, 0.1f, 10.0f);
+            changed |= ImGui::SliderFloat("Jitter", &r.positionJitter, 0.0f, 1.0f);
+            changed |= ImGui::Checkbox("Align To Normal", &r.alignToNormal);
+
+            changed |= ImGui::Checkbox("Slope Mask", &r.useSlopeMask);
+            if (r.useSlopeMask)
+            {
+                // Present as degrees like the brush; store as cosine (bounds invert).
+                float minDeg = std::acos(std::clamp(r.slopeMaxCos, 0.0f, 1.0f)) / kDegToRad;
+                float maxDeg = std::acos(std::clamp(r.slopeMinCos, 0.0f, 1.0f)) / kDegToRad;
+                bool slopeChanged = false;
+                slopeChanged |= ImGui::SliderFloat("Min Slope (deg)", &minDeg, 0.0f, 90.0f);
+                slopeChanged |= ImGui::SliderFloat("Max Slope (deg)", &maxDeg, 0.0f, 90.0f);
+                if (slopeChanged)
+                {
+                    if (maxDeg < minDeg) maxDeg = minDeg;
+                    r.slopeMinCos = std::cos(maxDeg * kDegToRad);
+                    r.slopeMaxCos = std::cos(minDeg * kDegToRad);
+                    changed = true;
+                }
+            }
+
+            changed |= ImGui::Checkbox("Height Mask", &r.useHeightMask);
+            if (r.useHeightMask)
+            {
+                changed |= ImGui::DragFloat("Min Height", &r.heightMin, 0.5f);
+                changed |= ImGui::DragFloat("Max Height", &r.heightMax, 0.5f);
+            }
+
+            changed |= ImGui::Checkbox("Noise Mask", &r.useNoiseMask);
+            if (r.useNoiseMask)
+            {
+                changed |= ImGui::SliderFloat("Noise Freq", &r.noiseFrequency, 0.01f, 1.0f, "%.3f");
+                changed |= ImGui::SliderFloat("Noise Threshold", &r.noiseThreshold, 0.0f, 1.0f);
+                int ns = static_cast<int>(r.noiseSeed);
+                if (ImGui::DragInt("Noise Seed", &ns, 1.0f, 0, 1000000))
+                {
+                    r.noiseSeed = static_cast<uint32_t>(ns < 0 ? 0 : ns);
+                    changed = true;
+                }
+            }
+
+            changed |= ImGui::Checkbox("Layer Mask", &r.useLayerMask);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Gate placement by a terrain splat/material layer weight");
+            if (r.useLayerMask)
+            {
+                int li = static_cast<int>(r.layerIndex);
+                if (ImGui::DragInt("Layer Index", &li, 1.0f, 0, 31))
+                {
+                    r.layerIndex = static_cast<uint8_t>(std::clamp(li, 0, 31));
+                    changed = true;
+                }
+                changed |= ImGui::SliderFloat("Min Weight", &r.layerWeightMin, 0.0f, 1.0f);
+                changed |= ImGui::Checkbox("Invert (exclude)", &r.invertLayer);
+            }
+
+            if (ImGui::Button("Remove Rule"))
+                removeIndex = index;
+
+            ImGui::TreePop();
+        }
+
+        ImGui::PopID();
+    }
+
+    void GrassDensityPanel::pushScatterProfile()
+    {
+        events::vegetation::SetGlobalScatterProfileCommand cmd;
+        cmd.profile = scatterProfile;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::generateScatter(bool replaceProcedural)
+    {
+        pushScatterProfile(); // keep the persisted component in sync before baking
+
+        events::vegetation::GenerateVegetationScatterCommand cmd;
+        cmd.region = std::nullopt; // MVP: whole active terrain
+        cmd.profile = scatterProfile;
+        cmd.profile.globalSeed = static_cast<uint32_t>(scatterSeed);
+        cmd.seed = static_cast<uint32_t>(scatterSeed);
+        cmd.replaceProcedural = replaceProcedural;
         events::EventDispatcher::instance().execute(cmd);
     }
 }

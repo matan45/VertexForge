@@ -2,6 +2,7 @@
 #include "../../interfaces/vegetation/IGrassService.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "vegetation/GrassConfig.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
 
 namespace services
 {
@@ -18,5 +19,9 @@ namespace services
         vegetation::GrassRenderConfig getGrassConfig(EntityHandle entityId) const;
         void setGlobalGrassConfig(const vegetation::GrassRenderConfig& config);
         vegetation::GrassRenderConfig getGlobalGrassConfig() const;
+
+        // VK-1581 scatter profile on the (find-or-created) global GrassComponent.
+        void setGlobalScatterProfile(const vegetation::ScatterProfile& profile);
+        vegetation::ScatterProfile getGlobalScatterProfile() const;
     };
 }

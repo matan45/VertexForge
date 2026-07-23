@@ -59,6 +59,45 @@ namespace {
             }
         }
     }
+
+    void deserializeScatterProfile(const nlohmann::json& j, vegetation::ScatterProfile& profile)
+    {
+        auto it = j.find("scatterProfile");
+        if (it == j.end() || !it->is_object())
+            return; // absent (older scenes) — keep defaults, no format bump needed
+        const auto& sp = *it;
+        readField(sp, "globalSeed", profile.globalSeed);
+        readField(sp, "globalDensityScale", profile.globalDensityScale);
+        if (auto rit = sp.find("rules"); rit != sp.end() && rit->is_array())
+        {
+            profile.rules.clear();
+            for (const auto& rj : *rit)
+            {
+                vegetation::ScatterRule r;
+                readField(rj, "paletteEntryIndex", r.paletteEntryIndex);
+                readField(rj, "density", r.density);
+                readField(rj, "spacing", r.spacing);
+                readField(rj, "positionJitter", r.positionJitter);
+                readField(rj, "alignToNormal", r.alignToNormal);
+                readField(rj, "useSlopeMask", r.useSlopeMask);
+                readField(rj, "slopeMinCos", r.slopeMinCos);
+                readField(rj, "slopeMaxCos", r.slopeMaxCos);
+                readField(rj, "useHeightMask", r.useHeightMask);
+                readField(rj, "heightMin", r.heightMin);
+                readField(rj, "heightMax", r.heightMax);
+                readField(rj, "useNoiseMask", r.useNoiseMask);
+                readField(rj, "noiseFrequency", r.noiseFrequency);
+                readField(rj, "noiseThreshold", r.noiseThreshold);
+                readField(rj, "noiseSeed", r.noiseSeed);
+                readField(rj, "useLayerMask", r.useLayerMask);
+                if (auto lit = rj.find("layerIndex"); lit != rj.end() && lit->is_number())
+                    r.layerIndex = static_cast<uint8_t>(lit->get<int>());
+                readField(rj, "layerWeightMin", r.layerWeightMin);
+                readField(rj, "invertLayer", r.invertLayer);
+                profile.rules.push_back(r);
+            }
+        }
+    }
 }
 
 namespace serialization
@@ -126,6 +165,38 @@ namespace serialization
         }
         j["billboardPalette"] = paletteArr;
 
+        // Scatter profile (VK-1581 procedural scatter rules)
+        json scatterObj;
+        scatterObj["globalSeed"] = grass.scatterProfile.globalSeed;
+        scatterObj["globalDensityScale"] = grass.scatterProfile.globalDensityScale;
+        json rulesArr = json::array();
+        for (const auto& r : grass.scatterProfile.rules)
+        {
+            json rj;
+            rj["paletteEntryIndex"] = r.paletteEntryIndex;
+            rj["density"] = r.density;
+            rj["spacing"] = r.spacing;
+            rj["positionJitter"] = r.positionJitter;
+            rj["alignToNormal"] = r.alignToNormal;
+            rj["useSlopeMask"] = r.useSlopeMask;
+            rj["slopeMinCos"] = r.slopeMinCos;
+            rj["slopeMaxCos"] = r.slopeMaxCos;
+            rj["useHeightMask"] = r.useHeightMask;
+            rj["heightMin"] = r.heightMin;
+            rj["heightMax"] = r.heightMax;
+            rj["useNoiseMask"] = r.useNoiseMask;
+            rj["noiseFrequency"] = r.noiseFrequency;
+            rj["noiseThreshold"] = r.noiseThreshold;
+            rj["noiseSeed"] = r.noiseSeed;
+            rj["useLayerMask"] = r.useLayerMask;
+            rj["layerIndex"] = static_cast<int>(r.layerIndex);
+            rj["layerWeightMin"] = r.layerWeightMin;
+            rj["invertLayer"] = r.invertLayer;
+            rulesArr.push_back(rj);
+        }
+        scatterObj["rules"] = rulesArr;
+        j["scatterProfile"] = scatterObj;
+
         return j;
     }
 
@@ -168,5 +239,8 @@ namespace serialization
 
         // Billboard palette
         deserializeBillboardPalette(j, grass.billboardPalette);
+
+        // Scatter profile (VK-1581)
+        deserializeScatterProfile(j, grass.scatterProfile);
     }
 }
