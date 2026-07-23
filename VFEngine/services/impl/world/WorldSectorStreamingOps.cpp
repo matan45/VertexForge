@@ -185,6 +185,13 @@ namespace services
                     {
                         if (ent == entt::null || !registry.valid(ent)) return;
 
+                        // VK-1579: only entity-backed meshes register for per-entity GPU object
+                        // streaming (one non-instanced GPUObjectData per submesh). Foliage is
+                        // packed FoliageInstance data on TerrainTile — entity-free by design — and
+                        // renders via the instanced collector (FramePreparationSystem::collectFoliage),
+                        // riding terrain-tile streaming. It must NEVER be materialized as entities
+                        // here, or it would emit one non-instanced object per plant and exhaust
+                        // MAX_GPU_OBJECTS (the exact catastrophe the packed store avoids).
                         if (registry.any_of<components::MeshComponent>(ent))
                         {
                             auto* uuidComp = registry.try_get<components::UUIDComponent>(ent);

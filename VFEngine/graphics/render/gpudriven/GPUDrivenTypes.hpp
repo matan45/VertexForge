@@ -332,6 +332,7 @@ namespace render::gpudriven
     struct GPUDrivenStats
     {
         uint32_t totalObjects;
+        uint32_t totalInstances; // VK-1579: instance-transform total (foliage/vegetation/mesh), bounded by MAX_GPU_INSTANCES
         uint32_t visibleObjects;
         uint32_t drawCalls;
         uint32_t objectsLOD0;

@@ -237,6 +237,8 @@ namespace render::gpudriven
         }
 
         stats.totalObjects = currentObjectCount;
+        // VK-1579: instance-transform total (foliage/vegetation/mesh) — bounded by MAX_GPU_INSTANCES.
+        stats.totalInstances = mergedBuffer ? mergedBuffer->getInstanceCount() : 0;
 
         // Compute per-(batch, shaderGroup) occupancy so empty sections can skip their
         // indirect draw. Identity-mapped in edit mode; in play mode slot indices over-mark

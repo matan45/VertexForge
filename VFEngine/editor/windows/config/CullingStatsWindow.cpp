@@ -61,6 +61,9 @@ namespace windows
                     ImGui::Separator();
 
                     ImGui::Text("Objects: %u total", gpu.totalObjects);
+                    // VK-1579: instanced-transform total (foliage/vegetation/mesh instances),
+                    // bounded by MAX_GPU_INSTANCES. Confirms foliage stays bounded under streaming.
+                    ImGui::Text("Instances: %u total", gpu.totalInstances);
                     if (gpu.totalObjects > 0)
                     {
                         ImGui::Text("  Culled by Distance:  %u", gpu.culledByDistance);

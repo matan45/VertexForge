@@ -8,6 +8,7 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "vegetation/VegetationSerializer.hpp"
+#include "foliage/FoliageSerializer.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -235,6 +236,22 @@ namespace services
                         vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances);
                         tile->billboardInstancesDirty = true;
                         tile->billboardInstancesGPUDirty = true;
+                    }
+
+                    // VK-1579: foliage rides terrain-tile streaming, exactly like billboard
+                    // vegetation above. Packed FoliageInstance data is entity-free (no
+                    // MeshComponent), so it is NEVER registered with GPUObjectStreamManager —
+                    // it renders solely via FramePreparationSystem::collectFoliage, which walks
+                    // resident tiles. Streaming a tile out frees it via grid.removeTile() (the
+                    // collector then prunes the tile's GPU cache); no stream-out code is needed.
+                    std::string foliageDir = getFoliageDirectory(tc.savePath);
+                    std::string foliagePath = std::format("{}/tile_{}_{}.vfFoliage",
+                        foliageDir, tileX, tileZ);
+                    if (fs::exists(foliagePath))
+                    {
+                        foliage::FoliageSerializer::loadFoliageInstances(foliagePath, tile->foliageInstances);
+                        tile->foliageInstancesDirty = true;
+                        tile->foliageInstancesGPUDirty = true;
                     }
 
                 }

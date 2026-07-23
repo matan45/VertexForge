@@ -4,6 +4,7 @@
 #include <foliage/FoliageSpatialGrid.hpp>
 #include <foliage/FoliageSerializer.hpp>
 #include <foliage/FoliageTypes.hpp>
+#include <terrain/TerrainTile.hpp>
 
 #include "data/FoliageUndoCommands.hpp"
 #include "events/EventDispatcher.hpp"
@@ -419,6 +420,134 @@ TEST_CASE("FoliageBrushServiceImpl paints into tile store, never creating entiti
     CHECK(addedInstances > 0);        // ...but it does write to the tile store
 
     dispatcher.clear();
+}
+
+// ============================================================
+// VK-1579: foliage rides terrain-tile streaming (.vfFoliage sidecars)
+// ============================================================
+//
+// streamInTile() itself is not CPU-unit-testable (it needs createTileEntity -> scene
+// graph and addTileFromFile -> terrain file cache). These cases exercise the exact
+// per-tile load/flag/free logic the VK-1579 block runs, at the tile-data level.
+
+namespace {
+    // Mirrors the foliage block added to TerrainService::streamInTile (VK-1579), which in
+    // turn mirrors the vegetation restore block. The on-disk layout matches
+    // TerrainService::getFoliageDirectory (TerrainDataIOOps.cpp:226-230): a "<stem>_foliage"
+    // directory beside the terrain save file, holding "tile_<x>_<z>.vfFoliage" sidecars.
+    // Keep this in sync with TerrainStreamingOps.cpp if that block changes.
+    bool streamInFoliageForTile(const std::string& savePath, int tileX, int tileZ,
+                                terrain::TerrainTile& tile)
+    {
+        namespace fs = std::filesystem;
+        fs::path p(savePath);
+        std::string foliageDir = (p.parent_path() / (p.stem().string() + "_foliage")).string();
+        std::string foliagePath = foliageDir + "/tile_" + std::to_string(tileX) + "_" +
+                                  std::to_string(tileZ) + ".vfFoliage";
+        if (!fs::exists(foliagePath))
+            return false;
+        foliage::FoliageSerializer::loadFoliageInstances(foliagePath, tile.foliageInstances);
+        tile.foliageInstancesDirty = true;
+        tile.foliageInstancesGPUDirty = true;
+        return true;
+    }
+
+    // Write a tile sidecar under the getFoliageDirectory layout, creating the dir first.
+    void writeFoliageSidecar(const std::string& savePath, int tileX, int tileZ,
+                             const std::vector<foliage::FoliageInstance>& instances)
+    {
+        namespace fs = std::filesystem;
+        fs::path p(savePath);
+        fs::path foliageDir = p.parent_path() / (p.stem().string() + "_foliage");
+        fs::create_directories(foliageDir);
+        std::string foliagePath = (foliageDir / ("tile_" + std::to_string(tileX) + "_" +
+                                   std::to_string(tileZ) + ".vfFoliage")).string();
+        REQUIRE(foliage::FoliageSerializer::saveFoliageInstances(foliagePath, instances));
+    }
+}
+
+TEST_CASE("stream-in loads the tile's .vfFoliage sidecar and raises both dirty flags") {
+    namespace fs = std::filesystem;
+    fs::path root = fs::temp_directory_path() / "vf1579_stream_in";
+    fs::remove_all(root);
+    fs::create_directories(root);
+    std::string savePath = (root / "world.vfWorld").string();
+
+    std::vector<foliage::FoliageInstance> saved(3);
+    saved[0].position = glm::vec3(12.0f, 3.0f, -7.0f);
+    saved[0].typeIndex = 9;
+    saved[0].seed = 0xABCDEF01u;
+    saved[1].typeIndex = 40;
+    saved[2].typeIndex = 63;
+    writeFoliageSidecar(savePath, 2, 3, saved);
+
+    // Fresh tile, as produced by grid.addTileFromFile before the foliage restore.
+    terrain::TerrainTile tile;
+    REQUIRE_FALSE(tile.hasFoliageInstances());
+    REQUIRE_FALSE(tile.foliageInstancesDirty);
+    REQUIRE_FALSE(tile.foliageInstancesGPUDirty);
+
+    bool loaded = streamInFoliageForTile(savePath, 2, 3, tile);
+
+    CHECK(loaded);
+    CHECK(tile.hasFoliageInstances());
+    CHECK(tile.foliageInstances.size() == 3u);
+    CHECK(tile.foliageInstances[0].typeIndex == 9u);
+    CHECK(tile.foliageInstances[0].position.x == doctest::Approx(12.0f));
+    CHECK(tile.foliageInstances[0].seed == 0xABCDEF01u);
+    CHECK(tile.foliageInstances[2].typeIndex == 63u);
+    CHECK(tile.foliageInstancesDirty);      // save gate
+    CHECK(tile.foliageInstancesGPUDirty);   // collector recompose gate
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("stream-in of a tile with no sidecar leaves it empty and unflagged") {
+    namespace fs = std::filesystem;
+    fs::path root = fs::temp_directory_path() / "vf1579_stream_in_missing";
+    fs::remove_all(root);
+    fs::create_directories(root);
+    std::string savePath = (root / "world.vfWorld").string();
+
+    // A sidecar exists for (2,3) but NOT for the tile we stream in (9,9).
+    writeFoliageSidecar(savePath, 2, 3, std::vector<foliage::FoliageInstance>(1));
+
+    terrain::TerrainTile tile;
+    bool loaded = streamInFoliageForTile(savePath, 9, 9, tile);
+
+    CHECK_FALSE(loaded);
+    CHECK_FALSE(tile.hasFoliageInstances());
+    CHECK_FALSE(tile.foliageInstancesDirty);
+    CHECK_FALSE(tile.foliageInstancesGPUDirty);
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("stream-out frees a tile's foliage with the tile (no explicit unload needed)") {
+    namespace fs = std::filesystem;
+    fs::path root = fs::temp_directory_path() / "vf1579_stream_out";
+    fs::remove_all(root);
+    fs::create_directories(root);
+    std::string savePath = (root / "world.vfWorld").string();
+    writeFoliageSidecar(savePath, 5, 5, std::vector<foliage::FoliageInstance>(4));
+
+    // Stream in on a heap tile (grid owns tiles); foliage becomes resident.
+    auto tile = std::make_unique<terrain::TerrainTile>();
+    REQUIRE(streamInFoliageForTile(savePath, 5, 5, *tile));
+    REQUIRE(tile->foliageInstances.size() == 4u);
+
+    // Stream out == grid.removeTile(coord): destroying the tile frees foliageInstances.
+    // No per-field cleanup runs anywhere, and none is needed.
+    tile.reset();
+
+    // A tile re-streamed at the same coord starts empty and only regains foliage by
+    // re-loading its own sidecar — foliage residency is bound purely to tile lifetime.
+    terrain::TerrainTile restreamed;
+    CHECK_FALSE(restreamed.hasFoliageInstances());
+    REQUIRE(streamInFoliageForTile(savePath, 5, 5, restreamed));
+    CHECK(restreamed.foliageInstances.size() == 4u);
+
+    fs::remove_all(root);
 }
 
 } // TEST_SUITE("FoliageBrush")

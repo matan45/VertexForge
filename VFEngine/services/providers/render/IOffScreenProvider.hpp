@@ -38,6 +38,7 @@ namespace services {
         uint32_t hiZMipLevels = 0;
 
         uint32_t totalObjects = 0;
+        uint32_t totalInstances = 0; // VK-1579: instanced transforms (foliage/vegetation/mesh), bounded by MAX_GPU_INSTANCES
         uint32_t visibleObjects = 0;
         uint32_t culledByFrustum = 0;
         uint32_t culledByOcclusion = 0;

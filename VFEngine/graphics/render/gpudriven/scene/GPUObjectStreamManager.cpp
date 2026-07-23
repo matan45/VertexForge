@@ -48,6 +48,11 @@ namespace render::gpudriven
         const std::vector<std::pair<uint64_t, entt::entity>>& entities,
         entt::registry& registry)
     {
+        // This pool is per-entity and NON-instanced: processUploads() emits one GPUObjectData
+        // per submesh (aabbMax.w = 1, instanceData INVALID), bounded by MAX_GPU_OBJECTS.
+        // Packed foliage/vegetation deliberately bypass it — they carry no entity/MeshComponent
+        // and render through the instanced MeshRenderData.instanceTransforms path
+        // (MAX_GPU_INSTANCES). See VK-1579: foliage rides terrain-tile streaming, not this.
         auto& sectorSet = sectorObjects[sectorId];
 
         for (const auto& [uuid, entity] : entities)
