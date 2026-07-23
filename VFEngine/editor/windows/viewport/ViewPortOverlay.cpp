@@ -350,13 +350,6 @@ namespace windows
 
     std::pair<glm::vec2, glm::vec2> ViewPortOverlay::getIconUV(ViewportIcon icon) const
     {
-        // The 4x4 atlas has no dedicated art at slot 12; reuse the vegetation icon so the
-        // foliage button is recognizable (both paint plants onto the terrain).
-        if (icon == ViewportIcon::Foliage)
-        {
-            icon = ViewportIcon::Vegetation;
-        }
-
         uint32_t index = static_cast<uint32_t>(icon);
         uint32_t maxIndex = ATLAS_COLUMNS * ATLAS_ROWS;
 
