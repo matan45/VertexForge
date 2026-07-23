@@ -1,7 +1,9 @@
 #include <doctest.h>
 #include <foliage/FoliageTypes.hpp>
+#include <foliage/FoliageCompose.hpp>
 #include <terrain/TerrainTile.hpp>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include <type_traits>
 #include <cstdint>
 
@@ -106,6 +108,109 @@ TEST_CASE("TerrainTile stores foliage instances entity-free") {
     CHECK(tile.foliageInstances.size() == 1u);
     CHECK(tile.foliageInstances[0].typeIndex == 5u);
     CHECK(tile.foliageInstances[0].position.y == doctest::Approx(2.0f));
+}
+
+// ============================================================
+// VK-1573: collector pure-math helpers (FoliageCompose.hpp)
+// ============================================================
+
+TEST_CASE("unpackTintRGBA8 decodes 0xRRGGBBAA into a normalized vec4") {
+    // Opaque white (default tint) round-trips to all-ones.
+    glm::vec4 white = foliage::unpackTintRGBA8(0xFFFFFFFFu);
+    CHECK(white.r == doctest::Approx(1.0f));
+    CHECK(white.g == doctest::Approx(1.0f));
+    CHECK(white.b == doctest::Approx(1.0f));
+    CHECK(white.a == doctest::Approx(1.0f));
+
+    // R in the most-significant byte.
+    glm::vec4 red = foliage::unpackTintRGBA8(0xFF000000u);
+    CHECK(red.r == doctest::Approx(1.0f));
+    CHECK(red.g == doctest::Approx(0.0f));
+    CHECK(red.b == doctest::Approx(0.0f));
+    CHECK(red.a == doctest::Approx(0.0f));
+
+    // Green with full alpha locks the middle two bytes + LSB.
+    glm::vec4 green = foliage::unpackTintRGBA8(0x00FF00FFu);
+    CHECK(green.r == doctest::Approx(0.0f));
+    CHECK(green.g == doctest::Approx(1.0f));
+    CHECK(green.b == doctest::Approx(0.0f));
+    CHECK(green.a == doctest::Approx(1.0f));
+
+    // Half grey (0x80) is ~0.5019.
+    glm::vec4 grey = foliage::unpackTintRGBA8(0x80808080u);
+    CHECK(grey.r == doctest::Approx(128.0f / 255.0f));
+}
+
+TEST_CASE("composeFoliageModelMatrix builds Translate*RotateY*Scale") {
+    foliage::FoliageType type; // alignToNormal defaults false
+
+    SUBCASE("identity instance yields pure translation") {
+        foliage::FoliageInstance fi;
+        fi.position = glm::vec3(3.0f, 5.0f, -7.0f);
+        glm::mat4 m = foliage::composeFoliageModelMatrix(fi, type);
+        CHECK(m[3].x == doctest::Approx(3.0f));
+        CHECK(m[3].y == doctest::Approx(5.0f));
+        CHECK(m[3].z == doctest::Approx(-7.0f));
+        // No rotation/scale: basis is identity.
+        CHECK(m[0].x == doctest::Approx(1.0f));
+        CHECK(m[1].y == doctest::Approx(1.0f));
+        CHECK(m[2].z == doctest::Approx(1.0f));
+    }
+
+    SUBCASE("non-uniform scale is applied to the basis") {
+        foliage::FoliageInstance fi;
+        fi.scale = glm::vec3(2.0f, 3.0f, 4.0f);
+        glm::mat4 m = foliage::composeFoliageModelMatrix(fi, type);
+        CHECK(glm::length(glm::vec3(m[0])) == doctest::Approx(2.0f));
+        CHECK(glm::length(glm::vec3(m[1])) == doctest::Approx(3.0f));
+        CHECK(glm::length(glm::vec3(m[2])) == doctest::Approx(4.0f));
+    }
+
+    SUBCASE("rotationY = pi flips the X and Z basis vectors") {
+        foliage::FoliageInstance fi;
+        fi.rotationY = glm::pi<float>();
+        glm::mat4 m = foliage::composeFoliageModelMatrix(fi, type);
+        // Rotating +X by 180 deg about Y gives -X; +Z gives -Z.
+        CHECK(m[0].x == doctest::Approx(-1.0f).epsilon(0.0001));
+        CHECK(m[2].z == doctest::Approx(-1.0f).epsilon(0.0001));
+    }
+
+    SUBCASE("alignToNormal tilts the local up-axis onto the surface normal") {
+        foliage::FoliageType tiltType;
+        tiltType.alignToNormal = true;
+        foliage::FoliageInstance fi;
+        fi.normal = glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f)); // 45 deg slope
+        glm::mat4 m = foliage::composeFoliageModelMatrix(fi, tiltType);
+        glm::vec3 localUp = glm::normalize(glm::vec3(m[1]));
+        CHECK(localUp.x == doctest::Approx(fi.normal.x).epsilon(0.001));
+        CHECK(localUp.y == doctest::Approx(fi.normal.y).epsilon(0.001));
+        CHECK(localUp.z == doctest::Approx(fi.normal.z).epsilon(0.001));
+    }
+}
+
+TEST_CASE("foliageTileInRange culls on the XZ plane, ignoring Y") {
+    glm::vec3 tileCenter(100.0f, 0.0f, 0.0f);
+    glm::vec3 camNear(90.0f, 999.0f, 0.0f);  // 10 units away in XZ, huge Y offset
+    glm::vec3 camFar(40.0f, 0.0f, 0.0f);     // 60 units away in XZ
+    CHECK(foliage::foliageTileInRange(tileCenter, camNear, 50.0f));
+    CHECK_FALSE(foliage::foliageTileInRange(tileCenter, camFar, 50.0f));
+    // Exactly on the boundary is inclusive.
+    CHECK(foliage::foliageTileInRange(tileCenter, glm::vec3(50.0f, 0.0f, 0.0f), 50.0f));
+}
+
+TEST_CASE("groupInstanceIndicesByType buckets by type and drops out-of-range indices") {
+    std::vector<foliage::FoliageInstance> instances(5);
+    instances[0].typeIndex = 0;
+    instances[1].typeIndex = 2;
+    instances[2].typeIndex = 0;
+    instances[3].typeIndex = 2;
+    instances[4].typeIndex = 7; // out of range for a palette of size 3
+
+    auto groups = foliage::groupInstanceIndicesByType(instances, /*paletteSize*/ 3);
+    CHECK(groups.size() == 2u);             // only types 0 and 2 survive
+    CHECK(groups[0].size() == 2u);
+    CHECK(groups[2].size() == 2u);
+    CHECK(groups.find(7) == groups.end());  // out-of-range dropped
 }
 
 } // TEST_SUITE("Foliage")

@@ -79,6 +79,13 @@ namespace core
         terrainService->getTerrainGridWorldBounds(outMin, outMax);
     }
 
+    const std::vector<foliage::FoliageType>& TerrainRenderAdapter::getFoliagePalette() const
+    {
+        static const std::vector<foliage::FoliageType> empty;
+        if (!terrainService) return empty;
+        return terrainService->getFoliagePalette();
+    }
+
     void TerrainRenderAdapter::setDistanceCullingEnabled(bool enabled)
     {
         if (terrainService) terrainService->setDistanceCullingEnabled(enabled);

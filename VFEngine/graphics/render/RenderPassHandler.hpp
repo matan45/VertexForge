@@ -507,6 +507,7 @@ namespace render
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
 
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
+        services::ITerrainRenderProvider* getTerrainRenderProvider() const { return terrainRenderProvider; } // VK-1573: foliage collector reads tiles + palette
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setAsyncComputeActive(bool active) { asyncComputeActive = active; }
         void setParallelSceneRecording(bool enabled, core::ThreadCommandPoolManager* poolManager = nullptr)

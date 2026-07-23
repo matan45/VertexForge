@@ -44,6 +44,8 @@ namespace core
         std::string getTerrainMaterialPath() const override;
         void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const override;
 
+        const std::vector<foliage::FoliageType>& getFoliagePalette() const override;
+
         void setDistanceCullingEnabled(bool enabled) override;
         void setMaxDrawDistance(float distance) override;
 

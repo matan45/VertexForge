@@ -41,14 +41,15 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    constexpr uint32_t MAX_GPU_INSTANCES = 131072;  // Max instance transforms in SSBO
+    constexpr uint32_t MAX_GPU_INSTANCES = 262144;  // Max instance transforms in SSBO (VK-1573: 131072->262144 for foliage)
 
     // Per-instance data for instanced draw calls. Includes PBR override fields so that
     // entities with different .vfMatInstance scalar overrides (but same parent material)
     // can be batched into a single draw call.
     //
     // Trade-off: 112 bytes vs 64 bytes (mat4 only). The extra 48 bytes per instance
-    // increase GPU memory and bandwidth (~6 MB worst-case at MAX_GPU_INSTANCES).
+    // increase GPU memory and bandwidth (~12 MB of that at MAX_GPU_INSTANCES = 262144;
+    // total device SSBO ~28 MB, plus one host-visible staging copy per frame-in-flight).
     // iblOverride.w acts as a hasOverride flag: 0.0 = use PerDrawData PBR (no overhead
     // in the shader's common path), 1.0 = use per-instance PBR values.
     struct alignas(16) GPUInstanceTransform

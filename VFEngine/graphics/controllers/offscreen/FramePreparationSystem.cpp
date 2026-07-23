@@ -14,8 +14,12 @@
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../render/material/MaterialPBRExtractor.hpp"
+#include "../../../services/providers/terrain/ITerrainRenderProvider.hpp"
+#include "terrain/TerrainTile.hpp"
+#include "foliage/FoliageCompose.hpp"
 #include "threading/ParallelCollect.hpp"
 #include <cstdio>
+#include <unordered_set>
 
 namespace controllers::offscreen
 {
@@ -465,7 +469,121 @@ namespace controllers::offscreen
             renderHandler->clearVisibleLights();
         }
 
+        // VK-1573: append pre-instanced foliage draws (terrain-tile instances) into the same
+        // draw list so they ride the existing GPU-instancing path (per-instance cull/LOD/crossfade)
+        // and get mesh residency for free via updateMeshStreaming. Must run before the move.
+        {
+            const glm::vec3 cameraPos(glm::inverse(ctx.cameraController->getCurrentViewMatrix())[3]);
+            collectFoliage(meshDrawList, ctx, cameraPos);
+        }
+
         renderHandler->setMeshDrawList(std::move(meshDrawList));
         renderHandler->setCurrentFrustum(&ctx.cameraController->getCurrentFrustum());
+    }
+
+    void FramePreparationSystem::collectFoliage(std::vector<render::mesh::MeshRenderData>& meshDrawList,
+                                                const FrameContext& ctx, const glm::vec3& cameraPos)
+    {
+        auto* provider = ctx.renderHandler->getTerrainRenderProvider();
+        if (!provider || !provider->hasActiveTerrain()) return;
+
+        const auto& palette = provider->getFoliagePalette();
+        if (palette.empty()) return;
+
+        std::vector<terrain::TerrainTile*> tiles = provider->getAllLoadedTiles();
+
+        // Live tile set for this frame — used to prune cache entries of unloaded/emptied tiles.
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> liveKeys;
+        liveKeys.reserve(tiles.size());
+
+        for (auto* tile : tiles)
+        {
+            if (!tile || !tile->hasFoliageInstances()) continue;
+            liveKeys.insert(tile->coord);
+
+            // Rebuild this tile's composed cache only when its GPU-dirty flag is set (or first sight).
+            // The persistent per-tile cache means we can rebuild once on edit regardless of distance
+            // and simply re-emit from it every frame — never the vegetation "re-collect everything".
+            auto cacheIt = foliageDrawCache.find(tile->coord);
+            if (tile->foliageInstancesGPUDirty || cacheIt == foliageDrawCache.end())
+            {
+                std::vector<ComposedFoliageDraw> composed;
+                auto groups = foliage::groupInstanceIndicesByType(tile->foliageInstances, palette.size());
+                composed.reserve(groups.size());
+
+                for (auto& [typeIndex, indices] : groups)
+                {
+                    const foliage::FoliageType& type = palette[typeIndex];
+                    if (type.meshPath.empty() || !type.visible) continue;
+
+                    // Resolve the material's PBR once per type so enabling a per-instance tint
+                    // override does not blank the material's metallic/roughness/ao/emission/IBL.
+                    const render::mesh::ExtractedPBRValues* pbr =
+                        type.materialPath.empty() ? nullptr : getCachedPBRValues(type.materialPath);
+
+                    ComposedFoliageDraw draw;
+                    draw.typeIndex = typeIndex;
+                    draw.transforms.reserve(indices.size());
+                    for (uint32_t idx : indices)
+                    {
+                        const foliage::FoliageInstance& fi = tile->foliageInstances[idx];
+                        render::mesh::MeshRenderData::InstanceData inst;
+                        inst.modelMatrix = foliage::composeFoliageModelMatrix(fi, type);
+                        // Per-instance tint: only turn the override on when a tint is actually set,
+                        // and mirror the real material PBR so the override branch (hasOverride) keeps
+                        // correct shading. Untinted instances keep InstanceData defaults (no override).
+                        if (fi.tint != 0xFFFFFFFFu && pbr)
+                        {
+                            inst.albedo = foliage::unpackTintRGBA8(fi.tint);
+                            inst.pbrParams = glm::vec4(pbr->metallic, pbr->roughness, pbr->ao, pbr->emission);
+                            inst.iblParams = glm::vec4(pbr->iblDiffuse, pbr->iblSpecular, pbr->alphaCutoff, 1.0f);
+                        }
+                        draw.transforms.push_back(inst);
+                    }
+                    if (!draw.transforms.empty())
+                        composed.push_back(std::move(draw));
+                }
+
+                foliageDrawCache[tile->coord] = std::move(composed);
+                tile->foliageInstancesGPUDirty = false;
+                cacheIt = foliageDrawCache.find(tile->coord);
+            }
+
+            // Emit one MeshRenderData per (tile, type) from the cache, with a per-tile distance cull.
+            const float tileSize = tile->config.worldTileSize;
+            const glm::vec3 tileCenter(
+                static_cast<float>(tile->coord.x) * tileSize + tileSize * 0.5f,
+                0.0f,
+                static_cast<float>(tile->coord.z) * tileSize + tileSize * 0.5f);
+
+            for (const auto& draw : cacheIt->second)
+            {
+                if (draw.typeIndex >= palette.size()) continue; // palette may have shrunk
+                const foliage::FoliageType& type = palette[draw.typeIndex];
+
+                // endCullDistance is enforced HERE: the GPU skips group distance cull for instanced
+                // draws, so tile-granularity CPU culling is what honours the type's cull distance.
+                if (!foliage::foliageTileInRange(tileCenter, cameraPos, type.endCullDistance + tileSize))
+                    continue;
+
+                render::mesh::MeshRenderData rd;
+                rd.meshPath = type.meshPath;
+                rd.defaultMaterialPath = type.materialPath;
+                rd.maxDrawDistance = type.endCullDistance;
+                rd.isStatic = true;
+                rd.renderLayer = 0;
+                rd.instanceTransforms = draw.transforms; // copy the composed cache into the record
+                meshDrawList.push_back(std::move(rd));
+            }
+        }
+
+        // Prune cache entries for tiles no longer loaded (or that lost all their foliage).
+        for (auto it = foliageDrawCache.begin(); it != foliageDrawCache.end();)
+        {
+            if (liveKeys.find(it->first) == liveKeys.end())
+                it = foliageDrawCache.erase(it);
+            else
+                ++it;
+        }
     }
 }

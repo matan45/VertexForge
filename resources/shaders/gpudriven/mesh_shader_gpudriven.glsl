@@ -621,6 +621,10 @@ void main() {
     if (isSampleableTexture(albedoIdx)) {
         vec4 albedoSample = sampleMaterialTex(albedoIdx, texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
+        // VK-1573: per-instance albedo tint over the sampled texture. Gated on the hasOverride flag
+        // (fragInstanceIBL.w) so non-override instances (all normal meshes) are byte-identical; only
+        // foliage-tinted / runtime-override instances multiply the texture by their per-instance albedo.
+        if (fragInstanceIBL.w > 0.5) albedo *= fragInstanceAlbedo.rgb;
         alpha = albedoSample.a;
 #ifdef SVT_ENABLED
         // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),

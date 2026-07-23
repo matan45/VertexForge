@@ -5,6 +5,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "foliage/FoliageTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
@@ -17,6 +18,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace scene
@@ -65,6 +67,11 @@ namespace services
         std::atomic<bool> saveInProgress{false};
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
+
+        // VK-1573: per-scene foliage type palette (typeIndex -> mesh/material/cull), read by
+        // the graphics collector via ITerrainRenderProvider::getFoliagePalette(). Populated via
+        // setFoliagePalette() by authoring (VK-1575 brush / VK-1581 scatter).
+        std::vector<foliage::FoliageType> foliagePalette;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
@@ -141,6 +148,11 @@ namespace services
         bool hasActiveTerrain() const { return !terrainGrids.empty(); }
         std::string getTerrainMaterialPath() const;
         void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const;
+
+        // VK-1573: foliage palette accessors (surfaced to graphics via TerrainRenderAdapter).
+        // setFoliagePalette is the authoring entry point (VK-1575 brush / VK-1581 scatter).
+        const std::vector<foliage::FoliageType>& getFoliagePalette() const { return foliagePalette; }
+        void setFoliagePalette(std::vector<foliage::FoliageType> palette) { foliagePalette = std::move(palette); }
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
         void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }
