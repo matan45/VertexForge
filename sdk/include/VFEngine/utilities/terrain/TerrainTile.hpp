@@ -5,6 +5,7 @@
 #include "TerrainWeightMap.hpp"
 #include "CaveSDFData.hpp"
 #include "../vegetation/VegetationTypes.hpp"
+#include "../foliage/FoliageTypes.hpp"
 #include "../resource/Types.hpp"
 #include "../resource/MeshletTypes.hpp"
 #include "../math/Frustum.hpp"
@@ -73,6 +74,11 @@ namespace terrain
         bool billboardInstancesDirty = false;
         bool billboardInstancesGPUDirty = false;
 
+        // Foliage mesh instances placed by brush (packed, entity-free — VK-1571)
+        std::vector<foliage::FoliageInstance> foliageInstances;
+        bool foliageInstancesDirty = false;    // CPU/serialization dirty (VK-1575)
+        bool foliageInstancesGPUDirty = false; // GPU re-upload gate      (VK-1573)
+
         std::unique_ptr<CaveSDFData> caveData;
         TileLODData caveLOD;
         bool caveDirty = false;
@@ -125,6 +131,7 @@ namespace terrain
         [[nodiscard]] bool hasWeightMap() const { return weightMap.isInitialized(); }
 
         [[nodiscard]] bool hasBillboardInstances() const { return !billboardInstances.empty(); }
+        [[nodiscard]] bool hasFoliageInstances() const { return !foliageInstances.empty(); }
 
         void initializeCaveSDF();
         void initializeCaveSDFFromHeights();
