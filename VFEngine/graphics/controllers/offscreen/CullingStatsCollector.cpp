@@ -72,6 +72,7 @@ namespace controllers::offscreen
 
             const auto& gpuStats = gpuDrivenRenderer->getStats();
             stats.gpuDriven.totalObjects = gpuStats.totalObjects;
+            stats.gpuDriven.totalInstances = gpuStats.totalInstances;
             stats.gpuDriven.visibleObjects = gpuStats.visibleObjects;
             stats.gpuDriven.culledByFrustum = gpuStats.culledByFrustum;
             stats.gpuDriven.culledByOcclusion = gpuStats.culledByOcclusion;

@@ -277,6 +277,29 @@ namespace render::gpudriven
             ObjectFlags::packShadingFlags(obj.flags, shadingModel, toonProfileIndex);
         }
 
+        // VK-1580: set the foliage-wind gate bit (bit 8) when the material opts in.
+        // Pre-resolved on the main thread (subMat or the pbrCache fallback), so this
+        // stays a pure read — safe in the parallel object phase.
+        {
+            bool receiveWind = false;
+            if (subMat)
+            {
+                receiveWind = subMat->receiveWind;
+            }
+            else if (!materialPath.empty())
+            {
+                auto it = pbrCache.find(materialPath);
+                if (it != pbrCache.end())
+                {
+                    receiveWind = it->second.receiveWind;
+                }
+            }
+            if (receiveWind)
+            {
+                obj.flags |= ObjectFlags::FoliageWind;
+            }
+        }
+
         obj.availableLODMask = submeshLoc.getAvailableLODMask();
         obj.shaderGroupIndex = (resolvers.shaderGroupResolver && !materialPath.empty())
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;
@@ -294,9 +317,10 @@ namespace render::gpudriven
 
             const auto& meshInfo = registeredMeshes[meshIt->second];
 
-            if (!meshRender.instanceTransforms.empty())
+            const auto& insts = meshRender.effectiveInstanceTransforms(); // #9: cache view or owned
+            if (!insts.empty())
             {
-                uint32_t instanceCount = static_cast<uint32_t>(meshRender.instanceTransforms.size());
+                uint32_t instanceCount = static_cast<uint32_t>(insts.size());
 
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
@@ -322,19 +346,24 @@ namespace render::gpudriven
                     populateObjectData(obj, meshRender, submeshLoc, resolvers);
                     obj.entityId = currentObjectCount;
 
-                    obj.modelMatrix = meshRender.instanceTransforms[0].modelMatrix;
+                    obj.modelMatrix = insts[0].modelMatrix;
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount; // instanceOffset
+                    // VK-1582: near edge of the dither fade band (squared), read by the task shader
+                    // as uintBitsToFloat(obj.instanceData.y). 0 = no near fade. end^2 lives in aabbMin.w.
+                    float startFadeSq = meshRender.startFadeDistance > 0.0f
+                        ? meshRender.startFadeDistance * meshRender.startFadeDistance : 0.0f;
+                    std::memcpy(&obj.instanceData.y, &startFadeSq, sizeof(float));
                     obj.flags |= ObjectFlags::Instanced;
 
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
                         auto& inst = cpuInstanceTransforms[currentInstanceCount + i];
-                        inst.modelMatrix = meshRender.instanceTransforms[i].modelMatrix;
-                        inst.albedoOverride = meshRender.instanceTransforms[i].albedo;
-                        inst.pbrOverride = meshRender.instanceTransforms[i].pbrParams;
-                        inst.iblOverride = meshRender.instanceTransforms[i].iblParams;
+                        inst.modelMatrix = insts[i].modelMatrix;
+                        inst.albedoOverride = insts[i].albedo;
+                        inst.pbrOverride = insts[i].pbrParams;
+                        inst.iblOverride = insts[i].iblParams;
                     }
                     currentInstanceCount += instanceCount;
 
@@ -408,9 +437,10 @@ namespace render::gpudriven
 
             const auto& meshInfo = registeredMeshes[meshIt->second];
 
-            if (!meshRender.instanceTransforms.empty())
+            const auto& insts = meshRender.effectiveInstanceTransforms(); // #9: cache view or owned
+            if (!insts.empty())
             {
-                uint32_t instanceCount = static_cast<uint32_t>(meshRender.instanceTransforms.size());
+                uint32_t instanceCount = static_cast<uint32_t>(insts.size());
 
                 for (uint32_t subIdx = 0; subIdx < meshInfo.submeshCount; ++subIdx)
                 {
@@ -427,7 +457,7 @@ namespace render::gpudriven
                     populateObjectData(obj, meshRender, submeshLoc, resolvers);
                     obj.entityId = currentObjectCount;
 
-                    obj.modelMatrix = meshRender.instanceTransforms[0].modelMatrix;
+                    obj.modelMatrix = insts[0].modelMatrix;
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount;
@@ -436,10 +466,10 @@ namespace render::gpudriven
                     for (uint32_t i = 0; i < instanceCount; ++i)
                     {
                         auto& inst = cpuInstanceTransforms[currentInstanceCount + i];
-                        inst.modelMatrix = meshRender.instanceTransforms[i].modelMatrix;
-                        inst.albedoOverride = meshRender.instanceTransforms[i].albedo;
-                        inst.pbrOverride = meshRender.instanceTransforms[i].pbrParams;
-                        inst.iblOverride = meshRender.instanceTransforms[i].iblParams;
+                        inst.modelMatrix = insts[i].modelMatrix;
+                        inst.albedoOverride = insts[i].albedo;
+                        inst.pbrOverride = insts[i].pbrParams;
+                        inst.iblOverride = insts[i].iblParams;
                     }
                     currentInstanceCount += instanceCount;
 

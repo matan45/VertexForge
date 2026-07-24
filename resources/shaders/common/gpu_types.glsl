@@ -76,7 +76,7 @@ struct GPUObjectData {
     uvec4 meshletLod2;
     uvec4 meshletLod3;
 
-    uvec4 instanceData; // .w=instanceOffset
+    uvec4 instanceData; // .w=instanceOffset; .y=startFadeDistanceSquared bits (VK-1582, uintBitsToFloat; 0=no near fade)
 };
 
 // Must match BatchDrawStats in GPUDrivenTypes.hpp (32 bytes)

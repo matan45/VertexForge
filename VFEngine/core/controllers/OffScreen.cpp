@@ -391,6 +391,11 @@ namespace controllers {
 		offScreenController->setShadowDistanceMultiplier(multiplier);
 	}
 
+	void OffScreen::setFoliageDensityScale(float scale) // VK-1582
+	{
+		offScreenController->setFoliageDensityScale(scale);
+	}
+
 	void OffScreen::setGlobalLodBias(float bias)
 	{
 		offScreenController->setGlobalLodBias(bias);

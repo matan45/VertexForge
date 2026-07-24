@@ -133,6 +133,9 @@ namespace core
         void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) override;
         void removeAllVegetationColliders() override;
 
+        uint32_t createFoliageStaticBody(const FoliageColliderDesc& desc) override;
+        void destroyFoliageStaticBody(uint32_t bodyHandle) override;
+
         void addWaterSensorBody(services::EntityHandle entity, const glm::vec3& position,
                                 const glm::vec3& halfExtents) override;
         void removeWaterSensorBody(services::EntityHandle entity) override;

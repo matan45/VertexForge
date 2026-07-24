@@ -273,6 +273,12 @@ namespace material
         {
             j["toonProfile"] = material.toonProfile;
         }
+        // Foliage wind (VK-1580) — written only when enabled so non-foliage
+        // `.vfMat` files stay byte-identical.
+        if (material.receiveWind)
+        {
+            j["receiveWind"] = true;
+        }
         j["blendMode"] = blendModeToString(material.blendMode);
         j["opacity"] = material.opacity;
         j["alphaCutoff"] = material.alphaCutoff;

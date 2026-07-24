@@ -12,6 +12,7 @@
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/meshbrush/MeshBrushEvents.hpp"
+#include "../../events/foliage/FoliageBrushEvents.hpp"
 #include "../../events/terrain/SplineTerrainEvents.hpp"
 
 namespace services
@@ -66,6 +67,12 @@ namespace services
         if (meshBrushParamsToken.isValid())
             dispatcher.unsubscribe(meshBrushParamsToken);
 
+        if (foliageBrushModeToken.isValid())
+            dispatcher.unsubscribe(foliageBrushModeToken);
+
+        if (foliageBrushParamsToken.isValid())
+            dispatcher.unsubscribe(foliageBrushParamsToken);
+
         if (splineModeToken.isValid())
             dispatcher.unsubscribe(splineModeToken);
     }
@@ -77,7 +84,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrainRaycast::SetCursorPositionCommand>(
             [this](const events::terrainRaycast::SetCursorPositionCommand& cmd)
             {
-                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !caveModeActive && !vegBrushModeActive && !meshBrushModeActive && !splineModeActive) || !provider)
+                if ((!sculptModeActive && !paintModeActive && !holeModeActive && !caveModeActive && !vegBrushModeActive && !meshBrushModeActive && !foliageBrushModeActive && !splineModeActive) || !provider)
                 {
                     return;
                 }
@@ -333,6 +340,45 @@ namespace services
             [this](const events::meshBrush::MeshBrushParamsChangedNotification& n)
             {
                 if (meshBrushModeActive && provider)
+                {
+                    provider->setBrushOverlayParams(
+                        n.params.radius,
+                        static_cast<float>(n.params.falloff),
+                        0.0f);
+                }
+            });
+
+        foliageBrushModeToken = dispatcher.subscribe<events::foliageBrush::FoliageBrushModeChangedNotification>(
+            [this](const events::foliageBrush::FoliageBrushModeChangedNotification& n)
+            {
+                if (n.isActive)
+                {
+                    foliageBrushModeActive = true;
+                    if (provider)
+                    {
+                        auto brushParams = events::EventDispatcher::instance().query(
+                            events::foliageBrush::GetFoliageBrushParamsQuery{});
+                        provider->setBrushOverlayParams(
+                            brushParams.radius,
+                            static_cast<float>(brushParams.falloff),
+                            0.0f);
+                    }
+                }
+                else
+                {
+                    foliageBrushModeActive = false;
+                    if (provider)
+                    {
+                        provider->clearRaycastCursor();
+                        provider->setBrushOverlayParams(0.0f, 0.0f, 0.0f);
+                    }
+                }
+            });
+
+        foliageBrushParamsToken = dispatcher.subscribe<events::foliageBrush::FoliageBrushParamsChangedNotification>(
+            [this](const events::foliageBrush::FoliageBrushParamsChangedNotification& n)
+            {
+                if (foliageBrushModeActive && provider)
                 {
                     provider->setBrushOverlayParams(
                         n.params.radius,

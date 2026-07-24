@@ -3,6 +3,8 @@
 #include "../../data/EntityHandle.hpp"
 #include "vegetation/GrassConfig.hpp"
 #include "vegetation/VegetationTypes.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
+#include <optional>
 #include <vector>
 
 namespace events::vegetation
@@ -40,6 +42,19 @@ namespace events::vegetation
     struct GetGlobalGrassConfigQuery : IQuery<::vegetation::GrassRenderConfig>
     {
         std::string_view getName() const override { return "GetGlobalGrassConfig"; }
+    };
+
+    // Scatter profile (VK-1581) on the first GrassComponent — persisted in scene JSON.
+    struct SetGlobalScatterProfileCommand : ICommand<void>
+    {
+        ::vegetation::ScatterProfile profile;
+
+        std::string_view getName() const override { return "SetGlobalScatterProfile"; }
+    };
+
+    struct GetGlobalScatterProfileQuery : IQuery<::vegetation::ScatterProfile>
+    {
+        std::string_view getName() const override { return "GetGlobalScatterProfile"; }
     };
 
     struct SetBillboardPaletteCommand : ICommand<void>
@@ -97,5 +112,37 @@ namespace events::vegetation
         std::vector<::vegetation::BillboardInstance> instances;
 
         std::string_view getName() const override { return "SetTileBillboardInstances"; }
+    };
+
+    // A world-space XZ region for a scatter bake (VK-1581). On the command, nullopt = whole terrain.
+    struct ScatterRegion
+    {
+        float minX = 0.0f;
+        float minZ = 0.0f;
+        float maxX = 0.0f;
+        float maxZ = 0.0f;
+    };
+
+    // Bake procedural vegetation billboards into terrain tiles from a scatter profile as
+    // ONE undoable stroke. replaceProcedural (Regenerate) clears existing procedural-source
+    // instances in the region first; hand-painted instances are always preserved.
+    struct GenerateVegetationScatterCommand : ICommand<void>
+    {
+        std::optional<ScatterRegion> region;   // nullopt = whole active terrain
+        ::vegetation::ScatterProfile profile;
+        uint32_t seed = 1337;
+        bool replaceProcedural = true;
+
+        std::string_view getName() const override { return "GenerateVegetationScatter"; }
+    };
+
+    // Broadcast when a scatter bake completes — drives the panel's placed-count / budget warning.
+    struct ScatterBakeCompletedNotification : INotification
+    {
+        uint32_t placedCount = 0;    // procedural instances placed this bake
+        uint32_t totalCount = 0;     // total billboards after the bake (painted + procedural)
+        bool budgetExceeded = false; // hit the GPU instance budget
+
+        std::string_view getName() const override { return "ScatterBakeCompleted"; }
     };
 }

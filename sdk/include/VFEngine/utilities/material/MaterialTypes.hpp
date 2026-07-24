@@ -483,6 +483,13 @@ namespace material
         std::string toonProfile;
         ToonProfile toonProfileValues;
 
+        // Foliage wind (VK-1580). When `receiveWind` is true, this material's meshes sway
+        // in the GPU-driven mesh path (painted/placed foliage trees & bushes) using the
+        // shared, GLOBAL grass WindSystem — direction/strength/gust are scene-global, so
+        // there are no per-material wind parameters. Serialized only when `receiveWind` is
+        // true so non-foliage `.vfMat` files stay byte-identical.
+        bool receiveWind = false;
+
         ShaderGraph graph;
 
         std::map<std::string, MaterialParameter> parameters;

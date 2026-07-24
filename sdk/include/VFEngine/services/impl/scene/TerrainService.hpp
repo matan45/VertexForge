@@ -5,9 +5,12 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
+#include "foliage/FoliageTypes.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../foliage/FoliagePhysicsActivator.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
@@ -17,6 +20,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace scene
@@ -62,9 +66,19 @@ namespace services
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
+        FoliagePhysicsActivator foliagePhysicsActivator; // VK-1584 proximity foliage colliders
         std::atomic<bool> saveInProgress{false};
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
+
+        // VK-1573: per-scene foliage type palette (typeIndex -> mesh/material/cull), read by
+        // the graphics collector via ITerrainRenderProvider::getFoliagePalette(). Populated via
+        // setFoliagePalette() by authoring (VK-1575 brush / VK-1581 scatter).
+        std::vector<foliage::FoliageType> foliagePalette;
+
+        // VK-1585: procedural MESH scatter profile (reuses vegetation::ScatterProfile; its
+        // paletteEntryIndex indexes foliagePalette). Persisted in the foliage_scatter.json sidecar.
+        vegetation::ScatterProfile foliageScatterProfile;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
@@ -142,6 +156,23 @@ namespace services
         std::string getTerrainMaterialPath() const;
         void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const;
 
+        // VK-1573: foliage palette accessors (surfaced to graphics via TerrainRenderAdapter).
+        // setFoliagePalette is the authoring entry point (VK-1575 brush / VK-1581 scatter).
+        const std::vector<foliage::FoliageType>& getFoliagePalette() const { return foliagePalette; }
+        void setFoliagePalette(std::vector<foliage::FoliageType> palette)
+        {
+            foliagePalette = std::move(palette);
+            // code-review #5: palette change can invalidate the physics activator's per-type collider
+            // AABB cache (mesh/shape swap). The render draw cache is handled collector-side by the
+            // palette signature hash (FramePreparationSystem, code-review #4).
+            foliagePhysicsActivator.onPaletteChanged();
+        }
+
+        // VK-1585: foliage scatter profile accessors (parity with the palette; authored via the
+        // foliage brush panel's Scatter Rules, persisted in the foliage_scatter.json sidecar).
+        const vegetation::ScatterProfile& getFoliageScatterProfile() const { return foliageScatterProfile; }
+        void setFoliageScatterProfile(vegetation::ScatterProfile profile) { foliageScatterProfile = std::move(profile); }
+
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
         void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }
 
@@ -155,6 +186,7 @@ namespace services
         void setPhysicsProvider(IPhysicsProvider* provider)
         {
             physicsProvider = provider;
+            foliagePhysicsActivator.setPhysicsProvider(provider);
         }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
@@ -236,7 +268,14 @@ namespace services
         bool loadVegetation(uint64_t terrainEntityId, const std::string& terrainPath);
         static std::string getVegetationDirectory(const std::string& terrainPath);
 
+        // VK-1575: per-tile foliage sidecars (tile_x_z.vfFoliage) + foliage_palette.json,
+        // saved/loaded next to the vegetation sidecars.
+        bool saveFoliage(uint64_t terrainEntityId, const std::string& terrainPath);
+        bool loadFoliage(uint64_t terrainEntityId, const std::string& terrainPath);
+        static std::string getFoliageDirectory(const std::string& terrainPath);
+
         void registerVegetationBrushHandlers(::events::EventDispatcher& dispatcher);
+        void registerFoliageBrushHandlers(::events::EventDispatcher& dispatcher);
 
         void registerCaveBrushHandlers(::events::EventDispatcher& dispatcher);
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);

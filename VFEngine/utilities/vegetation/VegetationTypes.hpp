@@ -16,6 +16,15 @@ namespace vegetation
         CameraFacing = 1 // Always faces camera
     };
 
+    // Provenance of a placed billboard instance (VK-1581 procedural scatter).
+    // Painted = hand-placed by the vegetation brush; Procedural = emitted by a scatter
+    // bake. Regenerate replaces only Procedural instances, leaving Painted untouched.
+    enum class InstanceSource : uint8_t
+    {
+        Painted = 0,
+        Procedural = 1
+    };
+
     // Brush mode
     enum class VegetationBrushType : uint8_t
     {
@@ -41,6 +50,7 @@ namespace vegetation
         float heightScale = 1.0f;    // Per-instance height multiplier (variation)
         float tint = 1.0f;           // Per-instance brightness/tint multiplier [~0.5,1.5]
         glm::vec3 normal{0.0f, 1.0f, 0.0f}; // Terrain surface normal (for align-to-normal)
+        InstanceSource source = InstanceSource::Painted; // Painted vs procedural (CPU-only; not uploaded to GPU)
     };
 
     // Billboard palette entry (texture + settings)

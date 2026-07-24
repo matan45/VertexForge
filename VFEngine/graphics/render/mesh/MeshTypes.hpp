@@ -157,6 +157,7 @@ namespace render::mesh
         float iblSpecular = 0.5f;
         uint8_t shadingModel = 0;      // VK-1493: material::ShadingModel (2 = Toon)
         uint8_t toonProfileIndex = 0;  // VK-1493: resolved toon profile GPU slot (0-127)
+        bool receiveWind = false;      // VK-1580: foliage-wind gate (global wind params)
     };
 
     struct MeshRenderData
@@ -196,6 +197,10 @@ namespace render::mesh
         float lodBias = 0.0f;
         int forceLODLevel = -1;
         float maxDrawDistance = 0.0f;
+        // VK-1582: near edge of a dither fade-out band for instanced draws. When > 0 and <
+        // maxDrawDistance, instances dither-fade out across [startFadeDistance, maxDrawDistance]
+        // (foliage startCullDistance -> endCullDistance). 0 = no fade (hard cull at maxDrawDistance).
+        float startFadeDistance = 0.0f;
         bool isStatic = true;
         int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
         uint32_t renderLayer = 0; // VK-1415: render-layer index 0-31, packed into GPUObjectData.flags
@@ -209,6 +214,19 @@ namespace render::mesh
             glm::vec4 iblParams{1.0f, 0.5f, 0.0f, 0.0f};  // iblDiffuse, iblSpecular, alphaCutoff, hasOverride
         };
         std::vector<InstanceData> instanceTransforms;
+
+        // code-review #9: optional non-owning view into a persistent instance-transform buffer (the
+        // foliage collector's per-tile composed cache). When set, effectiveInstanceTransforms() reads
+        // it directly instead of the producer copying the whole vector into instanceTransforms every
+        // frame. The pointee must outlive this frame's draw-list consumption (the foliage cache is
+        // mutated only at frame start and pruned only for non-live tiles). All other producers leave
+        // it null and use the owned instanceTransforms.
+        const std::vector<InstanceData>* instanceTransformsView = nullptr;
+
+        const std::vector<InstanceData>& effectiveInstanceTransforms() const
+        {
+            return instanceTransformsView ? *instanceTransformsView : instanceTransforms;
+        }
 
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const
         {

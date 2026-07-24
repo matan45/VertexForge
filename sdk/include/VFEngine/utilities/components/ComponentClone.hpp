@@ -52,6 +52,16 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<MeshBrushInstanceComponent>(MeshBrushInstanceComponent& c)
+    {
+        // VK-1570: brushGroupId is a per-(palette,sector) provenance hash of the SOURCE instance.
+        // A clone lives at a different position/sector, so the copied id is stale — zero it. The
+        // scene-load rebuild recovers grouping from the entity's parent, not this field, so this
+        // is purely belt-and-suspenders against any future consumer trusting brushGroupId.
+        c.brushGroupId = 0;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<PhysicsAnimationComponent>(PhysicsAnimationComponent& c)
     {
         // VK-1437: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp so a duplicated

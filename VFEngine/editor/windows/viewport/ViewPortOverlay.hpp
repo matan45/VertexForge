@@ -19,7 +19,8 @@ namespace windows
         Vegetation = 8,
         MeshBrush = 9,
         Cave = 10,
-        Spline = 11
+        Spline = 11,
+        Foliage = 12
     };
 
     class ViewPortOverlay

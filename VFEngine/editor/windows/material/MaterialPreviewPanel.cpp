@@ -176,6 +176,18 @@ namespace editor::materialeditor
                 }
             }
 
+            // VK-1580: foliage wind gate. Render-time flag only (no shader recompile); the
+            // callback refreshes the render-side material cache so the FoliageWind flag re-packs.
+            ImGui::Separator();
+            if (ImGui::Checkbox("Foliage Wind", &materialData->receiveWind)) {
+                if (onBlendModeChanged) {
+                    onBlendModeChanged();
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Sway this material's meshes with the global scene wind\n(trees & bushes). Uses the shared grass WindSystem.");
+            }
+
             ImGui::Separator();
             ImGui::Text("Blend Mode");
             const char* blendModes[] = { "Opaque", "Masked", "Translucent", "Additive", "Multiply" };

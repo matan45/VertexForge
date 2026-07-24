@@ -21,7 +21,10 @@ namespace render::vegetation
 
         core::BufferInfoRequest request(logicalDevice, physicalDevice);
         request.size = sizeof(GPUWindData);
-        request.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        // eUniformBuffer for the grass pipeline's set-2 UBO; eStorageBuffer so the GPU-driven
+        // mesh pipeline (VK-1580 foliage wind) can bind the same buffer as an SSBO at set-1
+        // binding 7 without a uniform-buffer-update-after-bind device-feature dependency.
+        request.usage = vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eStorageBuffer;
         request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
                             vk::MemoryPropertyFlagBits::eHostCoherent;
 

@@ -9,6 +9,7 @@
 #include "events/terrain/SplineTerrainEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
+#include "events/foliage/FoliageBrushEvents.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "events/terrain/TerrainEvents.hpp"
 #include <imgui.h>
@@ -98,7 +99,8 @@ namespace windows
                 bool isVegBrushMode = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
                 bool isMeshBrushMode = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
                 bool isSplineMode = dispatcher.query(events::splineTerrain::IsSplineModeActiveQuery{});
-                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isCaveMode || isVegBrushMode || isMeshBrushMode || isSplineMode);
+                bool isFoliageBrushMode = dispatcher.query(events::foliageBrush::IsFoliageBrushModeActiveQuery{});
+                ImGui::BeginDisabled(isSculptMode || isPaintMode || isHoleMode || isCaveMode || isVegBrushMode || isMeshBrushMode || isSplineMode || isFoliageBrushMode);
 
                 if (iconButton(ViewportIcon::Rotate, gizmo.getOperation() == GizmoOperation::Rotate, "Rotate tool"))
                 {
@@ -192,6 +194,17 @@ namespace windows
                 {
                     events::splineTerrain::SetSplineModeActiveCommand cmd;
                     cmd.active = !isSplineMode;
+                    dispatcher.execute(cmd);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(!isFoliageBrushMode && !canUseTerrain);
+                if (iconButton(ViewportIcon::Foliage, isFoliageBrushMode, isFoliageBrushMode ? "Exit Foliage Brush" : "Enter Foliage Brush"))
+                {
+                    events::foliageBrush::SetFoliageBrushModeActiveCommand cmd;
+                    cmd.active = !isFoliageBrushMode;
                     dispatcher.execute(cmd);
                 }
                 ImGui::EndDisabled();

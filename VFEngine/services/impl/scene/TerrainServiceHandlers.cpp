@@ -15,6 +15,7 @@
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
+#include "../../events/foliage/FoliageEvents.hpp"
 #include "../../events/terrain/CaveBrushEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
@@ -23,8 +24,37 @@
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
+#include "terrain/TileHeightSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/PaintBrushTypes.hpp"
+#include "vegetation/ScatterBaker.hpp"
+#include "foliage/FoliageScatterBaker.hpp"
+#include "../../data/VegetationUndoCommands.hpp"
+#include "../../data/FoliageUndoCommands.hpp"
+#include "../../events/editor/UndoRedoEvents.hpp"
+
+namespace
+{
+    // Assign a tile's billboard set and set BOTH dirty flags (CPU-save + GPU-rebuild).
+    // Single choke point so no mutation can forget a flag (VK-1581 dirty-flag contract).
+    void writeTileBillboards(terrain::TerrainTile& tile,
+                             std::vector<vegetation::BillboardInstance> instances)
+    {
+        tile.billboardInstances = std::move(instances);
+        tile.billboardInstancesDirty = true;
+        tile.billboardInstancesGPUDirty = true;
+    }
+
+    // VK-1585: assign a tile's foliage set and set BOTH dirty flags (save + GPU rebuild),
+    // mirroring the foliage brush handlers' dual-dirty contract.
+    void writeTileFoliage(terrain::TerrainTile& tile,
+                          std::vector<foliage::FoliageInstance> instances)
+    {
+        tile.foliageInstances = std::move(instances);
+        tile.foliageInstancesDirty = true;
+        tile.foliageInstancesGPUDirty = true;
+    }
+}
 
 namespace services
 {
@@ -35,6 +65,7 @@ namespace services
         registerTerrainCoreHandlers(dispatcher);
         registerBrushHandlers(dispatcher);
         registerVegetationBrushHandlers(dispatcher);
+        registerFoliageBrushHandlers(dispatcher);
         registerCaveBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
@@ -730,11 +761,404 @@ namespace services
                 {
                     auto* tile = grid->getTile(coord);
                     if (!tile) continue;
-                    tile->billboardInstances = cmd.instances;
-                    tile->billboardInstancesDirty = true;
-                    tile->billboardInstancesGPUDirty = true;
+                    writeTileBillboards(*tile, cmd.instances);
                     return;
                 }
+            });
+
+        // VK-1581: deterministic procedural scatter bake — one undoable stroke.
+        // Reads each tile's height/weight arrays directly (no per-candidate queries),
+        // keeps hand-painted instances, and (when replaceProcedural) regenerates the
+        // procedural set idempotently from the profile + seed.
+        dispatcher.registerCommandHandler<events::vegetation::GenerateVegetationScatterCommand>(
+            [this](const events::vegetation::GenerateVegetationScatterCommand& cmd)
+            {
+                // GPU instance budget: mirror of initialGrassCapacity in
+                // GPUDrivenRendererVegetation.cpp (billboards upload as GrassInstanceGPU).
+                constexpr size_t MAX_BILLBOARD_INSTANCES = 512 * 1024;
+
+                auto& bus = events::EventDispatcher::instance();
+
+                // Appearance palette (scale/height/tint per entry) — same source the panel edits.
+                std::vector<vegetation::BillboardPaletteEntry> palette;
+                try {
+                    palette = bus.query(events::vegetation::GetBillboardPaletteQuery{});
+                } catch (...) {}
+
+                auto tileInRegion = [&cmd](float originX, float originZ, float size) -> bool
+                {
+                    if (!cmd.region) return true; // nullopt = whole terrain
+                    const auto& rg = *cmd.region;
+                    return !(originX + size < rg.minX || originX > rg.maxX ||
+                             originZ + size < rg.minZ || originZ > rg.maxZ);
+                };
+
+                // Pass 1: how many instances survive the bake terrain-wide → budget headroom.
+                size_t surviving = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        const float originX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize;
+                        // Only tiles Pass 2 will actually re-bake (in-region AND have height data)
+                        // may drop their Procedural instances; every other tile is left untouched and
+                        // must be counted as fully surviving, or budget headroom is under-reserved and
+                        // total billboards can exceed MAX_BILLBOARD_INSTANCES.
+                        if (tileInRegion(originX, originZ, tile->config.worldTileSize) && tile->hasHeightData())
+                        {
+                            for (const auto& inst : tile->billboardInstances)
+                                if (!(cmd.replaceProcedural && inst.source == vegetation::InstanceSource::Procedural))
+                                    ++surviving;
+                        }
+                        else
+                        {
+                            surviving += tile->billboardInstances.size();
+                        }
+                    }
+                }
+                size_t genBudget = (surviving >= MAX_BILLBOARD_INSTANCES)
+                                       ? 0 : (MAX_BILLBOARD_INSTANCES - surviving);
+
+                auto undoCmd = std::make_shared<VegetationTileSnapshotUndoCommand>("Procedural Scatter Bake");
+                uint32_t placedCount = 0;
+                bool budgetExceeded = false;
+
+                // Pass 2: bake per tile.
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile || !tile->hasHeightData()) continue;
+
+                        const float tileSize = tile->config.worldTileSize;
+                        const float originX = static_cast<float>(tile->coord.x) * tileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tileSize;
+                        if (!tileInRegion(originX, originZ, tileSize)) continue;
+
+                        std::vector<vegetation::BillboardInstance> before = tile->billboardInstances;
+
+                        // Keep hand-painted; drop procedural when regenerating.
+                        std::vector<vegetation::BillboardInstance> merged;
+                        merged.reserve(before.size());
+                        for (const auto& inst : before)
+                        {
+                            if (cmd.replaceProcedural && inst.source == vegetation::InstanceSource::Procedural)
+                                continue;
+                            merged.push_back(inst);
+                        }
+
+                        // Direct-tile samplers (O(1), close over this tile's arrays).
+                        const float* heights = tile->heightData.data();
+                        const uint32_t vpt = tile->config.getVertexCount();
+                        const float vertexSpacing = tile->config.getVertexSpacing();
+                        const float eps = vertexSpacing * 0.5f;
+                        const terrain::TileWeightMapData& wm = tile->weightMap;
+
+                        auto result = vegetation::bakeScatterForTile(
+                            cmd.profile, palette, cmd.seed,
+                            originX, originZ, tileSize,
+                            [heights, vpt, vertexSpacing](float lx, float lz) {
+                                return terrain::sampleTileHeightBilinear(heights, vpt, vertexSpacing, lx, lz);
+                            },
+                            [heights, vpt, vertexSpacing, eps](float lx, float lz) {
+                                return terrain::sampleTileNormalCentralDiff(heights, vpt, vertexSpacing, lx, lz, eps);
+                            },
+                            [&wm, vertexSpacing](uint8_t layer, float lx, float lz) {
+                                return terrain::sampleTileLayerWeightBilinear(wm, layer, lx, lz, vertexSpacing);
+                            },
+                            // Curvature uses a full-vertexSpacing stencil (NOT the normal's 0.5*eps):
+                            // bilinear height is planar within a cell, so a narrower stencil reads ~0.
+                            [heights, vpt, vertexSpacing](float lx, float lz) {
+                                return terrain::sampleTileCurvature(heights, vpt, vertexSpacing, lx, lz, vertexSpacing);
+                            },
+                            genBudget);
+
+                        // Guard the unsigned subtraction against a baker that ever returns more than
+                        // the cap it was given (would otherwise wrap to a huge budget).
+                        genBudget = result.instances.size() >= genBudget
+                                        ? 0 : genBudget - result.instances.size();
+                        placedCount += static_cast<uint32_t>(result.instances.size());
+                        if (result.budgetExceeded) budgetExceeded = true;
+
+                        merged.insert(merged.end(), result.instances.begin(), result.instances.end());
+                        writeTileBillboards(*tile, std::move(merged));
+
+                        undoCmd->addTile(tile->coord.x, tile->coord.z,
+                                         std::move(before), tile->billboardInstances);
+                    }
+                }
+
+                if (undoCmd->hasChanges())
+                {
+                    events::undoredo::PushUndoableCommand pushCmd;
+                    pushCmd.command = undoCmd;
+                    bus.execute(pushCmd);
+                }
+
+                // Report placed/total + budget warning for the panel.
+                uint32_t totalAfter = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                    for (auto* tile : grid->getAllTiles())
+                        if (tile) totalAfter += static_cast<uint32_t>(tile->billboardInstances.size());
+
+                events::vegetation::ScatterBakeCompletedNotification note;
+                note.placedCount = placedCount;
+                note.totalCount = totalAfter;
+                note.budgetExceeded = budgetExceeded;
+                bus.publish(note);
+            });
+    }
+
+    void TerrainService::registerFoliageBrushHandlers(::events::EventDispatcher& dispatcher)
+    {
+        // Palette (owned by TerrainService; read by the graphics collector via getFoliagePalette()).
+        dispatcher.registerCommandHandler<events::foliage::SetFoliagePaletteCommand>(
+            [this](const events::foliage::SetFoliagePaletteCommand& cmd)
+            {
+                setFoliagePalette(cmd.palette);
+            });
+
+        dispatcher.registerQueryHandler<events::foliage::GetFoliagePaletteQuery>(
+            [this](const events::foliage::GetFoliagePaletteQuery&)
+                -> std::vector<foliage::FoliageType>
+            {
+                return foliagePalette;
+            });
+
+        // Clear all foliage instances across every tile.
+        dispatcher.registerCommandHandler<events::foliage::ClearAllFoliageInstancesCommand>(
+            [this](const events::foliage::ClearAllFoliageInstancesCommand&)
+            {
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        tile->foliageInstances.clear();
+                        tile->foliageInstancesDirty = true;
+                        tile->foliageInstancesGPUDirty = true;
+                    }
+                }
+            });
+
+        // Add foliage instances to a tile.
+        dispatcher.registerCommandHandler<events::foliage::AddFoliageInstancesToTileCommand>(
+            [this](const events::foliage::AddFoliageInstancesToTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->foliageInstances.insert(tile->foliageInstances.end(),
+                                                  cmd.instances.begin(), cmd.instances.end());
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Remove foliage instances from a tile (indices must be sorted descending).
+        dispatcher.registerCommandHandler<events::foliage::RemoveFoliageInstancesFromTileCommand>(
+            [this](const events::foliage::RemoveFoliageInstancesFromTileCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    // Swap-and-pop (indices must be sorted descending).
+                    for (uint32_t idx : cmd.indicesToRemove)
+                    {
+                        if (idx < tile->foliageInstances.size())
+                        {
+                            tile->foliageInstances[idx] = tile->foliageInstances.back();
+                            tile->foliageInstances.pop_back();
+                        }
+                    }
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // Get foliage instances for a tile (spatial-grid rebuild + undo snapshots).
+        dispatcher.registerQueryHandler<events::foliage::GetTileFoliageInstancesQuery>(
+            [this](const events::foliage::GetTileFoliageInstancesQuery& query)
+                -> std::vector<foliage::FoliageInstance>
+            {
+                terrain::TileCoord coord{query.tileX, query.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (tile) return tile->foliageInstances;
+                }
+                return {};
+            });
+
+        // Replace a tile's foliage instances wholesale (undo/redo snapshots).
+        dispatcher.registerCommandHandler<events::foliage::SetTileFoliageInstancesCommand>(
+            [this](const events::foliage::SetTileFoliageInstancesCommand& cmd)
+            {
+                terrain::TileCoord coord{cmd.tileX, cmd.tileZ};
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    auto* tile = grid->getTile(coord);
+                    if (!tile) continue;
+                    tile->foliageInstances = cmd.instances;
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    return;
+                }
+            });
+
+        // VK-1585: foliage scatter profile (lives on TerrainService; persisted in foliage_scatter.json).
+        dispatcher.registerCommandHandler<events::foliage::SetFoliageScatterProfileCommand>(
+            [this](const events::foliage::SetFoliageScatterProfileCommand& cmd)
+            {
+                setFoliageScatterProfile(cmd.profile);
+            });
+
+        dispatcher.registerQueryHandler<events::foliage::GetFoliageScatterProfileQuery>(
+            [this](const events::foliage::GetFoliageScatterProfileQuery&) -> vegetation::ScatterProfile
+            {
+                return foliageScatterProfile;
+            });
+
+        // VK-1585: deterministic procedural MESH scatter bake — one undoable stroke. Mirrors the
+        // billboard GenerateVegetationScatterCommand handler but emits FoliageInstances (reusing
+        // the same rule evaluator) and distinguishes procedural vs hand-painted by the Procedural
+        // flag bit (foliage has no source field). Regenerate keeps hand-painted foliage.
+        dispatcher.registerCommandHandler<events::foliage::GenerateFoliageScatterCommand>(
+            [this](const events::foliage::GenerateFoliageScatterCommand& cmd)
+            {
+                // GPU instance budget: mirror of MAX_GPU_INSTANCES (GPUDrivenTypes.hpp) — the
+                // instance-transform SSBO ceiling shared by foliage/vegetation/mesh.
+                constexpr size_t MAX_FOLIAGE_INSTANCES = 262144;
+
+                auto& bus = events::EventDispatcher::instance();
+
+                auto tileInRegion = [&cmd](float originX, float originZ, float size) -> bool
+                {
+                    if (!cmd.region) return true; // nullopt = whole terrain
+                    const auto& rg = *cmd.region;
+                    return !(originX + size < rg.minX || originX > rg.maxX ||
+                             originZ + size < rg.minZ || originZ > rg.maxZ);
+                };
+
+                // Pass 1: surviving instances terrain-wide → budget headroom.
+                size_t surviving = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile) continue;
+                        const float originX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize;
+                        // Only tiles Pass 2 will actually re-bake (in-region AND have height data)
+                        // may drop their Procedural instances; every other tile is left untouched and
+                        // must be counted as fully surviving, or budget headroom is under-reserved and
+                        // total foliage can exceed MAX_FOLIAGE_INSTANCES.
+                        if (tileInRegion(originX, originZ, tile->config.worldTileSize) && tile->hasHeightData())
+                        {
+                            for (const auto& inst : tile->foliageInstances)
+                                if (!(cmd.replaceProcedural && (inst.flags & foliage::FoliageInstanceFlags::Procedural)))
+                                    ++surviving;
+                        }
+                        else
+                        {
+                            surviving += tile->foliageInstances.size();
+                        }
+                    }
+                }
+                size_t genBudget = (surviving >= MAX_FOLIAGE_INSTANCES)
+                                       ? 0 : (MAX_FOLIAGE_INSTANCES - surviving);
+
+                auto undoCmd = std::make_shared<FoliageTileSnapshotUndoCommand>("Procedural Foliage Scatter Bake");
+                uint32_t placedCount = 0;
+                bool budgetExceeded = false;
+
+                // Pass 2: bake per tile.
+                for (auto& [entityId, grid] : terrainGrids)
+                {
+                    for (auto* tile : grid->getAllTiles())
+                    {
+                        if (!tile || !tile->hasHeightData()) continue;
+
+                        const float tileSize = tile->config.worldTileSize;
+                        const float originX = static_cast<float>(tile->coord.x) * tileSize;
+                        const float originZ = static_cast<float>(tile->coord.z) * tileSize;
+                        if (!tileInRegion(originX, originZ, tileSize)) continue;
+
+                        std::vector<foliage::FoliageInstance> before = tile->foliageInstances;
+
+                        // Keep hand-painted; drop procedural when regenerating.
+                        std::vector<foliage::FoliageInstance> merged;
+                        merged.reserve(before.size());
+                        for (const auto& inst : before)
+                        {
+                            if (cmd.replaceProcedural && (inst.flags & foliage::FoliageInstanceFlags::Procedural))
+                                continue;
+                            merged.push_back(inst);
+                        }
+
+                        const float* heights = tile->heightData.data();
+                        const uint32_t vpt = tile->config.getVertexCount();
+                        const float vertexSpacing = tile->config.getVertexSpacing();
+                        const float eps = vertexSpacing * 0.5f;
+                        const terrain::TileWeightMapData& wm = tile->weightMap;
+
+                        auto result = foliage::bakeFoliageScatterForTile(
+                            cmd.profile, foliagePalette, cmd.seed,
+                            originX, originZ, tileSize,
+                            [heights, vpt, vertexSpacing](float lx, float lz) {
+                                return terrain::sampleTileHeightBilinear(heights, vpt, vertexSpacing, lx, lz);
+                            },
+                            [heights, vpt, vertexSpacing, eps](float lx, float lz) {
+                                return terrain::sampleTileNormalCentralDiff(heights, vpt, vertexSpacing, lx, lz, eps);
+                            },
+                            [&wm, vertexSpacing](uint8_t layer, float lx, float lz) {
+                                return terrain::sampleTileLayerWeightBilinear(wm, layer, lx, lz, vertexSpacing);
+                            },
+                            [heights, vpt, vertexSpacing](float lx, float lz) {
+                                return terrain::sampleTileCurvature(heights, vpt, vertexSpacing, lx, lz, vertexSpacing);
+                            },
+                            genBudget);
+
+                        // Guard the unsigned subtraction against a baker that ever returns more than
+                        // the cap it was given (would otherwise wrap to a huge budget).
+                        genBudget = result.instances.size() >= genBudget
+                                        ? 0 : genBudget - result.instances.size();
+                        placedCount += static_cast<uint32_t>(result.instances.size());
+                        if (result.budgetExceeded) budgetExceeded = true;
+
+                        merged.insert(merged.end(), result.instances.begin(), result.instances.end());
+                        writeTileFoliage(*tile, std::move(merged));
+
+                        undoCmd->addTile(tile->coord.x, tile->coord.z,
+                                         std::move(before), tile->foliageInstances);
+                    }
+                }
+
+                if (undoCmd->hasChanges())
+                {
+                    events::undoredo::PushUndoableCommand pushCmd;
+                    pushCmd.command = undoCmd;
+                    bus.execute(pushCmd);
+                }
+
+                uint32_t totalAfter = 0;
+                for (auto& [entityId, grid] : terrainGrids)
+                    for (auto* tile : grid->getAllTiles())
+                        if (tile) totalAfter += static_cast<uint32_t>(tile->foliageInstances.size());
+
+                events::foliage::FoliageScatterBakeCompletedNotification note;
+                note.placedCount = placedCount;
+                note.totalCount = totalAfter;
+                note.budgetExceeded = budgetExceeded;
+                bus.publish(note);
             });
     }
 

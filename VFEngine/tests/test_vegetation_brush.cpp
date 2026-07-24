@@ -168,4 +168,33 @@ TEST_CASE("VegetationTileSnapshotUndoCommand: execute/undo drive tile state") {
     dispatcher.clear();
 }
 
+// code-review #1: hasChanges() must detect same-count content edits (BillboardInstance has no
+// no-padding guarantee, so the fix compares field-wise rather than via memcmp).
+TEST_CASE("VegetationTileSnapshotUndoCommand: hasChanges detects same-count content edits") {
+    std::vector<vegetation::BillboardInstance> before(4);
+    for (uint32_t i = 0; i < 4; ++i)
+        before[i].position = glm::vec3(static_cast<float>(i), 0.0f, 0.0f);
+
+    SUBCASE("identical content -> no change") {
+        std::vector<vegetation::BillboardInstance> after = before;
+        services::VegetationTileSnapshotUndoCommand cmd("Vegetation Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK_FALSE(cmd.hasChanges());
+    }
+    SUBCASE("same count, moved instance -> change") {
+        std::vector<vegetation::BillboardInstance> after = before;
+        after[1].position.z += 3.0f;
+        services::VegetationTileSnapshotUndoCommand cmd("Vegetation Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK(cmd.hasChanges());
+    }
+    SUBCASE("same count, changed source -> change") {
+        std::vector<vegetation::BillboardInstance> after = before;
+        after[0].source = vegetation::InstanceSource::Procedural;
+        services::VegetationTileSnapshotUndoCommand cmd("Vegetation Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK(cmd.hasChanges());
+    }
+}
+
 } // TEST_SUITE

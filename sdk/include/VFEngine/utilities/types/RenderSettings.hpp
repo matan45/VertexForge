@@ -201,6 +201,11 @@ namespace types
         float billboardDistance = 1000.0f;
         float waterDistance = 2000.0f;
         float shadowDistanceMultiplier = 0.5f;
+        // VK-1582: global foliage density scale [0,1] (UE foliage.DensityScale / Unity Detail
+        // Density Scale). Scales the rendered instanced-foliage count by deterministically skipping
+        // a stable subset per instance seed. Applied independently of `enabled` (a scalability knob,
+        // not a distance cull). Per-type FoliageType.densityScale multiplies this; a type may opt out.
+        float foliageDensityScale = 1.0f;
     };
 
     struct TransparencySettings
@@ -342,6 +347,7 @@ namespace types
                 s.distanceCulling.enabled = true;
                 s.distanceCulling.staticMeshDistance = 500.0f;
                 s.distanceCulling.foliageDistance = 200.0f;
+                s.distanceCulling.foliageDensityScale = 0.5f;
                 s.distanceCulling.vfxDistance = 150.0f;
                 s.vfxQualityTier = vfx::VFXQualityTier::Low;
                 s.terrain.lodBias = 0.5f;
@@ -367,6 +373,7 @@ namespace types
                 s.distanceCulling.enabled = true;
                 s.distanceCulling.staticMeshDistance = 750.0f;
                 s.distanceCulling.foliageDistance = 350.0f;
+                s.distanceCulling.foliageDensityScale = 0.75f;
                 s.distanceCulling.vfxDistance = 200.0f;
                 s.vfxQualityTier = vfx::VFXQualityTier::Medium;
                 s.terrain.lodBias = 0.8f;

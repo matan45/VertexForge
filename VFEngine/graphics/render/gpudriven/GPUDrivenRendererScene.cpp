@@ -1,5 +1,6 @@
 #include "GPUDrivenRenderer.hpp"
 #include "scene/ToonProfileGpuTable.hpp" // VK-1493: complete type for getBuffer()/uploadIfDirty()
+#include "../vegetation/WindSystem.hpp" // VK-1580: complete type for windSystem->getBuffer()
 #include "SelectionMaskPipeline.hpp" // VK-1490
 #include "../virtualtexture/svt/SVTManager.hpp"
 #include "../occlusion/HiZBuffer.hpp"
@@ -236,6 +237,8 @@ namespace render::gpudriven
         }
 
         stats.totalObjects = currentObjectCount;
+        // VK-1579: instance-transform total (foliage/vegetation/mesh) — bounded by MAX_GPU_INSTANCES.
+        stats.totalInstances = mergedBuffer ? mergedBuffer->getInstanceCount() : 0;
 
         // Compute per-(batch, shaderGroup) occupancy so empty sections can skip their
         // indirect draw. Identity-mapped in edit mode; in play mode slot indices over-mark
@@ -632,6 +635,26 @@ namespace render::gpudriven
     {
         if (toonProfileTable)
             toonProfileTable->uploadIfDirty(cmd);
+    }
+
+    void GPUDrivenRenderer::wireWindPipelines()
+    {
+        // VK-1580: binding 7 (the global wind UBO) is statically used and not
+        // partially-bound, so every mesh pipeline must point at the lifetime-stable
+        // WindSystem buffer. Called after initVegetationSubsystems (WindSystem exists) and
+        // again when the WBOIT pipeline is created; null-guards cover pipelines/systems
+        // that don't exist yet.
+        if (!vegetation.windSystem)
+            return;
+        vk::Buffer windBuffer = vegetation.windSystem->getBuffer();
+        auto wire = [&](MeshShaderPipeline* p)
+        {
+            if (p)
+                p->updateWindDescriptor(windBuffer);
+        };
+        wire(meshShaderPipeline.get());
+        wire(transparentMeshShaderPipeline.get());
+        wire(wboitMeshShaderPipeline.get());
     }
 
     bool GPUDrivenRenderer::isSVTActive() const

@@ -1,5 +1,6 @@
 #include "SceneSerialization.hpp"
 #include "../components/Components.hpp"
+#include "../vegetation/ScatterProfileSerialization.hpp"
 
 namespace {
     template<typename T>
@@ -59,6 +60,7 @@ namespace {
             }
         }
     }
+
 }
 
 namespace serialization
@@ -126,6 +128,12 @@ namespace serialization
         }
         j["billboardPalette"] = paletteArr;
 
+        // Scatter profile (VK-1581 rules + VK-1585 curvature) — shared serializer.
+        json scatterObj;
+        vegetation::serializeScatterProfile(scatterObj, grass.scatterProfile);
+        j["scatterProfile"] = scatterObj;
+        j["scatterProfilePath"] = grass.scatterProfilePath; // VK-1585 optional external asset ref
+
         return j;
     }
 
@@ -168,5 +176,17 @@ namespace serialization
 
         // Billboard palette
         deserializeBillboardPalette(j, grass.billboardPalette);
+
+        // Scatter profile (VK-1581 rules + VK-1585 curvature) — shared serializer.
+        // Absent (older scenes) keeps defaults — no scene-format bump.
+        if (auto it = j.find("scatterProfile"); it != j.end() && it->is_object())
+            vegetation::deserializeScatterProfile(*it, grass.scatterProfile);
+
+        // VK-1585: if a reusable .vfScatterProfile asset is referenced, resolve it into the
+        // inline snapshot (asset is authoritative). The serialized inline copy above remains as
+        // a fallback if the asset file is missing at load time.
+        readField(j, "scatterProfilePath", grass.scatterProfilePath);
+        if (!grass.scatterProfilePath.empty())
+            vegetation::loadScatterProfileFile(grass.scatterProfilePath, grass.scatterProfile);
     }
 }

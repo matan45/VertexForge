@@ -332,7 +332,8 @@ namespace serialization
                 {"decalDistance", s.decalDistance},
                 {"billboardDistance", s.billboardDistance},
                 {"waterDistance", s.waterDistance},
-                {"shadowDistanceMultiplier", s.shadowDistanceMultiplier}
+                {"shadowDistanceMultiplier", s.shadowDistanceMultiplier},
+                {"foliageDensityScale", s.foliageDensityScale} // VK-1582
             };
         }
 
@@ -362,6 +363,8 @@ namespace serialization
                 settings.waterDistance = dc["waterDistance"].get<float>();
             if (dc.contains("shadowDistanceMultiplier") && dc["shadowDistanceMultiplier"].is_number())
                 settings.shadowDistanceMultiplier = dc["shadowDistanceMultiplier"].get<float>();
+            if (dc.contains("foliageDensityScale") && dc["foliageDensityScale"].is_number()) // VK-1582
+                settings.foliageDensityScale = dc["foliageDensityScale"].get<float>();
         }
         // ---- GI helpers ----
 

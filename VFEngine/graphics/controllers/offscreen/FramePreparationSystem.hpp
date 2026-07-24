@@ -8,10 +8,12 @@
 #include "../../render/billboard/BillboardTypes.hpp"
 #include "../../render/text/TextTypes.hpp"
 #include "../../../services/providers/render/IDecalRenderProvider.hpp"
+#include "terrain/TerrainTypes.hpp" // VK-1573: TileCoord/TileCoordHash for the foliage draw cache key
 #include <string>
 #include <functional>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 
 namespace render
 {
@@ -75,6 +77,25 @@ namespace controllers::offscreen
         };
         std::unordered_map<std::string, InstanceBatchInfo> instanceBatchCache;
 
+        // VK-1573: persistent per-tile composed foliage transforms. One ComposedFoliageDraw per
+        // (tile, foliage-type present); rebuilt only when a tile's foliageInstancesGPUDirty flag
+        // is set, then emitted as pre-instanced MeshRenderData records each frame. Lives on the
+        // collector (not on the ABI-frozen TerrainTile) — see collectFoliage().
+        struct ComposedFoliageDraw
+        {
+            uint16_t typeIndex = 0;
+            std::vector<render::mesh::MeshRenderData::InstanceData> transforms;
+        };
+        std::unordered_map<terrain::TileCoord, std::vector<ComposedFoliageDraw>, terrain::TileCoordHash> foliageDrawCache;
+
+        // VK-1582 + code-review #4: FNV hash of every palette field BAKED into the composed cache
+        // but read only inside the gated rebuild block — the global density scale, and per entry
+        // densityScale/affectedByDensityScale (survivor subset) + visible/alignToNormal (compose
+        // skip / model matrix) + meshPath/materialPath (compose guard / PBR bake). setFoliagePalette
+        // does NOT GPU-dirty tiles, so when this hash changes the whole foliage draw cache is dropped
+        // and re-composed. uint32 hash avoids float-accumulation overflow.
+        uint32_t foliagePaletteSignature = 0u;
+
         DebugFrameBuilder debugBuilder;
         UIFrameBuilder uiFrameBuilder;
         UIInteractionSystem uiInteraction;
@@ -88,6 +109,11 @@ namespace controllers::offscreen
             const render::mesh::MaterialPBRExtractor::ParameterOverrides* runtimeOverrides);
         void populateMaterialInfo(render::mesh::SubMeshMaterialInfo& matInfo, const std::string& materialPath,
                                   const render::mesh::MaterialPBRExtractor::ParameterOverrides* runtimeOverrides = nullptr);
+
+        // VK-1573: walk resident terrain tiles and append one pre-instanced MeshRenderData per
+        // (tile, foliage-type) into meshDrawList, feeding the existing GPU-instancing path.
+        void collectFoliage(std::vector<render::mesh::MeshRenderData>& meshDrawList,
+                            const FrameContext& ctx, const glm::vec3& cameraPos);
 
     public:
         FramePreparationSystem() = default;

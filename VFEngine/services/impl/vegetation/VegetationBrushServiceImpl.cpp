@@ -9,8 +9,10 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 #include "../../data/VegetationUndoCommands.hpp"
+#include "../common/BrushTerrainSampling.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/BrushFalloff.hpp"
+#include "terrain/ValueNoise.hpp"
 #include <cmath>
 #include <algorithm>
 #include <memory>
@@ -210,47 +212,9 @@ namespace services
         hasLastPlacement = true;
     }
 
-    // Hash-based 2D value noise in [0,1] for the scatter/clumping mask.
-    static float valueNoise2D(float x, float z, uint32_t seed)
-    {
-        auto hash = [seed](int ix, int iz) -> float {
-            uint32_t h = static_cast<uint32_t>(ix) * 374761393u
-                       + static_cast<uint32_t>(iz) * 668265263u + seed * 362437u;
-            h = (h ^ (h >> 13)) * 1274126177u;
-            h ^= (h >> 16);
-            return static_cast<float>(h & 0xFFFFFFu) / static_cast<float>(0xFFFFFF);
-        };
-        int x0 = static_cast<int>(std::floor(x));
-        int z0 = static_cast<int>(std::floor(z));
-        float fx = x - static_cast<float>(x0);
-        float fz = z - static_cast<float>(z0);
-        float ux = fx * fx * (3.0f - 2.0f * fx);
-        float uz = fz * fz * (3.0f - 2.0f * fz);
-        float n00 = hash(x0, z0),     n10 = hash(x0 + 1, z0);
-        float n01 = hash(x0, z0 + 1), n11 = hash(x0 + 1, z0 + 1);
-        float nx0 = n00 + (n10 - n00) * ux;
-        float nx1 = n01 + (n11 - n01) * ux;
-        return nx0 + (nx1 - nx0) * uz;
-    }
-
     glm::vec3 VegetationBrushServiceImpl::sampleTerrainNormal(float worldX, float worldZ) const
     {
-        const float eps = 0.5f;
-        auto sample = [](float x, float z, float fallback) -> float {
-            events::terrain::GetTerrainHeightAtQuery q;
-            q.worldX = x; q.worldZ = z;
-            try {
-                auto r = events::EventDispatcher::instance().query(q);
-                return r.valid ? r.height : fallback;
-            } catch (...) { return fallback; }
-        };
-        float hC = sample(worldX, worldZ, 0.0f);
-        float hL = sample(worldX - eps, worldZ, hC);
-        float hR = sample(worldX + eps, worldZ, hC);
-        float hD = sample(worldX, worldZ - eps, hC);
-        float hU = sample(worldX, worldZ + eps, hC);
-        glm::vec3 n(hL - hR, 2.0f * eps, hD - hU);
-        return glm::normalize(n);
+        return brushsampling::sampleTerrainNormalViaHeightQuery(worldX, worldZ);
     }
 
     bool VegetationBrushServiceImpl::passesMasks(float candY, const glm::vec3& normal,
@@ -268,9 +232,9 @@ namespace services
         }
         if (currentParams.useNoiseMask)
         {
-            float n = valueNoise2D(candX * currentParams.noiseFrequency,
-                                   candZ * currentParams.noiseFrequency,
-                                   currentParams.noiseSeed);
+            float n = terrain::valueNoise2D(candX * currentParams.noiseFrequency,
+                                            candZ * currentParams.noiseFrequency,
+                                            currentParams.noiseSeed);
             if (n < currentParams.noiseThreshold)
                 return false;
         }

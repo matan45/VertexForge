@@ -69,6 +69,9 @@ namespace types
         bool includeStaticMeshes = true;
         bool includeTerrain = true;
         bool includeColliders = true;
+        bool includeFoliage = true; // VK-1584: bake nav-contributing foliage types (trees/rocks).
+                                    // NOTE (code-review #7): covers only RESIDENT terrain tiles;
+                                    // foliage on streamed-out tiles is excluded — load the area first.
 
         // Area cost multipliers (indexed by area ID, 0-63)
         float areaCosts[64] = {

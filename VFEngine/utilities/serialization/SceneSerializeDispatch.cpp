@@ -95,6 +95,8 @@ namespace serialization
             out["grass"] = serializeGrass(entity.getComponent<components::GrassComponent>());
         if (entity.hasComponent<components::OceanComponent>())
             out["ocean"] = serializeOcean(entity.getComponent<components::OceanComponent>());
+        if (entity.hasComponent<components::MeshBrushInstanceComponent>())
+            out["meshBrushInstance"] = serializeMeshBrushInstance(entity.getComponent<components::MeshBrushInstanceComponent>());
     }
 
     void SceneSerialization::serializeUIStructuralComponents(scene::Entity& entity, json& out)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "terrain/TerrainSerializer.hpp"
+#include "foliage/FoliageTypes.hpp"
 #include <vector>
 #include <string>
 #include <glm/glm.hpp>
@@ -49,6 +50,10 @@ namespace services
 
         virtual std::string getTerrainMaterialPath() const = 0;
         virtual void getTerrainGridWorldBounds(glm::vec2& outMin, glm::vec2& outMax) const = 0;
+
+        /// VK-1573: per-scene foliage type palette (typeIndex -> mesh/material/cull distance),
+        /// consumed by the graphics-side foliage instanced collector.
+        virtual const std::vector<foliage::FoliageType>& getFoliagePalette() const = 0;
 
         virtual void setDistanceCullingEnabled(bool enabled) = 0;
         virtual void setMaxDrawDistance(float distance) = 0;

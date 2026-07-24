@@ -207,6 +207,7 @@ namespace windows
         ImGui::Checkbox("Include Terrain", &settings.includeTerrain);
         ImGui::Checkbox("Include Static Meshes", &settings.includeStaticMeshes);
         ImGui::Checkbox("Include Colliders", &settings.includeColliders);
+        ImGui::Checkbox("Include Foliage", &settings.includeFoliage);
     }
 
     void NavmeshWindow::drawAreaCosts()

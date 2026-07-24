@@ -5,6 +5,7 @@
 
 #include "../common/gpu_types.glsl"
 #include "../common/camera_types.glsl"
+#include "../vegetation/wind_common.glsl"   // VK-1580 foliage wind: calculateWindDisplacement/windHash
 
 const uint MESHLET_MAX_VERTICES = 64;
 const uint MESHLET_MAX_PRIMITIVES = 124;
@@ -29,6 +30,20 @@ layout(set = 0, binding = 0) uniform CameraUBO {
 layout(std430, set = 1, binding = 0) readonly buffer PerDrawDataBuffer {
     PerDrawData perDrawData[];
 };
+
+// VK-1580 foliage wind. Object SSBO (binding 2, shared with the task stage) supplies the
+// object-space AABB used to normalize vertex height; the wind UBO (binding 7) is the
+// global grass WindSystem buffer. FLAG_FOLIAGE_WIND (bit 8) must match ObjectFlags::FoliageWind.
+layout(std430, set = 1, binding = 2) readonly buffer ObjectBuffer {
+    GPUObjectData objects[];
+};
+
+layout(std430, set = 1, binding = 7) readonly buffer WindBuffer {
+    vec4 windDirectionAndSpeed;   // xyz = direction, w = speed
+    vec4 windGustParams;          // x = gustStrength, y = gustFrequency, z = turbulenceScale, w = time
+};
+
+const uint FLAG_FOLIAGE_WIND = 1u << 8;
 
 layout(std430, set = 3, binding = 0) readonly buffer MeshletBuffer {
     GPUMeshlet meshlets[];
@@ -106,6 +121,31 @@ void main() {
     mat3 normalMatrix = mat3(payload.instanceNormalMatrix);
     mat4 viewProjection = camera.projection * camera.view;
 
+    // VK-1580 foliage wind: resolve the per-instance tip bend + height normalization once
+    // (constant across the meshlet). Applied per-vertex below, scaled by height². Gated to
+    // non-skinned foliage (bind-pose AABB is only valid for unskinned meshes). Evaluated at
+    // the instance origin so the whole mesh bends coherently (no canopy shearing).
+    bool  windActive  = (drawData.flags & FLAG_FOLIAGE_WIND) != 0u
+                        && drawData.boneMatrixOffset == 0xFFFFFFFFu;
+    vec3  windTipBend = vec3(0.0);
+    float windMinY    = 0.0;
+    float windInvH    = 0.0;
+    if (windActive) {
+        GPUObjectData windObj = objects[drawData.objectIndex];
+        float windHeight = windObj.aabbMax.y - windObj.aabbMin.y;
+        if (windHeight > 1e-4) {
+            windMinY = windObj.aabbMin.y;
+            windInvH = 1.0 / windHeight;
+            vec3 windOrigin = payload.instanceModelMatrix[3].xyz;
+            vec4 windGust = windGustParams;
+            windGust.w += windHash(windOrigin.xz) * 6.28318530718;  // per-instance decorrelation
+            // vertexHeight = 1 => full tip displacement; per-vertex height² scaling below.
+            windTipBend = calculateWindDisplacement(windOrigin, 1.0, windDirectionAndSpeed, windGust);
+        } else {
+            windActive = false;
+        }
+    }
+
     uint numIterations = (vertexCount + gl_WorkGroupSize.x - 1) / gl_WorkGroupSize.x;
     for (uint iter = 0; iter < numIterations; iter++) {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -172,6 +212,11 @@ void main() {
         uint localVertexIndex = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
         if (localVertexIndex < vertexCount) {
             vec4 worldPos = modelMatrix * vec4(sharedPositions[localVertexIndex], 1.0);
+            // VK-1580: add foliage-wind sway, anchored at the base (height²).
+            if (windActive) {
+                float vh = clamp((sharedPositions[localVertexIndex].y - windMinY) * windInvH, 0.0, 1.0);
+                worldPos.xyz += windTipBend * (vh * vh);
+            }
             fragWorldPos[localVertexIndex] = worldPos.xyz;
             fragNormal[localVertexIndex] = normalize(normalMatrix * sharedNormals[localVertexIndex]);
             fragTexCoord[localVertexIndex] = sharedTexCoords[localVertexIndex];
@@ -576,6 +621,10 @@ void main() {
     if (isSampleableTexture(albedoIdx)) {
         vec4 albedoSample = sampleMaterialTex(albedoIdx, texCoords, texDx, texDy);
         albedo = albedoSample.rgb;
+        // VK-1573: per-instance albedo tint over the sampled texture. Gated on the hasOverride flag
+        // (fragInstanceIBL.w) so non-override instances (all normal meshes) are byte-identical; only
+        // foliage-tinted / runtime-override instances multiply the texture by their per-instance albedo.
+        if (fragInstanceIBL.w > 0.5) albedo *= fragInstanceAlbedo.rgb;
         alpha = albedoSample.a;
 #ifdef SVT_ENABLED
         // VK-1480: an SVT albedo tile can carry alpha ~= 0 (BC7 alpha in uncovered/streaming texels),

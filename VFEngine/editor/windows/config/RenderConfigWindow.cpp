@@ -456,6 +456,21 @@ namespace windows
                     ImGui::SetTooltip("Multiplier for shadow pass draw distances.\nLower values = shadows disappear closer.");
             }
 
+            // VK-1582: global foliage density scale — a scalability knob independent of the distance
+            // cull toggle above, so it lives outside the `enabled` block.
+            if (ImGui::SliderFloat("Foliage Density Scale", &settings.distanceCulling.foliageDensityScale,
+                                   0.0f, 1.0f, "%.2f"))
+            {
+                markDirty();
+                events::render::SetFoliageDensityScaleCommand cmd;
+                cmd.scale = settings.distanceCulling.foliageDensityScale;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Fraction of instanced foliage rendered (UE foliage.DensityScale).\n"
+                                  "Skips a stable per-instance subset; per-type Density Scale multiplies this,\n"
+                                  "and a foliage type can opt out via 'Affected by Density Scale'.");
+
             ImGui::Separator();
             ImGui::Text("Transparency");
             ImGui::Spacing();

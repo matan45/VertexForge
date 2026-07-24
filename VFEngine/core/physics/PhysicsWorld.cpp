@@ -359,6 +359,12 @@ namespace core::physics
     void PhysicsWorld::removeVegetationTileColliders(int32_t tileX, int32_t tileZ) { terrainManager.removeVegetationTileColliders(tileX, tileZ); }
     void PhysicsWorld::removeAllVegetationColliders() { terrainManager.removeAllVegetationColliders(); }
 
+    JPH::BodyID PhysicsWorld::createFoliageStaticBody(const FoliageColliderCreateInfo& info)
+    {
+        return terrainManager.createFoliageStaticBody(info);
+    }
+    void PhysicsWorld::destroyStaticBody(JPH::BodyID bodyId) { terrainManager.destroyStaticBody(bodyId); }
+
     // Ragdoll forwarding
     bool PhysicsWorld::createRagdoll(uint64_t entityId, const RagdollBuildResult& buildResult) { return ragdollManager.createRagdoll(entityId, buildResult); }
     void PhysicsWorld::destroyRagdoll(uint64_t entityId) { ragdollManager.destroyRagdoll(entityId); }

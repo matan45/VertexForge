@@ -60,6 +60,7 @@ namespace
             {".vfrig", AssetType::HumanoidRig},
             {".vfretarget", AssetType::RetargetMap},
             {".vftoonprofile", AssetType::ToonProfile}, // VK-1493
+            {".vfscatterprofile", AssetType::ScatterProfile}, // VK-1585
             {".mt", AssetType::Script},
         };
         return m;
@@ -75,7 +76,7 @@ namespace
             ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
             ".vfnavindex", ".vfimposter", ".vfinputmapping",
             ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget",
-            ".vftoonprofile", ".mt" // VK-1493
+            ".vftoonprofile", ".vfscatterprofile", ".mt" // VK-1493, VK-1585
         };
         return s;
     }

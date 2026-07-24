@@ -26,6 +26,8 @@ namespace services
 
         ::events::SubscriptionToken modeChangedToken;
         ::events::SubscriptionToken sceneClearedToken;
+        ::events::SubscriptionToken entityDeletedToken;
+        ::events::SubscriptionToken sceneLoadedToken;
 
         glm::vec3 lastPlacementPos{0.0f};
         bool hasLastPlacement = false;
@@ -58,6 +60,11 @@ namespace services
         EntityHandle ensureGroupEntity(uint32_t paletteIdx, const glm::vec3& worldPos);
 
         std::unordered_map<uint64_t, EntityHandle> instanceEntities;
+        std::unordered_map<EntityHandle, uint64_t, EntityHandle::Hash> entityInstanceIds;
+        std::unordered_map<uint64_t, meshbrush::MeshBrushInstanceSpec> instanceSpecs;
+
+        std::vector<meshbrush::MeshBrushInstanceSpec> strokeCreated;
+        std::vector<meshbrush::MeshBrushInstanceSpec> strokeRemoved;
 
         // AABB Y-offset cache (meshPath -> -aabb.min.y)
         std::unordered_map<std::string, float> aabbYOffsetCache;
@@ -72,7 +79,27 @@ namespace services
     private:
         void applyBrush(const glm::vec3& worldPos, const glm::vec3& normal, float deltaTime, bool isFirst);
         void placeMeshes(const glm::vec3& worldPos, const glm::vec3& normal);
+        // Single-instance placement mode: one instance at the cursor (masks/spacing still apply).
+        void placeSingleMesh(const glm::vec3& worldPos, const glm::vec3& normal);
+        // Build the enabled palette indices + weights (selected entry, or all non-empty). False if empty.
+        bool selectEnabledEntries(std::vector<uint32_t>& enabledIndices, std::vector<float>& weights) const;
+        // Per-candidate terrain normal via central finite differences (for the slope mask / align).
+        glm::vec3 sampleTerrainNormal(float worldX, float worldZ) const;
+        // Shared post-acceptance placement: slope/mask gate, randomized transform, spawn + track.
+        // Returns true if an instance was spawned. candidatePos taken by value (locally offset).
+        bool placeOneCandidate(glm::vec3 candidatePos, uint32_t paletteIdx, const glm::vec3& surfaceNormal);
         void eraseInstances(const glm::vec3& worldPos);
+        EntityHandle spawnInstance(const meshbrush::MeshBrushInstanceSpec& spec);
+        bool removeInstance(uint64_t instanceId);
+        void forgetInstance(uint64_t instanceId);
+        void applyInstanceDelta(const std::vector<uint64_t>& removeIds,
+                                const std::vector<meshbrush::MeshBrushInstanceSpec>& respawnSpecs);
+        void rebuildSpatialGrid();
+        // Rebuild all in-RAM tracking (specs/entities/grid/group parents) from the entities
+        // carrying MeshBrushInstanceComponent after a scene load. See SceneLoadedNotification.
+        void rebuildTrackingFromScene();
+        void finalizeStroke();
+        void discardStroke();
 
         void publishParamsChanged();
     };

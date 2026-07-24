@@ -175,6 +175,7 @@ namespace render::gpudriven
         // VK-1493: bind the toon profile table SSBO to set-1 binding 6. The buffer
         // handle is lifetime-stable, so this is written once after (re)creation.
         void updateToonProfileDescriptor(vk::Buffer toonProfileBuffer);
+        void updateWindDescriptor(vk::Buffer windUboBuffer);  // VK-1580 foliage wind (binding 7)
         void updateMeshletDescriptors(MeshletBuffer& meshletBuffer);
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
         void updateVertexDescriptors(MergedMeshBuffer& mergedBuffer);

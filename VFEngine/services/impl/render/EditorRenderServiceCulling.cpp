@@ -76,6 +76,13 @@ namespace services
                     offScreenProvider->setShadowDistanceMultiplier(cmd.multiplier);
             });
 
+        dispatcher.registerCommandHandler<events::render::SetFoliageDensityScaleCommand>(
+            [this](const events::render::SetFoliageDensityScaleCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->setFoliageDensityScale(cmd.scale);
+            });
+
         dispatcher.registerCommandHandler<events::render::SetGlobalLodBiasCommand>(
             [this](const events::render::SetGlobalLodBiasCommand& cmd)
             {

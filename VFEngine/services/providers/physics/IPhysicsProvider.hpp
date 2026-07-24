@@ -173,6 +173,25 @@ namespace services
         virtual void removeVegetationTileColliders(int32_t tileX, int32_t tileZ) = 0;
         virtual void removeAllVegetationColliders() = 0;
 
+        // Foliage proximity colliders (VK-1584) — entity-free static bodies built from ONE cached
+        // shape per FoliageType. The FoliagePhysicsActivator creates a body per in-radius instance
+        // and destroys it by handle when it leaves the radius. ConvexMesh loads the mesh (cached by
+        // meshPath); Capsule/Box are sized from the mesh-local AABB (center/half-extents).
+        static constexpr uint32_t INVALID_BODY_HANDLE = 0xFFFFFFFFu;
+        struct FoliageColliderDesc
+        {
+            std::string meshPath;
+            types::ColliderShape shape = types::ColliderShape::Capsule;
+            glm::vec3 position{0.0f};
+            float rotationY = 0.0f;
+            glm::vec3 scale{1.0f};
+            glm::vec3 localAabbCenter{0.0f};
+            glm::vec3 localAabbHalfExtents{0.5f};
+            uint8_t collisionLayer = 0;
+        };
+        virtual uint32_t createFoliageStaticBody(const FoliageColliderDesc& desc) = 0;
+        virtual void destroyFoliageStaticBody(uint32_t bodyHandle) = 0;
+
         virtual void addWaterSensorBody(EntityHandle entity, const glm::vec3& position,
                                         const glm::vec3& halfExtents) = 0;
         virtual void removeWaterSensorBody(EntityHandle entity) = 0;

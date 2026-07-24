@@ -7,6 +7,8 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "vegetation/VegetationSerializer.hpp"
+#include "vegetation/ScatterProfileSerialization.hpp" // VK-1585 foliage scatter sidecar
+#include "foliage/FoliageSerializer.hpp"
 #include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -217,6 +219,133 @@ namespace services
         {
             vfLogInfo("TerrainService: Loaded billboard instances ({} tiles) from {}",
                       loadedCount, vegDir);
+        }
+
+        return true;
+    }
+
+    std::string TerrainService::getFoliageDirectory(const std::string& terrainPath)
+    {
+        namespace fs = std::filesystem;
+        fs::path p(terrainPath);
+        return (p.parent_path() / (p.stem().string() + "_foliage")).string();
+    }
+
+    bool TerrainService::saveFoliage(uint64_t terrainEntityId, const std::string& terrainPath)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        namespace fs = std::filesystem;
+        std::string foliageDir = getFoliageDirectory(terrainPath);
+
+        auto allTiles = gridIt->second->getAllTiles();
+        bool anyData = false;
+
+        for (const auto* tile : allTiles)
+        {
+            if (!tile) continue;
+
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfFoliage",
+                foliageDir, tile->coord.x, tile->coord.z);
+
+            if (tile->foliageInstances.empty())
+            {
+                // Tile fully erased: drop any stale sidecar so a later load doesn't resurrect it.
+                std::error_code ec;
+                if (fs::exists(instancesPath)) fs::remove(instancesPath, ec);
+                continue;
+            }
+
+            anyData = true;
+            if (!foliage::FoliageSerializer::saveFoliageInstances(instancesPath, tile->foliageInstances))
+            {
+                vfLogError("TerrainService: Failed to save foliage instances for tile ({}, {})",
+                           tile->coord.x, tile->coord.z);
+            }
+        }
+
+        // Save the foliage palette (lives on TerrainService, not on a component).
+        if (!foliagePalette.empty())
+        {
+            foliage::FoliageSerializer::saveFoliagePalette(
+                foliageDir + "/foliage_palette.json", foliagePalette);
+            anyData = true;
+        }
+
+        // Save the procedural foliage scatter profile (VK-1585) as a sidecar alongside the palette.
+        if (!foliageScatterProfile.rules.empty())
+        {
+            std::error_code ec;
+            fs::create_directories(foliageDir, ec);
+            vegetation::saveScatterProfileFile(foliageDir + "/foliage_scatter.json", foliageScatterProfile);
+            anyData = true;
+        }
+
+        if (anyData)
+            vfLogInfo("TerrainService: Saved foliage data to {}", foliageDir);
+
+        return true;
+    }
+
+    bool TerrainService::loadFoliage(uint64_t terrainEntityId, const std::string& terrainPath)
+    {
+        auto gridIt = terrainGrids.find(terrainEntityId);
+        if (gridIt == terrainGrids.end())
+            return false;
+
+        namespace fs = std::filesystem;
+        std::string foliageDir = getFoliageDirectory(terrainPath);
+
+        if (!fs::exists(foliageDir) || !fs::is_directory(foliageDir))
+            return true; // No foliage data — not an error
+
+        auto allTiles = gridIt->second->getAllTiles();
+        uint32_t loadedCount = 0;
+
+        for (auto* tile : allTiles)
+        {
+            if (!tile) continue;
+
+            std::string instancesPath = std::format("{}/tile_{}_{}.vfFoliage",
+                foliageDir, tile->coord.x, tile->coord.z);
+            if (fs::exists(instancesPath))
+            {
+                if (foliage::FoliageSerializer::loadFoliageInstances(instancesPath, tile->foliageInstances))
+                {
+                    tile->foliageInstancesDirty = true;
+                    tile->foliageInstancesGPUDirty = true;
+                    loadedCount++;
+                }
+            }
+        }
+
+        // Load the foliage palette onto TerrainService (drives the render collector).
+        std::string palettePath = foliageDir + "/foliage_palette.json";
+        if (fs::exists(palettePath))
+        {
+            std::vector<foliage::FoliageType> palette;
+            if (foliage::FoliageSerializer::loadFoliagePalette(palettePath, palette))
+            {
+                setFoliagePalette(std::move(palette));
+                vfLogInfo("TerrainService: Loaded foliage palette ({} entries)", foliagePalette.size());
+            }
+        }
+
+        // Load the procedural foliage scatter profile (VK-1585).
+        std::string scatterPath = foliageDir + "/foliage_scatter.json";
+        if (fs::exists(scatterPath))
+        {
+            vegetation::ScatterProfile profile;
+            if (vegetation::loadScatterProfileFile(scatterPath, profile))
+                setFoliageScatterProfile(std::move(profile));
+        }
+
+        if (loadedCount > 0)
+        {
+            vfLogInfo("TerrainService: Loaded foliage instances ({} tiles) from {}",
+                      loadedCount, foliageDir);
         }
 
         return true;

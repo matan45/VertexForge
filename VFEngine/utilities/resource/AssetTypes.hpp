@@ -44,6 +44,9 @@ namespace resource {
 		// PluginAsset so existing enumerator values are unchanged; both
 		// persistence paths store AssetType by name, so the shifted COUNT is safe.
 		ToonProfile = 26,
+		// Reusable procedural scatter profile (VK-1585), `.vfScatterProfile`.
+		// Append-only; persisted by name, so the shifted COUNT stays safe.
+		ScatterProfile = 27,
 		COUNT
 	};
 
@@ -76,6 +79,7 @@ namespace resource {
 		case AssetType::VFXSequence:      return "VFXSequence";
 		case AssetType::PluginAsset:      return "PluginAsset";
 		case AssetType::ToonProfile:      return "ToonProfile";
+		case AssetType::ScatterProfile:   return "ScatterProfile";
 		default:                          return "Unknown";
 		}
 	}

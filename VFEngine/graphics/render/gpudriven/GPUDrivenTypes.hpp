@@ -41,14 +41,15 @@ namespace render::gpudriven
     constexpr uint32_t MAX_ANIMATED_OBJECTS = 4096;
     constexpr uint32_t INVALID_BONE_OFFSET = 0xFFFFFFFF;
 
-    constexpr uint32_t MAX_GPU_INSTANCES = 131072;  // Max instance transforms in SSBO
+    constexpr uint32_t MAX_GPU_INSTANCES = 262144;  // Max instance transforms in SSBO (VK-1573: 131072->262144 for foliage)
 
     // Per-instance data for instanced draw calls. Includes PBR override fields so that
     // entities with different .vfMatInstance scalar overrides (but same parent material)
     // can be batched into a single draw call.
     //
     // Trade-off: 112 bytes vs 64 bytes (mat4 only). The extra 48 bytes per instance
-    // increase GPU memory and bandwidth (~6 MB worst-case at MAX_GPU_INSTANCES).
+    // increase GPU memory and bandwidth (~12 MB of that at MAX_GPU_INSTANCES = 262144;
+    // total device SSBO ~28 MB, plus one host-visible staging copy per frame-in-flight).
     // iblOverride.w acts as a hasOverride flag: 0.0 = use PerDrawData PBR (no overhead
     // in the shader's common path), 1.0 = use per-instance PBR values.
     struct alignas(16) GPUInstanceTransform
@@ -100,7 +101,9 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
-        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
+        // .w=instanceOffset; .y=startFadeDistanceSquared bits (VK-1582, packed via memcpy of a float,
+        // read on GPU with uintBitsToFloat; 0 = no near fade). .x/.z spare.
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0};
     };
     static_assert(sizeof(GPUObjectData) == 352);
 
@@ -151,6 +154,16 @@ namespace render::gpudriven
             flags |= (static_cast<uint32_t>(shadingModel) & ShadingModelMask) << ShadingModelShift;
             flags |= (static_cast<uint32_t>(profileIndex) & ProfileIndexMask) << ProfileIndexShift;
         }
+
+        // VK-1580: foliage wind. A single gate bit (bit 8, free) marking a mesh as
+        // wind-receiving foliage. Sway amplitude/direction/time are GLOBAL — read from the
+        // shared grass WindSystem UBO — so no per-object wind parameters are stored. Set
+        // from a per-material "Foliage Wind" flag. Does NOT collide with any packed field
+        // (blend 4-12, Instanced 15, Category 13-16, ShadowStatic 17, Layer 18-22,
+        // ShadingModel 23-24, ProfileIndex 25-31). `makePerDrawData` copies flags verbatim,
+        // so no PerDrawData change is needed. Must match FLAG_FOLIAGE_WIND in
+        // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
+        constexpr uint32_t FoliageWind = 1 << 8;
     }
 
     namespace ObjectCategory
@@ -321,6 +334,7 @@ namespace render::gpudriven
     struct GPUDrivenStats
     {
         uint32_t totalObjects;
+        uint32_t totalInstances; // VK-1579: instance-transform total (foliage/vegetation/mesh), bounded by MAX_GPU_INSTANCES
         uint32_t visibleObjects;
         uint32_t drawCalls;
         uint32_t objectsLOD0;

@@ -16,10 +16,11 @@ namespace services
         bool inBatchMode = false;
         std::string batchDescription;
         std::unique_ptr<BatchUndoCommand> currentBatch;
+        ::events::SubscriptionToken sceneClearedToken;
 
     public:
         explicit UndoRedoServiceImpl();
-        ~UndoRedoServiceImpl() override = default;
+        ~UndoRedoServiceImpl() override;
 
         void registerEventHandlers() override;
         

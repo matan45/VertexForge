@@ -34,6 +34,8 @@ namespace vegetation
             file.write(reinterpret_cast<const char*>(&inst.heightScale), sizeof(float));
             file.write(reinterpret_cast<const char*>(&inst.tint), sizeof(float));
             file.write(reinterpret_cast<const char*>(&inst.normal), sizeof(glm::vec3));
+            const uint8_t source = static_cast<uint8_t>(inst.source); // v3: Painted/Procedural
+            file.write(reinterpret_cast<const char*>(&source), sizeof(uint8_t));
         }
 
         return file.good();
@@ -55,7 +57,8 @@ namespace vegetation
 
         uint32_t version = 0;
         file.read(reinterpret_cast<char*>(&version), sizeof(version));
-        if (version != VEGETATION_INSTANCE_FORMAT_VERSION)
+        // v2 and v3 are both readable; v3 appends a per-instance source byte.
+        if (version != 2 && version != VEGETATION_INSTANCE_FORMAT_VERSION)
         {
             vfLogError("VegetationSerializer: Unsupported version {} in {}", version, filePath);
             return false;
@@ -84,6 +87,13 @@ namespace vegetation
             file.read(reinterpret_cast<char*>(&inst.heightScale), sizeof(float));
             file.read(reinterpret_cast<char*>(&inst.tint), sizeof(float));
             file.read(reinterpret_cast<char*>(&inst.normal), sizeof(glm::vec3));
+            if (version >= 3)
+            {
+                uint8_t source = 0;
+                file.read(reinterpret_cast<char*>(&source), sizeof(uint8_t));
+                inst.source = static_cast<InstanceSource>(source);
+            }
+            // else v2: inst.source stays the default (Painted) from resize().
             inst.windPhase = windDist(rng);
         }
 

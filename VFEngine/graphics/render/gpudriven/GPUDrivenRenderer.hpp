@@ -282,6 +282,7 @@ namespace render::gpudriven
         // VK-1493: bind the toon profile table (set-1 binding 6) on every mesh pipeline. Written
         // once after pipeline (re)creation — the table's buffer handle is lifetime-stable.
         void wireToonProfilePipelines();
+        void wireWindPipelines();  // VK-1580: bind the global wind UBO (set-1 binding 7) on the mesh pipelines
 
         detail::TerrainState terrain;
 

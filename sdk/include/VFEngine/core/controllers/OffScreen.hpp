@@ -155,6 +155,7 @@ namespace controllers
         void setCategoryDistance(uint32_t category, float distance);
         void setShadowDistanceMultiplier(float multiplier);
         void setGlobalLodBias(float bias);
+        void setFoliageDensityScale(float scale); // VK-1582
         void setTerrainFrustumCullingEnabled(bool enabled);
         void setTerrainMeshletCullingEnabled(bool enabled);
 

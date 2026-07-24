@@ -1,11 +1,17 @@
 #include "GrassDensityPanel.hpp"
+#include "ScatterRuleWidget.hpp"
+#include "ScatterProfileAssetIO.hpp"
+#include "vegetation/ScatterProfileSerialization.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/vegetation/GrassEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include <imgui.h>
 #include <filesystem>
+#include <algorithm>
 #include <cmath>
+#include <optional>
+#include <string>
 
 namespace
 {
@@ -20,6 +26,7 @@ namespace windows
         {
             auto& dispatcher = events::EventDispatcher::instance();
             dispatcher.unsubscribe(modeToken);
+            dispatcher.unsubscribe(scatterToken);
         }
     }
 
@@ -35,6 +42,14 @@ namespace windows
                 visible = n.isActive;
                 if (visible)
                     configLoaded = false; // Force reload palette when panel opens
+            });
+
+        scatterToken = dispatcher.subscribe<events::vegetation::ScatterBakeCompletedNotification>(
+            [this](const events::vegetation::ScatterBakeCompletedNotification& n)
+            {
+                lastPlacedCount = static_cast<int>(n.placedCount);
+                lastTotalCount = static_cast<int>(n.totalCount);
+                lastBudgetExceeded = n.budgetExceeded;
             });
 
         subscribed = true;
@@ -59,6 +74,8 @@ namespace windows
         ensureConfigLoaded();
         drawWindControls();
         drawSSSControls();
+        ImGui::Separator();
+        drawScatterControls();
         ImGui::End();
 
         if (!visible)
@@ -370,6 +387,12 @@ namespace windows
                     events::vegetation::GetBillboardPaletteQuery{});
             } catch (...) {}
 
+            try {
+                scatterProfile = events::EventDispatcher::instance().query(
+                    events::vegetation::GetGlobalScatterProfileQuery{});
+                scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+            } catch (...) {}
+
             configLoaded = true;
         }
     }
@@ -387,6 +410,119 @@ namespace windows
         events::vegetation::SetBillboardPaletteCommand cmd;
         cmd.entries = billboardEntries;
         cmd.activeEntry = -1; // All active entries render (controlled by per-entry checkbox)
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::drawScatterControls()
+    {
+        if (!ImGui::CollapsingHeader("Scatter Rules"))
+            return;
+
+        ImGui::TextDisabled("Rule-driven procedural placement (bake).");
+
+        // Reusable .vfScatterProfile asset (VK-1585): author once, apply across scenes.
+        if (ImGui::Button("New##scatter"))
+        {
+            scatterProfile = vegetation::ScatterProfile{};
+            scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+            pushScatterProfile();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load...##scatter"))
+        {
+            nfd::FileDialog dlg;
+            std::string path = dlg.openFileDialog({{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}});
+            if (!path.empty() && vegetation::loadScatterProfileFile(path, scatterProfile))
+            {
+                scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+                pushScatterProfile();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save As...##scatter"))
+        {
+            nfd::FileDialog dlg;
+            std::string path = dlg.saveFileDialog(
+                {{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}}, L"vfScatterProfile");
+            if (!path.empty())
+            {
+                scatterProfile.domain = vegetation::ScatterDomain::Billboard;
+                saveScatterProfileAsset(path, scatterProfile);
+            }
+        }
+        ImGui::Separator();
+
+        bool changed = false;
+
+        if (ImGui::DragInt("Global Seed", &scatterSeed, 1.0f, 0, 1000000))
+        {
+            if (scatterSeed < 0) scatterSeed = 0;
+            scatterProfile.globalSeed = static_cast<uint32_t>(scatterSeed);
+            changed = true;
+        }
+        changed |= ImGui::SliderFloat("Density Scale", &scatterProfile.globalDensityScale, 0.0f, 1.0f, "%.2f");
+
+        int removeIndex = -1;
+        for (int i = 0; i < static_cast<int>(scatterProfile.rules.size()); ++i)
+            drawScatterRule(i, removeIndex, changed);
+
+        if (removeIndex >= 0)
+        {
+            scatterProfile.rules.erase(scatterProfile.rules.begin() + removeIndex);
+            changed = true;
+        }
+
+        if (ImGui::Button("Add Rule"))
+        {
+            scatterProfile.rules.emplace_back();
+            changed = true;
+        }
+
+        // Biome-layered rule sets (VK-1585).
+        drawBiomeListEditor(scatterProfile.biomes, static_cast<int>(billboardEntries.size()), changed);
+
+        if (changed)
+            pushScatterProfile();
+
+        ImGui::Separator();
+        if (ImGui::Button("Bake / Regenerate Scatter"))
+            generateScatter(true);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Regenerate procedural instances across the whole terrain; hand-painted are kept");
+
+        if (lastPlacedCount >= 0)
+        {
+            ImGui::Text("Placed %d (total %d)", lastPlacedCount, lastTotalCount);
+            if (lastBudgetExceeded)
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.2f, 1.0f),
+                                   "Budget exceeded - some instances skipped");
+        }
+    }
+
+    void GrassDensityPanel::drawScatterRule(int index, int& removeIndex, bool& changed)
+    {
+        // Shared per-rule editor (VK-1585) — same widget the foliage scatter panel uses.
+        drawScatterRuleEditor(index, scatterProfile.rules[index],
+                              static_cast<int>(billboardEntries.size()), 2000, removeIndex, changed);
+    }
+
+    void GrassDensityPanel::pushScatterProfile()
+    {
+        events::vegetation::SetGlobalScatterProfileCommand cmd;
+        cmd.profile = scatterProfile;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void GrassDensityPanel::generateScatter(bool replaceProcedural)
+    {
+        pushScatterProfile(); // keep the persisted component in sync before baking
+
+        events::vegetation::GenerateVegetationScatterCommand cmd;
+        cmd.region = std::nullopt; // MVP: whole active terrain
+        cmd.profile = scatterProfile;
+        cmd.profile.globalSeed = static_cast<uint32_t>(scatterSeed);
+        cmd.seed = static_cast<uint32_t>(scatterSeed);
+        cmd.replaceProcedural = replaceProcedural;
         events::EventDispatcher::instance().execute(cmd);
     }
 }

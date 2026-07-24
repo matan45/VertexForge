@@ -15,6 +15,7 @@
 #include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/meshbrush/MeshBrushEvents.hpp"
+#include "events/foliage/FoliageBrushEvents.hpp"
 #include "events/ui/UIPickEvents.hpp"
 #include "events/input/InputEvents.hpp"
 #include "events/audio/AudioEvents.hpp"
@@ -143,6 +144,7 @@ namespace windows
             handleCaveBrush();
             handleVegetationBrush();
             handleMeshBrush();
+            handleFoliageBrush();
             handleSplineTool();
         }
         ImGui::End();
@@ -459,6 +461,8 @@ namespace windows
         if (sculptDispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{})) return;
         bool meshBrushActive = sculptDispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
         if (meshBrushActive && !ImGui::GetIO().KeyCtrl) return;
+        bool foliageBrushActive = sculptDispatcher.query(events::foliageBrush::IsFoliageBrushModeActiveQuery{});
+        if (foliageBrushActive && !ImGui::GetIO().KeyCtrl) return;
 
         if (!ImGui::IsWindowHovered()) return;
         if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
@@ -616,10 +620,11 @@ namespace windows
         bool caveActive = dispatcher.query(events::cave::IsCaveModeActiveQuery{});
         bool vegActive = dispatcher.query(events::vegetationBrush::IsVegetationBrushModeActiveQuery{});
         bool meshBrushActive = dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{});
+        bool foliageBrushActive = dispatcher.query(events::foliageBrush::IsFoliageBrushModeActiveQuery{});
 
         bool splineActive = dispatcher.query(events::splineTerrain::IsSplineModeActiveQuery{});
 
-        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive || splineActive;
+        bool anyActive = sculptActive || paintActive || holeActive || caveActive || vegActive || meshBrushActive || foliageBrushActive || splineActive;
 
         if (!anyActive || !ImGui::IsWindowHovered())
         {
@@ -636,6 +641,7 @@ namespace windows
         else if (caveActive) sendCursorUV(viewportPos, viewportSize);
         else if (vegActive) updateVegetationCursorUV(viewportPos, viewportSize);
         else if (meshBrushActive) updateMeshBrushCursorUV(viewportPos, viewportSize);
+        else if (foliageBrushActive) updateFoliageBrushCursorUV(viewportPos, viewportSize);
         else if (splineActive) sendCursorUV(viewportPos, viewportSize);
     }
 
@@ -811,6 +817,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::meshBrush::IsMeshBrushModeActiveQuery{}) || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl) {
+            if (meshBrushDragging) {
+                events::meshBrush::FinalizeMeshBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             meshBrushDragging = false;
             return;
         }
@@ -826,7 +836,47 @@ namespace windows
                 meshBrushDragging = true;
             }
         } else {
+            if (meshBrushDragging) {
+                events::meshBrush::FinalizeMeshBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             meshBrushDragging = false;
+        }
+    }
+
+    void ViewPort::updateFoliageBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize)
+    {
+        sendCursorUV(viewportPos, viewportSize);
+    }
+
+    void ViewPort::handleFoliageBrush()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        if (!dispatcher.query(events::foliageBrush::IsFoliageBrushModeActiveQuery{}) || !ImGui::IsWindowHovered() || ImGui::GetIO().KeyCtrl) {
+            if (foliageBrushDragging) {
+                events::foliageBrush::FinalizeFoliageBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
+            foliageBrushDragging = false;
+            return;
+        }
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+            if (hitResult.hit) {
+                events::foliageBrush::ApplyFoliageBrushCommand applyCmd;
+                applyCmd.worldPosition = hitResult.position;
+                applyCmd.surfaceNormal = hitResult.normal;
+                applyCmd.deltaTime = ImGui::GetIO().DeltaTime;
+                applyCmd.isFirstApplication = !foliageBrushDragging;
+                dispatcher.execute(applyCmd);
+                foliageBrushDragging = true;
+            }
+        } else {
+            if (foliageBrushDragging) {
+                events::foliageBrush::FinalizeFoliageBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
+            foliageBrushDragging = false;
         }
     }
 

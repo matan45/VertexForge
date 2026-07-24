@@ -288,6 +288,13 @@ namespace events::render {
         std::string_view getName() const override { return "SetShadowDistanceMultiplier"; }
     };
 
+    // VK-1582: global foliage density scale [0,1]. Scales the rendered instanced-foliage count.
+    struct SetFoliageDensityScaleCommand : ICommand<> {
+        float scale;
+
+        std::string_view getName() const override { return "SetFoliageDensityScale"; }
+    };
+
     struct SetLODCrossfadeCommand : ICommand<> {
         bool enabled;
 

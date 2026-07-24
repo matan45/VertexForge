@@ -92,6 +92,10 @@ namespace services
                     auto ent = scene::EntityRegistry::findByUUID(uuid);
                     if (ent != entt::null)
                     {
+                        // VK-1579: foliage is entity-free packed FoliageInstance data on
+                        // TerrainTile and renders via the instanced collector — it is never
+                        // an entity, so it never registers for per-entity GPU object streaming
+                        // here (which would blow MAX_GPU_OBJECTS). Only real mesh entities do.
                         if (registry.any_of<components::MeshComponent>(ent))
                             meshEntities.emplace_back(uuid, ent);
                         if (registry.any_of<components::PointLightComponent, components::SpotLightComponent>(ent))

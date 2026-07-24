@@ -38,6 +38,7 @@ namespace services {
         uint32_t hiZMipLevels = 0;
 
         uint32_t totalObjects = 0;
+        uint32_t totalInstances = 0; // VK-1579: instanced transforms (foliage/vegetation/mesh), bounded by MAX_GPU_INSTANCES
         uint32_t visibleObjects = 0;
         uint32_t culledByFrustum = 0;
         uint32_t culledByOcclusion = 0;
@@ -311,6 +312,7 @@ namespace services {
         virtual void setCategoryDistance(uint32_t category, float distance) = 0;
         virtual void setShadowDistanceMultiplier(float multiplier) = 0;
         virtual void setGlobalLodBias(float bias) = 0;
+        virtual void setFoliageDensityScale(float scale) = 0; // VK-1582
 
         virtual void setTerrainFrustumCullingEnabled(bool enabled) = 0;
         virtual void setTerrainMeshletCullingEnabled(bool enabled) = 0;

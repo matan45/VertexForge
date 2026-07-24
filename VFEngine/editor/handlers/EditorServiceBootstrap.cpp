@@ -57,6 +57,8 @@
 #include "impl/vegetation/VegetationBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushModeServiceImpl.hpp"
 #include "impl/meshbrush/MeshBrushServiceImpl.hpp"
+#include "impl/foliage/FoliageBrushServiceImpl.hpp"
+#include "impl/foliage/FoliageBrushModeServiceImpl.hpp"
 #include "impl/weather/WeatherServiceImpl.hpp"
 #include "impl/destruction/DestructionServiceImpl.hpp"
 #include "../adapters/terrain/TerrainRenderAdapter.hpp"
@@ -91,6 +93,7 @@ namespace handlers
         createOceanServices();
         createVegetationServices();
         createMeshBrushServices();
+        createFoliageBrushServices();
         createAIServices();
         createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
@@ -314,6 +317,12 @@ namespace handlers
         meshBrushModeService = std::make_shared<services::MeshBrushModeServiceImpl>();
     }
 
+    void EditorHandler::createFoliageBrushServices()
+    {
+        foliageBrushService = std::make_shared<services::FoliageBrushServiceImpl>();
+        foliageBrushModeService = std::make_shared<services::FoliageBrushModeServiceImpl>();
+    }
+
     void EditorHandler::createAIServices()
     {
         behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
@@ -384,6 +393,8 @@ namespace handlers
         vegetationBrushModeService->registerEventHandlers();
         meshBrushService->registerEventHandlers();
         meshBrushModeService->registerEventHandlers();
+        foliageBrushService->registerEventHandlers();
+        foliageBrushModeService->registerEventHandlers();
         billboardRenderService->registerEventHandlers();
         decalRenderService->registerEventHandlers();
         lightStreamingService->registerEventHandlers();

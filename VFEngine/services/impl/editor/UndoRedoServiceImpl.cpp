@@ -1,11 +1,18 @@
 #include "print/Log.hpp"
 #include "UndoRedoServiceImpl.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
+#include "../../events/project/SceneEvents.hpp"
 
 namespace services
 {
     UndoRedoServiceImpl::UndoRedoServiceImpl()
     {
+    }
+
+    UndoRedoServiceImpl::~UndoRedoServiceImpl()
+    {
+        if (sceneClearedToken.isValid())
+            events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
     }
 
     void UndoRedoServiceImpl::registerEventHandlers()
@@ -41,6 +48,12 @@ namespace services
             {
                 if (cmd.command)
                     pushCommand(std::make_unique<SharedUndoCommand>(cmd.command));
+            });
+
+        sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+            [this](const events::scene::SceneClearedNotification&)
+            {
+                clear();
             });
     }
 
@@ -125,6 +138,9 @@ namespace services
     {
         undoStack.clear();
         redoStack.clear();
+        currentBatch.reset();
+        batchDescription.clear();
+        inBatchMode = false;
     }
 
     bool UndoRedoServiceImpl::canUndo() const

@@ -225,6 +225,7 @@ namespace windows
             caveToolPanel.draw();
             grassDensityPanel.draw();
             meshBrushToolPanel.draw();
+            foliageBrushToolPanel.draw();
             giConfigWindow.draw();
             volumetricFogConfigWindow.draw();
             atmosphereConfigWindow.draw();

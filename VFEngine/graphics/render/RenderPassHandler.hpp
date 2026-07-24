@@ -281,6 +281,9 @@ namespace render
         // fallback) only once both flight slots have been populated by the DepthCopy pass.
         uint32_t prevFrameDepthReadyCounter = 0;
         services::ITerrainRenderProvider* terrainRenderProvider = nullptr;
+        // VK-1582: global foliage density scale [0,1] (UE foliage.DensityScale parity). Stored here
+        // because the foliage collector (FramePreparationSystem) reads it back via this handler.
+        float foliageDensityScale = 1.0f;
         services::IOceanRenderProvider* oceanRenderProvider = nullptr;
         services::IGrassRenderProvider* grassRenderProvider = nullptr;
 
@@ -507,6 +510,8 @@ namespace render
         occlusion::CameraOcclusionManager* getCameraOcclusionManager() const { return cameraOcclusionManager.get(); }
 
         gpudriven::GPUDrivenRenderer* getGPUDrivenRenderer() const { return gpuDrivenRenderer.get(); }
+        services::ITerrainRenderProvider* getTerrainRenderProvider() const { return terrainRenderProvider; } // VK-1573: foliage collector reads tiles + palette
+        float getFoliageDensityScale() const { return foliageDensityScale; } // VK-1582: read by the foliage collector
         bool isGPUDrivenRendererInitialized() const { return gpuDrivenRendererInitialized; }
         void setAsyncComputeActive(bool active) { asyncComputeActive = active; }
         void setParallelSceneRecording(bool enabled, core::ThreadCommandPoolManager* poolManager = nullptr)
@@ -561,6 +566,7 @@ namespace render
         void setBillboardDrawDistance(float distance);
         void setTerrainDistanceCullingEnabled(bool enabled);
         void setTerrainDrawDistance(float distance);
+        void setFoliageDensityScale(float scale); // VK-1582
 
         void setTerrainRenderProvider(services::ITerrainRenderProvider* provider);
         void clearTerrainData();

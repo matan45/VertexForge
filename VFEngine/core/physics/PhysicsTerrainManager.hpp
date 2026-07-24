@@ -78,6 +78,21 @@ namespace core::physics
         OwnedTerrainColliderData cachedData; // full-res cache for LOD transitions
     };
 
+    // VK-1584 — one entity-free proximity foliage collider. The Jolt shape (convex hull cached by
+    // meshPath, or a box/capsule sized from the mesh AABB) is shared across every instance of a
+    // FoliageType; only the transform varies per instance.
+    struct FoliageColliderCreateInfo
+    {
+        types::ColliderShape shape = types::ColliderShape::Capsule;
+        std::string meshPath;                 // ConvexMesh source (loaded + cached by meshPath)
+        glm::vec3 position{0.0f};             // instance world position (mesh origin / base)
+        float yRotation = 0.0f;
+        glm::vec3 scale{1.0f};                // per-instance scale
+        glm::vec3 localAabbCenter{0.0f};      // mesh-local AABB center (Box/Capsule offset)
+        glm::vec3 localAabbHalfExtents{0.5f}; // mesh-local AABB half-size (Box/Capsule sizing)
+        uint8_t collisionLayer = 0;
+    };
+
     class PhysicsTerrainManager
     {
     public:
@@ -115,6 +130,11 @@ namespace core::physics
                                          const std::vector<JPH::BodyID>& bodyIds);
         void removeVegetationTileColliders(int32_t tileX, int32_t tileZ);
         void removeAllVegetationColliders();
+
+        // VK-1584 — proximity foliage colliders: entity-free static body from a per-type shared
+        // shape; caller tracks the returned BodyID and destroys it via destroyStaticBody.
+        JPH::BodyID createFoliageStaticBody(const FoliageColliderCreateInfo& info);
+        void destroyStaticBody(JPH::BodyID bodyId);
 
         static TileCoordKey makeTileKey(int32_t x, int32_t z);
 

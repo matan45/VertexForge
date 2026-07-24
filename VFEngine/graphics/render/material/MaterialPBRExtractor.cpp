@@ -358,6 +358,10 @@ namespace render::mesh
             }
         }
 
+        // VK-1580: foliage-wind gate. Global wind params, so this is a pure copy — no GPU
+        // table to resolve. The merged-scene packer turns it into the FoliageWind flag bit.
+        pbr.receiveWind = matData.receiveWind;
+
         return pbr;
     }
 

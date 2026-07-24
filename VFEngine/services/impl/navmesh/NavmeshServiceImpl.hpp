@@ -80,6 +80,11 @@ namespace services
         void collectColliderGeometry(navigation::NavmeshInputGeometry& outGeometry);
         void collectColliderGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
                                                navigation::NavmeshInputGeometry& outGeometry);
+        // VK-1584: nav-contributing packed foliage. Loads each opted-in type's coarse (LOD3) mesh
+        // ONCE, then transform-appends it across that type's instances within the bounds.
+        void collectFoliageGeometry(navigation::NavmeshInputGeometry& outGeometry);
+        void collectFoliageGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                              navigation::NavmeshInputGeometry& outGeometry);
         navigation::OffMeshConnectionsMap collectAllOffMeshLinks(const types::NavmeshBakeSettings& settings);
         navigation::NavmeshOffMeshConnections collectOffMeshLinksForTile(const navigation::NavmeshTileBounds& bounds,
                                                                          const types::NavmeshBakeSettings& settings);
