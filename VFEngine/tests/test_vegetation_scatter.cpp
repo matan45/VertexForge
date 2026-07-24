@@ -98,6 +98,58 @@ TEST_SUITE("VegetationScatter")
         CHECK(ScatterRuleEvaluator::passes(r, low));
     }
 
+    TEST_CASE("evaluator curvature mask gates a curvature band (VK-1585)")
+    {
+        ScatterRule r;
+        r.useCurvatureMask = true;
+        r.curvatureMin = 0.5f; // require concave
+        r.curvatureMax = 5.0f;
+
+        ScatterSample concave{0, 0, 0, glm::vec3(0, 1, 0), 1.0f, 1.0f};  // in band
+        ScatterSample convex{0, 0, 0, glm::vec3(0, 1, 0), 1.0f, -1.0f};  // below band (ridge)
+        ScatterSample tooDeep{0, 0, 0, glm::vec3(0, 1, 0), 1.0f, 9.0f};  // above band
+        CHECK(ScatterRuleEvaluator::passes(r, concave));
+        CHECK_FALSE(ScatterRuleEvaluator::passes(r, convex));
+        CHECK_FALSE(ScatterRuleEvaluator::passes(r, tooDeep));
+    }
+
+    TEST_CASE("tile curvature sampler: concave positive, convex negative, flat zero (VK-1585)")
+    {
+        // vpt=3, vertexSpacing=1, eps=vertexSpacing. Bowl (centre low) -> concave (+).
+        std::array<float, 9> bowl = {2, 1, 2, 1, 0, 1, 2, 1, 2};
+        CHECK(terrain::sampleTileCurvature(bowl.data(), 3, 1.0f, 1.0f, 1.0f, 1.0f) == doctest::Approx(1.0f));
+        // Dome (centre high) -> convex (-).
+        std::array<float, 9> dome = {-2, -1, -2, -1, 0, -1, -2, -1, -2};
+        CHECK(terrain::sampleTileCurvature(dome.data(), 3, 1.0f, 1.0f, 1.0f, 1.0f) == doctest::Approx(-1.0f));
+        // Flat -> zero.
+        std::array<float, 9> flat = {5, 5, 5, 5, 5, 5, 5, 5, 5};
+        CHECK(terrain::sampleTileCurvature(flat.data(), 3, 1.0f, 1.0f, 1.0f, 1.0f) == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("curvature gate restricts placement to the band, deterministically (VK-1585)")
+    {
+        std::vector<BillboardPaletteEntry> palette(1);
+        ScatterProfile p = oneRuleProfile(1.0f, 1.0f, 0.0f); // no jitter -> candidates at cell centres
+        p.rules[0].useCurvatureMask = true;
+        p.rules[0].curvatureMin = 0.5f;
+        p.rules[0].curvatureMax = 10.0f;
+        // Left half concave (passes), right half convex (rejected).
+        auto leftConcave = [](float lx, float) { return lx < 4.0f ? 1.0f : -1.0f; };
+
+        auto r = bakeScatterForTile(p, palette, 11u, 0, 0, 8.0f,
+                                    flatHeight, flatNormal, fullLayer, leftConcave, 1u << 20);
+        REQUIRE(!r.instances.empty());
+        for (const auto& i : r.instances)
+            CHECK(i.position.x < 4.0f);
+
+        // Enabling curvature does not perturb determinism.
+        auto r2 = bakeScatterForTile(p, palette, 11u, 0, 0, 8.0f,
+                                     flatHeight, flatNormal, fullLayer, leftConcave, 1u << 20);
+        REQUIRE(r.instances.size() == r2.instances.size());
+        for (size_t i = 0; i < r.instances.size(); ++i)
+            CHECK(r.instances[i].position.x == doctest::Approx(r2.instances[i].position.x));
+    }
+
     TEST_CASE("bake is deterministic (idempotent Regenerate)")
     {
         ScatterProfile p = oneRuleProfile(1.0f, 1.0f, 0.5f);

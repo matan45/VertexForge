@@ -7,7 +7,7 @@
 // (cached by meshPath). Gated to play mode so no bodies exist while editing. Owned + ticked by
 // TerrainService, which already has the camera position, loaded tiles, palette, and physics
 // provider all in one scope.
-#include "providers/physics/IPhysicsProvider.hpp"
+#include "../../providers/physics/IPhysicsProvider.hpp"
 #include "foliage/FoliageActivation.hpp"
 #include "foliage/FoliageTypes.hpp"
 #include <glm/glm.hpp>

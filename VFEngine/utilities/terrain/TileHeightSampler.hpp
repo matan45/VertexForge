@@ -50,6 +50,26 @@ namespace terrain
         return glm::normalize(glm::vec3(hL - hR, 2.0f * eps, hD - hU));
     }
 
+    // Discrete curvature of the bilinear height field (VK-1585): the mean of the four axis
+    // neighbours (at +/-eps) minus the centre height, in world-Y units. POSITIVE = concave
+    // (centre sits below its neighbours, e.g. a hollow/valley), NEGATIVE = convex (a ridge/peak).
+    // It is proportional to the 5-point discrete Laplacian.
+    //
+    // eps MUST be >= vertexSpacing. Bilinear interpolation is planar within a single grid cell
+    // (its pure second derivatives are zero there), so a stencil narrower than one grid step
+    // reads ~0 curvature everywhere; sampling a full vertexSpacing away lands on genuinely
+    // different height values. At tile edges the neighbour samples clamp inward.
+    inline float sampleTileCurvature(const float* heightData, uint32_t vpt, float vertexSpacing,
+                                     float localX, float localZ, float eps)
+    {
+        const float hC = sampleTileHeightBilinear(heightData, vpt, vertexSpacing, localX, localZ);
+        const float hL = sampleTileHeightBilinear(heightData, vpt, vertexSpacing, localX - eps, localZ);
+        const float hR = sampleTileHeightBilinear(heightData, vpt, vertexSpacing, localX + eps, localZ);
+        const float hD = sampleTileHeightBilinear(heightData, vpt, vertexSpacing, localX, localZ - eps);
+        const float hU = sampleTileHeightBilinear(heightData, vpt, vertexSpacing, localX, localZ + eps);
+        return (hL + hR + hD + hU) * 0.25f - hC;
+    }
+
     // Bilinear splat weight of material palette layer `paletteLayer`. Returns 0 when the
     // layer is not present on this tile (findChannel == 0xFF). resolution == vpt.
     inline float sampleTileLayerWeightBilinear(const TileWeightMapData& wm, uint8_t paletteLayer,

@@ -45,7 +45,12 @@ namespace vegetation
             SCALE = 4,
             HEIGHT = 5,
             TINT = 6,
-            WINDPHASE = 7
+            WINDPHASE = 7,
+            // Appended for the procedural MESH scatter baker (VK-1585); append-only so the
+            // existing billboard streams keep yielding identical values (idempotency).
+            TILT_ANGLE = 8,
+            TILT_AZIM = 9,
+            SEED = 10
         };
     }
 
@@ -81,6 +86,11 @@ namespace vegetation
                 if (r.invertLayer)
                     pass = !pass;
                 if (!pass)
+                    return false;
+            }
+            if (r.useCurvatureMask)
+            {
+                if (s.curvature < r.curvatureMin || s.curvature > r.curvatureMax)
                     return false;
             }
             return true;

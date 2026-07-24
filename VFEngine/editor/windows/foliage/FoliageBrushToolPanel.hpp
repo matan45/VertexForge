@@ -7,6 +7,7 @@
 #include "events/EventTypes.hpp"
 #include "foliage/FoliageBrushTypes.hpp"
 #include "foliage/FoliageTypes.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
 #include "nfd/FileDialog.hpp"
 #include <vector>
 #include <cstdint>
@@ -38,6 +39,14 @@ namespace windows
         events::SubscriptionToken modeToken;
         bool subscribed = false;
 
+        // Scatter rules (VK-1585) — rule-driven procedural MESH foliage placement (bake).
+        vegetation::ScatterProfile scatterProfile;
+        int scatterSeed = 1337;
+        int lastPlacedCount = -1;   // <0 = no bake yet this session
+        int lastTotalCount = 0;
+        bool lastBudgetExceeded = false;
+        events::SubscriptionToken scatterToken;
+
     public:
         FoliageBrushToolPanel() = default;
         ~FoliageBrushToolPanel();
@@ -55,5 +64,10 @@ namespace windows
         void pushParams();
         void pushPalette();
         [[nodiscard]] uint32_t packTint() const;
+
+        // VK-1585 procedural mesh scatter.
+        void drawScatterControls();
+        void pushScatterProfile();
+        void generateScatter(bool replaceProcedural);
     };
 }

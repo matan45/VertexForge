@@ -35,6 +35,10 @@ namespace foliage
         constexpr uint16_t Tilt          = 1u << 0; // random tilt applied
         constexpr uint16_t Collider      = 1u << 1; // has proximity collider  (VK-1584)
         constexpr uint16_t NavContribute = 1u << 2; // contributes to navmesh  (VK-1584)
+        constexpr uint16_t Procedural    = 1u << 3; // placed by procedural scatter bake (VK-1585);
+                                                    // a Regenerate replaces only these, keeping
+                                                    // hand-painted foliage. Rides the existing
+                                                    // flags field -> no ABI/format change.
     }
 
     // Palette cap. typeIndex is u16 (headroom) but the palette is capped at 64.

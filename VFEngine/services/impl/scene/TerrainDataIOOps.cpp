@@ -7,6 +7,7 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainWeightMapAsset.hpp"
 #include "vegetation/VegetationSerializer.hpp"
+#include "vegetation/ScatterProfileSerialization.hpp" // VK-1585 foliage scatter sidecar
 #include "foliage/FoliageSerializer.hpp"
 #include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
@@ -273,6 +274,15 @@ namespace services
             anyData = true;
         }
 
+        // Save the procedural foliage scatter profile (VK-1585) as a sidecar alongside the palette.
+        if (!foliageScatterProfile.rules.empty())
+        {
+            std::error_code ec;
+            fs::create_directories(foliageDir, ec);
+            vegetation::saveScatterProfileFile(foliageDir + "/foliage_scatter.json", foliageScatterProfile);
+            anyData = true;
+        }
+
         if (anyData)
             vfLogInfo("TerrainService: Saved foliage data to {}", foliageDir);
 
@@ -321,6 +331,15 @@ namespace services
                 setFoliagePalette(std::move(palette));
                 vfLogInfo("TerrainService: Loaded foliage palette ({} entries)", foliagePalette.size());
             }
+        }
+
+        // Load the procedural foliage scatter profile (VK-1585).
+        std::string scatterPath = foliageDir + "/foliage_scatter.json";
+        if (fs::exists(scatterPath))
+        {
+            vegetation::ScatterProfile profile;
+            if (vegetation::loadScatterProfileFile(scatterPath, profile))
+                setFoliageScatterProfile(std::move(profile));
         }
 
         if (loadedCount > 0)

@@ -1,10 +1,14 @@
 #include "FoliageBrushToolPanel.hpp"
+#include "../vegetation/ScatterRuleWidget.hpp"
+#include "../vegetation/ScatterProfileAssetIO.hpp"
+#include "vegetation/ScatterProfileSerialization.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/foliage/FoliageBrushEvents.hpp"
 #include "events/foliage/FoliageEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cstring>
+#include <optional>
 #include <string>
 
 namespace windows
@@ -15,6 +19,7 @@ namespace windows
         {
             auto& dispatcher = events::EventDispatcher::instance();
             dispatcher.unsubscribe(modeToken);
+            dispatcher.unsubscribe(scatterToken);
         }
     }
 
@@ -39,7 +44,20 @@ namespace windows
                     if (selectedPaletteIndex >= static_cast<int>(paletteEntries.size()))
                         selectedPaletteIndex = -1;
                     pushParams();
+
+                    // Sync the scatter profile FROM the service (a disk-loaded profile lives there).
+                    scatterProfile = events::EventDispatcher::instance().query(
+                        events::foliage::GetFoliageScatterProfileQuery{});
+                    scatterSeed = static_cast<int>(scatterProfile.globalSeed);
                 }
+            });
+
+        scatterToken = dispatcher.subscribe<events::foliage::FoliageScatterBakeCompletedNotification>(
+            [this](const auto& n)
+            {
+                lastPlacedCount = static_cast<int>(n.placedCount);
+                lastTotalCount = static_cast<int>(n.totalCount);
+                lastBudgetExceeded = n.budgetExceeded;
             });
 
         subscribed = true;
@@ -77,6 +95,9 @@ namespace windows
 
         ImGui::Separator();
         drawPaletteSection();
+
+        ImGui::Separator();
+        drawScatterControls();
 
         ImGui::End();
 
@@ -385,6 +406,113 @@ namespace windows
     {
         events::foliage::SetFoliagePaletteCommand cmd;
         cmd.palette = paletteEntries;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void FoliageBrushToolPanel::drawScatterControls()
+    {
+        if (!ImGui::CollapsingHeader("Scatter Rules"))
+            return;
+
+        ImGui::TextDisabled("Rule-driven procedural MESH placement (bake).");
+
+        // Reusable .vfScatterProfile asset (VK-1585): author once, apply across scenes.
+        if (ImGui::Button("New##foliageScatter"))
+        {
+            scatterProfile = vegetation::ScatterProfile{};
+            scatterProfile.domain = vegetation::ScatterDomain::Mesh;
+            scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+            pushScatterProfile();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load...##foliageScatter"))
+        {
+            std::string path = fileDialog.openFileDialog(
+                {{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}});
+            if (!path.empty() && vegetation::loadScatterProfileFile(path, scatterProfile))
+            {
+                scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+                pushScatterProfile();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save As...##foliageScatter"))
+        {
+            std::string path = fileDialog.saveFileDialog(
+                {{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}}, L"vfScatterProfile");
+            if (!path.empty())
+            {
+                scatterProfile.domain = vegetation::ScatterDomain::Mesh;
+                saveScatterProfileAsset(path, scatterProfile);
+            }
+        }
+        ImGui::Separator();
+
+        bool changed = false;
+
+        if (ImGui::DragInt("Global Seed", &scatterSeed, 1.0f, 0, 1000000))
+        {
+            if (scatterSeed < 0) scatterSeed = 0;
+            scatterProfile.globalSeed = static_cast<uint32_t>(scatterSeed);
+            changed = true;
+        }
+        changed |= ImGui::SliderFloat("Density Scale", &scatterProfile.globalDensityScale, 0.0f, 1.0f, "%.2f");
+
+        int removeIndex = -1;
+        for (int i = 0; i < static_cast<int>(scatterProfile.rules.size()); ++i)
+            drawScatterRuleEditor(i, scatterProfile.rules[i],
+                                  static_cast<int>(paletteEntries.size()), 3000, removeIndex, changed);
+
+        if (removeIndex >= 0)
+        {
+            scatterProfile.rules.erase(scatterProfile.rules.begin() + removeIndex);
+            changed = true;
+        }
+
+        if (ImGui::Button("Add Rule"))
+        {
+            scatterProfile.rules.emplace_back();
+            changed = true;
+        }
+
+        // Biome-layered rule sets (VK-1585).
+        drawBiomeListEditor(scatterProfile.biomes, static_cast<int>(paletteEntries.size()), changed);
+
+        if (changed)
+            pushScatterProfile();
+
+        ImGui::Separator();
+        if (ImGui::Button("Bake / Regenerate Foliage Scatter"))
+            generateScatter(true);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Regenerate procedural mesh foliage across the whole terrain; hand-painted is kept");
+
+        if (lastPlacedCount >= 0)
+        {
+            ImGui::Text("Placed %d (total %d)", lastPlacedCount, lastTotalCount);
+            if (lastBudgetExceeded)
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.2f, 1.0f),
+                                   "Budget exceeded - some instances skipped");
+        }
+    }
+
+    void FoliageBrushToolPanel::pushScatterProfile()
+    {
+        events::foliage::SetFoliageScatterProfileCommand cmd;
+        cmd.profile = scatterProfile;
+        events::EventDispatcher::instance().execute(cmd);
+    }
+
+    void FoliageBrushToolPanel::generateScatter(bool replaceProcedural)
+    {
+        pushScatterProfile(); // keep the persisted profile in sync before baking
+
+        events::foliage::GenerateFoliageScatterCommand cmd;
+        cmd.region = std::nullopt; // whole active terrain
+        cmd.profile = scatterProfile;
+        cmd.profile.globalSeed = static_cast<uint32_t>(scatterSeed);
+        cmd.seed = static_cast<uint32_t>(scatterSeed);
+        cmd.replaceProcedural = replaceProcedural;
         events::EventDispatcher::instance().execute(cmd);
     }
 }

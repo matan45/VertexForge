@@ -1,4 +1,7 @@
 #include "GrassDensityPanel.hpp"
+#include "ScatterRuleWidget.hpp"
+#include "ScatterProfileAssetIO.hpp"
+#include "vegetation/ScatterProfileSerialization.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
 #include "events/vegetation/GrassEvents.hpp"
@@ -417,6 +420,38 @@ namespace windows
 
         ImGui::TextDisabled("Rule-driven procedural placement (bake).");
 
+        // Reusable .vfScatterProfile asset (VK-1585): author once, apply across scenes.
+        if (ImGui::Button("New##scatter"))
+        {
+            scatterProfile = vegetation::ScatterProfile{};
+            scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+            pushScatterProfile();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load...##scatter"))
+        {
+            nfd::FileDialog dlg;
+            std::string path = dlg.openFileDialog({{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}});
+            if (!path.empty() && vegetation::loadScatterProfileFile(path, scatterProfile))
+            {
+                scatterSeed = static_cast<int>(scatterProfile.globalSeed);
+                pushScatterProfile();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save As...##scatter"))
+        {
+            nfd::FileDialog dlg;
+            std::string path = dlg.saveFileDialog(
+                {{L"VF Scatter Profile (*.vfScatterProfile)", L"*.vfScatterProfile"}}, L"vfScatterProfile");
+            if (!path.empty())
+            {
+                scatterProfile.domain = vegetation::ScatterDomain::Billboard;
+                saveScatterProfileAsset(path, scatterProfile);
+            }
+        }
+        ImGui::Separator();
+
         bool changed = false;
 
         if (ImGui::DragInt("Global Seed", &scatterSeed, 1.0f, 0, 1000000))
@@ -443,6 +478,9 @@ namespace windows
             changed = true;
         }
 
+        // Biome-layered rule sets (VK-1585).
+        drawBiomeListEditor(scatterProfile.biomes, static_cast<int>(billboardEntries.size()), changed);
+
         if (changed)
             pushScatterProfile();
 
@@ -463,86 +501,9 @@ namespace windows
 
     void GrassDensityPanel::drawScatterRule(int index, int& removeIndex, bool& changed)
     {
-        ImGui::PushID(2000 + index);
-        auto& r = scatterProfile.rules[index];
-
-        std::string label = "Rule " + std::to_string(index) +
-                            " -> entry " + std::to_string(r.paletteEntryIndex);
-        if (ImGui::TreeNode("Rule", "%s", label.c_str()))
-        {
-            int pe = static_cast<int>(r.paletteEntryIndex);
-            const int maxEntry = billboardEntries.empty() ? 0 : static_cast<int>(billboardEntries.size()) - 1;
-            if (ImGui::DragInt("Palette Entry", &pe, 0.1f, 0, maxEntry))
-            {
-                r.paletteEntryIndex = static_cast<uint32_t>(std::clamp(pe, 0, maxEntry));
-                changed = true;
-            }
-
-            changed |= ImGui::SliderFloat("Density", &r.density, 0.0f, 1.0f, "%.2f");
-            changed |= ImGui::SliderFloat("Spacing", &r.spacing, 0.1f, 10.0f);
-            changed |= ImGui::SliderFloat("Jitter", &r.positionJitter, 0.0f, 1.0f);
-            changed |= ImGui::Checkbox("Align To Normal", &r.alignToNormal);
-
-            changed |= ImGui::Checkbox("Slope Mask", &r.useSlopeMask);
-            if (r.useSlopeMask)
-            {
-                // Present as degrees like the brush; store as cosine (bounds invert).
-                float minDeg = std::acos(std::clamp(r.slopeMaxCos, 0.0f, 1.0f)) / kDegToRad;
-                float maxDeg = std::acos(std::clamp(r.slopeMinCos, 0.0f, 1.0f)) / kDegToRad;
-                bool slopeChanged = false;
-                slopeChanged |= ImGui::SliderFloat("Min Slope (deg)", &minDeg, 0.0f, 90.0f);
-                slopeChanged |= ImGui::SliderFloat("Max Slope (deg)", &maxDeg, 0.0f, 90.0f);
-                if (slopeChanged)
-                {
-                    if (maxDeg < minDeg) maxDeg = minDeg;
-                    r.slopeMinCos = std::cos(maxDeg * kDegToRad);
-                    r.slopeMaxCos = std::cos(minDeg * kDegToRad);
-                    changed = true;
-                }
-            }
-
-            changed |= ImGui::Checkbox("Height Mask", &r.useHeightMask);
-            if (r.useHeightMask)
-            {
-                changed |= ImGui::DragFloat("Min Height", &r.heightMin, 0.5f);
-                changed |= ImGui::DragFloat("Max Height", &r.heightMax, 0.5f);
-            }
-
-            changed |= ImGui::Checkbox("Noise Mask", &r.useNoiseMask);
-            if (r.useNoiseMask)
-            {
-                changed |= ImGui::SliderFloat("Noise Freq", &r.noiseFrequency, 0.01f, 1.0f, "%.3f");
-                changed |= ImGui::SliderFloat("Noise Threshold", &r.noiseThreshold, 0.0f, 1.0f);
-                int ns = static_cast<int>(r.noiseSeed);
-                if (ImGui::DragInt("Noise Seed", &ns, 1.0f, 0, 1000000))
-                {
-                    r.noiseSeed = static_cast<uint32_t>(ns < 0 ? 0 : ns);
-                    changed = true;
-                }
-            }
-
-            changed |= ImGui::Checkbox("Layer Mask", &r.useLayerMask);
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Gate placement by a terrain splat/material layer weight");
-            if (r.useLayerMask)
-            {
-                int li = static_cast<int>(r.layerIndex);
-                if (ImGui::DragInt("Layer Index", &li, 1.0f, 0, 31))
-                {
-                    r.layerIndex = static_cast<uint8_t>(std::clamp(li, 0, 31));
-                    changed = true;
-                }
-                changed |= ImGui::SliderFloat("Min Weight", &r.layerWeightMin, 0.0f, 1.0f);
-                changed |= ImGui::Checkbox("Invert (exclude)", &r.invertLayer);
-            }
-
-            if (ImGui::Button("Remove Rule"))
-                removeIndex = index;
-
-            ImGui::TreePop();
-        }
-
-        ImGui::PopID();
+        // Shared per-rule editor (VK-1585) — same widget the foliage scatter panel uses.
+        drawScatterRuleEditor(index, scatterProfile.rules[index],
+                              static_cast<int>(billboardEntries.size()), 2000, removeIndex, changed);
     }
 
     void GrassDensityPanel::pushScatterProfile()

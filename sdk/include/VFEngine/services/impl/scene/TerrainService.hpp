@@ -6,6 +6,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "foliage/FoliageTypes.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
 #include "math/Frustum.hpp"
 #include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
@@ -74,6 +75,10 @@ namespace services
         // the graphics collector via ITerrainRenderProvider::getFoliagePalette(). Populated via
         // setFoliagePalette() by authoring (VK-1575 brush / VK-1581 scatter).
         std::vector<foliage::FoliageType> foliagePalette;
+
+        // VK-1585: procedural MESH scatter profile (reuses vegetation::ScatterProfile; its
+        // paletteEntryIndex indexes foliagePalette). Persisted in the foliage_scatter.json sidecar.
+        vegetation::ScatterProfile foliageScatterProfile;
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
@@ -155,6 +160,11 @@ namespace services
         // setFoliagePalette is the authoring entry point (VK-1575 brush / VK-1581 scatter).
         const std::vector<foliage::FoliageType>& getFoliagePalette() const { return foliagePalette; }
         void setFoliagePalette(std::vector<foliage::FoliageType> palette) { foliagePalette = std::move(palette); }
+
+        // VK-1585: foliage scatter profile accessors (parity with the palette; authored via the
+        // foliage brush panel's Scatter Rules, persisted in the foliage_scatter.json sidecar).
+        const vegetation::ScatterProfile& getFoliageScatterProfile() const { return foliageScatterProfile; }
+        void setFoliageScatterProfile(vegetation::ScatterProfile profile) { foliageScatterProfile = std::move(profile); }
 
         void setDistanceCullingEnabled(bool enabled) { distanceCullingEnabled_ = enabled; }
         void setMaxDrawDistance(float distance) { maxTerrainDistSq_ = distance * distance; }

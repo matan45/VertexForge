@@ -3,6 +3,9 @@
 // palette (both owned by TerrainService). Mirrors the vegetation tile block in GrassEvents.hpp.
 #include "../EventTypes.hpp"
 #include "foliage/FoliageTypes.hpp"
+#include "vegetation/VegetationScatterTypes.hpp"
+#include "../vegetation/GrassEvents.hpp" // events::vegetation::ScatterRegion (VK-1585)
+#include <optional>
 #include <vector>
 #include <cstdint>
 
@@ -63,5 +66,45 @@ namespace events::foliage
         std::vector<::foliage::FoliageInstance> instances;
 
         std::string_view getName() const override { return "SetTileFoliageInstances"; }
+    };
+
+    // ---- VK-1585: procedural MESH scatter (reuses the vegetation ScatterProfile taxonomy) ----
+
+    // The foliage scatter profile lives on TerrainService (like the palette) and persists in a
+    // foliage_scatter.json sidecar. Reuses vegetation::ScatterProfile; paletteEntryIndex indexes
+    // the FoliageType palette.
+    struct SetFoliageScatterProfileCommand : ICommand<void>
+    {
+        ::vegetation::ScatterProfile profile;
+
+        std::string_view getName() const override { return "SetFoliageScatterProfile"; }
+    };
+
+    struct GetFoliageScatterProfileQuery : IQuery<::vegetation::ScatterProfile>
+    {
+        std::string_view getName() const override { return "GetFoliageScatterProfile"; }
+    };
+
+    // Bake procedural foliage MESH instances into terrain tiles as ONE undoable stroke.
+    // replaceProcedural (Regenerate) drops existing Procedural-flagged instances in the region;
+    // hand-painted foliage is always preserved.
+    struct GenerateFoliageScatterCommand : ICommand<void>
+    {
+        std::optional<::events::vegetation::ScatterRegion> region; // nullopt = whole active terrain
+        ::vegetation::ScatterProfile profile;
+        uint32_t seed = 1337;
+        bool replaceProcedural = true;
+
+        std::string_view getName() const override { return "GenerateFoliageScatter"; }
+    };
+
+    // Broadcast when a foliage scatter bake completes — drives the panel's placed-count/budget UI.
+    struct FoliageScatterBakeCompletedNotification : INotification
+    {
+        uint32_t placedCount = 0;    // procedural foliage instances placed this bake
+        uint32_t totalCount = 0;     // total foliage instances after the bake (painted + procedural)
+        bool budgetExceeded = false; // hit the GPU instance budget
+
+        std::string_view getName() const override { return "FoliageScatterBakeCompleted"; }
     };
 }
