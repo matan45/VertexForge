@@ -463,6 +463,38 @@ TEST_CASE("FoliageTileSnapshotUndoCommand: execute/undo drive tile state") {
     dispatcher.clear();
 }
 
+// ---- code-review #1: hasChanges() must detect content edits, not just count changes ----
+
+TEST_CASE("FoliageTileSnapshotUndoCommand: hasChanges detects same-count content edits") {
+    // A re-bake / edit that replaces N instances with N *different* instances (same count) must
+    // still be undoable — otherwise Ctrl+Z is a silent no-op and the prior layout is lost.
+    std::vector<foliage::FoliageInstance> before(4);
+    for (uint32_t i = 0; i < 4; ++i)
+        before[i].position = glm::vec3(static_cast<float>(i), 0.0f, 0.0f);
+
+    SUBCASE("identical content -> no change") {
+        std::vector<foliage::FoliageInstance> after = before; // byte-identical copy
+        services::FoliageTileSnapshotUndoCommand cmd("Foliage Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK_FALSE(cmd.hasChanges());
+    }
+    SUBCASE("same count, moved instance -> change") {
+        std::vector<foliage::FoliageInstance> after = before;
+        after[2].position.x += 5.0f; // moved one instance, count unchanged
+        services::FoliageTileSnapshotUndoCommand cmd("Foliage Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK(cmd.hasChanges());
+    }
+    SUBCASE("same count, changed appearance (tint/scale) -> change") {
+        std::vector<foliage::FoliageInstance> after = before;
+        after[0].tint = 0x11223344u;
+        after[1].scale = glm::vec3(2.0f);
+        services::FoliageTileSnapshotUndoCommand cmd("Foliage Brush");
+        cmd.addTile(0, 0, before, after);
+        CHECK(cmd.hasChanges());
+    }
+}
+
 // ---- Case 5: InstancedFoliage backend emits ZERO CreateEntityCommand ----
 
 TEST_CASE("FoliageBrushServiceImpl paints into tile store, never creating entities") {

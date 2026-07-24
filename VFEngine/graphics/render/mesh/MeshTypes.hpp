@@ -215,6 +215,19 @@ namespace render::mesh
         };
         std::vector<InstanceData> instanceTransforms;
 
+        // code-review #9: optional non-owning view into a persistent instance-transform buffer (the
+        // foliage collector's per-tile composed cache). When set, effectiveInstanceTransforms() reads
+        // it directly instead of the producer copying the whole vector into instanceTransforms every
+        // frame. The pointee must outlive this frame's draw-list consumption (the foliage cache is
+        // mutated only at frame start and pruned only for non-live tiles). All other producers leave
+        // it null and use the owned instanceTransforms.
+        const std::vector<InstanceData>* instanceTransformsView = nullptr;
+
+        const std::vector<InstanceData>& effectiveInstanceTransforms() const
+        {
+            return instanceTransformsView ? *instanceTransformsView : instanceTransforms;
+        }
+
         const SubMeshMaterialInfo* getMaterialForSubmesh(const std::string& submeshName) const
         {
             auto it = submeshMaterials.find(submeshName);

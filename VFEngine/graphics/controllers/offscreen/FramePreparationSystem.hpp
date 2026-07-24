@@ -88,11 +88,13 @@ namespace controllers::offscreen
         };
         std::unordered_map<terrain::TileCoord, std::vector<ComposedFoliageDraw>, terrain::TileCoordHash> foliageDrawCache;
 
-        // VK-1582: FNV hash of the inputs to the density-scale subset selection (global scale +
-        // every palette entry's densityScale/affectedByDensityScale). setFoliagePalette does NOT
-        // GPU-dirty tiles, so when this hash changes the whole foliage draw cache is dropped and
-        // re-composed with the new survivor set. uint32 hash avoids float-accumulation overflow.
-        uint32_t foliageDensitySignature = 0u;
+        // VK-1582 + code-review #4: FNV hash of every palette field BAKED into the composed cache
+        // but read only inside the gated rebuild block — the global density scale, and per entry
+        // densityScale/affectedByDensityScale (survivor subset) + visible/alignToNormal (compose
+        // skip / model matrix) + meshPath/materialPath (compose guard / PBR bake). setFoliagePalette
+        // does NOT GPU-dirty tiles, so when this hash changes the whole foliage draw cache is dropped
+        // and re-composed. uint32 hash avoids float-accumulation overflow.
+        uint32_t foliagePaletteSignature = 0u;
 
         DebugFrameBuilder debugBuilder;
         UIFrameBuilder uiFrameBuilder;

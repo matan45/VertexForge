@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <fstream>
 #include <string>
+#include <type_traits>
 
 namespace vegetation
 {
@@ -24,8 +25,29 @@ namespace vegetation
         template <typename T>
         inline void readScatterField(const nlohmann::json& j, const char* key, T& out)
         {
-            if (auto it = j.find(key); it != j.end())
-                out = it->get<T>();
+            auto it = j.find(key);
+            if (it == j.end())
+                return;
+            // Type-guard so a present-but-wrong-typed value keeps the struct default instead of
+            // throwing json::type_error out of the deserializer (matches the is_*()-guarded sibling
+            // reads and the documented "missing/bad key keeps default" contract). bool is checked
+            // before is_arithmetic (bool is arithmetic) so it uses is_boolean().
+            if constexpr (std::is_same_v<T, bool>)
+            {
+                if (it->is_boolean()) out = it->get<bool>();
+            }
+            else if constexpr (std::is_arithmetic_v<T>)
+            {
+                if (it->is_number()) out = it->get<T>();
+            }
+            else if constexpr (std::is_same_v<T, std::string>)
+            {
+                if (it->is_string()) out = it->get<std::string>();
+            }
+            else
+            {
+                try { out = it->get<T>(); } catch (...) {}
+            }
         }
     }
 
@@ -192,14 +214,17 @@ namespace vegetation
         try
         {
             f >> j;
+            if (!j.is_object())
+                return false;
+            // Inside the try: deserializeScatterProfile is now type-tolerant (readScatterField),
+            // but keep it guarded so any residual throw honors the bool return contract rather than
+            // escaping to callers (e.g. SceneSerializeGrass::deserializeGrass) and aborting load.
+            deserializeScatterProfile(j, p);
         }
         catch (...)
         {
             return false;
         }
-        if (!j.is_object())
-            return false;
-        deserializeScatterProfile(j, p);
         return true;
     }
 }

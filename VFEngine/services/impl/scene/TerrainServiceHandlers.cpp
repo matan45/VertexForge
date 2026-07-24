@@ -802,7 +802,11 @@ namespace services
                         if (!tile) continue;
                         const float originX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize;
                         const float originZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize;
-                        if (tileInRegion(originX, originZ, tile->config.worldTileSize))
+                        // Only tiles Pass 2 will actually re-bake (in-region AND have height data)
+                        // may drop their Procedural instances; every other tile is left untouched and
+                        // must be counted as fully surviving, or budget headroom is under-reserved and
+                        // total billboards can exceed MAX_BILLBOARD_INSTANCES.
+                        if (tileInRegion(originX, originZ, tile->config.worldTileSize) && tile->hasHeightData())
                         {
                             for (const auto& inst : tile->billboardInstances)
                                 if (!(cmd.replaceProcedural && inst.source == vegetation::InstanceSource::Procedural))
@@ -871,7 +875,10 @@ namespace services
                             },
                             genBudget);
 
-                        genBudget -= result.instances.size();
+                        // Guard the unsigned subtraction against a baker that ever returns more than
+                        // the cap it was given (would otherwise wrap to a huge budget).
+                        genBudget = result.instances.size() >= genBudget
+                                        ? 0 : genBudget - result.instances.size();
                         placedCount += static_cast<uint32_t>(result.instances.size());
                         if (result.budgetExceeded) budgetExceeded = true;
 
@@ -1050,7 +1057,11 @@ namespace services
                         if (!tile) continue;
                         const float originX = static_cast<float>(tile->coord.x) * tile->config.worldTileSize;
                         const float originZ = static_cast<float>(tile->coord.z) * tile->config.worldTileSize;
-                        if (tileInRegion(originX, originZ, tile->config.worldTileSize))
+                        // Only tiles Pass 2 will actually re-bake (in-region AND have height data)
+                        // may drop their Procedural instances; every other tile is left untouched and
+                        // must be counted as fully surviving, or budget headroom is under-reserved and
+                        // total foliage can exceed MAX_FOLIAGE_INSTANCES.
+                        if (tileInRegion(originX, originZ, tile->config.worldTileSize) && tile->hasHeightData())
                         {
                             for (const auto& inst : tile->foliageInstances)
                                 if (!(cmd.replaceProcedural && (inst.flags & foliage::FoliageInstanceFlags::Procedural)))
@@ -1116,7 +1127,10 @@ namespace services
                             },
                             genBudget);
 
-                        genBudget -= result.instances.size();
+                        // Guard the unsigned subtraction against a baker that ever returns more than
+                        // the cap it was given (would otherwise wrap to a huge budget).
+                        genBudget = result.instances.size() >= genBudget
+                                        ? 0 : genBudget - result.instances.size();
                         placedCount += static_cast<uint32_t>(result.instances.size());
                         if (result.budgetExceeded) budgetExceeded = true;
 

@@ -39,6 +39,12 @@ namespace services
         // Destroy every active body (leaving play mode / teardown).
         void clearAll();
 
+        // code-review #5: called when the foliage palette changes. The per-type collider AABB cache
+        // is keyed by typeIndex and never re-queries, so a mesh/shape swap would keep the old dims.
+        // Drop that cache and destroy active bodies so no stale-sized collider persists; they
+        // re-activate next tick with fresh dimensions.
+        void onPaletteChanged();
+
         [[nodiscard]] std::size_t activeColliderCount() const { return activeBodies.size(); }
 
     private:

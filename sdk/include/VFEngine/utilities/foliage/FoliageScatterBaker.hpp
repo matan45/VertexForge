@@ -20,6 +20,7 @@
 #include "../vegetation/VegetationScatterTypes.hpp"
 #include "../vegetation/ScatterRuleEvaluator.hpp"
 #include "../vegetation/BiomeCompositor.hpp"
+#include "../vegetation/ScatterLoop.hpp"
 #include "FoliageTypes.hpp"
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -54,19 +55,6 @@ namespace foliage
         constexpr float kDegToRad = 3.14159265358979323846f / 180.0f;
 
         FoliageScatterBakeResult result;
-
-        const float tileMinX = tileOriginX;
-        const float tileMinZ = tileOriginZ;
-        const float tileMaxX = tileOriginX + worldTileSize;
-        const float tileMaxZ = tileOriginZ + worldTileSize;
-
-        auto cellRange = [&](float cell, int32_t& cxLo, int32_t& cxHi, int32_t& czLo, int32_t& czHi)
-        {
-            cxLo = static_cast<int32_t>(std::ceil(tileMinX / cell - 0.5f));
-            cxHi = static_cast<int32_t>(std::ceil(tileMaxX / cell - 0.5f)) - 1;
-            czLo = static_cast<int32_t>(std::ceil(tileMinZ / cell - 0.5f));
-            czHi = static_cast<int32_t>(std::ceil(tileMaxZ / cell - 0.5f)) - 1;
-        };
 
         // Sample terrain at an already-jittered candidate, gate through the SHARED evaluator, and
         // (on pass) emit a deterministic FoliageInstance tagged Procedural. Returns false only when
@@ -141,75 +129,10 @@ namespace foliage
             return true;
         };
 
-        // Flat (biome-agnostic) rules.
-        for (const auto& rule : profile.rules)
-        {
-            const float cell = rule.spacing;
-            if (cell <= 0.0f) continue;
-            if (rule.paletteEntryIndex >= palette.size()) continue;
-            const FoliageType& type = palette[rule.paletteEntryIndex];
-
-            const float keepProb = std::clamp(rule.density * profile.globalDensityScale, 0.0f, 1.0f);
-            if (keepProb <= 0.0f) continue;
-
-            int32_t cxLo, cxHi, czLo, czHi;
-            cellRange(cell, cxLo, cxHi, czLo, czHi);
-            const float jitterScale = std::clamp(rule.positionJitter, 0.0f, 1.0f) * cell;
-
-            for (int32_t cz = czLo; cz <= czHi; ++cz)
-                for (int32_t cx = cxLo; cx <= cxHi; ++cx)
-                {
-                    if (scatter::streamFloat01(cx, cz, seed, scatter::KEEP) >= keepProb) continue;
-                    const float centerX = (static_cast<float>(cx) + 0.5f) * cell;
-                    const float centerZ = (static_cast<float>(cz) + 0.5f) * cell;
-                    const float worldX = centerX + (scatter::streamFloat01(cx, cz, seed, scatter::JITTER_X) - 0.5f) * jitterScale;
-                    const float worldZ = centerZ + (scatter::streamFloat01(cx, cz, seed, scatter::JITTER_Z) - 0.5f) * jitterScale;
-                    if (!emitCandidate(rule, type, cx, cz, worldX, worldZ)) return result;
-                }
-        }
-
-        // Biome-layered rules (VK-1585) — same compositing model as the billboard baker.
-        for (const auto& biome : profile.biomes)
-        {
-            for (const auto& rule : biome.rules)
-            {
-                const float cell = rule.spacing;
-                if (cell <= 0.0f) continue;
-                if (rule.paletteEntryIndex >= palette.size()) continue;
-                const FoliageType& type = palette[rule.paletteEntryIndex];
-
-                int32_t cxLo, cxHi, czLo, czHi;
-                cellRange(cell, cxLo, cxHi, czLo, czHi);
-                const float jitterScale = std::clamp(rule.positionJitter, 0.0f, 1.0f) * cell;
-
-                for (int32_t cz = czLo; cz <= czHi; ++cz)
-                    for (int32_t cx = cxLo; cx <= cxHi; ++cx)
-                    {
-                        const float centerX = (static_cast<float>(cx) + 0.5f) * cell;
-                        const float centerZ = (static_cast<float>(cz) + 0.5f) * cell;
-                        const float worldX = centerX + (scatter::streamFloat01(cx, cz, seed, scatter::JITTER_X) - 0.5f) * jitterScale;
-                        const float worldZ = centerZ + (scatter::streamFloat01(cx, cz, seed, scatter::JITTER_Z) - 0.5f) * jitterScale;
-                        const float localX = worldX - tileOriginX;
-                        const float localZ = worldZ - tileOriginZ;
-
-                        const float m = vegetation::biomeMembership(
-                            layerFn(biome.biomeLayerIndex, localX, localZ), biome.edgeBlendWidth);
-                        float mHi = 0.0f;
-                        for (const auto& other : profile.biomes)
-                            if (other.priority > biome.priority)
-                                mHi = std::max(mHi, vegetation::biomeMembership(
-                                    layerFn(other.biomeLayerIndex, localX, localZ), other.edgeBlendWidth));
-
-                        const float keepProb = vegetation::biomeEffectiveKeepProb(
-                            rule.density, biome.densityScale, profile.globalDensityScale, m, mHi);
-                        if (keepProb <= 0.0f) continue;
-                        if (scatter::streamFloat01(cx, cz, seed, scatter::KEEP) >= keepProb) continue;
-
-                        if (!emitCandidate(rule, type, cx, cz, worldX, worldZ)) return result;
-                    }
-            }
-        }
-
+        // Flat + biome cell-scan is shared with the billboard baker (one copy of the ownership math,
+        // gating, stream order, and the #10 biome KEEP early-out) — see ../vegetation/ScatterLoop.hpp.
+        vegetation::detail::bakeScatterLoop(profile, palette, seed, tileOriginX, tileOriginZ,
+                                            worldTileSize, layerFn, emitCandidate);
         return result;
     }
 }

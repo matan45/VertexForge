@@ -203,4 +203,12 @@ namespace services
         }
         activeBodies.clear();
     }
+
+    void FoliagePhysicsActivator::onPaletteChanged()
+    {
+        // Destroy active bodies (they were built from possibly-stale dims) then drop the per-type
+        // AABB cache so the next resolveTypeInfo re-queries the current mesh bounds.
+        clearAll();
+        typeInfoCache.clear();
+    }
 }

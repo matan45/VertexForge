@@ -13,6 +13,7 @@
 #include "../../data/DTOs.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../data/MeshBrushUndoCommands.hpp"
+#include "../common/BrushTerrainSampling.hpp"
 #include "../../../utilities/scene/EntityRegistry.hpp"
 #include "../../../utilities/components/Components.hpp"
 #include "../../../utilities/math/TransformUtils.hpp"
@@ -333,7 +334,9 @@ namespace services
                 if (!palette[idx].meshPath.empty())
                 {
                     enabledIndices.push_back(idx);
-                    weights.push_back(palette[idx].weight);
+                    // Clamp to non-negative: std::discrete_distribution has UB on negative weights.
+                    // Mirrors FoliageScatter.hpp's std::max(weight, 0.0f) guard.
+                    weights.push_back(std::max(palette[idx].weight, 0.0f));
                 }
             }
         }
@@ -342,28 +345,7 @@ namespace services
 
     glm::vec3 MeshBrushServiceImpl::sampleTerrainNormal(float worldX, float worldZ) const
     {
-        const float eps = 0.5f;
-        auto sample = [](float x, float z, float fallback) -> float {
-            events::terrain::GetTerrainHeightAtQuery q;
-            q.worldX = x;
-            q.worldZ = z;
-            try
-            {
-                auto r = events::EventDispatcher::instance().query(q);
-                return r.valid ? r.height : fallback;
-            }
-            catch (...)
-            {
-                return fallback;
-            }
-        };
-        float hC = sample(worldX, worldZ, 0.0f);
-        float hL = sample(worldX - eps, worldZ, hC);
-        float hR = sample(worldX + eps, worldZ, hC);
-        float hD = sample(worldX, worldZ - eps, hC);
-        float hU = sample(worldX, worldZ + eps, hC);
-        glm::vec3 n(hL - hR, 2.0f * eps, hD - hU);
-        return glm::normalize(n);
+        return brushsampling::sampleTerrainNormalViaHeightQuery(worldX, worldZ);
     }
 
     bool MeshBrushServiceImpl::placeOneCandidate(glm::vec3 candidatePos, uint32_t paletteIdx,

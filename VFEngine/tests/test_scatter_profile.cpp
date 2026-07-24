@@ -6,6 +6,7 @@
 #include "vegetation/ScatterProfileSerialization.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <nlohmann/json.hpp>
 
 using namespace vegetation;
@@ -125,5 +126,51 @@ TEST_SUITE("ScatterProfileAsset")
     {
         ScatterProfile out;
         CHECK_FALSE(loadScatterProfileFile("does_not_exist_vk1585.vfScatterProfile", out));
+    }
+
+    // code-review #2: a present-but-wrong-typed field must keep the struct default instead of
+    // throwing nlohmann::json::type_error (which previously escaped deserializeScatterProfile and
+    // could abort the whole scene load).
+    TEST_CASE("code-review #2: wrong-typed fields keep defaults and never throw")
+    {
+        nlohmann::json j;
+        j["globalSeed"] = "not a number";  // string, expected number
+        j["globalDensityScale"] = true;    // bool, expected number
+        nlohmann::json rj;
+        rj["paletteEntryIndex"] = "x";     // string, expected number
+        rj["density"] = "big";             // string, expected number
+        rj["alignToNormal"] = 1;           // number, expected bool
+        rj["useSlopeMask"] = "yes";        // string, expected bool
+        j["rules"] = nlohmann::json::array({rj});
+
+        ScatterProfile out;
+        const ScatterProfile def;   // defaults
+        const ScatterRule defRule;  // defaults
+        CHECK_NOTHROW(deserializeScatterProfile(j, out));
+        CHECK(out.globalSeed == def.globalSeed);
+        CHECK(out.globalDensityScale == doctest::Approx(def.globalDensityScale));
+        REQUIRE(out.rules.size() == 1);
+        CHECK(out.rules[0].paletteEntryIndex == defRule.paletteEntryIndex);
+        CHECK(out.rules[0].density == doctest::Approx(defRule.density));
+        CHECK(out.rules[0].alignToNormal == defRule.alignToNormal);
+        CHECK(out.rules[0].useSlopeMask == defRule.useSlopeMask);
+    }
+
+    // code-review #2: loadScatterProfileFile must honor its bool return contract (never throw) even
+    // when a well-formed JSON file carries a wrong-typed scalar; well-typed fields still apply.
+    TEST_CASE("code-review #2: loadScatterProfileFile honors bool contract on malformed content")
+    {
+        auto path = (std::filesystem::temp_directory_path() / "vk1585_malformed.vfScatterProfile").string();
+        {
+            std::ofstream f(path);
+            f << R"({"version":1,"globalSeed":5,"rules":[{"paletteEntryIndex":1,"density":"oops"}]})";
+        }
+        ScatterProfile out;
+        bool ok = false;
+        CHECK_NOTHROW(ok = loadScatterProfileFile(path, out));
+        CHECK(ok);
+        REQUIRE(out.rules.size() == 1);
+        CHECK(out.rules[0].paletteEntryIndex == 1u); // well-typed field still applied
+        std::filesystem::remove(path);
     }
 }

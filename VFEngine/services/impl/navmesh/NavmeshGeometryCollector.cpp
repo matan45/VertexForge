@@ -415,6 +415,24 @@ namespace services
 
     void NavmeshServiceImpl::collectFoliageGeometry(navigation::NavmeshInputGeometry& outGeometry)
     {
+        // code-review #7: foliage contribution is limited to currently-RESIDENT terrain tiles
+        // (collectFoliageGeometryForBounds enumerates GetTerrainBakeGeometryQuery.tileInfos, which
+        // comes from the loaded terrain grid). In a world-sector-streamed scene, foliage on
+        // streamed-out tiles is NOT baked, so agents can path straight through those trees/rocks.
+        // This matches the terrain-geometry bake (also resident-tile based); warn once on the
+        // whole-scene bake path so the exclusion is not silent.
+        {
+            auto palette = ::events::EventDispatcher::instance().query(
+                events::foliage::GetFoliagePaletteQuery{});
+            bool anyNav = false;
+            for (const auto& t : palette)
+                if (t.navContribute) { anyNav = true; break; }
+            if (anyNav)
+                vfLogWarning("NavmeshService: foliage nav contribution only covers currently-resident "
+                             "terrain tiles; foliage on streamed-out tiles is excluded. Load the "
+                             "relevant area before baking to include it.");
+        }
+
         // Whole-scene bake: no bounds filter — collect every nav-contributing foliage instance.
         navigation::NavmeshTileBounds all;
         all.min = glm::vec3(-1e9f);

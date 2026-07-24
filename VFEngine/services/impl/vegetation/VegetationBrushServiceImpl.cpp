@@ -9,6 +9,7 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 #include "../../data/VegetationUndoCommands.hpp"
+#include "../common/BrushTerrainSampling.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/BrushFalloff.hpp"
 #include "terrain/ValueNoise.hpp"
@@ -213,22 +214,7 @@ namespace services
 
     glm::vec3 VegetationBrushServiceImpl::sampleTerrainNormal(float worldX, float worldZ) const
     {
-        const float eps = 0.5f;
-        auto sample = [](float x, float z, float fallback) -> float {
-            events::terrain::GetTerrainHeightAtQuery q;
-            q.worldX = x; q.worldZ = z;
-            try {
-                auto r = events::EventDispatcher::instance().query(q);
-                return r.valid ? r.height : fallback;
-            } catch (...) { return fallback; }
-        };
-        float hC = sample(worldX, worldZ, 0.0f);
-        float hL = sample(worldX - eps, worldZ, hC);
-        float hR = sample(worldX + eps, worldZ, hC);
-        float hD = sample(worldX, worldZ - eps, hC);
-        float hU = sample(worldX, worldZ + eps, hC);
-        glm::vec3 n(hL - hR, 2.0f * eps, hD - hU);
-        return glm::normalize(n);
+        return brushsampling::sampleTerrainNormalViaHeightQuery(worldX, worldZ);
     }
 
     bool VegetationBrushServiceImpl::passesMasks(float candY, const glm::vec3& normal,

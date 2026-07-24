@@ -502,16 +502,27 @@ namespace controllers::offscreen
                 std::memcpy(&bits, &f, sizeof(bits));
                 return (h ^ bits) * 0x01000193u;
             };
+            auto mixU32 = [](uint32_t h, uint32_t v) { return (h ^ v) * 0x01000193u; };
+            auto mixStr = [&mixU32](uint32_t h, const std::string& s) {
+                for (unsigned char c : s) h = mixU32(h, c);
+                return mixU32(h, 0xFFu); // terminator so ("ab","") hashes differ from ("a","b")
+            };
             uint32_t sig = mixFloat(0x811C9DC5u, foliageDensityScale);
             for (const auto& t : palette)
             {
                 sig = mixFloat(sig, t.densityScale);
                 sig = (sig ^ (t.affectedByDensityScale ? 0x9E3779B9u : 0u)) * 0x01000193u;
+                // code-review #4: these are baked into the composed cache but read only inside the
+                // gated rebuild block, so a palette-only edit to any of them must drop the cache too.
+                sig = mixU32(sig, t.visible ? 0x85EBCA77u : 0u);
+                sig = mixU32(sig, t.alignToNormal ? 0xC2B2AE3Du : 0u);
+                sig = mixStr(sig, t.meshPath);
+                sig = mixStr(sig, t.materialPath);
             }
-            if (sig != foliageDensitySignature)
+            if (sig != foliagePaletteSignature)
             {
                 foliageDrawCache.clear();
-                foliageDensitySignature = sig;
+                foliagePaletteSignature = sig;
             }
         }
 
@@ -604,7 +615,11 @@ namespace controllers::offscreen
                 rd.startFadeDistance = type.startCullDistance; // VK-1582: GPU dither fade-out band
                 rd.isStatic = true;
                 rd.renderLayer = 0;
-                rd.instanceTransforms = draw.transforms; // copy the composed cache into the record
+                // code-review #9: reference the persistent composed cache instead of deep-copying it
+                // every frame. draw.transforms lives in foliageDrawCache, which is stable for the rest
+                // of this frame (mutated only at frame start; pruned only for tiles absent from
+                // liveKeys, and this tile is in liveKeys) and consumed same-frame by MergedMeshBuffer.
+                rd.instanceTransformsView = &draw.transforms;
                 meshDrawList.push_back(std::move(rd));
             }
         }

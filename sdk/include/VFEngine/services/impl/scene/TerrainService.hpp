@@ -159,7 +159,14 @@ namespace services
         // VK-1573: foliage palette accessors (surfaced to graphics via TerrainRenderAdapter).
         // setFoliagePalette is the authoring entry point (VK-1575 brush / VK-1581 scatter).
         const std::vector<foliage::FoliageType>& getFoliagePalette() const { return foliagePalette; }
-        void setFoliagePalette(std::vector<foliage::FoliageType> palette) { foliagePalette = std::move(palette); }
+        void setFoliagePalette(std::vector<foliage::FoliageType> palette)
+        {
+            foliagePalette = std::move(palette);
+            // code-review #5: palette change can invalidate the physics activator's per-type collider
+            // AABB cache (mesh/shape swap). The render draw cache is handled collector-side by the
+            // palette signature hash (FramePreparationSystem, code-review #4).
+            foliagePhysicsActivator.onPaletteChanged();
+        }
 
         // VK-1585: foliage scatter profile accessors (parity with the palette; authored via the
         // foliage brush panel's Scatter Rules, persisted in the foliage_scatter.json sidecar).

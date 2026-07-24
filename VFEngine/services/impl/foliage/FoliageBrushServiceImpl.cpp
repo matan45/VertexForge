@@ -7,6 +7,7 @@
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 #include "../../data/FoliageUndoCommands.hpp"
+#include "../common/BrushTerrainSampling.hpp"
 #include "terrain/BrushSampler.hpp"
 #include <glm/gtc/constants.hpp>
 #include <cmath>
@@ -91,6 +92,7 @@ namespace services
                     finalizeStroke();
                     hasLastPlacement = false;
                     spatialGrids.clear();
+                    eraseSpatialGrids.clear();
                 }
             });
     }
@@ -105,15 +107,31 @@ namespace services
             hasLastPlacement = false;
             flowAccumulator = 0.0f;
             strokeBeforeSnapshots.clear();
-        }
+            eraseSpatialGrids.clear(); // fresh erase grids per stroke (picks up current spacing)
 
-        // Query the actual tile size from terrain (drives worldToTileCoord + erase tiling).
-        auto& registry = scene::EntityRegistry::getRegistry();
-        auto terrainView = registry.view<components::TerrainComponent>();
-        for (auto entity : terrainView)
-        {
-            worldTileSize = terrainView.get<components::TerrainComponent>(entity).worldTileSize;
-            break;
+            // Cache per-stroke inputs that are constant during a drag (code-review #11/#15): the
+            // terrain tile size (drives worldToTileCoord + erase tiling) and the foliage palette +
+            // derived rule/enabled sets. Avoids a per-dab ECS view scan and a per-dab palette query
+            // + copy + rule rebuild.
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto terrainView = registry.view<components::TerrainComponent>();
+            for (auto entity : terrainView)
+            {
+                worldTileSize = terrainView.get<components::TerrainComponent>(entity).worldTileSize;
+                break;
+            }
+
+            strokeCacheValid = false;
+            strokeEnabledAll.clear();
+            strokeEnabledSelected.clear();
+            try {
+                strokePalette = events::EventDispatcher::instance().query(
+                    events::foliage::GetFoliagePaletteQuery{});
+                buildRules(strokePalette, strokeRules, strokeEnabledAll, /*restrictToSelected*/false);
+                std::vector<foliage::ScatterTypeRule> tmpRules; // rules identical; need only the enabled set
+                buildRules(strokePalette, tmpRules, strokeEnabledSelected, /*restrictToSelected*/true);
+                strokeCacheValid = true;
+            } catch (...) { strokeCacheValid = false; }
         }
 
         if (currentMode == foliage::FoliageBrushMode::Erase)
@@ -310,16 +328,8 @@ namespace services
 
     void FoliageBrushServiceImpl::placeFoliage(const glm::vec3& worldPos)
     {
-        std::vector<foliage::FoliageType> palette;
-        try {
-            palette = events::EventDispatcher::instance().query(
-                events::foliage::GetFoliagePaletteQuery{});
-        } catch (...) { return; }
-
-        std::vector<foliage::ScatterTypeRule> rules;
-        std::vector<uint32_t> enabledIndices;
-        buildRules(palette, rules, enabledIndices, /*restrictToSelected*/false);
-        if (enabledIndices.empty()) return;
+        // Uses the per-stroke palette/rules cache (code-review #11) built in applyBrush.
+        if (!strokeCacheValid || strokeEnabledAll.empty()) return;
 
         foliage::ScatterParams params;
         params.radius = currentParams.radius;
@@ -334,21 +344,13 @@ namespace services
         params.maxCandidates = std::clamp(
             static_cast<uint32_t>(currentParams.density * area / spacingSq), 1u, 4096u);
 
-        generateAndDispatch(worldPos, rules, enabledIndices, params, palette, /*useSpacing*/true);
+        generateAndDispatch(worldPos, strokeRules, strokeEnabledAll, params, strokePalette, /*useSpacing*/true);
     }
 
     void FoliageBrushServiceImpl::placeSingle(const glm::vec3& worldPos)
     {
-        std::vector<foliage::FoliageType> palette;
-        try {
-            palette = events::EventDispatcher::instance().query(
-                events::foliage::GetFoliagePaletteQuery{});
-        } catch (...) { return; }
-
-        std::vector<foliage::ScatterTypeRule> rules;
-        std::vector<uint32_t> enabledIndices;
-        buildRules(palette, rules, enabledIndices, /*restrictToSelected*/true);
-        if (enabledIndices.empty()) return;
+        // Uses the per-stroke palette/rules cache (code-review #11) built in applyBrush.
+        if (!strokeCacheValid || strokeEnabledSelected.empty()) return;
 
         // Single hero instance seated exactly at the cursor: zero radius/jitter so the sole
         // candidate lands at worldPos, no falloff thinning, and no spacing gate.
@@ -361,7 +363,7 @@ namespace services
         params.perCandidateNormal = true;
         params.maxCandidates = 1;
 
-        generateAndDispatch(worldPos, rules, enabledIndices, params, palette, /*useSpacing*/false);
+        generateAndDispatch(worldPos, strokeRules, strokeEnabledSelected, params, strokePalette, /*useSpacing*/false);
     }
 
     void FoliageBrushServiceImpl::eraseFoliage(const glm::vec3& worldPos)
@@ -377,7 +379,7 @@ namespace services
             if (!ensureSpatialGridForTile(coord))
                 continue;
 
-            auto gridIt = spatialGrids.find(coord);
+            auto gridIt = eraseSpatialGrids.find(coord);
             auto entries = gridIt->second.queryRadius(worldPos, currentParams.radius);
             if (entries.empty()) continue;
 
@@ -405,8 +407,9 @@ namespace services
 
             erasedCount += static_cast<uint32_t>(toRemove.size());
 
-            // Indices shifted (swap-and-pop) — drop the grid so it rebuilds next stroke.
-            spatialGrids.erase(coord);
+            // Indices shifted (swap-and-pop) — drop this tile's erase grid so it rebuilds on the
+            // next dab that touches it. Tiles NOT removed from keep their grid (code-review #8).
+            eraseSpatialGrids.erase(coord);
         }
 
         if (erasedCount > 0)
@@ -462,22 +465,7 @@ namespace services
 
     glm::vec3 FoliageBrushServiceImpl::sampleTerrainNormal(float worldX, float worldZ) const
     {
-        const float eps = 0.5f;
-        auto sample = [](float x, float z, float fallback) -> float {
-            events::terrain::GetTerrainHeightAtQuery q;
-            q.worldX = x; q.worldZ = z;
-            try {
-                auto r = events::EventDispatcher::instance().query(q);
-                return r.valid ? r.height : fallback;
-            } catch (...) { return fallback; }
-        };
-        float hC = sample(worldX, worldZ, 0.0f);
-        float hL = sample(worldX - eps, worldZ, hC);
-        float hR = sample(worldX + eps, worldZ, hC);
-        float hD = sample(worldX, worldZ - eps, hC);
-        float hU = sample(worldX, worldZ + eps, hC);
-        glm::vec3 n(hL - hR, 2.0f * eps, hD - hU);
-        return glm::normalize(n);
+        return brushsampling::sampleTerrainNormalViaHeightQuery(worldX, worldZ);
     }
 
     terrain::TileCoord FoliageBrushServiceImpl::worldToTileCoord(float worldX, float worldZ) const
@@ -500,10 +488,14 @@ namespace services
 
     bool FoliageBrushServiceImpl::ensureSpatialGridForTile(const terrain::TileCoord& coord)
     {
-        // Always rebuild from authoritative tile data so instanceIndex maps 1:1 to the
-        // tile's FoliageInstance vector (FoliageSpatialGrid has no rebuild(); placement
-        // grids hold position-only placeholders that must never drive erase).
-        spatialGrids.erase(coord);
+        // Reuse an already-built erase grid: it maps instanceIndex 1:1 to the tile's FoliageInstance
+        // vector and stays valid until a removal on this tile invalidates it (eraseFoliage erases it
+        // after a swap-and-pop). Rebuilding only on a cache miss avoids a full O(N) query+rebuild on
+        // every erase dab that merely overlaps a dense tile (code-review #8). This map is dedicated
+        // to erase (never the placement `spatialGrids` position-only placeholders), and is cleared at
+        // stroke start so cell size / tile data are always current.
+        if (auto it = eraseSpatialGrids.find(coord); it != eraseSpatialGrids.end())
+            return true;
 
         events::foliage::GetTileFoliageInstancesQuery query;
         query.tileX = coord.x;
@@ -514,7 +506,7 @@ namespace services
         } catch (...) { return false; }
         if (instances.empty()) return false;
 
-        auto& grid = spatialGrids[coord];
+        auto& grid = eraseSpatialGrids[coord];
         grid.setCellSize(currentParams.spacing);
         for (uint32_t i = 0; i < static_cast<uint32_t>(instances.size()); ++i)
             grid.insert(i, instances[i].position, instances[i].typeIndex);

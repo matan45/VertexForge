@@ -44,6 +44,12 @@ namespace services
             }
         };
         std::unordered_map<terrain::TileCoord, foliage::FoliageSpatialGrid, TileCoordHash, TileCoordEqual> spatialGrids;
+        // Separate grid map used ONLY by erase, always built from authoritative tile data so
+        // instanceIndex maps 1:1 to the tile's FoliageInstance vector. Kept apart from the placement
+        // `spatialGrids` (position-only spacing placeholders that must never drive erase), so a valid
+        // erase grid can be REUSED across dabs instead of rebuilt every dab (code-review #8). Cleared
+        // at stroke start + mode deactivate; invalidated per-tile after a removal (swap-and-pop).
+        std::unordered_map<terrain::TileCoord, foliage::FoliageSpatialGrid, TileCoordHash, TileCoordEqual> eraseSpatialGrids;
 
         // Per-stroke "before" snapshots of touched tiles, for one undo entry per stroke.
         using TileSnapshotMap = std::unordered_map<terrain::TileCoord,
@@ -59,6 +65,15 @@ namespace services
         bool hasLastPlacement = false;
         float worldTileSize = 32.0f;
         float flowAccumulator = 0.0f; // Airbrush flow timing (instances accumulate over time)
+
+        // Per-stroke cache of inputs constant during a drag (code-review #11/#15): the foliage
+        // palette + derived rules and the enabled-index lists for spray (all paint-enabled) and
+        // single (selected). Rebuilt once at isFirstApplication instead of queried/copied per dab.
+        std::vector<foliage::FoliageType> strokePalette;
+        std::vector<foliage::ScatterTypeRule> strokeRules;
+        std::vector<uint32_t> strokeEnabledAll;      // restrictToSelected = false (spray)
+        std::vector<uint32_t> strokeEnabledSelected; // restrictToSelected = true  (single)
+        bool strokeCacheValid = false;
 
         ::events::SubscriptionToken foliageModeToken;
 
