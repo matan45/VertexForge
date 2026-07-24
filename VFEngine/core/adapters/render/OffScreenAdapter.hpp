@@ -123,6 +123,7 @@ namespace core
         void setCategoryDistance(uint32_t category, float distance) override;
         void setShadowDistanceMultiplier(float multiplier) override;
         void setGlobalLodBias(float bias) override;
+        void setFoliageDensityScale(float scale) override; // VK-1582
         void setTerrainFrustumCullingEnabled(bool enabled) override;
         void setTerrainMeshletCullingEnabled(bool enabled) override;
 

@@ -60,6 +60,7 @@ namespace render
     void RenderPassHandler::setBillboardDrawDistance(float distance) { if (billboardPipelineInitialized && billboardPipeline) billboardPipeline->setMaxDrawDistance(distance); }
     void RenderPassHandler::setTerrainDistanceCullingEnabled(bool enabled) { if (terrainRenderProvider) terrainRenderProvider->setDistanceCullingEnabled(enabled); }
     void RenderPassHandler::setTerrainDrawDistance(float distance) { if (terrainRenderProvider) terrainRenderProvider->setMaxDrawDistance(distance); }
+    void RenderPassHandler::setFoliageDensityScale(float scale) { foliageDensityScale = scale; } // VK-1582: read back by the foliage collector
 
     void RenderPassHandler::setTerrainRenderProvider(services::ITerrainRenderProvider* provider)
     {

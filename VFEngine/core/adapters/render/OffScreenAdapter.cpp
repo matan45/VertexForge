@@ -431,6 +431,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setFoliageDensityScale(float scale) { // VK-1582
+        if (offScreen) {
+            offScreen->setFoliageDensityScale(scale);
+        }
+    }
+
     void OffScreenAdapter::setTerrainFrustumCullingEnabled(bool enabled) {
         if (offScreen) {
             offScreen->setTerrainFrustumCullingEnabled(enabled);

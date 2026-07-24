@@ -19,6 +19,7 @@
 #include "foliage/FoliageCompose.hpp"
 #include "threading/ParallelCollect.hpp"
 #include <cstdio>
+#include <cstring>
 #include <unordered_set>
 
 namespace controllers::offscreen
@@ -490,6 +491,30 @@ namespace controllers::offscreen
         const auto& palette = provider->getFoliagePalette();
         if (palette.empty()) return;
 
+        // VK-1582: global foliage density scale (runtime scalability knob). Combined with each
+        // palette entry's densityScale + opt-out into a hash; when it changes we drop the whole
+        // composed cache so the deterministic survivor set is recomputed (setFoliagePalette does
+        // not GPU-dirty tiles, so this hash is the only signal for a per-type or global-knob edit).
+        const float foliageDensityScale = ctx.renderHandler->getFoliageDensityScale();
+        {
+            auto mixFloat = [](uint32_t h, float f) {
+                uint32_t bits;
+                std::memcpy(&bits, &f, sizeof(bits));
+                return (h ^ bits) * 0x01000193u;
+            };
+            uint32_t sig = mixFloat(0x811C9DC5u, foliageDensityScale);
+            for (const auto& t : palette)
+            {
+                sig = mixFloat(sig, t.densityScale);
+                sig = (sig ^ (t.affectedByDensityScale ? 0x9E3779B9u : 0u)) * 0x01000193u;
+            }
+            if (sig != foliageDensitySignature)
+            {
+                foliageDrawCache.clear();
+                foliageDensitySignature = sig;
+            }
+        }
+
         std::vector<terrain::TerrainTile*> tiles = provider->getAllLoadedTiles();
 
         // Live tile set for this frame — used to prune cache entries of unloaded/emptied tiles.
@@ -516,6 +541,11 @@ namespace controllers::offscreen
                     const foliage::FoliageType& type = palette[typeIndex];
                     if (type.meshPath.empty() || !type.visible) continue;
 
+                    // VK-1582: per-type effective density (per-type multiplier x global scale unless
+                    // the type opts out). Instances are skipped deterministically by seed so the
+                    // surviving subset is stable frame-to-frame and monotone in the scale.
+                    const float effScale = foliage::effectiveFoliageDensityScale(type, foliageDensityScale);
+
                     // Resolve the material's PBR once per type so enabling a per-instance tint
                     // override does not blank the material's metallic/roughness/ao/emission/IBL.
                     const render::mesh::ExtractedPBRValues* pbr =
@@ -527,6 +557,7 @@ namespace controllers::offscreen
                     for (uint32_t idx : indices)
                     {
                         const foliage::FoliageInstance& fi = tile->foliageInstances[idx];
+                        if (!foliage::keepFoliageAtScale(fi.seed, effScale)) continue; // density-scale skip
                         render::mesh::MeshRenderData::InstanceData inst;
                         inst.modelMatrix = foliage::composeFoliageModelMatrix(fi, type);
                         // Per-instance tint: only turn the override on when a tint is actually set,
@@ -570,6 +601,7 @@ namespace controllers::offscreen
                 rd.meshPath = type.meshPath;
                 rd.defaultMaterialPath = type.materialPath;
                 rd.maxDrawDistance = type.endCullDistance;
+                rd.startFadeDistance = type.startCullDistance; // VK-1582: GPU dither fade-out band
                 rd.isStatic = true;
                 rd.renderLayer = 0;
                 rd.instanceTransforms = draw.transforms; // copy the composed cache into the record

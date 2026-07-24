@@ -349,6 +349,11 @@ namespace render::gpudriven
 
                     std::memcpy(&obj.aabbMax.w, &instanceCount, sizeof(uint32_t));
                     obj.instanceData.w = currentInstanceCount; // instanceOffset
+                    // VK-1582: near edge of the dither fade band (squared), read by the task shader
+                    // as uintBitsToFloat(obj.instanceData.y). 0 = no near fade. end^2 lives in aabbMin.w.
+                    float startFadeSq = meshRender.startFadeDistance > 0.0f
+                        ? meshRender.startFadeDistance * meshRender.startFadeDistance : 0.0f;
+                    std::memcpy(&obj.instanceData.y, &startFadeSq, sizeof(float));
                     obj.flags |= ObjectFlags::Instanced;
 
                     for (uint32_t i = 0; i < instanceCount; ++i)

@@ -102,6 +102,7 @@ namespace foliage
             e["materialPath"] = t.materialPath;
             e["weight"] = t.weight;
             e["densityScale"] = t.densityScale;
+            e["affectedByDensityScale"] = t.affectedByDensityScale;
             e["scaleMin"] = t.scaleRange.x;
             e["scaleMax"] = t.scaleRange.y;
             e["heightMin"] = t.heightRange.x;
@@ -149,6 +150,7 @@ namespace foliage
                 if (e.contains("materialPath")) t.materialPath = e["materialPath"].get<std::string>();
                 if (e.contains("weight")) t.weight = e["weight"].get<float>();
                 if (e.contains("densityScale")) t.densityScale = e["densityScale"].get<float>();
+                if (e.contains("affectedByDensityScale")) t.affectedByDensityScale = e["affectedByDensityScale"].get<bool>();
                 if (e.contains("scaleMin")) t.scaleRange.x = e["scaleMin"].get<float>();
                 if (e.contains("scaleMax")) t.scaleRange.y = e["scaleMax"].get<float>();
                 if (e.contains("heightMin")) t.heightRange.x = e["heightMin"].get<float>();

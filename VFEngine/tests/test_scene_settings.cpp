@@ -106,6 +106,7 @@ TEST_SUITE("SceneSettingsSerialization")
 
         auto render = types::RenderSettings::createDefault();
         render.distanceCulling.enabled = true;
+        render.distanceCulling.foliageDensityScale = 0.4f; // VK-1582
         render.terrain.detailMaps = true;
         source.setRenderSettings(render);
 
@@ -120,6 +121,7 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(loaded.getAudioSettings().masterVolume == doctest::Approx(0.2f));
         CHECK(loaded.getAudioSettings().enableHrtf == true); // VK-1508
         CHECK(loaded.getRenderSettings().distanceCulling.enabled);
+        CHECK(loaded.getRenderSettings().distanceCulling.foliageDensityScale == doctest::Approx(0.4f)); // VK-1582
         CHECK(loaded.getRenderSettings().terrain.detailMaps);
     }
 

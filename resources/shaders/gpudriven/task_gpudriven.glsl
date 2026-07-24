@@ -153,6 +153,7 @@ void main() {
     uint meshletCount = drawData.meshletCount;
     uint actualLodLevel = drawData.lodLevel & 0xFFu;
     float instanceScreenPixels = 0.0;
+    float distanceFadeAlpha = 0.0; // VK-1582: foliage far-fade dither amount (0 = fully visible, 1 = fully faded)
 
     if (isInstanced) {
         uint instanceOffset = drawData.instanceData.w;
@@ -164,6 +165,17 @@ void main() {
         vec3 localCenter = (obj.aabbMin.xyz + obj.aabbMax.xyz) * 0.5;
         float localRadius = length(obj.aabbMax.xyz - localCenter);
         vec4 worldSphere = transformBoundingSphere(vec4(localCenter, localRadius), modelMatrix);
+
+        // VK-1582: per-instance far-fade band. start^2 in obj.instanceData.y (uintBitsToFloat), end^2
+        // in obj.aabbMin.w. Dither-fade OUT across [startFade, endCull] instead of a hard pop; the
+        // amount is folded into the crossfade byte below and consumed by the fragment ditherTest.
+        float startFadeSq = uintBitsToFloat(obj.instanceData.y);
+        float endFadeSq = obj.aabbMin.w;
+        if (startFadeSq > 0.0 && endFadeSq > startFadeSq) {
+            vec3 toCam = worldSphere.xyz - camera.cameraPos;
+            float camDistSq = dot(toCam, toCam);
+            distanceFadeAlpha = clamp((camDistSq - startFadeSq) / (endFadeSq - startFadeSq), 0.0, 1.0);
+        }
 
         if ((pc.viewMode & MESHLET_CULL_FRUSTUM_BIT) != 0u) {
             if (!sphereInFrustum(worldSphere, camera.frustumPlanes)) {
@@ -291,10 +303,17 @@ void main() {
         // For instanced objects, compute crossfade from screen pixels.
         // For non-instanced, crossfade is already packed by the compute shader.
         uint packedLod = actualLodLevel;
-        if (isInstanced && instanceScreenPixels > 0.0) {
-            uint crossfadeByte = computeCrossfadeByteTask(instanceScreenPixels, objects[drawData.objectIndex].lodThresholds, actualLodLevel);
+        if (isInstanced) {
+            uint crossfadeByte = 0u;
+            if (instanceScreenPixels > 0.0) {
+                crossfadeByte = computeCrossfadeByteTask(instanceScreenPixels, objects[drawData.objectIndex].lodThresholds, actualLodLevel);
+            }
+            // VK-1582: combine the distance fade-out dither with the LOD-transition crossfade dither
+            // (whichever discards more wins). The fragment ditherTest turns this byte into stipple.
+            uint fadeByte = uint(clamp(distanceFadeAlpha, 0.0, 1.0) * 255.0);
+            crossfadeByte = max(crossfadeByte, fadeByte);
             packedLod = actualLodLevel | (crossfadeByte << 8u);
-        } else if (!isInstanced) {
+        } else {
             packedLod = drawData.lodLevel; // Already packed by compute shader
         }
         payload.instanceLodLevel = packedLod;

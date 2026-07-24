@@ -288,6 +288,7 @@ namespace windows
             // --- Selection ---
             changed |= ImGui::DragFloat("Weight", &entry.weight, 0.1f, 0.01f, 100.0f);
             changed |= ImGui::DragFloat("Density Scale", &entry.densityScale, 0.01f, 0.0f, 10.0f);
+            changed |= ImGui::Checkbox("Affected by Density Scale", &entry.affectedByDensityScale);
 
             // --- Placement transform ---
             changed |= ImGui::DragFloat2("Scale Range", &entry.scaleRange.x, 0.01f, 0.01f, 10.0f);

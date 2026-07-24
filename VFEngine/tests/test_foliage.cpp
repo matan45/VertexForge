@@ -61,6 +61,7 @@ TEST_CASE("FoliageType default values match the palette contract") {
     CHECK(type.materialPath.empty());
     CHECK(type.weight == doctest::Approx(1.0f));
     CHECK(type.densityScale == doctest::Approx(1.0f));
+    CHECK(type.affectedByDensityScale); // VK-1582: default opted-in to the global density scale
     CHECK(type.scaleRange.x == doctest::Approx(0.8f));
     CHECK(type.scaleRange.y == doctest::Approx(1.2f));
     CHECK(type.heightRange.x == doctest::Approx(1.0f));

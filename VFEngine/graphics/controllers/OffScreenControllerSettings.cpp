@@ -97,6 +97,7 @@ namespace controllers
         renderHandler->setBillboardDrawDistance(settings.distanceCulling.billboardDistance);
         renderHandler->setTerrainDistanceCullingEnabled(settings.distanceCulling.enabled);
         renderHandler->setTerrainDrawDistance(settings.distanceCulling.terrainDistance);
+        renderHandler->setFoliageDensityScale(settings.distanceCulling.foliageDensityScale); // VK-1582
 
         renderHandler->setWBOITEnabled(settings.transparency.wboitEnabled);
 
@@ -486,6 +487,12 @@ namespace controllers
     {
         auto* rh = offScreen->getRenderPassHandler();
         if (rh) rh->setGlobalLodBias(bias);
+    }
+
+    void OffScreenController::setFoliageDensityScale(float scale) // VK-1582
+    {
+        auto* rh = offScreen->getRenderPassHandler();
+        if (rh) rh->setFoliageDensityScale(scale);
     }
 
     void OffScreenController::setTerrainFrustumCullingEnabled(bool enabled)

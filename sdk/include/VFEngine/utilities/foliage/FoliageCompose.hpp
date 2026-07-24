@@ -27,6 +27,36 @@ namespace foliage
             static_cast<float>(tint & 0xFFu) / 255.0f);
     }
 
+    // VK-1582 — deterministic density-scale subset selection. Hash the per-instance seed to a
+    // stable [0,1) threshold; keep the instance iff threshold < effectiveScale. Two properties the
+    // collector and its unit tests rely on: deterministic (same seed+scale -> identical survivor
+    // set, no frame-to-frame churn) and MONOTONE (raising the scale only ever adds survivors, never
+    // removes them -> nested subsets, no popping when the scalability knob moves). The finalizing
+    // mix spreads authored sequential seeds so the survivor subset isn't biased by seed ordering.
+    inline float instanceKeepThreshold(uint32_t seed)
+    {
+        uint32_t h = seed * 0x9E3779B1u;
+        h ^= h >> 15;
+        h *= 0x85EBCA77u;
+        h ^= h >> 13;
+        return static_cast<float>(h >> 8) * (1.0f / 16777216.0f); // [0,1)
+    }
+
+    inline bool keepFoliageAtScale(uint32_t seed, float effectiveScale)
+    {
+        if (effectiveScale >= 1.0f) return true;  // >=1 keeps everything (can't add instances)
+        if (effectiveScale <= 0.0f) return false; // 0 keeps nothing
+        return instanceKeepThreshold(seed) < effectiveScale;
+    }
+
+    // Effective per-instance density scale = per-type authoring multiplier, times the GLOBAL
+    // runtime scale unless the type opts out (Unity "Affected by Density Scale"). Kept here so the
+    // collector and the CPU unit tests compute it identically.
+    inline float effectiveFoliageDensityScale(const FoliageType& type, float globalDensityScale)
+    {
+        return type.densityScale * (type.affectedByDensityScale ? globalDensityScale : 1.0f);
+    }
+
     // Compose the world model matrix for one foliage instance. TRS built as
     // Translate * (align-to-normal) * RotateY * Scale. The instance already stores final
     // world-space position/rotationY/scale/normal (baked at authoring time); alignToNormal

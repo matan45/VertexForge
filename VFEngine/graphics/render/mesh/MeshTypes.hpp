@@ -197,6 +197,10 @@ namespace render::mesh
         float lodBias = 0.0f;
         int forceLODLevel = -1;
         float maxDrawDistance = 0.0f;
+        // VK-1582: near edge of a dither fade-out band for instanced draws. When > 0 and <
+        // maxDrawDistance, instances dither-fade out across [startFadeDistance, maxDrawDistance]
+        // (foliage startCullDistance -> endCullDistance). 0 = no fade (hard cull at maxDrawDistance).
+        float startFadeDistance = 0.0f;
         bool isStatic = true;
         int32_t submeshIndex = -1; // -1 = all, >= 0 = only this submesh
         uint32_t renderLayer = 0; // VK-1415: render-layer index 0-31, packed into GPUObjectData.flags

@@ -62,6 +62,8 @@ namespace foliage
         // Selection
         float weight       = 1.0f;               // weighted random pick
         float densityScale = 1.0f;               // per-type density multiplier (VK-1582)
+        bool  affectedByDensityScale = true;     // VK-1582: opt out of the GLOBAL foliage density
+                                                 // scale (Unity parity) for gameplay-relevant foliage
 
         // Placement transform
         glm::vec2 scaleRange{0.8f, 1.2f};        // uniform scale min/max

@@ -101,7 +101,9 @@ namespace render::gpudriven
         glm::uvec4 meshletLod1;
         glm::uvec4 meshletLod2;
         glm::uvec4 meshletLod3;  // .w = boneMatrixOffset
-        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0}; // .w=instanceOffset
+        // .w=instanceOffset; .y=startFadeDistanceSquared bits (VK-1582, packed via memcpy of a float,
+        // read on GPU with uintBitsToFloat; 0 = no near fade). .x/.z spare.
+        glm::uvec4 instanceData{INVALID_TEXTURE_INDEX, 0, 0, 0};
     };
     static_assert(sizeof(GPUObjectData) == 352);
 

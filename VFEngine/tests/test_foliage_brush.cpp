@@ -4,6 +4,7 @@
 #include <foliage/FoliageSpatialGrid.hpp>
 #include <foliage/FoliageSerializer.hpp>
 #include <foliage/FoliageTypes.hpp>
+#include <foliage/FoliageCompose.hpp> // VK-1582: keepFoliageAtScale / effectiveFoliageDensityScale
 #include <terrain/TerrainTile.hpp>
 
 #include "data/FoliageUndoCommands.hpp"
@@ -23,6 +24,7 @@
 #include <random>
 #include <vector>
 #include <map>
+#include <set>
 #include <utility>
 #include <cstdint>
 
@@ -269,6 +271,7 @@ TEST_CASE("FoliageSerializer: palette JSON round-trip preserves the FoliageType 
     out[0].materialPath = "bark.vfMatInstance";
     out[0].weight = 2.5f;
     out[0].densityScale = 0.5f;
+    out[0].affectedByDensityScale = false; // VK-1582
     out[0].scaleRange = glm::vec2(0.6f, 1.8f);
     out[0].heightRange = glm::vec2(0.9f, 1.3f);
     out[0].rotationYRange = glm::vec2(0.0f, 180.0f);
@@ -298,6 +301,7 @@ TEST_CASE("FoliageSerializer: palette JSON round-trip preserves the FoliageType 
     CHECK(in[0].materialPath == "bark.vfMatInstance");
     CHECK(in[0].weight == doctest::Approx(2.5f));
     CHECK(in[0].densityScale == doctest::Approx(0.5f));
+    CHECK_FALSE(in[0].affectedByDensityScale); // VK-1582
     CHECK(in[0].scaleRange.y == doctest::Approx(1.8f));
     CHECK(in[0].heightRange.x == doctest::Approx(0.9f));
     CHECK(in[0].rotationYRange.y == doctest::Approx(180.0f));
@@ -317,6 +321,117 @@ TEST_CASE("FoliageSerializer: palette JSON round-trip preserves the FoliageType 
     CHECK_FALSE(in[0].paintEnabled);
 
     fs::remove(tmp);
+}
+
+// ---- VK-1582: opt-out key defaults to true for older palettes ----
+
+TEST_CASE("FoliageSerializer: missing affectedByDensityScale defaults to true (back-compat)") {
+    namespace fs = std::filesystem;
+    fs::path tmp = fs::temp_directory_path() / "vf_test_foliage_palette_nokey.json";
+    {
+        std::ofstream f(tmp);
+        f << R"([{"meshPath":"a.vfMesh","densityScale":0.5}])"; // no affectedByDensityScale key
+    }
+    std::vector<foliage::FoliageType> in;
+    REQUIRE(foliage::FoliageSerializer::loadFoliagePalette(tmp.string(), in));
+    REQUIRE(in.size() == 1);
+    CHECK(in[0].affectedByDensityScale);                 // defaulted true
+    CHECK(in[0].densityScale == doctest::Approx(0.5f));
+    fs::remove(tmp);
+}
+
+// ============================================================
+// VK-1582: deterministic density-scale subset selection
+// ============================================================
+
+namespace {
+    // Spread of non-sequential seeds like the ones authoring bakes onto FoliageInstance.seed.
+    std::vector<uint32_t> makeSeeds(uint32_t n)
+    {
+        std::vector<uint32_t> s;
+        s.reserve(n);
+        for (uint32_t i = 0; i < n; ++i) s.push_back(i * 2654435761u + 1013904223u);
+        return s;
+    }
+}
+
+TEST_CASE("Density scale: same seed set + scale yields an identical survivor set") {
+    const auto seeds = makeSeeds(1000);
+    auto survivors = [&](float scale) {
+        std::vector<uint32_t> out;
+        for (uint32_t s : seeds)
+            if (foliage::keepFoliageAtScale(s, scale)) out.push_back(s);
+        return out;
+    };
+    CHECK(survivors(0.37f) == survivors(0.37f)); // deterministic, no frame-to-frame churn
+    CHECK(survivors(0.80f) == survivors(0.80f));
+}
+
+TEST_CASE("Density scale: survivor set is monotone (nested) as the scale rises") {
+    const auto seeds = makeSeeds(4000);
+    auto survivorSet = [&](float scale) {
+        std::set<uint32_t> out;
+        for (uint32_t s : seeds)
+            if (foliage::keepFoliageAtScale(s, scale)) out.insert(s);
+        return out;
+    };
+    const auto lo  = survivorSet(0.3f);
+    const auto mid = survivorSet(0.6f);
+    const auto hi  = survivorSet(1.0f);
+
+    // Raising the scale only ever ADDS survivors: lo ⊆ mid ⊆ hi (this is what prevents popping
+    // when the density knob moves — a survivor at a lower scale always survives at a higher one).
+    for (uint32_t s : lo)  CHECK(mid.count(s) == 1);
+    for (uint32_t s : mid) CHECK(hi.count(s) == 1);
+
+    CHECK(lo.size() <= mid.size());
+    CHECK(mid.size() <= hi.size());
+    CHECK(hi.size() == seeds.size()); // scale 1.0 keeps everything
+}
+
+TEST_CASE("Density scale: bounds keep-all at >= 1 and keep-none at <= 0") {
+    const auto seeds = makeSeeds(200);
+    for (uint32_t s : seeds) {
+        CHECK(foliage::keepFoliageAtScale(s, 1.0f));
+        CHECK(foliage::keepFoliageAtScale(s, 1.5f));
+        CHECK_FALSE(foliage::keepFoliageAtScale(s, 0.0f));
+        CHECK_FALSE(foliage::keepFoliageAtScale(s, -0.25f));
+    }
+}
+
+TEST_CASE("Density scale: effective scale = per-type densityScale x global, with opt-out") {
+    foliage::FoliageType affected;                 // defaults: densityScale 1, affected = true
+    foliage::FoliageType optedOut;  optedOut.affectedByDensityScale = false;
+    foliage::FoliageType halfType;  halfType.densityScale = 0.5f;
+
+    // Opt-out ignores the global scale; affected multiplies by it; per-type densityScale multiplies too.
+    CHECK(foliage::effectiveFoliageDensityScale(optedOut, 0.25f) == doctest::Approx(1.0f));
+    CHECK(foliage::effectiveFoliageDensityScale(affected, 0.25f) == doctest::Approx(0.25f));
+    CHECK(foliage::effectiveFoliageDensityScale(halfType, 0.5f)  == doctest::Approx(0.25f));
+
+    const auto seeds = makeSeeds(2000);
+    auto survivorCount = [&](const foliage::FoliageType& t, float global) {
+        size_t n = 0;
+        const float eff = foliage::effectiveFoliageDensityScale(t, global);
+        for (uint32_t s : seeds)
+            if (foliage::keepFoliageAtScale(s, eff)) ++n;
+        return n;
+    };
+    CHECK(survivorCount(optedOut, 0.1f) == survivorCount(optedOut, 0.9f)); // opt-out: global has no effect
+    CHECK(survivorCount(affected, 0.1f) <  survivorCount(affected, 0.9f)); // affected: fewer at lower global
+}
+
+TEST_CASE("Density scale: survivor fraction approximates the effective scale") {
+    const auto seeds = makeSeeds(40000);
+    auto fraction = [&](float scale) {
+        size_t n = 0;
+        for (uint32_t s : seeds)
+            if (foliage::keepFoliageAtScale(s, scale)) ++n;
+        return static_cast<double>(n) / static_cast<double>(seeds.size());
+    };
+    CHECK(fraction(0.25f) == doctest::Approx(0.25).epsilon(0.04));
+    CHECK(fraction(0.50f) == doctest::Approx(0.50).epsilon(0.04));
+    CHECK(fraction(0.75f) == doctest::Approx(0.75).epsilon(0.04));
 }
 
 // ---- Case 2: FoliageTileSnapshotUndoCommand round-trip ----
