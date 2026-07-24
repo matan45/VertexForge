@@ -16,6 +16,17 @@ namespace foliage
         HLODProxy         = 2, // reserved (VK-1583)
     };
 
+    // VK-1584 — collision shape used for a collision-enabled FoliageType's proximity collider.
+    // ONE cached Jolt shape is built per type (never per instance). Capsule (default) hugs a
+    // trunk so the player can walk under the canopy; ConvexHull/Box wrap the whole mesh (rocks,
+    // props). Capsule/Box dimensions derive from the mesh AABB; ConvexHull is built from meshPath.
+    enum class FoliageColliderShape : uint8_t
+    {
+        Capsule    = 0,
+        ConvexHull = 1,
+        Box        = 2,
+    };
+
     // Per-instance flag bits (FoliageInstance.flags, uint16_t). Namespaced-constexpr
     // to match the engine ObjectFlags idiom (GPUDrivenTypes.hpp).
     namespace FoliageInstanceFlags
@@ -89,8 +100,9 @@ namespace foliage
         float windStiffness = 1.0f;
 
         // Gameplay
-        bool collision     = false; // static collider per instance (VK-1584)
-        bool navContribute = false; // (VK-1584)
+        bool collision     = false; // proximity-activated static collider (VK-1584)
+        bool navContribute = false; // contributes to navmesh bake (VK-1584)
+        FoliageColliderShape colliderShape = FoliageColliderShape::Capsule; // shape when collision on (VK-1584)
 
         // Editor
         bool visible      = true;

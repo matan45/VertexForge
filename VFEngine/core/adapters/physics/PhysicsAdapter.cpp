@@ -754,6 +754,32 @@ namespace core
         physicsWorld->removeAllVegetationColliders();
     }
 
+    uint32_t PhysicsAdapter::createFoliageStaticBody(const FoliageColliderDesc& desc)
+    {
+        if (!physicsWorld) return INVALID_BODY_HANDLE;
+
+        physics::FoliageColliderCreateInfo info;
+        info.shape = desc.shape;
+        info.meshPath = desc.meshPath;
+        info.position = desc.position;
+        info.yRotation = desc.rotationY;
+        info.scale = desc.scale;
+        info.localAabbCenter = desc.localAabbCenter;
+        info.localAabbHalfExtents = desc.localAabbHalfExtents;
+        info.collisionLayer = desc.collisionLayer;
+
+        JPH::BodyID id = physicsWorld->createFoliageStaticBody(info);
+        // GetIndexAndSequenceNumber() already yields cInvalidBodyID (0xFFFFFFFF == INVALID_BODY_HANDLE)
+        // when the body wasn't created, so no special-casing is needed here.
+        return id.GetIndexAndSequenceNumber();
+    }
+
+    void PhysicsAdapter::destroyFoliageStaticBody(uint32_t bodyHandle)
+    {
+        if (!physicsWorld || bodyHandle == INVALID_BODY_HANDLE) return;
+        physicsWorld->destroyStaticBody(JPH::BodyID(bodyHandle));
+    }
+
     void PhysicsAdapter::addWaterSensorBody(services::EntityHandle entity,
                                             const glm::vec3& position,
                                             const glm::vec3& halfExtents)

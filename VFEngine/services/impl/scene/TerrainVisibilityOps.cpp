@@ -123,6 +123,12 @@ namespace services
             }
         }
 
+        // VK-1584: proximity foliage colliders. Runs once per frame with the camera position; uses
+        // ALL loaded tiles (not just frustum-visible ones — a tree behind the camera is still
+        // collidable) and self-gates to play mode. No-op unless a FoliageType opts into collision.
+        if (physicsProvider)
+            foliagePhysicsActivator.update(cameraPosition, getAllLoadedTiles(), foliagePalette);
+
         return result;
     }
 

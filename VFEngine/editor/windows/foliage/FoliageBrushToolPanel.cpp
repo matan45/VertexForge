@@ -319,6 +319,17 @@ namespace windows
             changed |= ImGui::Checkbox("Collision", &entry.collision);
             ImGui::SameLine();
             changed |= ImGui::Checkbox("Nav Contribute", &entry.navContribute);
+            if (entry.collision)
+            {
+                // VK-1584: proximity colliders build one cached shape per type from this choice.
+                const char* shapeItems[] = {"Capsule", "Convex Hull", "Box"};
+                int shapeIdx = static_cast<int>(entry.colliderShape);
+                if (ImGui::Combo("Collider Shape", &shapeIdx, shapeItems, IM_ARRAYSIZE(shapeItems)))
+                {
+                    entry.colliderShape = static_cast<foliage::FoliageColliderShape>(shapeIdx);
+                    changed = true;
+                }
+            }
 
             // --- Editor ---
             changed |= ImGui::Checkbox("Visible", &entry.visible);

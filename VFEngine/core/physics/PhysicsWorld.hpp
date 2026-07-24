@@ -169,6 +169,10 @@ namespace core::physics
         void removeVegetationTileColliders(int32_t tileX, int32_t tileZ);
         void removeAllVegetationColliders();
 
+        // Foliage proximity colliders (VK-1584) — entity-free, per-type shared shape
+        JPH::BodyID createFoliageStaticBody(const FoliageColliderCreateInfo& info);
+        void destroyStaticBody(JPH::BodyID bodyId);
+
         // Contact callbacks
         void setContactAddedCallback(ContactCallback callback);
         void setContactRemovedCallback(ContactCallback callback);

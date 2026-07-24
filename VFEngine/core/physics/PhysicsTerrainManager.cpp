@@ -1,12 +1,15 @@
 #include "PhysicsTerrainManager.hpp"
 #include "PhysicsHeightFieldDecimator.hpp"
 #include "PhysicsContext.hpp"
+#include "PhysicsShapeFactory.hpp"
 #include "JoltConversions.hpp"
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/Shape/HeightFieldShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/ScaledShape.h>
+#include <glm/gtc/quaternion.hpp>
 #include "print/Log.hpp"
 #include <algorithm>
 #include <chrono>
@@ -260,6 +263,65 @@ namespace core::physics
             }
         }
         vegetationBodies.clear();
+    }
+
+    JPH::BodyID PhysicsTerrainManager::createFoliageStaticBody(const FoliageColliderCreateInfo& info)
+    {
+        if (!ctx || !ctx->physicsSystem) return JPH::BodyID();
+
+        // Capsule reuses the existing helper (uniform scale, base-anchored Y offset) — ideal for
+        // tree trunks: radius from the horizontal extent, height from the vertical extent.
+        if (info.shape == types::ColliderShape::Capsule)
+        {
+            const float uniformScale = std::max({info.scale.x, info.scale.y, info.scale.z});
+            const float radius = std::max(info.localAabbHalfExtents.x, info.localAabbHalfExtents.z);
+            const float height = info.localAabbHalfExtents.y * 2.0f;
+            return addStaticCapsule(info.position, info.yRotation, uniformScale, radius, height,
+                                    info.collisionLayer);
+        }
+
+        // Box / ConvexMesh: build (or fetch cached) shape via the factory. ConvexMesh is cached by
+        // meshPath so the heavy hull is built once per type; Box is a cheap primitive.
+        ColliderCreateInfo ci;
+        ci.shape = info.shape;
+        ci.meshPath = info.meshPath;
+        ci.halfExtents = info.localAabbHalfExtents * info.scale; // Box: pre-scaled dims
+        ci.collisionLayer = info.collisionLayer;
+
+        JPH::Ref<JPH::Shape> shape = PhysicsShapeFactory::createShape(ci);
+        if (shape == nullptr) return JPH::BodyID();
+
+        glm::vec3 bodyPos = info.position;
+        if (info.shape == types::ColliderShape::ConvexMesh)
+        {
+            // Hull vertices carry their mesh-local offset; apply per-instance scale via a light
+            // ScaledShape wrapper (the underlying hull stays shared/cached).
+            if (info.scale != glm::vec3(1.0f))
+                shape = new JPH::ScaledShape(shape, toJolt(info.scale));
+        }
+        else // Box: primitive is centered at the shape origin, so offset it to the mesh AABB center.
+        {
+            const glm::vec3 scaledCenter = info.localAabbCenter * info.scale;
+            const glm::quat q = glm::angleAxis(info.yRotation, glm::vec3(0.0f, 1.0f, 0.0f));
+            bodyPos = info.position + (q * scaledCenter);
+        }
+
+        const JPH::Quat rot = JPH::Quat::sRotation(JPH::Vec3::sAxisY(), info.yRotation);
+        JPH::BodyCreationSettings settings(
+            shape, toJoltR(bodyPos), rot,
+            JPH::EMotionType::Static, static_cast<JPH::ObjectLayer>(info.collisionLayer));
+        settings.mFriction = 0.5f;
+        settings.mRestitution = 0.0f;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        return bodyInterface.CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+    }
+
+    void PhysicsTerrainManager::destroyStaticBody(JPH::BodyID bodyId)
+    {
+        if (!ctx || !ctx->physicsSystem || bodyId.IsInvalid()) return;
+        auto& bodyInterface = ctx->getBodyInterface();
+        removeAndDestroyBody(bodyInterface, bodyId);
     }
 
     // --- Async streaming pipeline ---

@@ -124,6 +124,7 @@ namespace foliage
             e["windStiffness"] = t.windStiffness;
             e["collision"] = t.collision;
             e["navContribute"] = t.navContribute;
+            e["colliderShape"] = static_cast<int>(t.colliderShape);
             e["visible"] = t.visible;
             e["paintEnabled"] = t.paintEnabled;
             j.push_back(e);
@@ -172,6 +173,7 @@ namespace foliage
                 if (e.contains("windStiffness")) t.windStiffness = e["windStiffness"].get<float>();
                 if (e.contains("collision")) t.collision = e["collision"].get<bool>();
                 if (e.contains("navContribute")) t.navContribute = e["navContribute"].get<bool>();
+                if (e.contains("colliderShape")) t.colliderShape = static_cast<FoliageColliderShape>(e["colliderShape"].get<int>());
                 if (e.contains("visible")) t.visible = e["visible"].get<bool>();
                 if (e.contains("paintEnabled")) t.paintEnabled = e["paintEnabled"].get<bool>();
                 palette.push_back(t);

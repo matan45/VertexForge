@@ -1,11 +1,16 @@
 #include "NavmeshServiceImpl.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
+#include "../../events/foliage/FoliageEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "asset/AssetRef.hpp"
+#include "foliage/FoliageNavGeometry.hpp"
 #include <glm/gtc/constants.hpp>
+#include <string>
+#include <unordered_map>
 
 namespace services
 {
@@ -25,6 +30,11 @@ namespace services
         if (settings.includeColliders)
         {
             collectColliderGeometry(outGeometry);
+        }
+
+        if (settings.includeFoliage)
+        {
+            collectFoliageGeometry(outGeometry);
         }
 
         collectObstacleGeometry(outGeometry);
@@ -290,6 +300,10 @@ namespace services
         {
             collectColliderGeometryForBounds(expanded, outGeometry);
         }
+        if (settings.includeFoliage)
+        {
+            collectFoliageGeometryForBounds(expanded, outGeometry);
+        }
 
         collectObstacleGeometryForBounds(expanded, outGeometry);
     }
@@ -397,6 +411,113 @@ namespace services
                 }
             }
         }
+    }
+
+    void NavmeshServiceImpl::collectFoliageGeometry(navigation::NavmeshInputGeometry& outGeometry)
+    {
+        // Whole-scene bake: no bounds filter — collect every nav-contributing foliage instance.
+        navigation::NavmeshTileBounds all;
+        all.min = glm::vec3(-1e9f);
+        all.max = glm::vec3(1e9f);
+        collectFoliageGeometryForBounds(all, outGeometry);
+    }
+
+    void NavmeshServiceImpl::collectFoliageGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
+                                                             navigation::NavmeshInputGeometry& outGeometry)
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        // Palette: bail unless at least one type opts into navmesh contribution (grass never does).
+        auto palette = dispatcher.query(events::foliage::GetFoliagePaletteQuery{});
+        if (palette.empty())
+            return;
+        bool anyNav = false;
+        for (const auto& t : palette)
+            if (t.navContribute) { anyNav = true; break; }
+        if (!anyNav)
+            return;
+
+        // Enumerate terrain tiles overlapping the bounds (reuse the terrain bake tile list, which
+        // carries each tile's coord + world AABB — the same enumeration collectTerrainGeometry uses).
+        auto bakeGeometry = dispatcher.query(events::terrain::GetTerrainBakeGeometryQuery{});
+        if (bakeGeometry.tileInfos.empty())
+            return;
+
+        // Per meshPath: the coarse (LOD3) geometry loaded ONCE, positions + indices flattened across
+        // submeshes. Reused across every instance of that type — never a per-instance mesh load.
+        struct TypeMesh
+        {
+            std::vector<glm::vec3> positions;
+            std::vector<uint32_t>  indices;
+        };
+        std::unordered_map<std::string, TypeMesh> meshCache;
+
+        auto getTypeMesh = [&meshCache](const std::string& meshPath) -> const TypeMesh& {
+            auto it = meshCache.find(meshPath);
+            if (it != meshCache.end())
+                return it->second;
+
+            TypeMesh tm;
+            auto meshRef = asset::AssetRef::fromPath(meshPath);
+            if (meshRef.isValid())
+            {
+                auto meshesData = resource::ResourceManager::loadMeshAsync(meshRef).get();
+                if (meshesData)
+                {
+                    for (const auto& submesh : meshesData->meshes)
+                    {
+                        if (submesh.lodLevels.empty())
+                            continue;
+                        const auto& lod = submesh.lodLevels.back(); // coarsest LOD (~12.5% of LOD0)
+                        const uint32_t base = static_cast<uint32_t>(tm.positions.size());
+                        for (const auto& v : lod.vertices)
+                            tm.positions.push_back(v.position);
+                        for (uint32_t idx : lod.indices)
+                            tm.indices.push_back(base + idx);
+                    }
+                }
+            }
+            return meshCache.emplace(meshPath, std::move(tm)).first->second;
+        };
+
+        int totalVerts = 0;
+        int totalTris = 0;
+
+        for (const auto& tileInfo : bakeGeometry.tileInfos)
+        {
+            glm::vec3 tileMin = tileInfo.worldOrigin;
+            glm::vec3 tileMax = tileMin + glm::vec3(tileInfo.tileSize, 1e6f, tileInfo.tileSize);
+            if (!boundsOverlap2D(bounds, tileMin, tileMax))
+                continue;
+
+            events::foliage::GetTileFoliageInstancesQuery instQuery;
+            instQuery.tileX = tileInfo.coordX;
+            instQuery.tileZ = tileInfo.coordZ;
+            auto instances = dispatcher.query(instQuery);
+            if (instances.empty())
+                continue;
+
+            for (const auto& inst : instances)
+            {
+                if (inst.typeIndex >= palette.size())
+                    continue;
+                const auto& type = palette[inst.typeIndex];
+                if (!type.navContribute || type.meshPath.empty())
+                    continue;
+
+                const TypeMesh& tm = getTypeMesh(type.meshPath);
+                if (tm.positions.empty() || tm.indices.empty())
+                    continue;
+
+                foliage::appendFoliageInstanceGeometry(inst, type, tm.positions, tm.indices, outGeometry);
+                totalVerts += static_cast<int>(tm.positions.size());
+                totalTris += static_cast<int>(tm.indices.size() / 3);
+            }
+        }
+
+        if (totalVerts > 0)
+            vfLogInfo("NavmeshService: Collected foliage geometry: {} verts, {} tris ({} types)",
+                      totalVerts, totalTris, meshCache.size());
     }
 
     void NavmeshServiceImpl::collectColliderGeometryForBounds(const navigation::NavmeshTileBounds& bounds,

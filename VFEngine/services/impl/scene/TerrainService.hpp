@@ -9,6 +9,7 @@
 #include "math/Frustum.hpp"
 #include "../../providers/terrain/ITerrainBrushComputeProvider.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
+#include "../foliage/FoliagePhysicsActivator.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
@@ -64,6 +65,7 @@ namespace services
 
         ITerrainBrushComputeProvider* brushComputeProvider = nullptr;
         IPhysicsProvider* physicsProvider = nullptr;
+        FoliagePhysicsActivator foliagePhysicsActivator; // VK-1584 proximity foliage colliders
         std::atomic<bool> saveInProgress{false};
         bool distanceCullingEnabled_ = false;
         float maxTerrainDistSq_ = 0.0f;
@@ -167,6 +169,7 @@ namespace services
         void setPhysicsProvider(IPhysicsProvider* provider)
         {
             physicsProvider = provider;
+            foliagePhysicsActivator.setPhysicsProvider(provider);
         }
 
         bool addTerrainCollider(EntityHandle terrainEntity);
