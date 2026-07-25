@@ -93,6 +93,8 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodyDataQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::HasWaterBodyComponentQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodiesQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::HasAnyWaterQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterSurfaceAtQuery>();
     }
 
     void OceanService::registerEventHandlers()
@@ -886,6 +888,19 @@ namespace services
         return getOceanSurfaceHeightAt(worldXZ);
     }
 
+    std::optional<float> OceanService::getWaterSurfaceAt(const glm::vec2& worldXZ) const
+    {
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+            return bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+
+        if (!oceanEntity.isValid())
+            return std::nullopt;
+
+        return getOceanSurfaceHeightAt(worldXZ);
+    }
+
     float OceanService::getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const
     {
         if (!oceanEntity.isValid())
@@ -1099,6 +1114,18 @@ namespace services
             [this](const events::ocean::GetWaterBodiesQuery&)
             {
                 return getWaterBodies();
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::HasAnyWaterQuery>(
+            [this](const events::ocean::HasAnyWaterQuery&)
+            {
+                return hasWaterToRender();
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterSurfaceAtQuery>(
+            [this](const events::ocean::GetWaterSurfaceAtQuery& query)
+            {
+                return getWaterSurfaceAt(query.worldXZ);
             });
     }
 

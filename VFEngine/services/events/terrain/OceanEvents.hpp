@@ -233,6 +233,22 @@ namespace events::ocean
         std::string_view getName() const override { return "GetWaterBodies"; }
     };
 
+    // Is there ANY water in the scene - the ocean, or at least one active body. A cheap once-per-tick
+    // gate for callers that would otherwise pay a per-entity query for nothing.
+    struct HasAnyWaterQuery : IQuery<bool> {
+        std::string_view getName() const override { return "HasAnyWater"; }
+    };
+
+    // The water surface at a point, or nullopt when there is none there. GetOceanHeightAtQuery
+    // cannot answer this: it returns 0 both for "no water" and for "the water really is at y = 0",
+    // which was harmless while the only water was an infinite ocean and is not any more - a lake
+    // covers part of the world and dry land covers the rest.
+    struct GetWaterSurfaceAtQuery : IQuery<std::optional<float>> {
+        glm::vec2 worldXZ{0.0f};
+
+        std::string_view getName() const override { return "GetWaterSurfaceAt"; }
+    };
+
     // === Notifications ===
 
     struct OceanFFTConfigChangedNotification : INotification {

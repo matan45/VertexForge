@@ -160,6 +160,11 @@ namespace services
         bool isPositionInOcean(const glm::vec3& worldPos) const;
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
+        // VK-1607: the water surface at a point, or nullopt when there is no water there at all.
+        // getOceanHeightAt cannot express "no water" - it returns 0, which is indistinguishable from
+        // a real surface at y = 0. Callers that need the difference (character swimming) use this.
+        std::optional<float> getWaterSurfaceAt(const glm::vec2& worldXZ) const;
+
         OceanVisualSettings getOceanVisualSettings() const;
         // VK-1604: per-entity overload behind GetOceanVisualSettingsQuery.
         std::optional<OceanVisualSettings> getOceanVisualSettings(EntityHandle entity) const;

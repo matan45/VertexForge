@@ -30,10 +30,13 @@ namespace services
         auto& dispatcher = ::events::EventDispatcher::instance();
         auto view = registry.view<components::ControllerComponent, components::TransformComponent>();
 
-        // VK-1606: resolve "is there an ocean" once per tick rather than once per character.
-        // GetOceanHeightAtQuery cannot answer it - it returns 0 both for "no ocean" and for "the
+        // VK-1606: resolve "is there water" once per tick rather than once per character.
+        // GetOceanHeightAtQuery cannot answer it - it returns 0 both for "no water" and for "the
         // water really is at y = 0". Skipped entirely in the common case where nothing swims.
-        oceanPresentThisFrame = false;
+        //
+        // VK-1607: this used to ask GetOceanEntityQuery, i.e. "is there an OCEAN entity", so a
+        // character could not swim in a lake unless the scene also happened to contain an ocean.
+        waterPresentThisFrame = false;
         {
             bool anySwimmer = false;
             for (auto entity : view)
@@ -46,8 +49,8 @@ namespace services
             }
             if (anySwimmer)
             {
-                ::events::ocean::GetOceanEntityQuery oceanQuery;
-                oceanPresentThisFrame = dispatcher.query(oceanQuery).isValid();
+                ::events::ocean::HasAnyWaterQuery waterQuery;
+                waterPresentThisFrame = dispatcher.query(waterQuery);
             }
         }
 
@@ -160,12 +163,25 @@ namespace services
         bool swimming = false;
         float waterSurfaceY = 0.0f;
         float swimHalfHeight = 0.0f;
-        if (controller.swimEnabled && oceanPresentThisFrame)
+        // VK-1607: GetWaterSurfaceAtQuery, not GetOceanHeightAtQuery. A bounded water body covers
+        // part of the world and dry land covers the rest, so "no water here" has to be expressible -
+        // otherwise a character standing beside a lake reads the fallback 0 as a surface and can
+        // register submersion on dry ground. With an infinite ocean present the optional is always
+        // engaged, so ocean-only scenes behave exactly as before.
+        bool overWater = false;
+        if (controller.swimEnabled && waterPresentThisFrame)
         {
-            ::events::ocean::GetOceanHeightAtQuery heightQuery;
-            heightQuery.worldXZ = glm::vec2(transform.position.x, transform.position.z);
-            waterSurfaceY = ::events::EventDispatcher::instance().query(heightQuery);
+            ::events::ocean::GetWaterSurfaceAtQuery surfaceQuery;
+            surfaceQuery.worldXZ = glm::vec2(transform.position.x, transform.position.z);
+            if (auto surface = ::events::EventDispatcher::instance().query(surfaceQuery))
+            {
+                overWater = true;
+                waterSurfaceY = *surface;
+            }
+        }
 
+        if (overWater)
+        {
             // The capsule the character controller actually uses comes from its collider; fall back
             // to a 1.8 m humanoid so a controller authored without one still floats sensibly.
             swimHalfHeight = 0.9f;
