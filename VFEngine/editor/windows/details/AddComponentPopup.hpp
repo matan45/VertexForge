@@ -58,6 +58,10 @@ namespace windows::details {
         bool hasDestructible = false;
         bool hasBuoyancy = false;
         bool hasWaterWakeEmitter = false;   // VK-1606
+        // NOTE: this struct is filled by POSITIONAL aggregate init in
+        // EntityDetailsPanel::drawComponentSection. A new flag must be inserted at the SAME position
+        // in both places or every field after it silently shifts.
+        bool hasWaterBody = false;          // VK-1607
         bool hasUIStyle = false;
         bool hasUITooltip = false;
         bool hasUIWindow = false;

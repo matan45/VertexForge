@@ -24,6 +24,8 @@ namespace core
         void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) override;
 
         bool hasActiveOcean() const override;
+        bool hasWaterToRender() const override;
+        std::vector<water::WaterBodyDesc> getWaterBodies() const override;
 
         services::OceanVisualSettings getOceanVisualSettings() const override;
         float getBaseWaterHeight() const override;

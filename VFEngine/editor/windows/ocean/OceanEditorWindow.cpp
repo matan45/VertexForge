@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/OceanEvents.hpp"
 #include "water/SeaState.hpp"
+#include "water/WaterBodyMath.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -139,8 +140,77 @@ namespace windows
                 }
                 ImGui::PopStyleColor(3);
             }
+
+            // VK-1607: OUTSIDE the hasOcean branch on purpose. A lake or a pool is authorable in a
+            // scene with no ocean at all, and that is the case most likely to be reached through
+            // this window.
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawWaterBodiesSection();
         }
         ImGui::End();
+    }
+
+    void OceanEditorWindow::drawWaterBodiesSection()
+    {
+        if (!ImGui::CollapsingHeader("Water Bodies", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        ImGui::Indent();
+
+        ImGui::TextWrapped("Bounded lakes and pools at their own level. They coexist with the ocean "
+                           "and suppress it inside their own footprint.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Create Water Body", ImVec2(-1, 0)))
+        {
+            events::ocean::CreateWaterBodyCommand cmd;
+            cmd.name = "WaterBody";
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Adds a scene entity with a WaterBodyComponent at the world origin.\n"
+                              "Move and size it from the Details panel or the transform gizmo.");
+
+        ImGui::Spacing();
+
+        const auto bodies = dispatcher.query(events::ocean::GetWaterBodiesQuery{});
+        if (bodies.empty())
+        {
+            ImGui::TextDisabled("No water bodies in this scene.");
+        }
+        else
+        {
+            ImGui::Text("%zu water %s", bodies.size(), bodies.size() == 1 ? "body" : "bodies");
+            ImGui::Separator();
+            for (size_t i = 0; i < bodies.size(); ++i)
+            {
+                const auto& entry = bodies[i];
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::Text("%s  %.1f x %.1f m  %s",
+                            entry.data.type == 1u ? "Pool" : "Lake",
+                            entry.data.halfExtents.x * 2.0f,
+                            entry.data.halfExtents.y * 2.0f,
+                            entry.data.isActive ? "" : "(inactive)");
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Select a body in the hierarchy to edit it.");
+        }
+
+        // Only the nearest MAX_WATER_BODY_CLIP_RECTS suppress the ocean; say so rather than letting
+        // a scene silently double-blend.
+        if (bodies.size() > water::MAX_WATER_BODY_CLIP_RECTS)
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f),
+                               "Only the %u nearest bodies suppress the ocean beneath them.",
+                               water::MAX_WATER_BODY_CLIP_RECTS);
+        }
+
+        ImGui::Unindent();
     }
 
     void OceanEditorWindow::drawCreationSection()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../utilities/water/RippleSimMath.hpp"
+#include "../../../utilities/water/WaterBodyMath.hpp"
 
 #include <functional>
 #include <glm/glm.hpp>
@@ -24,6 +25,17 @@ namespace services
         virtual ~IOceanRenderProvider() = default;
 
         virtual bool hasActiveOcean() const = 0;
+
+        // VK-1607: is there ANY water this frame - the ocean, or at least one active water body.
+        // Every render-side gate that used to ask hasActiveOcean() asks this instead, so a scene
+        // whose only water is a lake still gets its water pass, its refraction copy and its
+        // underwater post-process. hasActiveOcean() survives for the things that genuinely need an
+        // OceanComponent (the FFT config, the ripple sim's parameters).
+        virtual bool hasWaterToRender() const = 0;
+
+        // Every active water body, resolved to plain rectangles. Returned by value once per frame,
+        // like drainWaterImpulses - the renderer must not hold a pointer into the registry.
+        virtual std::vector<water::WaterBodyDesc> getWaterBodies() const = 0;
 
         virtual OceanVisualSettings getOceanVisualSettings() const = 0;
         virtual float getBaseWaterHeight() const = 0;

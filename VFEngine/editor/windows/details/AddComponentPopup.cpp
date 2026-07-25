@@ -9,6 +9,7 @@
 #include "events/scene/ReverbZoneEvents.hpp"
 #include "events/scene/FogVolumeEvents.hpp"
 #include "events/scene/ReflectionProbeEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 #include <imgui.h>
 #include <cctype>
 #include <cstring>
@@ -333,6 +334,18 @@ namespace windows::details
             }
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("Writes ripples into the interactive water patch as the entity moves (bow waves, wakes)");
+        }
+
+        if (!c.hasWaterBody && matchesFilter("Water Body", filter))   // VK-1607
+        {
+            if (ImGui::Selectable("  Water Body"))
+            {
+                events::ocean::AddWaterBodyComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Bounded lake or pool at its own level, additive to the scene's ocean");
         }
 
         if (!c.hasDestructible && matchesFilter("Destructible", filter))

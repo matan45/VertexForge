@@ -346,6 +346,26 @@ namespace services
         bool enabled = true;
     };
 
+    // VK-1607. Mirrors components::WaterBodyComponent; `type` is the raw enum value so this DTO
+    // stays free of the components headers.
+    struct WaterBodyComponentData
+    {
+        uint32_t type = 0;                    // 0 = Lake, 1 = Pool
+        float waterHeight = 0.0f;             // offset above the entity transform's Y
+        glm::vec2 halfExtents{10.0f, 10.0f};  // world metres
+        uint32_t bandMask = 0u;
+        bool physicsEnabled = true;
+        bool isActive = true;
+    };
+
+    // One row of GetWaterBodiesQuery: the entity plus its settings, so the editor can list and
+    // select bodies without a second query per entity.
+    struct WaterBodyEntry
+    {
+        EntityHandle entity;
+        WaterBodyComponentData data;
+    };
+
     struct PhysicsAnimationComponentData
     {
         asset::AssetRef physicsAnimationRef;

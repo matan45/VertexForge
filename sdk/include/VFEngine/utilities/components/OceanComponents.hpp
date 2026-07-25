@@ -132,4 +132,35 @@ namespace components
         float waterHeight = 0.0f;
         bool isActive = true;
     };
+
+    // VK-1607: bounded water at its own level - a lake, a harbour pool, a flooded basement. Additive
+    // to the ocean rather than a replacement for it: the ocean stays the scene singleton and any
+    // number of bodies coexist with it, each suppressing the ocean inside its own footprint.
+    enum class WaterBodyType : uint8_t
+    {
+        Lake = 0,
+        Pool = 1
+    };
+
+    struct WaterBodyComponent
+    {
+        WaterBodyType type = WaterBodyType::Lake;
+
+        // Surface Y = TransformComponent.position.y + waterHeight. An offset rather than an absolute
+        // level so the move gizmo's Y axis still does something, while a precise numeric nudge stays
+        // available.
+        float waterHeight = 0.0f;
+
+        // Half size of the axis-aligned XZ box, in WORLD METRES around the entity's transform
+        // position. Entity scale is deliberately not applied - these numbers mean what they say.
+        glm::vec2 halfExtents{10.0f, 10.0f};
+
+        // Bits 0..2 = swell / agitation / ripples, ANDed with the ocean's own band mask. 0 (the
+        // default) is a mirror-flat surface, which is what a pool should be; the VK-1606 ripple
+        // patch still applies on top because it is a world-space overlay, not a band.
+        uint32_t bandMask = 0u;
+
+        bool physicsEnabled = true;
+        bool isActive = true;
+    };
 }

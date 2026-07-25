@@ -245,6 +245,10 @@ namespace serialization
         static json serializeWaterWakeEmitter(const components::WaterWakeEmitterComponent& emitter);
         static void deserializeWaterWakeEmitter(const json& j, components::WaterWakeEmitterComponent& emitter);
 
+        // VK-1607
+        static json serializeWaterBody(const components::WaterBodyComponent& body);
+        static void deserializeWaterBody(const json& j, components::WaterBodyComponent& body);
+
         static json serializeDestructible(const components::DestructibleComponent& destructible);
         static void deserializeDestructible(const json& j, components::DestructibleComponent& destructible);
 

@@ -50,6 +50,7 @@ namespace render::gpudriven
 namespace render::postprocess
 {
     class PostProcessPipeline;
+    struct CameraInfo;   // VK-1607: by-reference parameter of applyWaterSubmersion
 }
 
 namespace render::transparency
@@ -723,6 +724,12 @@ namespace render
         void executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;
+
+        // VK-1607: fill the submersion fields of the post-process camera info. Was three verbatim
+        // copies of a global "camera Y vs the ocean plane" test; water bodies made that wrong in
+        // both directions (standing beside a raised pool triggered it, standing in a lake at a
+        // different level did not), so the check is now XZ-aware and lives in exactly one place.
+        void applyWaterSubmersion(render::postprocess::CameraInfo& camInfo) const;
 
         // Graph-managed dispatch variants (call *GraphManaged sub-pipeline methods)
         void drawSceneMeshesGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;

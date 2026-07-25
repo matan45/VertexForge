@@ -709,8 +709,10 @@ namespace render
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
+        // VK-1607: hasWaterToRender() covers the ocean AND any water body, so a lake-only scene
+        // still asks for the mesh pass.
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
-            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
+            && oceanRenderProvider && oceanRenderProvider->hasWaterToRender();
 
         bool hasBillboardsToRender = gpuDrivenRenderer && gpuDrivenRenderer->isBillboardRenderingEnabled();
 
@@ -827,6 +829,10 @@ namespace render
         // ocean at all — its parameters come from the OceanComponent, and without one the sim would
         // keep stepping on whatever settings were last published. The impulses it consumes were
         // drained in updateGPUDrivenSceneData above.
+        //
+        // VK-1607 deliberately leaves this one on hasActiveOcean() while the other water gates moved
+        // to hasWaterToRender(): the reason above still holds, so ripples on a water body require an
+        // ocean entity to be present for its settings.
         if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
             gpuDrivenRenderer->dispatchWaterRipples(commandBuffer, currentTime);
 
@@ -1155,7 +1161,7 @@ namespace render
             gpuDrivenRenderer->renderGrassDraw(commandBuffer);
 
         bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled()
-            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
+            && oceanRenderProvider && oceanRenderProvider->hasWaterToRender();   // VK-1607
 
         if (hasWater)
         {

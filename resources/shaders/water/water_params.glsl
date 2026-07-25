@@ -14,7 +14,13 @@
 #define WATER_FLAG_SHORE_WAVES 32u
 #define WATER_FLAG_SHORE_FIELD 64u
 #define WATER_FLAG_RIPPLES     128u    // VK-1606
-// bits 8..15 still free
+#define WATER_FLAG_BODY_CLIP   256u    // VK-1607: ocean tiles discard inside bodyClipRects
+// bits 9..15 still free
+
+// VK-1607: per-tile flag bits carried in WaterTileData::heightAndWave.w.
+// Twin: water::WATER_TILE_BAND_MASK_BITS / WATER_TILE_IS_BODY in WaterTileGrid.hpp.
+#define WATER_TILE_BAND_MASK_BITS 7u
+#define WATER_TILE_IS_BODY        8u
 
 layout(std140, set = 9, binding = 2) uniform WaterExtendedParamsUBO {
     vec4 absorptionCoeff;       //   0  rgb = extinction 1/m
@@ -48,6 +54,12 @@ layout(std140, set = 9, binding = 2) uniform WaterExtendedParamsUBO {
     vec4  shoreWaveA;           // 160  x amplitude, y length, z speed, w breakDepth
     vec4  shoreWaveB;           // 176  x breakRange, y crestFoam, z crestFoamThreshold, w shoreLean
     vec4  rippleParams;         // 192  VK-1606 x heightScale, y normalScale, z foamScale, w edgeFadeStart
-} ext;                          // 208
+
+    vec4  bodyClipRects[8];     // 208  VK-1607 xy = min corner XZ, zw = max corner XZ
+    uint  bodyClipCount;        // 336
+    float pad1607a;             // 340
+    float pad1607b;             // 344
+    float pad1607c;             // 348
+} ext;                          // 352
 
 #endif // WATER_PARAMS_GLSL

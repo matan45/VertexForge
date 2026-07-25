@@ -10,7 +10,9 @@
 #include "../../../utilities/water/ShoreDepthField.hpp"
 #include "../../../utilities/water/ShoalingMath.hpp"
 #include "../../../utilities/water/ShoreWaveMath.hpp"
+#include "../../../utilities/water/WaterBodyMath.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 #include <cstring>
 #include <chrono>
 
@@ -87,7 +89,9 @@ namespace render::gpudriven
                                           float oceanPatchSize,
                                           bool worldMode,
                                           const ::water::WaterTileGrid* tileGrid,
-                                          const ::water::ShoreDepthField* shoreField)
+                                          const ::water::ShoreDepthField* shoreField,
+                                          const std::vector<::water::WaterBodyDesc>& waterBodies,
+                                          bool oceanActive)
     {
         auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
@@ -95,7 +99,16 @@ namespace render::gpudriven
 
         float tileSize = oceanPatchSize * 2.0f;
 
-        if (worldMode && tileGrid && tileGrid->tileCount() > 0)
+        if (!oceanActive)
+        {
+            // VK-1607: no ocean, so no ocean tiles - the water bodies appended below are the whole
+            // draw. Everything downstream (the UBO fill, the push constants, the descriptor update)
+            // still runs, because the bodies need it all.
+            water.tileData.clear();
+            for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
+                water.lodTileCounts[lod] = 0;
+        }
+        else if (worldMode && tileGrid && tileGrid->tileCount() > 0)
         {
             // World mode: sector-driven tiles from WaterTileGrid
             water.tileData.clear();
@@ -131,9 +144,12 @@ namespace render::gpudriven
                     else if (ring <= 3) lod = 2;
                     else lod = 3;
 
+                    // VK-1607: .y is the size along Z (square here) and .w carries the per-tile
+                    // flags - every band enabled, not a water body.
                     render::water::WaterTileGPUData tile;
-                    tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileSize);
-                    tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod), 0.0f);
+                    tile.worldOriginAndSize = glm::vec4(tileOriginX, tileSize, tileOriginZ, tileSize);
+                    tile.heightAndWave = glm::vec4(baseWaterHeight, 1.0f, static_cast<float>(lod),
+                                                   static_cast<float>(::water::WATER_TILE_OCEAN_FLAGS));
                     lodBuckets[lod].push_back(tile);
                 }
             }
@@ -143,6 +159,39 @@ namespace render::gpudriven
             {
                 water.lodTileCounts[lod] = static_cast<uint32_t>(lodBuckets[lod].size());
                 water.tileData.insert(water.tileData.end(), lodBuckets[lod].begin(), lodBuckets[lod].end());
+            }
+        }
+
+        // VK-1607: water bodies contribute one tile each, PREPENDED into the LOD 0 range. Tiles are
+        // flattened LOD 0 first, so the head of the array is the head of LOD 0 - which is exactly the
+        // part clampLodTileCounts never trims. A lake must not disappear because the ocean filled the
+        // 128-instance budget.
+        if (!waterBodies.empty())
+        {
+            std::vector<render::water::WaterTileGPUData> bodyTiles;
+            bodyTiles.reserve(waterBodies.size());
+            for (const auto& body : waterBodies)
+                bodyTiles.push_back(::water::makeBodyTile(body));
+
+            water.tileData.insert(water.tileData.begin(), bodyTiles.begin(), bodyTiles.end());
+            water.lodTileCounts[0] += static_cast<uint32_t>(bodyTiles.size());
+        }
+
+        // The instance budget is now shared between the ocean and the bodies. updateTileData clamps
+        // only the memcpy, so without trimming lodTileCounts too, renderMultiLOD would issue draws
+        // whose firstInstance runs past the end of the SSBO.
+        {
+            const uint32_t kept = ::water::clampLodTileCounts(water.lodTileCounts,
+                                                              ::water::MAX_WATER_GPU_INSTANCES);
+            if (kept < water.tileData.size())
+            {
+                if (!water.tileBudgetWarned)
+                {
+                    water.tileBudgetWarned = true;
+                    vfLogWarning("Water tile budget exceeded: {} tiles requested, {} drawn (limit {})",
+                                 water.tileData.size(), kept, ::water::MAX_WATER_GPU_INSTANCES);
+                }
+                water.tileData.resize(kept);
             }
         }
 
@@ -301,6 +350,38 @@ namespace render::gpudriven
             // zero-fill from init, which would displace nothing but would still cost the taps.
             if (water.rippleEnabled && water.rippleSim && water.rippleSim->hasSimulated())
                 flags |= render::water::WATER_FLAG_RIPPLES;
+
+            // VK-1607: the footprints ocean fragments must be discarded inside. Only the nearest
+            // MAX_WATER_BODY_CLIP_RECTS fit; the rest still draw their own surface, they just stop
+            // suppressing the ocean underneath. Sorting by distance means the ones actually filling
+            // the screen are the ones that get the slots.
+            if (!waterBodies.empty())
+            {
+                std::vector<uint32_t> order(waterBodies.size());
+                for (uint32_t i = 0; i < order.size(); ++i) order[i] = i;
+
+                const glm::vec2 camXZ(cameraPosition.x, cameraPosition.z);
+                std::sort(order.begin(), order.end(),
+                          [&](uint32_t a, uint32_t b)
+                          {
+                              const glm::vec2 va = waterBodies[a].center - camXZ;
+                              const glm::vec2 vb = waterBodies[b].center - camXZ;
+                              const float da = glm::dot(va, va);
+                              const float db = glm::dot(vb, vb);
+                              if (da != db) return da < db;
+                              return a < b;   // stable, so the set does not flicker between frames
+                          });
+
+                const uint32_t clipCount = std::min(static_cast<uint32_t>(order.size()),
+                                                    ::water::MAX_WATER_BODY_CLIP_RECTS);
+                for (uint32_t i = 0; i < clipCount; ++i)
+                    ext.bodyClipRects[i] = ::water::clipRect(waterBodies[order[i]]);
+                ext.bodyClipCount = clipCount;
+
+                if (clipCount > 0)
+                    flags |= render::water::WATER_FLAG_BODY_CLIP;
+            }
+
             ext.flags = flags;
 
             water.cachedExtendedParams = ext;

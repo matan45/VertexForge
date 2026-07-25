@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../utilities/water/WaterBodyMath.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -58,7 +59,11 @@ namespace render::water
     // VK-1606: the interactive ripple patch (set 9 binding 4) has valid contents. Gates both the
     // vertex displacement and the fragment foam contribution.
     constexpr uint32_t WATER_FLAG_RIPPLES = 1u << 7;
-    // bits 8..15 still free
+    // VK-1607: at least one water body is present, so ocean tiles must discard the fragments that
+    // fall inside bodyClipRects[0..bodyClipCount). Body tiles exempt themselves via their own
+    // per-tile is-body bit, so this flag is safe to leave set for every tile in the draw.
+    constexpr uint32_t WATER_FLAG_BODY_CLIP = 1u << 8;
+    // bits 9..15 still free
 
     // Flags an RTT / reflection-probe view is allowed to keep. SSR is view-dependent (baking it
     // into a probe cubemap would be wrong from every direction but the capture one) and both SSR
@@ -134,8 +139,16 @@ namespace render::water
         // VK-1606. x = ripple height scale (metres per unit of simulated height), y = normal scale,
         // z = foam scale, w = patch-border fade start in 0..1 (same meaning as shoreEdgeFadeStart).
         glm::vec4 rippleParams{1.0f, 1.0f, 1.0f, 0.85f};         // 192
+
+        // VK-1607. Water-body footprints the ocean must not draw inside: xy = min corner XZ,
+        // zw = max corner XZ. std140 gives a vec4 array a 16-byte stride, which is what the C++
+        // array already has, so the two layouts match without extra padding. Only the
+        // bodyClipCount nearest the camera fit; the rest simply do not suppress the ocean.
+        glm::vec4 bodyClipRects[::water::MAX_WATER_BODY_CLIP_RECTS]{};  // 208 .. 335
+        uint32_t bodyClipCount = 0u;                            // 336
+        float pad1607[3]{};                                     // 340 .. 351
     };
-    static_assert(sizeof(WaterExtendedParams) == 208);
+    static_assert(sizeof(WaterExtendedParams) == 352);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

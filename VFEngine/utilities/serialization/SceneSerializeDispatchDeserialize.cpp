@@ -215,6 +215,11 @@ namespace serialization
             auto& oceanComp = entity.addOrReplaceComponent<components::OceanComponent>();
             deserializeOcean(c["ocean"], oceanComp);
         }
+        if (c.contains("waterBody"))   // VK-1607
+        {
+            auto& bodyComp = entity.addOrReplaceComponent<components::WaterBodyComponent>();
+            deserializeWaterBody(c["waterBody"], bodyComp);
+        }
         if (c.contains("meshBrushInstance"))
         {
             auto& brushComp = entity.addOrReplaceComponent<components::MeshBrushInstanceComponent>();

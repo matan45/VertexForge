@@ -697,13 +697,18 @@ namespace render::gpudriven
         // profile changed. Cheap (12 KB); called before the scene pass, next to the SVT
         // upload. No-op unless a profile row is dirty.
         void uploadToonProfiles(vk::CommandBuffer cmd);
+        // VK-1607: `waterBodies` are bounded lakes/pools that contribute their own tiles alongside
+        // the ocean's, and `oceanActive` says whether to emit the ocean tile grid at all - a scene
+        // whose only water is a lake still gets here, it just has no ocean to tile.
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,
                          float oceanPatchSize,
                          bool worldMode = false,
                          const ::water::WaterTileGrid* tileGrid = nullptr,
-                         const ::water::ShoreDepthField* shoreField = nullptr);
+                         const ::water::ShoreDepthField* shoreField = nullptr,
+                         const std::vector<::water::WaterBodyDesc>& waterBodies = {},
+                         bool oceanActive = true);
 
         // VK-1605: record the shore-depth texture upload and latch the frame time that drives
         // camera.u_Time (so CPU buoyancy stays in phase with the drawn breakers). MUST be called

@@ -105,6 +105,9 @@ namespace render::gpudriven::detail
         std::unique_ptr<render::water::WaterMeshBuffer> meshBuffer;
         std::vector<render::water::WaterTileGPUData> tileData;
         uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
+        // VK-1607: the 128-instance budget is shared between the ocean grid and the water bodies.
+        // Latched so a scene that is permanently over budget logs once, not every frame.
+        bool tileBudgetWarned = false;
         render::water::WaterPushConstants cachedPushConstants{};
         // VK-1604: last uploaded set 9 b2 params, kept for debug/inspection.
         render::water::WaterExtendedParams cachedExtendedParams{};

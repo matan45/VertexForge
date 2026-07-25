@@ -3,8 +3,10 @@
 #include "../EventTypes.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../data/OceanData.hpp"
+#include "../../data/DTOs.hpp"
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace events::ocean
 {
@@ -173,6 +175,62 @@ namespace events::ocean
 
     struct RebuildOceanFromComponentsCommand : ICommand<void> {
         std::string_view getName() const override { return "RebuildOceanFromComponents"; }
+    };
+
+    // === VK-1607: water bodies ===
+    //
+    // These live here, and are handled by OceanService, rather than following the
+    // Add/Remove/Set/Get/Has convention of ComponentPhysicsLightEvents + PhysicsComponentService.
+    // A water body is only meaningful against the ocean it coexists with - height resolution,
+    // buoyancy and tile emission all have to consult both - so splitting ownership across two
+    // services would mean the ocean asking another service what the water level is.
+
+    // Creates a dedicated scene entity carrying a WaterBodyComponent, the way CreateOceanCommand
+    // creates the ocean entity.
+    struct CreateWaterBodyCommand : ICommand<services::EntityHandle> {
+        services::WaterBodyComponentData data;
+        glm::vec3 position{0.0f};
+        std::string name = "WaterBody";
+
+        std::string_view getName() const override { return "CreateWaterBody"; }
+    };
+
+    // Adds the component to an entity that already exists (the Add Component popup path).
+    struct AddWaterBodyComponentCommand : ICommand<void> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddWaterBodyComponent"; }
+    };
+
+    struct RemoveWaterBodyComponentCommand : ICommand<void> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveWaterBodyComponent"; }
+    };
+
+    struct SetWaterBodyDataCommand : ICommand<void> {
+        services::EntityHandle entity;
+        services::WaterBodyComponentData data;
+
+        std::string_view getName() const override { return "SetWaterBodyData"; }
+    };
+
+    struct GetWaterBodyDataQuery : IQuery<std::optional<services::WaterBodyComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetWaterBodyData"; }
+    };
+
+    struct HasWaterBodyComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasWaterBodyComponent"; }
+    };
+
+    // Every active body in the scene, for the editor's list. The renderer does NOT go through this:
+    // it pulls water::WaterBodyDesc straight off IOceanRenderProvider once per frame.
+    struct GetWaterBodiesQuery : IQuery<std::vector<services::WaterBodyEntry>> {
+        std::string_view getName() const override { return "GetWaterBodies"; }
     };
 
     // === Notifications ===

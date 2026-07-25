@@ -24,6 +24,17 @@ namespace core
         return oceanService && oceanService->hasActiveOcean();
     }
 
+    bool OceanRenderAdapter::hasWaterToRender() const
+    {
+        return oceanService && oceanService->hasWaterToRender();
+    }
+
+    std::vector<water::WaterBodyDesc> OceanRenderAdapter::getWaterBodies() const
+    {
+        if (!oceanService) return {};
+        return oceanService->collectWaterBodies();
+    }
+
     services::OceanVisualSettings OceanRenderAdapter::getOceanVisualSettings() const
     {
         if (!oceanService) return {};

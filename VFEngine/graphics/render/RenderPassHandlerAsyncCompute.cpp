@@ -107,7 +107,9 @@ namespace render
             }
         }
 
-        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean() && gpuDrivenRenderer)
+        // VK-1607: hasWaterToRender(), not hasActiveOcean() - a scene whose only water is a lake
+        // still needs its tiles built, its params uploaded and its descriptors written.
+        if (oceanRenderProvider && oceanRenderProvider->hasWaterToRender() && gpuDrivenRenderer)
         {
             oceanRenderProvider->processWaterTileStreaming();
 
@@ -131,9 +133,11 @@ namespace render
             const auto* tileGrid = oceanRenderProvider->getWaterTileGrid();
             const auto* shoreField = oceanRenderProvider->getShoreDepthField();
             bool worldMode = oceanRenderProvider->isWorldModeActive();
+            auto waterBodies = oceanRenderProvider->getWaterBodies();
             gpuDrivenRenderer->updateWater(visualSettings, baseHeight,
                                             currentCameraPosition, cfgData.bands[0].patchSize,
-                                            worldMode, tileGrid, shoreField);
+                                            worldMode, tileGrid, shoreField,
+                                            waterBodies, oceanRenderProvider->hasActiveOcean());
         }
 
         if (oceanRenderProvider && gpuDrivenRenderer)
@@ -315,6 +319,31 @@ namespace render
             {}, {}, {}, toAttachment);
     }
 
+    void RenderPassHandler::applyWaterSubmersion(render::postprocess::CameraInfo& camInfo) const
+    {
+        if (!oceanRenderProvider || !oceanRenderProvider->hasWaterToRender())
+            return;
+
+        const glm::vec2 camXZ(currentCameraPosition.x, currentCameraPosition.z);
+
+        // VK-1607: bodies take precedence over the ocean at their own footprint, exactly as they do
+        // for buoyancy. Note this uses the ocean's BASE height rather than the displaced surface -
+        // unchanged behaviour, and the 1 m ramp below is far wider than the waves anyway.
+        const auto bodies = oceanRenderProvider->getWaterBodies();
+        bool found = false;
+        const float waterH = ::water::resolveSurfaceHeight(bodies.data(), bodies.size(), camXZ,
+                                                            oceanRenderProvider->getBaseWaterHeight(),
+                                                            oceanRenderProvider->hasActiveOcean(),
+                                                            found);
+        if (!found)
+            return;
+
+        const float diff = waterH - currentCameraPosition.y;
+        camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
+        camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
+        camInfo.waterHeight = waterH;
+    }
+
     void RenderPassHandler::executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
     {
         render::postprocess::CameraInfo camInfo{};
@@ -327,14 +356,7 @@ namespace render
         camInfo.jitterOffset = currentJitterOffset;
         camInfo.frameIndex = taaFrameIndex;
         camInfo.time = currentTime;
-        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
-        {
-            float waterH = oceanRenderProvider->getBaseWaterHeight();
-            float diff = waterH - currentCameraPosition.y;
-            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
-            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
-            camInfo.waterHeight = waterH;
-        }
+        applyWaterSubmersion(camInfo);
         postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)
@@ -561,14 +583,7 @@ namespace render
         camInfo.jitterOffset = currentJitterOffset;
         camInfo.frameIndex = taaFrameIndex;
         camInfo.time = currentTime;
-        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
-        {
-            float waterH = oceanRenderProvider->getBaseWaterHeight();
-            float diff = waterH - currentCameraPosition.y;
-            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
-            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
-            camInfo.waterHeight = waterH;
-        }
+        applyWaterSubmersion(camInfo);
         postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)
@@ -591,14 +606,7 @@ namespace render
         camInfo.jitterOffset = currentJitterOffset;
         camInfo.frameIndex = taaFrameIndex;
         camInfo.time = currentTime;
-        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
-        {
-            float waterH = oceanRenderProvider->getBaseWaterHeight();
-            float diff = waterH - currentCameraPosition.y;
-            camInfo.submersionFactor = glm::clamp((diff + 0.5f) / 1.0f, 0.0f, 1.0f);
-            camInfo.isUnderwater = camInfo.submersionFactor > 0.01f;
-            camInfo.waterHeight = waterH;
-        }
+        applyWaterSubmersion(camInfo);
         postProcessPipeline->setCameraData(camInfo);
 
         if (gpuDrivenRendererInitialized)

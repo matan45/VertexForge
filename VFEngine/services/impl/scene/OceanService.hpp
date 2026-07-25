@@ -11,6 +11,7 @@
 #include "../../../utilities/water/SeaState.hpp"
 #include "../../../utilities/water/ShoreDepthField.hpp"
 #include "../../../utilities/water/RippleSimMath.hpp"
+#include "../../../utilities/water/WaterBodyMath.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
@@ -24,6 +25,7 @@
 namespace components
 {
     struct OceanComponent;
+    struct WaterBodyComponent;
 }
 
 namespace scene
@@ -144,6 +146,17 @@ namespace services
 
         bool hasActiveOcean() const { return oceanEntity.isValid(); }
 
+        // VK-1607: is there ANY water to draw and submerge in - the ocean, or at least one water
+        // body. Every render-side gate that used to ask hasActiveOcean() asks this instead, so a
+        // scene with a lake and no ocean still renders, floats and goes underwater.
+        bool hasWaterToRender() const;
+
+        // Every active body in the scene, resolved against its TransformComponent. Rebuilt on
+        // demand rather than cached: the callers are once-per-frame (renderer, underwater post) or
+        // once-per-physics-step (updateBuoyancy hoists it out of its inner loops), and a cache
+        // would need invalidating from the transform, the component and the hierarchy.
+        std::vector<water::WaterBodyDesc> collectWaterBodies() const;
+
         bool isPositionInOcean(const glm::vec3& worldPos) const;
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
@@ -191,10 +204,32 @@ namespace services
         void setRippleSimEnabled(bool enabled);
         bool isRippleSimEnabled() const;
 
+        // VK-1607: water bodies. Entity-level create plus the per-entity component quintet - all
+        // handled here rather than in PhysicsComponentService, because body-vs-ocean height
+        // resolution lives in this service.
+        EntityHandle createWaterBody(const WaterBodyComponentData& data, const glm::vec3& position,
+                                     const std::string& name);
+        void addWaterBodyComponent(EntityHandle entity);
+        void removeWaterBodyComponent(EntityHandle entity);
+        void setWaterBodyData(EntityHandle entity, const WaterBodyComponentData& data);
+        std::optional<WaterBodyComponentData> getWaterBodyData(EntityHandle entity) const;
+        bool hasWaterBodyComponent(EntityHandle entity) const;
+        std::vector<WaterBodyEntry> getWaterBodies() const;
+
     private:
         void registerOceanCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanQueryHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanFFTHandlers(::events::EventDispatcher& dispatcher);
+        void registerWaterBodyHandlers(::events::EventDispatcher& dispatcher);
+
+        // VK-1607: the ocean-only half of getOceanHeightAt (base level + FFT displacement), split
+        // out so the body-aware wrapper and the buoyancy fast path can both reach it without
+        // re-running the body lookup.
+        float getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const;
+
+        static void applyWaterBodyData(components::WaterBodyComponent& comp,
+                                       const WaterBodyComponentData& data);
+        static WaterBodyComponentData waterBodyDataFromComponent(const components::WaterBodyComponent& comp);
 
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();

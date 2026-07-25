@@ -15,6 +15,10 @@ layout(location = 4) out float fragBaseHeight;   // flat water height (no waves)
 layout(location = 5) out float fragShoreDepth;
 layout(location = 6) out float fragShoreFade;
 layout(location = 7) out float fragShoalFactor;  // band 0's shoaling scale, for break foam
+// VK-1607: the tile's own flag bits. The fragment stage needs the is-body bit to know whether it is
+// allowed to clip itself against the water-body rectangles; it cannot read the tile SSBO, which is
+// bound to the vertex stage only.
+layout(location = 8) flat out uint fragTileFlags;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -23,9 +27,13 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     float u_Time;
 } camera;
 
+// Hand-synced twin of water::WaterTileGPUData in VFEngine/utilities/water/WaterTileGrid.hpp.
+// VK-1607 gave two previously constant fields a meaning: worldOriginAndSize.y is the tile's size
+// along Z (tiles are no longer necessarily square, which is how a water body's tile can be exactly
+// its rectangle) and heightAndWave.w carries the per-tile flags.
 struct WaterTileData {
-    vec4 worldOriginAndSize;   // xyz = plane world origin, w = planeSize
-    vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = 0, w = 0
+    vec4 worldOriginAndSize;   // x,z = tile world origin XZ, w = size along X, y = size along Z
+    vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = lodLevel, w = tile flags
 };
 layout(set = 1, binding = 0) readonly buffer TileBuffer {
     WaterTileData tiles[];
@@ -82,21 +90,27 @@ void main() {
     vec4 originSize = tileData.tiles[tileIndex].worldOriginAndSize;
     vec4 heightWave = tileData.tiles[tileIndex].heightAndWave;
 
-    vec3 tileOrigin = originSize.xyz;
-    float tileSize = originSize.w;
+    float tileSizeX = originSize.w;
+    float tileSizeZ = originSize.y;
     float waterHeight = heightWave.x;
 
     vec3 worldPos = vec3(
-        tileOrigin.x + inPosition.x * tileSize,
+        originSize.x + inPosition.x * tileSizeX,
         waterHeight,
-        tileOrigin.z + inPosition.z * tileSize
+        originSize.z + inPosition.z * tileSizeZ
     );
 
     fragBaseHeight = waterHeight;
 
+    // VK-1607: the tile's own flags. Bits 0..2 gate the FFT bands per tile (a water body defaults to
+    // 0 = mirror-flat), bit 3 says this tile belongs to a body rather than the ocean.
+    uint tileFlags = uint(heightWave.w);
+    bool isBodyTile = (tileFlags & WATER_TILE_IS_BODY) != 0u;
+    fragTileFlags = tileFlags;
+
     // Per-tile simulation LOD: skip expensive bands at coarse LODs
     uint lodLevel = uint(heightWave.z);
-    uint tileBandMask = pc.bandEnableMask;
+    uint tileBandMask = pc.bandEnableMask & (tileFlags & WATER_TILE_BAND_MASK_BITS);
     if (lodLevel >= 2u) tileBandMask &= ~4u;  // skip ripples at LOD2+
     if (lodLevel >= 3u) tileBandMask &= ~2u;  // skip agitation at LOD3
 
@@ -116,9 +130,13 @@ void main() {
     // effectiveFlags is uniform across the draw. Note the RTT mask does NOT clear these bits: a
     // reflection probe must displace its water exactly like the main view or it reflects a surface
     // that is not there (same rule as WATER_FLAG_HEX).
+    //
+    // VK-1607: neither applies to a water body. Both are driven by the shore-depth field, which is
+    // baked from terrain against the OCEAN's level - reading it at a lake 40 m up would shoal the
+    // lake against the sea floor. The ripple patch below is world-space and does apply.
     uint vertFlags = ext.flags & pc.viewFlagMask;
-    bool shoalingOn = (vertFlags & WATER_FLAG_SHOALING) != 0u;
-    bool shoreWavesOn = (vertFlags & WATER_FLAG_SHORE_WAVES) != 0u;
+    bool shoalingOn = (vertFlags & WATER_FLAG_SHOALING) != 0u && !isBodyTile;
+    bool shoreWavesOn = (vertFlags & WATER_FLAG_SHORE_WAVES) != 0u && !isBodyTile;
 
     vec2 baseXZ = worldPos.xz;
     float shoreDepth = SHORE_FIELD_DEEP;
@@ -187,6 +205,12 @@ void main() {
         totalNorm = normalize(totalNorm + (n2 - vec3(0.0, 1.0, 0.0)));
     }
 
+    // VK-1607: a body's tile IS its rectangle, so horizontal chop must not shear vertices past the
+    // rim. The fragment clip protects the ocean from the body, not the body from itself. No-op at
+    // the default bandMask of 0, which produces no displacement at all.
+    if (isBodyTile)
+        totalDisp.xz = vec2(0.0);
+
     worldPos.x += totalDisp.x;
     worldPos.y += totalDisp.y;
     worldPos.z += totalDisp.z;
@@ -249,6 +273,7 @@ layout(location = 4) in float fragBaseHeight;
 layout(location = 5) in float fragShoreDepth;    // VK-1605: true vertical water depth
 layout(location = 6) in float fragShoreFade;
 layout(location = 7) in float fragShoalFactor;
+layout(location = 8) flat in uint fragTileFlags;   // VK-1607: bit 3 = this tile is a water body
 
 layout(location = 0) out vec4 outColor;
 
@@ -334,6 +359,22 @@ void main() {
     // copy and depth image, and because a view-dependent reflection baked into a probe cubemap
     // would be wrong from every direction except the capture one.
     uint effectiveFlags = ext.flags & pc.viewFlagMask;
+
+    // VK-1607: water bodies suppress the ocean inside their footprint. Water draws with depth writes
+    // off, so without this the two surfaces simply blend over each other and a raised pool shows the
+    // sea through its floor. Earliest possible out - before any texture work.
+    //
+    // Body tiles are exempt (they would otherwise clip themselves, and one body sitting inside
+    // another is a legitimate authoring choice resolved by findBodyAt on the CPU side).
+    if ((effectiveFlags & WATER_FLAG_BODY_CLIP) != 0u &&
+        (fragTileFlags & WATER_TILE_IS_BODY) == 0u) {
+        for (uint i = 0u; i < ext.bodyClipCount; ++i) {
+            vec4 r = ext.bodyClipRects[i];
+            if (all(greaterThanEqual(fragWorldPos.xz, r.xy)) &&
+                all(lessThanEqual(fragWorldPos.xz, r.zw)))
+                discard;
+        }
+    }
 
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);

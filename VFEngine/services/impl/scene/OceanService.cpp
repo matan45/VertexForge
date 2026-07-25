@@ -84,6 +84,15 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
+
+        // VK-1607
+        dispatcher.unregisterCommandHandler<events::ocean::CreateWaterBodyCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::AddWaterBodyComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::RemoveWaterBodyComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetWaterBodyDataCommand>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodyDataQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::HasWaterBodyComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodiesQuery>();
     }
 
     void OceanService::registerEventHandlers()
@@ -93,6 +102,7 @@ namespace services
         registerOceanCoreHandlers(dispatcher);
         registerOceanQueryHandlers(dispatcher);
         registerOceanFFTHandlers(dispatcher);
+        registerWaterBodyHandlers(dispatcher);
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
@@ -628,11 +638,24 @@ namespace services
 
     bool OceanService::isPositionInOcean(const glm::vec3& worldPos) const
     {
+        // VK-1607: a water body counts as water even with no ocean in the scene, so the old
+        // "no ocean entity -> not in water" early-out cannot stand on its own any more. Bodies are
+        // bounded, which is why this resolves through resolveSurfaceHeight rather than
+        // getOceanHeightAt: outside every body AND with no ocean there is simply no surface, and
+        // that is different from a surface at y = 0.
+        const glm::vec2 worldXZ(worldPos.x, worldPos.z);
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+
+        // Bodies first, so the ocean height sampler (which sums every FFT band) is only paid for
+        // when the point is actually over open water.
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+            return worldPos.y <= bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+
         if (!oceanEntity.isValid())
             return false;
 
-        float height = getOceanHeightAt(glm::vec2(worldPos.x, worldPos.z));
-        return worldPos.y <= height;
+        return worldPos.y <= getOceanSurfaceHeightAt(worldXZ);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -849,6 +872,22 @@ namespace services
 
     float OceanService::getOceanHeightAt(const glm::vec2& worldXZ) const
     {
+        // VK-1607: water bodies win over the ocean wherever they cover the point. This is the single
+        // choke point every consumer already goes through - GetOceanHeightAtQuery, the
+        // Ocean.getOceanHeightAt script native, and updateBuoyancy's per-sample-point call - so
+        // making it body-aware makes all of them body-aware with no API change.
+        //
+        // A body is flat by definition, so there is no FFT displacement to add on top.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+            return bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+
+        return getOceanSurfaceHeightAt(worldXZ);
+    }
+
+    float OceanService::getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const
+    {
         if (!oceanEntity.isValid())
             return 0.0f;
 
@@ -864,6 +903,203 @@ namespace services
             baseHeight += oceanHeightSampler(worldXZ);
 
         return baseHeight;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // VK-1607: water bodies
+    // ------------------------------------------------------------------------------------------
+
+    bool OceanService::hasWaterToRender() const
+    {
+        if (hasActiveOcean())
+            return true;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent>();
+        for (auto entity : view)
+        {
+            if (view.get<components::WaterBodyComponent>(entity).isActive)
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<water::WaterBodyDesc> OceanService::collectWaterBodies() const
+    {
+        std::vector<water::WaterBodyDesc> bodies;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& body = view.get<components::WaterBodyComponent>(entity);
+            if (!body.isActive)
+                continue;
+
+            // transform.position rather than a resolved world matrix, matching how VK-1606's
+            // updateWakeEmitters reads emitter positions. Bodies are authored at the scene root, so
+            // the two agree; parenting a body under a moving entity is out of scope for this
+            // milestone.
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            water::WaterBodyDesc desc;
+            desc.center = glm::vec2(transform.position.x, transform.position.z);
+            desc.halfExtents = glm::max(body.halfExtents, glm::vec2(0.0f));
+            desc.surfaceHeight = transform.position.y + body.waterHeight;
+            desc.bandMask = body.bandMask & water::WATER_TILE_BAND_MASK_BITS;
+            desc.physicsEnabled = body.physicsEnabled ? 1u : 0u;
+            bodies.push_back(desc);
+        }
+
+        return bodies;
+    }
+
+    EntityHandle OceanService::createWaterBody(const WaterBodyComponentData& data,
+                                               const glm::vec3& position, const std::string& name)
+    {
+        scene::Entity entity(name.empty() ? std::string("WaterBody") : name);
+        sceneGraph->addChild(sceneGraph->GetRoot(), entity);
+
+        entity.getComponent<components::TransformComponent>().position = position;
+
+        auto& comp = entity.addComponent<components::WaterBodyComponent>();
+        applyWaterBodyData(comp, data);
+
+        vfLogInfo("Created water body entity");
+        return internal::toHandle(entity.getHandle());
+    }
+
+    void OceanService::applyWaterBodyData(components::WaterBodyComponent& comp,
+                                          const WaterBodyComponentData& data)
+    {
+        comp.type = data.type == 1u ? components::WaterBodyType::Pool : components::WaterBodyType::Lake;
+        comp.waterHeight = data.waterHeight;
+        comp.halfExtents = glm::max(data.halfExtents, glm::vec2(0.0f));
+        comp.bandMask = data.bandMask & water::WATER_TILE_BAND_MASK_BITS;
+        comp.physicsEnabled = data.physicsEnabled;
+        comp.isActive = data.isActive;
+    }
+
+    WaterBodyComponentData OceanService::waterBodyDataFromComponent(const components::WaterBodyComponent& comp)
+    {
+        WaterBodyComponentData data;
+        data.type = static_cast<uint32_t>(comp.type);
+        data.waterHeight = comp.waterHeight;
+        data.halfExtents = comp.halfExtents;
+        data.bandMask = comp.bandMask;
+        data.physicsEnabled = comp.physicsEnabled;
+        data.isActive = comp.isActive;
+        return data;
+    }
+
+    void OceanService::addWaterBodyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        registry.emplace<components::WaterBodyComponent>(ent);
+    }
+
+    void OceanService::removeWaterBodyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        registry.remove<components::WaterBodyComponent>(ent);
+    }
+
+    void OceanService::setWaterBodyData(EntityHandle entity, const WaterBodyComponentData& data)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        applyWaterBodyData(registry.get<components::WaterBodyComponent>(ent), data);
+    }
+
+    std::optional<WaterBodyComponentData> OceanService::getWaterBodyData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return std::nullopt;
+
+        return waterBodyDataFromComponent(registry.get<components::WaterBodyComponent>(ent));
+    }
+
+    bool OceanService::hasWaterBodyComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        return registry.valid(ent) && registry.all_of<components::WaterBodyComponent>(ent);
+    }
+
+    std::vector<WaterBodyEntry> OceanService::getWaterBodies() const
+    {
+        std::vector<WaterBodyEntry> entries;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent>();
+        for (auto entity : view)
+        {
+            WaterBodyEntry entry;
+            entry.entity = internal::toHandle(entity);
+            entry.data = waterBodyDataFromComponent(view.get<components::WaterBodyComponent>(entity));
+            entries.push_back(entry);
+        }
+
+        return entries;
+    }
+
+    void OceanService::registerWaterBodyHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::ocean::CreateWaterBodyCommand>(
+            [this](const events::ocean::CreateWaterBodyCommand& cmd)
+            {
+                return createWaterBody(cmd.data, cmd.position, cmd.name);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::AddWaterBodyComponentCommand>(
+            [this](const events::ocean::AddWaterBodyComponentCommand& cmd)
+            {
+                addWaterBodyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::RemoveWaterBodyComponentCommand>(
+            [this](const events::ocean::RemoveWaterBodyComponentCommand& cmd)
+            {
+                removeWaterBodyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetWaterBodyDataCommand>(
+            [this](const events::ocean::SetWaterBodyDataCommand& cmd)
+            {
+                setWaterBodyData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterBodyDataQuery>(
+            [this](const events::ocean::GetWaterBodyDataQuery& query)
+            {
+                return getWaterBodyData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::HasWaterBodyComponentQuery>(
+            [this](const events::ocean::HasWaterBodyComponentQuery& query)
+            {
+                return hasWaterBodyComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterBodiesQuery>(
+            [this](const events::ocean::GetWaterBodiesQuery&)
+            {
+                return getWaterBodies();
+            });
     }
 
     OceanVisualSettings OceanService::getOceanVisualSettings() const
@@ -1198,16 +1434,33 @@ namespace services
 
     void OceanService::updateBuoyancy()
     {
-        if (!physicsProvider || !oceanEntity.isValid())
+        if (!physicsProvider)
             return;
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(oceanEntity);
-        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
-            return;
 
-        const auto& comp = registry.get<components::OceanComponent>(ent);
-        if (!comp.physicsEnabled)
+        // VK-1607: this used to bail whenever there was no ocean entity. A scene whose only water is
+        // a lake still has to float boats, so the ocean is now one optional water source among
+        // several. The tuning (density / drag / buoyancyStrength) still comes from the OceanComponent
+        // when there is one, and falls back to its own defaults when there is not.
+        static const components::OceanComponent defaultOceanTuning{};
+        const components::OceanComponent* oceanComp = nullptr;
+        if (oceanEntity.isValid())
+        {
+            entt::entity ent = internal::fromHandle(oceanEntity);
+            if (registry.valid(ent) && registry.all_of<components::OceanComponent>(ent))
+                oceanComp = &registry.get<components::OceanComponent>(ent);
+        }
+
+        // Ocean water only participates when its own physics switch is on; bodies carry their own.
+        const bool oceanPhysicsActive = oceanComp != nullptr && oceanComp->physicsEnabled;
+        const auto& comp = oceanComp ? *oceanComp : defaultOceanTuning;
+
+        // Hoisted out of the per-body, per-sample-point loops below: one registry walk per physics
+        // step instead of one per sample point.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+
+        if (!oceanPhysicsActive && bodies.empty())
             return;
 
         glm::vec3 gravity = physicsProvider->getGravity();
@@ -1272,7 +1525,36 @@ namespace services
             for (uint32_t i = 0; i < samples.count; ++i)
             {
                 pointWorld[i] = pos + rot * samples.points[i];
-                float waterHeight = getOceanHeightAt(glm::vec2(pointWorld[i].x, pointWorld[i].z));
+                const glm::vec2 pointXZ(pointWorld[i].x, pointWorld[i].z);
+
+                // VK-1607: bodies first, ocean second - the same precedence getOceanHeightAt uses,
+                // but resolved against the hoisted list and short-circuiting BEFORE the ocean height
+                // sampler runs (that one sums every FFT band and is far from free). A body whose
+                // physics switch is off is a hole in the water rather than a fall-through to the
+                // ocean: something is occupying that footprint, it just does not float anything.
+                const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), pointXZ);
+
+                float waterHeight;
+                if (bodyIndex >= 0)
+                {
+                    const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+                    if (body.physicsEnabled == 0u)
+                    {
+                        pointSubmersion[i] = 0.0f;
+                        continue;
+                    }
+                    waterHeight = body.surfaceHeight;
+                }
+                else
+                {
+                    if (!oceanPhysicsActive)
+                    {
+                        pointSubmersion[i] = 0.0f;
+                        continue;
+                    }
+                    waterHeight = getOceanSurfaceHeightAt(pointXZ);
+                }
+
                 pointSubmersion[i] = water::computeSubmersion(pointWorld[i].y, waterHeight, halfHeight);
                 totalSubmersion += pointSubmersion[i];
             }

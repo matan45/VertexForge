@@ -58,5 +58,7 @@ namespace components
                                                // list, so duplicating a buoyant entity silently
                                                // dropped its hull tuning — cloning folds over
                                                // exactly this type_list (see ComponentClone.hpp).
-                                               BuoyancyComponent, WaterWakeEmitterComponent>;
+                                               BuoyancyComponent, WaterWakeEmitterComponent,
+                                               // VK-1607
+                                               WaterBodyComponent>;
 }

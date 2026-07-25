@@ -64,20 +64,20 @@ namespace core::api
                 {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     auto& dispatcher = events::EventDispatcher::instance();
                     auto& registry = scene::EntityRegistry::getRegistry();
-                    auto view = registry.view<components::OceanComponent>();
-                    for (auto entity : view)
+
+                    // VK-1607: this used to be gated on an OceanComponent existing, which meant a
+                    // camera submerged in a lake in an ocean-less scene reported "not underwater".
+                    // IsPositionInOceanQuery already resolves bodies first and answers false when
+                    // there is no water at that XZ at all, so the outer ocean loop is gone. The
+                    // query samples the DISPLACED surface, so this still accounts for waves.
+                    auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
+                    for (auto camEntity : camView)
                     {
-                        // Check if the camera position (from CameraComponent) is below the
-                        // displaced wave surface, not just the flat base height
-                        auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
-                        for (auto camEntity : camView)
-                        {
-                            const auto& transform = camView.get<components::TransformComponent>(camEntity);
-                            events::ocean::GetOceanHeightAtQuery query;
-                            query.worldXZ = glm::vec2(transform.position.x, transform.position.z);
-                            if (transform.position.y < dispatcher.query(query))
-                                return value::Value(true);
-                        }
+                        const auto& transform = camView.get<components::TransformComponent>(camEntity);
+                        events::ocean::IsPositionInOceanQuery query;
+                        query.position = transform.position;
+                        if (dispatcher.query(query))
+                            return value::Value(true);
                     }
                     return value::Value(false);
                 }});

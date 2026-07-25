@@ -97,6 +97,8 @@ namespace serialization
             out["grass"] = serializeGrass(entity.getComponent<components::GrassComponent>());
         if (entity.hasComponent<components::OceanComponent>())
             out["ocean"] = serializeOcean(entity.getComponent<components::OceanComponent>());
+        if (entity.hasComponent<components::WaterBodyComponent>())   // VK-1607
+            out["waterBody"] = serializeWaterBody(entity.getComponent<components::WaterBodyComponent>());
         if (entity.hasComponent<components::MeshBrushInstanceComponent>())
             out["meshBrushInstance"] = serializeMeshBrushInstance(entity.getComponent<components::MeshBrushInstanceComponent>());
     }
