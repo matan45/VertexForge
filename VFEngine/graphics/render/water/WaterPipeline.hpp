@@ -81,6 +81,9 @@ namespace render::water
         vk::DescriptorSetLayout refractionDummyLayout;
         vk::DescriptorPool refractionDummyPool;
         vk::DescriptorSet refractionDummyDescSet;
+        // VK-1604: set 9 binding 2 needs a valid buffer even on the dummy path.
+        vk::Buffer refractionDummyParamsBuffer;
+        core::VulkanAllocation refractionDummyParamsAllocation;
 
         // Ocean FFT texture support
         vk::DescriptorSetLayout oceanTextureLayout;       // Currently active layout (dummy or external)

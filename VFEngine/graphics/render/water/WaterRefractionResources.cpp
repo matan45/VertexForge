@@ -1,7 +1,9 @@
 #include "WaterRefractionResources.hpp"
+#include "../../core/BufferUtilities.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "../../core/Utilities.hpp"
+#include <cstring>
 
 namespace render::water
 {
@@ -19,6 +21,7 @@ namespace render::water
     {
         createRefractionImage(swapchainFormat, width, height);
         createSampler();
+        createParamsBuffer();
         createDescriptorLayout();
         createDescriptorPool();
         allocateDescriptorSet();
@@ -44,10 +47,19 @@ namespace render::water
         }
 
         if (descriptorSetLayout) { vkDevice.destroyDescriptorSetLayout(descriptorSetLayout); descriptorSetLayout = nullptr; }
+        if (depthSampler)        { vkDevice.destroySampler(depthSampler); depthSampler = nullptr; }
         if (refractionSampler)   { vkDevice.destroySampler(refractionSampler); refractionSampler = nullptr; }
         if (refractionView)      { vkDevice.destroyImageView(refractionView); refractionView = nullptr; }
         if (refractionImage)     { vkDevice.destroyImage(refractionImage); refractionImage = nullptr; }
         if (refractionAllocation) { device.getMemoryManager().free(refractionAllocation); refractionAllocation = {}; }
+
+        if (paramsBuffer)
+        {
+            paramsMapped = nullptr;
+            core::BufferUtilities::destroyBuffer(vkDevice, paramsBuffer, paramsAllocation, device.getMemoryManager());
+            paramsBuffer = nullptr;
+            paramsAllocation = {};
+        }
 
         initialized = false;
     }
@@ -83,13 +95,54 @@ namespace render::water
         info.mipmapMode = vk::SamplerMipmapMode::eLinear;
 
         refractionSampler = device.getLogicalDevice().createSampler(info);
+
+        // VK-1604: separate nearest sampler for the scene depth binding (see header note).
+        vk::SamplerCreateInfo depthInfo{};
+        depthInfo.magFilter = vk::Filter::eNearest;
+        depthInfo.minFilter = vk::Filter::eNearest;
+        depthInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+        depthInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+        depthInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+        depthInfo.anisotropyEnable = VK_FALSE;
+        depthInfo.maxAnisotropy = 1.0f;
+        depthInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+
+        depthSampler = device.getLogicalDevice().createSampler(depthInfo);
     }
 
+    void WaterRefractionResources::createParamsBuffer()
+    {
+        core::BufferInfoRequest req(device.getLogicalDevice(), device.getPhysicalDevice());
+        req.size = sizeof(WaterExtendedParams);
+        req.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        req.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(req, paramsBuffer, paramsAllocation, device.getMemoryManager());
+        paramsMapped = paramsAllocation.mappedPtr;
+
+        // Start from the struct defaults so the first frames before updateWater runs (and any
+        // frame where the ocean is disabled) read sane, all-features-off values.
+        if (paramsMapped)
+        {
+            WaterExtendedParams defaults{};
+            std::memcpy(paramsMapped, &defaults, sizeof(WaterExtendedParams));
+        }
+    }
+
+    void WaterRefractionResources::updateParams(const WaterExtendedParams& params)
+    {
+        if (paramsMapped)
+            std::memcpy(paramsMapped, &params, sizeof(WaterExtendedParams));
+    }
+
+    // NOTE: WaterPipeline::createRefractionDummy() mirrors this layout for the no-refraction /
+    // RTT path. Binding count, types and STAGE FLAGS must match exactly or the two layouts are
+    // not descriptor-set-compatible and binding the dummy into a pipeline built from this layout
+    // is a validation error.
     void WaterRefractionResources::createDescriptorLayout()
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
@@ -100,6 +153,12 @@ namespace render::water
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        // VK-1604: extended params. Vertex too — hex tiling runs in the vertex stage.
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -108,14 +167,16 @@ namespace render::water
 
     void WaterRefractionResources::createDescriptorPool()
     {
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = 2;
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[0].descriptorCount = 2;
+        poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
 
         descriptorPool = device.getLogicalDevice().createDescriptorPool(poolInfo);
     }
@@ -138,13 +199,29 @@ namespace render::water
         imageInfos[0].imageView = refractionView;
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        // Binding 1: use the same refraction color texture as a dummy
-        // (depth sampling removed - water shader uses gl_FragCoord.z directly)
-        imageInfos[1].sampler = refractionSampler;
-        imageInfos[1].imageView = refractionView;
-        imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        // VK-1604: binding 1 is the real scene depth image. water.glsl reconstructs linear depth
+        // from it for shore foam, SSR and Beer-Lambert absorption. Legal because the water draw
+        // runs inside beginWaterReadOnlyDepthPassGraphManaged, which binds depth read-only.
+        // Fall back to the color copy only if no depth view was supplied (init ordering safety).
+        if (sceneDepthView)
+        {
+            imageInfos[1].sampler = depthSampler;
+            imageInfos[1].imageView = sceneDepthView;
+            imageInfos[1].imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+        }
+        else
+        {
+            imageInfos[1].sampler = refractionSampler;
+            imageInfos[1].imageView = refractionView;
+            imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        }
 
-        std::array<vk::WriteDescriptorSet, 2> writes{};
+        vk::DescriptorBufferInfo paramsInfo{};
+        paramsInfo.buffer = paramsBuffer;
+        paramsInfo.offset = 0;
+        paramsInfo.range = sizeof(WaterExtendedParams);
+
+        std::array<vk::WriteDescriptorSet, 3> writes{};
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
@@ -156,6 +233,12 @@ namespace render::water
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[1].pImageInfo = &imageInfos[1];
+
+        writes[2].dstSet = descriptorSet;
+        writes[2].dstBinding = 2;
+        writes[2].descriptorCount = 1;
+        writes[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+        writes[2].pBufferInfo = &paramsInfo;
 
         vkDevice.updateDescriptorSets(writes, nullptr);
     }

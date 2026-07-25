@@ -225,6 +225,16 @@ namespace core::api
 
                     events::ocean::SetOceanVisualSettingsCommand cmd;
                     cmd.oceanEntity = services::EntityHandle{static_cast<uint64_t>(id)};
+
+                    // VK-1604: read-modify-write. The service handler writes EVERY field of the
+                    // struct, so sending a default-constructed one would reset refraction,
+                    // caustics, shore, SSR, absorption and anti-tiling to their defaults. Seed
+                    // from the live settings and overwrite only what the script passed.
+                    events::ocean::GetOceanVisualSettingsQuery settingsQuery;
+                    settingsQuery.entity = cmd.oceanEntity;
+                    if (auto current = dispatcher.query(settingsQuery); current.has_value())
+                        cmd.settings = *current;
+
                     cmd.settings.shallowColor = glm::vec4(
                         extractFloat(args[1]), extractFloat(args[2]),
                         extractFloat(args[3]), extractFloat(args[4]));

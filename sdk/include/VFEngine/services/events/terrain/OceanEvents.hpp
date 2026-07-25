@@ -83,6 +83,15 @@ namespace events::ocean
         std::string_view getName() const override { return "GetOceanData"; }
     };
 
+    // VK-1604: read the visual settings back in the exact struct SetOceanVisualSettingsCommand
+    // takes, so a caller that only wants to change a few fields can read-modify-write instead of
+    // sending a default-constructed struct and silently resetting everything else.
+    struct GetOceanVisualSettingsQuery : IQuery<std::optional<services::OceanVisualSettings>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetOceanVisualSettings"; }
+    };
+
     struct HasOceanComponentQuery : IQuery<bool> {
         services::EntityHandle entity;
 

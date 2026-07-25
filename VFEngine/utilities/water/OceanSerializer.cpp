@@ -9,7 +9,10 @@ namespace ocean
     {
         nlohmann::json j;
 
-        j["version"] = 1;
+        // VK-1604 bumped this to 2 (adds the SSR / Beer-Lambert / hex-tiling visual keys).
+        // load() does not branch on it — every key is read with a self-defaulting value(), so a
+        // v1 file simply keeps the struct defaults. The field is informational.
+        j["version"] = 2;
         j["waterHeight"] = data.waterHeight;
         j["physicsEnabled"] = data.physicsEnabled;
 
@@ -32,6 +35,22 @@ namespace ocean
         vis["shoreWetRange"] = data.shoreWetRange;
         vis["shoreWetDarkening"] = data.shoreWetDarkening;
         vis["shoreWetRoughness"] = data.shoreWetRoughness;
+
+        // VK-1604
+        vis["ssrEnabled"] = data.ssrEnabled;
+        vis["ssrIntensity"] = data.ssrIntensity;
+        vis["ssrMaxDistance"] = data.ssrMaxDistance;
+        vis["ssrThickness"] = data.ssrThickness;
+        vis["ssrMaxSteps"] = data.ssrMaxSteps;
+        vis["beerLambertEnabled"] = data.beerLambertEnabled;
+        vis["absorptionCoeff"] = {data.absorptionCoeff.r, data.absorptionCoeff.g, data.absorptionCoeff.b};
+        vis["scatteringColor"] = {data.scatteringColor.r, data.scatteringColor.g, data.scatteringColor.b};
+        vis["scatterCoeff"] = data.scatterCoeff;
+        vis["absorptionMaxDistance"] = data.absorptionMaxDistance;
+        vis["hexTilingEnabled"] = data.hexTilingEnabled;
+        vis["hexBandMask"] = data.hexBandMask;
+        vis["hexCellScale"] = data.hexCellScale;
+        vis["hexBlendContrast"] = data.hexBlendContrast;
 
         // Physics
         auto& phys = j["physics"];
@@ -125,6 +144,33 @@ namespace ocean
             outData.shoreWetRange = vis.value("shoreWetRange", 5.0f);
             outData.shoreWetDarkening = vis.value("shoreWetDarkening", 0.3f);
             outData.shoreWetRoughness = vis.value("shoreWetRoughness", 0.15f);
+
+            // VK-1604 — self-defaulting reads (fall back to the struct default), so v1 files
+            // that predate these keys load with every new feature off.
+            outData.ssrEnabled = vis.value("ssrEnabled", outData.ssrEnabled);
+            outData.ssrIntensity = vis.value("ssrIntensity", outData.ssrIntensity);
+            outData.ssrMaxDistance = vis.value("ssrMaxDistance", outData.ssrMaxDistance);
+            outData.ssrThickness = vis.value("ssrThickness", outData.ssrThickness);
+            outData.ssrMaxSteps = vis.value("ssrMaxSteps", outData.ssrMaxSteps);
+            outData.beerLambertEnabled = vis.value("beerLambertEnabled", outData.beerLambertEnabled);
+            if (vis.contains("absorptionCoeff") && vis["absorptionCoeff"].is_array()
+                && vis["absorptionCoeff"].size() >= 3)
+            {
+                auto& c = vis["absorptionCoeff"];
+                outData.absorptionCoeff = glm::vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>());
+            }
+            if (vis.contains("scatteringColor") && vis["scatteringColor"].is_array()
+                && vis["scatteringColor"].size() >= 3)
+            {
+                auto& c = vis["scatteringColor"];
+                outData.scatteringColor = glm::vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>());
+            }
+            outData.scatterCoeff = vis.value("scatterCoeff", outData.scatterCoeff);
+            outData.absorptionMaxDistance = vis.value("absorptionMaxDistance", outData.absorptionMaxDistance);
+            outData.hexTilingEnabled = vis.value("hexTilingEnabled", outData.hexTilingEnabled);
+            outData.hexBandMask = vis.value("hexBandMask", outData.hexBandMask);
+            outData.hexCellScale = vis.value("hexCellScale", outData.hexCellScale);
+            outData.hexBlendContrast = vis.value("hexBlendContrast", outData.hexBlendContrast);
         }
 
         // Physics

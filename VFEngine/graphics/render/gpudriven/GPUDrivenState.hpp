@@ -103,6 +103,15 @@ namespace render::gpudriven::detail
         std::vector<render::water::WaterTileGPUData> tileData;
         uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
         render::water::WaterPushConstants cachedPushConstants{};
+        // VK-1604: last uploaded set 9 b2 params, kept for debug/inspection.
+        render::water::WaterExtendedParams cachedExtendedParams{};
+        // VK-1604: hex-tiling settings mirrored for the CPU buoyancy height path so the physics
+        // surface matches the rendered one. Written on the render thread in updateWater, read on
+        // the physics worker via the injected ocean height sampler.
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
         bool renderingEnabled = true;
         // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude water).
         uint32_t renderLayer = 0;

@@ -34,8 +34,63 @@ namespace render::water
         float shoreFoamRange;           // 4  (world units: how far from shore foam extends)
         float shoreFoamIntensity;       // 4
         float shoreBreakingStrength;    // 4
+        // VK-1604: per-VIEW mask ANDed with WaterExtendedParams::flags in the shader.
+        // WaterExtendedParams is filled once per frame in updateWater, but renderWaterDraw runs
+        // once for the main view plus once per RTT / reflection-probe view, so anything that must
+        // differ between views cannot live in the UBO. RTT views clear the SSR and absorption bits
+        // (their set 9 points at the main view's color copy and depth).
+        uint32_t viewFlagMask;          // 4
     };
-    static_assert(sizeof(WaterPushConstants) == 88);
+    static_assert(sizeof(WaterPushConstants) == 92);
+
+    // VK-1604: feature flags shared by WaterExtendedParams::flags and WaterPushConstants::viewFlagMask.
+    // MUST stay in sync with resources/shaders/water/water_params.glsl — there is no codegen.
+    constexpr uint32_t WATER_FLAG_SSR = 1u << 0;
+    constexpr uint32_t WATER_FLAG_ABSORPTION = 1u << 1;
+    constexpr uint32_t WATER_FLAG_HEX = 1u << 2;
+    constexpr uint32_t WATER_FLAG_SSR_DEBUG = 1u << 3;
+    // bits 4..15 reserved for VK-1605 (shoaling / shore waves) and VK-1606 (ripples)
+
+    // Flags an RTT / reflection-probe view is allowed to keep. SSR is view-dependent (baking it
+    // into a probe cubemap would be wrong from every direction but the capture one) and both SSR
+    // and absorption read set 9, which belongs to the main view.
+    constexpr uint32_t WATER_VIEW_FLAGS_ALL = 0xFFFFFFFFu;
+    constexpr uint32_t WATER_VIEW_FLAGS_RTT = ~(WATER_FLAG_SSR | WATER_FLAG_ABSORPTION);
+
+    // VK-1604: ocean-level visual parameters that no longer fit in the 128-byte push-constant
+    // budget. std140 layout, bound as set 9 binding 2 (vertex | fragment — hex tiling runs in the
+    // vertex stage). Hand-padded into 16-byte rows exactly like WaterCausticsResources::CausticParams:
+    // glm is not force-aligned in this engine (alignof(glm::vec4) == 4), so no vec3 may appear here
+    // or the C++ and GLSL layouts silently diverge.
+    struct WaterExtendedParams
+    {
+        glm::vec4 absorptionCoeff{0.45f, 0.08f, 0.02f, 0.0f};   //   0  rgb = extinction 1/m, w pad
+        glm::vec4 scatterColor{0.0f, 0.35f, 0.30f, 0.0f};       //  16  rgb, w pad
+        glm::vec4 scatterCoeff{0.05f, 0.05f, 0.04f, 0.0f};      //  32  rgb = in-scatter 1/m, w pad
+
+        float ssrIntensity = 1.0f;                              //  48
+        float ssrMaxDistance = 60.0f;                           //  52  metres
+        float ssrThickness = 0.35f;                             //  56  metres (range-scaled in shader)
+        uint32_t ssrMaxSteps = 24u;                             //  60
+
+        float ssrEdgeFadeStart = 0.85f;                         //  64
+        float ssrRefineSteps = 5.0f;                            //  68
+        float absorptionMaxDistance = 30.0f;                    //  72  metres
+        float hexBlendExponent = 4.0f;                          //  76
+
+        float hexCellScale0 = 1.0f;                             //  80  hex cells per band patch
+        float hexCellScale1 = 1.0f;                             //  84
+        float hexCellScale2 = 1.0f;                             //  88
+        uint32_t hexPerBandMask = 0x6u;                         //  92  default: bands 1 and 2
+
+        uint32_t flags = 0u;                                    //  96
+        float reservedShoreField = 0.0f;                        // 100  VK-1605
+        float reservedShoaling = 0.0f;                          // 104  VK-1605
+        float reservedShoreWaves = 0.0f;                        // 108  VK-1605
+
+        glm::vec4 reserved0{0.0f};                              // 112  VK-1606 ripple patch window
+    };
+    static_assert(sizeof(WaterExtendedParams) == 128);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

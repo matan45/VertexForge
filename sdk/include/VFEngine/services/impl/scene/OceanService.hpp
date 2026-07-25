@@ -12,8 +12,14 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_set>
+
+namespace components
+{
+    struct OceanComponent;
+}
 
 namespace scene
 {
@@ -110,6 +116,8 @@ namespace services
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
         OceanVisualSettings getOceanVisualSettings() const;
+        // VK-1604: per-entity overload behind GetOceanVisualSettingsQuery.
+        std::optional<OceanVisualSettings> getOceanVisualSettings(EntityHandle entity) const;
         float getBaseWaterHeight() const;
 
         bool isOceanFFTEnabled() const { return oceanConfig.enabled; }
@@ -142,6 +150,11 @@ namespace services
 
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+
+        // VK-1604: the single component -> OceanVisualSettings copy. Both getOceanVisualSettings
+        // overloads go through it, so there is exactly one place to extend when a visual field
+        // is added.
+        static OceanVisualSettings visualSettingsFromComponent(const components::OceanComponent& comp);
 
         // Sea state helpers
         void applySeaState(const water::SeaState& state);

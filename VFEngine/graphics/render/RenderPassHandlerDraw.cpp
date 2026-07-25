@@ -1056,7 +1056,10 @@ namespace render
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            // VK-1604: water reads the scene depth image (set 9 b1), so it draws in its own
+            // scope with depth bound read-only. Everything after it may write depth, hence the
+            // restore + re-begin below.
+            meshPipeline->beginWaterReadOnlyDepthPassGraphManaged(commandBuffer, imageIndex);
 
             vk::Viewport viewport{0.0f, 0.0f,
                                    static_cast<float>(extent.width),
@@ -1067,6 +1070,12 @@ namespace render
             commandBuffer.setScissor(0, scissor);
 
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterWater(commandBuffer);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            commandBuffer.setViewport(0, viewport);
+            commandBuffer.setScissor(0, scissor);
 
             if (hasBillboards)
                 gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
@@ -1143,7 +1152,10 @@ namespace render
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            // VK-1604: water reads the scene depth image (set 9 b1), so it draws in its own
+            // scope with depth bound read-only, then depth is restored to AttachmentOptimal for
+            // the billboards / custom meshes / debug / plugin draws that follow.
+            meshPipeline->beginWaterReadOnlyDepthPassGraphManaged(commandBuffer, imageIndex);
 
             auto waterExtent = swapChain.getSwapchainExtent();
             vk::Viewport waterViewport{0.0f, 0.0f,
@@ -1155,6 +1167,12 @@ namespace render
             commandBuffer.setScissor(0, waterScissor);
 
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterWater(commandBuffer);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            commandBuffer.setViewport(0, waterViewport);
+            commandBuffer.setScissor(0, waterScissor);
         }
 
         if (gpuDrivenRenderer->isBillboardRenderingEnabled())

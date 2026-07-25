@@ -46,6 +46,8 @@ namespace render::water
         // CPU-side displacement readback for physics
         void readbackDisplacementData();
         [[nodiscard]] float sampleHeightAt(const glm::vec2& worldXZ) const;
+        // VK-1604: sample at an explicit patch UV (hex tiling supplies per-cell offset UVs).
+        [[nodiscard]] float sampleHeightAtUV(const glm::vec2& uv) const;
 
     private:
         core::Device& device;

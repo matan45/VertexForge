@@ -39,6 +39,11 @@ namespace render::gpudriven
         thread_local bool tlsHasTerrainViewProjectionOverride = false;
         thread_local glm::mat4 tlsTerrainViewProjectionOverride{1.0f};
         thread_local uint32_t tlsRTTCullingMask = 0xFFFFFFFFu;
+        // VK-1604: unambiguous "am I recording an RTT / reflection-probe view" flag. The culling
+        // mask cannot answer that - its default 0xFFFFFFFF is indistinguishable from an RTT camera
+        // that sees every layer. Water needs a definite answer because RTT views render into their
+        // own depth image while set 9 still points at the MAIN view's color copy and depth.
+        thread_local bool tlsInRTTContext = false;
     }
 
     void GPUDrivenRenderer::updateScene(
@@ -298,6 +303,7 @@ namespace render::gpudriven
         tlsHasTerrainViewProjectionOverride = true;
         tlsTerrainViewProjectionOverride = params.projection * params.view;
         tlsRTTCullingMask = params.cullingMask;
+        tlsInRTTContext = true;
     }
 
     void GPUDrivenRenderer::endRTTContext()
@@ -310,6 +316,7 @@ namespace render::gpudriven
         tlsActiveCullDescriptorSet = nullptr;
         tlsHasTerrainViewProjectionOverride = false;
         tlsRTTCullingMask = 0xFFFFFFFFu;
+        tlsInRTTContext = false;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::getThreadLocalCullDescriptorSet()
@@ -330,6 +337,11 @@ namespace render::gpudriven
     uint32_t GPUDrivenRenderer::getThreadLocalRTTCullingMask()
     {
         return tlsRTTCullingMask;
+    }
+
+    bool GPUDrivenRenderer::isThreadLocalRTTContext()
+    {
+        return tlsInRTTContext;
     }
 
     vk::DescriptorSet GPUDrivenRenderer::allocateRTTCullDescriptorSet(vk::DescriptorPool externalPool,

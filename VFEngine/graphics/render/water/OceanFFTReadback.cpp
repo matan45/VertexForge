@@ -1,6 +1,7 @@
 #include "OceanFFTReadback.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/BufferUtilities.hpp"
+#include "../../../utilities/water/DisplacementSampling.hpp"
 
 #include <cmath>
 #include <immintrin.h>
@@ -128,37 +129,21 @@ namespace render::water
 
     float OceanFFTReadback::sampleHeightAt(const glm::vec2& worldXZ, uint32_t resolution, float patchSize) const
     {
-        if (cpuDisplacementData.empty() || patchSize <= 0.0f)
+        return sampleHeightAtUV(::water::patchUV(worldXZ, patchSize), resolution);
+    }
+
+    // VK-1604: UV overload so the hex-tiling height path can sample the same band at three
+    // per-cell-offset UVs. Wrap + bilinear live in utilities/water/DisplacementSampling.hpp so
+    // they are shared with the tests and cannot drift from the readback.
+    float OceanFFTReadback::sampleHeightAtUV(const glm::vec2& uv, uint32_t resolution) const
+    {
+        if (cpuDisplacementData.empty() || resolution == 0)
+            return 0.0f;
+        if (cpuDisplacementData.size() < static_cast<size_t>(resolution) * resolution)
             return 0.0f;
 
-        uint32_t N = resolution;
-
-        float u = worldXZ.x / patchSize;
-        float v = worldXZ.y / patchSize;
-
-        u = u - std::floor(u);
-        v = v - std::floor(v);
-
-        float fx = u * N - 0.5f;
-        float fy = v * N - 0.5f;
-
-        int x0 = static_cast<int>(std::floor(fx));
-        int y0 = static_cast<int>(std::floor(fy));
-        float fracX = fx - x0;
-        float fracY = fy - y0;
-
-        auto wrap = [N](int c) -> uint32_t { return static_cast<uint32_t>(((c % static_cast<int>(N)) + N) % N); };
-        uint32_t x0w = wrap(x0), x1w = wrap(x0 + 1);
-        uint32_t y0w = wrap(y0), y1w = wrap(y0 + 1);
-
-        float h00 = cpuDisplacementData[y0w * N + x0w].y;
-        float h10 = cpuDisplacementData[y0w * N + x1w].y;
-        float h01 = cpuDisplacementData[y1w * N + x0w].y;
-        float h11 = cpuDisplacementData[y1w * N + x1w].y;
-
-        float h0 = h00 + fracX * (h10 - h00);
-        float h1 = h01 + fracX * (h11 - h01);
-
-        return h0 + fracY * (h1 - h0);
+        return ::water::sampleBilinearWrapped(
+            [this](uint32_t index) { return cpuDisplacementData[index].y; },
+            resolution, uv);
     }
 }

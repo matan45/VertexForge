@@ -50,6 +50,31 @@ namespace components
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
 
+        // VK-1604: screen-space reflections. In-fragment march in water.glsl against the scene
+        // depth + pre-water color copy (set 9) — the generic SSR chain cannot see water, which
+        // draws after the depth prepass with depth writes off. IBL fills misses and screen edges.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;       // metres
+        float ssrThickness = 0.35f;         // metres; range-scaled in the shader
+        uint32_t ssrMaxSteps = 24;
+
+        // VK-1604: Beer-Lambert absorption / in-scattering. OFF keeps the legacy height-based
+        // deep/shallow tint byte-for-byte, so existing content is unaffected until opted in.
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};   // per-channel extinction, 1/m
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;         // 1/m
+        float absorptionMaxDistance = 30.0f;// metres; clamps the path length
+
+        // VK-1604: hex tile-and-blend anti-tiling. hexBandMask picks which FFT bands pay the
+        // 3x sample cost; the CPU buoyancy height path honours the same mask, so the rendered
+        // surface and physics agree on every band.
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;         // bands 1 and 2 by default
+        float hexCellScale = 1.0f;          // hex cells per band patch
+        float hexBlendContrast = 4.0f;      // weight sharpening exponent
+
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {
             {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Swell

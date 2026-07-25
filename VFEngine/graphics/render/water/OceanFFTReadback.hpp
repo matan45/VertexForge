@@ -30,6 +30,8 @@ namespace render::water
         void recordCopy(vk::CommandBuffer cmd, vk::Image displacementImage, uint32_t resolution);
         void readback(uint32_t resolution);
         [[nodiscard]] float sampleHeightAt(const glm::vec2& worldXZ, uint32_t resolution, float patchSize) const;
+        // VK-1604: same fetch, pre-computed patch UV — used by the hex-tiling CPU height path.
+        [[nodiscard]] float sampleHeightAtUV(const glm::vec2& uv, uint32_t resolution) const;
 
     private:
         core::Device& device;

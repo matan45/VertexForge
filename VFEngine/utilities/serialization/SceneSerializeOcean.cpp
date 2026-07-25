@@ -33,6 +33,24 @@ namespace serialization
         j["shoreWetDarkening"] = ocean.shoreWetDarkening;
         j["shoreWetRoughness"] = ocean.shoreWetRoughness;
 
+        // VK-1604
+        j["ssrEnabled"] = ocean.ssrEnabled;
+        j["ssrIntensity"] = ocean.ssrIntensity;
+        j["ssrMaxDistance"] = ocean.ssrMaxDistance;
+        j["ssrThickness"] = ocean.ssrThickness;
+        j["ssrMaxSteps"] = ocean.ssrMaxSteps;
+        j["beerLambertEnabled"] = ocean.beerLambertEnabled;
+        j["absorptionCoeff"] = json::array({ocean.absorptionCoeff.x, ocean.absorptionCoeff.y,
+                                             ocean.absorptionCoeff.z});
+        j["scatteringColor"] = json::array({ocean.scatteringColor.x, ocean.scatteringColor.y,
+                                             ocean.scatteringColor.z});
+        j["scatterCoeff"] = ocean.scatterCoeff;
+        j["absorptionMaxDistance"] = ocean.absorptionMaxDistance;
+        j["hexTilingEnabled"] = ocean.hexTilingEnabled;
+        j["hexBandMask"] = ocean.hexBandMask;
+        j["hexCellScale"] = ocean.hexCellScale;
+        j["hexBlendContrast"] = ocean.hexBlendContrast;
+
         // Ocean FFT bands
         auto bandsArray = nlohmann::json::array();
         for (uint32_t i = 0; i < components::MAX_OCEAN_BANDS; ++i)
@@ -112,6 +130,39 @@ namespace serialization
             ocean.shoreWetDarkening = it->get<float>();
         if (auto it = j.find("shoreWetRoughness"); it != j.end() && it->is_number())
             ocean.shoreWetRoughness = it->get<float>();
+
+        // VK-1604 — absent keys leave the component defaults (all features off), so scenes
+        // saved before this story load unchanged.
+        if (auto it = j.find("ssrEnabled"); it != j.end() && it->is_boolean())
+            ocean.ssrEnabled = it->get<bool>();
+        if (auto it = j.find("ssrIntensity"); it != j.end() && it->is_number())
+            ocean.ssrIntensity = it->get<float>();
+        if (auto it = j.find("ssrMaxDistance"); it != j.end() && it->is_number())
+            ocean.ssrMaxDistance = it->get<float>();
+        if (auto it = j.find("ssrThickness"); it != j.end() && it->is_number())
+            ocean.ssrThickness = it->get<float>();
+        if (auto it = j.find("ssrMaxSteps"); it != j.end() && it->is_number_unsigned())
+            ocean.ssrMaxSteps = it->get<uint32_t>();
+        if (auto it = j.find("beerLambertEnabled"); it != j.end() && it->is_boolean())
+            ocean.beerLambertEnabled = it->get<bool>();
+        if (auto it = j.find("absorptionCoeff"); it != j.end() && it->is_array() && it->size() >= 3)
+            ocean.absorptionCoeff = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(),
+                                               (*it)[2].get<float>());
+        if (auto it = j.find("scatteringColor"); it != j.end() && it->is_array() && it->size() >= 3)
+            ocean.scatteringColor = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(),
+                                               (*it)[2].get<float>());
+        if (auto it = j.find("scatterCoeff"); it != j.end() && it->is_number())
+            ocean.scatterCoeff = it->get<float>();
+        if (auto it = j.find("absorptionMaxDistance"); it != j.end() && it->is_number())
+            ocean.absorptionMaxDistance = it->get<float>();
+        if (auto it = j.find("hexTilingEnabled"); it != j.end() && it->is_boolean())
+            ocean.hexTilingEnabled = it->get<bool>();
+        if (auto it = j.find("hexBandMask"); it != j.end() && it->is_number_unsigned())
+            ocean.hexBandMask = it->get<uint32_t>();
+        if (auto it = j.find("hexCellScale"); it != j.end() && it->is_number())
+            ocean.hexCellScale = it->get<float>();
+        if (auto it = j.find("hexBlendContrast"); it != j.end() && it->is_number())
+            ocean.hexBlendContrast = it->get<float>();
 
         // Ocean FFT bands
         if (j.contains("oceanBands") && j["oceanBands"].is_array())

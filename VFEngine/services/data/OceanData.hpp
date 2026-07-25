@@ -51,6 +51,24 @@ namespace services
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
+
+        // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;
+        float ssrThickness = 0.35f;
+        uint32_t ssrMaxSteps = 24;
+
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;
+        float absorptionMaxDistance = 30.0f;
+
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
     };
 
     struct OceanPhysicsSettings
@@ -93,6 +111,24 @@ namespace services
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
+
+        // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;
+        float ssrThickness = 0.35f;
+        uint32_t ssrMaxSteps = 24;
+
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;
+        float absorptionMaxDistance = 30.0f;
+
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
 
         // Weather-driven sea state
         bool weatherDriven = false;

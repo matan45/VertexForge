@@ -5,6 +5,8 @@
 #include "../water/OceanFFTResources.hpp"
 #include "../../../services/data/OceanData.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
+#include "../../../utilities/water/HexTiling.hpp"
+#include "../../../utilities/water/DisplacementSampling.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 #include <chrono>
@@ -149,6 +151,45 @@ namespace render::gpudriven
             water.causticsResources->updateParams(params);
         }
 
+        // VK-1604: extended visual params (set 9 binding 2). Filled once per frame; per-view
+        // gating rides on WaterPushConstants::viewFlagMask instead (see renderWaterDraw).
+        {
+            render::water::WaterExtendedParams ext{};
+            ext.absorptionCoeff = glm::vec4(visualSettings.absorptionCoeff, 0.0f);
+            ext.scatterColor = glm::vec4(visualSettings.scatteringColor, 0.0f);
+            ext.scatterCoeff = glm::vec4(glm::vec3(visualSettings.scatterCoeff), 0.0f);
+
+            ext.ssrIntensity = visualSettings.ssrIntensity;
+            ext.ssrMaxDistance = visualSettings.ssrMaxDistance;
+            ext.ssrThickness = visualSettings.ssrThickness;
+            ext.ssrMaxSteps = visualSettings.ssrMaxSteps;
+            ext.absorptionMaxDistance = visualSettings.absorptionMaxDistance;
+
+            ext.hexBlendExponent = visualSettings.hexBlendContrast;
+            ext.hexCellScale0 = visualSettings.hexCellScale;
+            ext.hexCellScale1 = visualSettings.hexCellScale;
+            ext.hexCellScale2 = visualSettings.hexCellScale;
+            ext.hexPerBandMask = visualSettings.hexBandMask;
+
+            uint32_t flags = 0;
+            if (visualSettings.ssrEnabled) flags |= render::water::WATER_FLAG_SSR;
+            if (visualSettings.beerLambertEnabled) flags |= render::water::WATER_FLAG_ABSORPTION;
+            if (visualSettings.hexTilingEnabled) flags |= render::water::WATER_FLAG_HEX;
+            ext.flags = flags;
+
+            water.cachedExtendedParams = ext;
+            if (water.refractionResources && water.refractionResources->isInitialized())
+                water.refractionResources->updateParams(ext);
+        }
+
+        // VK-1604: CPU buoyancy mirrors the shader's hex blend, so the height sampler needs the
+        // same parameters. Written here on the render thread and read by the physics worker
+        // through the injected sampler — same benign publish pattern as cachedPushConstants.
+        water.hexTilingEnabled = visualSettings.hexTilingEnabled;
+        water.hexBandMask = visualSettings.hexBandMask;
+        water.hexCellScale = visualSettings.hexCellScale;
+        water.hexBlendContrast = visualSettings.hexBlendContrast;
+
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
     }
@@ -191,6 +232,21 @@ namespace render::gpudriven
         water.cachedPushConstants.oceanPatchSize2 = (water.oceanBands[2] && water.oceanBands[2]->isInitialized())
             ? water.oceanBands[2]->getConfig().patchSize : 1.0f;
 
+        // VK-1604: set 9 (scene color copy + scene depth) belongs to the MAIN view. An RTT /
+        // reflection-probe view renders into its own depth image and never refreshes the color
+        // copy, so binding set 9 there would sample the main view's resources - and its depth
+        // image is in DepthStencilAttachmentOptimal on that submission, which makes the
+        // DepthStencilReadOnlyOptimal descriptor a validation error, not merely wrong pixels.
+        // Bind the dummy set instead (renderMultiLOD substitutes it for a null handle) and
+        // suppress refraction so the dummy texture never shows. The override lives on a local
+        // copy - mutating water.cachedPushConstants would leak into the main-view draw.
+        const bool inRTT = isThreadLocalRTTContext();
+        render::water::WaterPushConstants drawPushConstants = water.cachedPushConstants;
+        drawPushConstants.viewFlagMask = inRTT ? render::water::WATER_VIEW_FLAGS_RTT
+                                               : render::water::WATER_VIEW_FLAGS_ALL;
+        if (inRTT)
+            drawPushConstants.refractionStrength = 0.0f;
+
         render::water::WaterRenderDescriptors waterDescriptors{
             iblDescriptorSet,
             lightBufferManager->getDescriptorSet(),
@@ -200,11 +256,11 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
             (water.oceanEnabled && water.multiBandDescriptorValid && water.multiBandOceanDescSet)
                 ? water.multiBandOceanDescSet : vk::DescriptorSet{},
-            (water.refractionResources && water.refractionResources->isInitialized())
+            (!inRTT && water.refractionResources && water.refractionResources->isInitialized())
                 ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
         };
         water.pipeline->renderMultiLOD(cmd, waterDescriptors, *water.meshBuffer,
-                                       water.cachedPushConstants, water.lodTileCounts);
+                                       drawPushConstants, water.lodTileCounts);
 
         auto renderEnd = std::chrono::high_resolution_clock::now();
         water.renderUs = std::chrono::duration<float, std::micro>(renderEnd - renderStart).count();
@@ -688,15 +744,15 @@ namespace render::gpudriven
         if (!water.oceanEnabled)
             return;
 
-        // Find first active band for physics readback (typically band 0 / swell)
-        render::water::OceanFFT* physicsBand = nullptr;
-        for (auto& band : water.oceanBands)
-            if (band && band->isInitialized()) { physicsBand = band.get(); break; }
-        if (!physicsBand)
-            return;
-
+        // VK-1604: decode EVERY initialized band, not just the first. Each band already records
+        // its own GPU->CPU copy every frame inside OceanFFT::dispatch, so this adds only the F16C
+        // decodes (~256 KB/frame for the two extra bands). Must stay in lock-step with
+        // getOceanHeightAt below, which now sums all bands - summing a band that was never
+        // decoded would silently contribute stale or zero height.
         auto readbackStart = std::chrono::high_resolution_clock::now();
-        physicsBand->readbackDisplacementData();
+        for (auto& band : water.oceanBands)
+            if (band && band->isInitialized())
+                band->readbackDisplacementData();
         auto readbackEnd = std::chrono::high_resolution_clock::now();
         water.readbackUs = std::chrono::duration<float, std::micro>(readbackEnd - readbackStart).count();
     }
@@ -706,12 +762,39 @@ namespace render::gpudriven
         if (!water.oceanEnabled)
             return 0.0f;
 
-        // Find first active band for physics height sampling (typically band 0 / swell)
-        for (auto& band : water.oceanBands)
-            if (band && band->isInitialized())
-                return band->sampleHeightAt(worldXZ);
+        // VK-1604: sum ALL initialized bands. Previously this returned the first initialized
+        // band's height, so agitation and ripple waves never moved floating bodies and the
+        // physics surface sat below the rendered one.
+        //
+        // Hex-tiled bands are blended here exactly as water.glsl blends them (same lattice, same
+        // integer hash, same variance-preserving combine), so buoyancy keeps matching the
+        // rendered surface on whichever bands are tiled. Costs 3x the bilinear taps, but only
+        // for the bands the user actually enabled.
+        float height = 0.0f;
+        for (uint32_t i = 0; i < static_cast<uint32_t>(water.oceanBands.size()); ++i)
+        {
+            const auto& band = water.oceanBands[i];
+            if (!band || !band->isInitialized())
+                continue;
 
-        return 0.0f;
+            if (water.hexTilingEnabled && ::water::hexBandEnabled(water.hexBandMask, i))
+            {
+                const float patchSize = band->getConfig().patchSize;
+                const glm::vec2 uv = ::water::patchUV(worldXZ, patchSize);
+                const ::water::HexBlend hb =
+                    ::water::hexComputeBlend(uv, water.hexCellScale, water.hexBlendContrast);
+                height += ::water::hexCombineVariancePreserving(hb,
+                    band->sampleHeightAtUV(hb.uv[0]),
+                    band->sampleHeightAtUV(hb.uv[1]),
+                    band->sampleHeightAtUV(hb.uv[2]));
+            }
+            else
+            {
+                height += band->sampleHeightAt(worldXZ);
+            }
+        }
+
+        return height;
     }
 
     void GPUDrivenRenderer::copySceneColorForRefraction(vk::CommandBuffer cmd, vk::Image colorImage,

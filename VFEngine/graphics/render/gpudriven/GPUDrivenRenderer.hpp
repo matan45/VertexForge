@@ -401,6 +401,9 @@ namespace render::gpudriven
         static vk::DescriptorSet getThreadLocalCullDescriptorSet();
         static bool tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP);
         static uint32_t getThreadLocalRTTCullingMask();
+        // VK-1604: true while an RTT / reflection-probe view is being recorded on this thread.
+        // Distinct from the culling mask, whose "all layers" default is ambiguous.
+        static bool isThreadLocalRTTContext();
 
         void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 

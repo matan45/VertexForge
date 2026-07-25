@@ -73,6 +73,7 @@ namespace services
 
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanEntityQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanDataQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetOceanVisualSettingsQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::HasOceanComponentQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanFFTConfigQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
@@ -168,6 +169,21 @@ namespace services
                 comp.shoreWetRange = cmd.settings.shoreWetRange;
                 comp.shoreWetDarkening = cmd.settings.shoreWetDarkening;
                 comp.shoreWetRoughness = cmd.settings.shoreWetRoughness;
+                // VK-1604
+                comp.ssrEnabled = cmd.settings.ssrEnabled;
+                comp.ssrIntensity = cmd.settings.ssrIntensity;
+                comp.ssrMaxDistance = cmd.settings.ssrMaxDistance;
+                comp.ssrThickness = cmd.settings.ssrThickness;
+                comp.ssrMaxSteps = cmd.settings.ssrMaxSteps;
+                comp.beerLambertEnabled = cmd.settings.beerLambertEnabled;
+                comp.absorptionCoeff = cmd.settings.absorptionCoeff;
+                comp.scatteringColor = cmd.settings.scatteringColor;
+                comp.scatterCoeff = cmd.settings.scatterCoeff;
+                comp.absorptionMaxDistance = cmd.settings.absorptionMaxDistance;
+                comp.hexTilingEnabled = cmd.settings.hexTilingEnabled;
+                comp.hexBandMask = cmd.settings.hexBandMask;
+                comp.hexCellScale = cmd.settings.hexCellScale;
+                comp.hexBlendContrast = cmd.settings.hexBlendContrast;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -250,6 +266,12 @@ namespace services
             [this](const events::ocean::GetOceanDataQuery& query)
             {
                 return getOceanData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetOceanVisualSettingsQuery>(
+            [this](const events::ocean::GetOceanVisualSettingsQuery& query)
+            {
+                return getOceanVisualSettings(query.entity);
             });
 
         dispatcher.registerQueryHandler<events::ocean::HasOceanComponentQuery>(
@@ -442,6 +464,21 @@ namespace services
         data.shoreWetRange = comp.shoreWetRange;
         data.shoreWetDarkening = comp.shoreWetDarkening;
         data.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        data.ssrEnabled = comp.ssrEnabled;
+        data.ssrIntensity = comp.ssrIntensity;
+        data.ssrMaxDistance = comp.ssrMaxDistance;
+        data.ssrThickness = comp.ssrThickness;
+        data.ssrMaxSteps = comp.ssrMaxSteps;
+        data.beerLambertEnabled = comp.beerLambertEnabled;
+        data.absorptionCoeff = comp.absorptionCoeff;
+        data.scatteringColor = comp.scatteringColor;
+        data.scatterCoeff = comp.scatterCoeff;
+        data.absorptionMaxDistance = comp.absorptionMaxDistance;
+        data.hexTilingEnabled = comp.hexTilingEnabled;
+        data.hexBandMask = comp.hexBandMask;
+        data.hexCellScale = comp.hexCellScale;
+        data.hexBlendContrast = comp.hexBlendContrast;
         data.weatherDriven = comp.weatherDriven;
         data.weatherResponse = comp.weatherResponse;
         data.currentBeaufort = comp.currentBeaufort;
@@ -518,7 +555,25 @@ namespace services
         if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
             return settings;
 
-        const auto& comp = registry.get<components::OceanComponent>(ent);
+        return visualSettingsFromComponent(registry.get<components::OceanComponent>(ent));
+    }
+
+    std::optional<OceanVisualSettings> OceanService::getOceanVisualSettings(EntityHandle entity) const
+    {
+        if (!entity.isValid())
+            return std::nullopt;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return std::nullopt;
+
+        return visualSettingsFromComponent(registry.get<components::OceanComponent>(ent));
+    }
+
+    OceanVisualSettings OceanService::visualSettingsFromComponent(const components::OceanComponent& comp)
+    {
+        OceanVisualSettings settings;
         settings.shallowColor = comp.shallowColor;
         settings.deepColor = comp.deepColor;
         settings.maxVisibleDepth = comp.maxVisibleDepth;
@@ -534,6 +589,21 @@ namespace services
         settings.shoreWetRange = comp.shoreWetRange;
         settings.shoreWetDarkening = comp.shoreWetDarkening;
         settings.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        settings.ssrEnabled = comp.ssrEnabled;
+        settings.ssrIntensity = comp.ssrIntensity;
+        settings.ssrMaxDistance = comp.ssrMaxDistance;
+        settings.ssrThickness = comp.ssrThickness;
+        settings.ssrMaxSteps = comp.ssrMaxSteps;
+        settings.beerLambertEnabled = comp.beerLambertEnabled;
+        settings.absorptionCoeff = comp.absorptionCoeff;
+        settings.scatteringColor = comp.scatteringColor;
+        settings.scatterCoeff = comp.scatterCoeff;
+        settings.absorptionMaxDistance = comp.absorptionMaxDistance;
+        settings.hexTilingEnabled = comp.hexTilingEnabled;
+        settings.hexBandMask = comp.hexBandMask;
+        settings.hexCellScale = comp.hexCellScale;
+        settings.hexBlendContrast = comp.hexBlendContrast;
 
         return settings;
     }
@@ -582,6 +652,21 @@ namespace services
         fileData.shoreWetRange = comp.shoreWetRange;
         fileData.shoreWetDarkening = comp.shoreWetDarkening;
         fileData.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        fileData.ssrEnabled = comp.ssrEnabled;
+        fileData.ssrIntensity = comp.ssrIntensity;
+        fileData.ssrMaxDistance = comp.ssrMaxDistance;
+        fileData.ssrThickness = comp.ssrThickness;
+        fileData.ssrMaxSteps = comp.ssrMaxSteps;
+        fileData.beerLambertEnabled = comp.beerLambertEnabled;
+        fileData.absorptionCoeff = comp.absorptionCoeff;
+        fileData.scatteringColor = comp.scatteringColor;
+        fileData.scatterCoeff = comp.scatterCoeff;
+        fileData.absorptionMaxDistance = comp.absorptionMaxDistance;
+        fileData.hexTilingEnabled = comp.hexTilingEnabled;
+        fileData.hexBandMask = comp.hexBandMask;
+        fileData.hexCellScale = comp.hexCellScale;
+        fileData.hexBlendContrast = comp.hexBlendContrast;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -674,6 +759,21 @@ namespace services
             comp.shoreWetRange = fileData.shoreWetRange;
             comp.shoreWetDarkening = fileData.shoreWetDarkening;
             comp.shoreWetRoughness = fileData.shoreWetRoughness;
+            // VK-1604
+            comp.ssrEnabled = fileData.ssrEnabled;
+            comp.ssrIntensity = fileData.ssrIntensity;
+            comp.ssrMaxDistance = fileData.ssrMaxDistance;
+            comp.ssrThickness = fileData.ssrThickness;
+            comp.ssrMaxSteps = fileData.ssrMaxSteps;
+            comp.beerLambertEnabled = fileData.beerLambertEnabled;
+            comp.absorptionCoeff = fileData.absorptionCoeff;
+            comp.scatteringColor = fileData.scatteringColor;
+            comp.scatterCoeff = fileData.scatterCoeff;
+            comp.absorptionMaxDistance = fileData.absorptionMaxDistance;
+            comp.hexTilingEnabled = fileData.hexTilingEnabled;
+            comp.hexBandMask = fileData.hexBandMask;
+            comp.hexCellScale = fileData.hexCellScale;
+            comp.hexBlendContrast = fileData.hexBlendContrast;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;

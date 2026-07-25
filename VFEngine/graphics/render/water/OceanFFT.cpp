@@ -235,4 +235,11 @@ namespace render::water
         if (!initialized) return 0.0f;
         return readback->sampleHeightAt(worldXZ, config.resolution, config.patchSize);
     }
+
+    // VK-1604: used by the hex-tiling CPU height path, which derives its own per-cell UVs.
+    float OceanFFT::sampleHeightAtUV(const glm::vec2& uv) const
+    {
+        if (!initialized) return 0.0f;
+        return readback->sampleHeightAtUV(uv, config.resolution);
+    }
 }

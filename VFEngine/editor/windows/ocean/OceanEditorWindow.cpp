@@ -48,6 +48,21 @@ namespace windows
             visualSettings.shoreWetRange = dataOpt->shoreWetRange;
             visualSettings.shoreWetDarkening = dataOpt->shoreWetDarkening;
             visualSettings.shoreWetRoughness = dataOpt->shoreWetRoughness;
+            // VK-1604
+            visualSettings.ssrEnabled = dataOpt->ssrEnabled;
+            visualSettings.ssrIntensity = dataOpt->ssrIntensity;
+            visualSettings.ssrMaxDistance = dataOpt->ssrMaxDistance;
+            visualSettings.ssrThickness = dataOpt->ssrThickness;
+            visualSettings.ssrMaxSteps = dataOpt->ssrMaxSteps;
+            visualSettings.beerLambertEnabled = dataOpt->beerLambertEnabled;
+            visualSettings.absorptionCoeff = dataOpt->absorptionCoeff;
+            visualSettings.scatteringColor = dataOpt->scatteringColor;
+            visualSettings.scatterCoeff = dataOpt->scatterCoeff;
+            visualSettings.absorptionMaxDistance = dataOpt->absorptionMaxDistance;
+            visualSettings.hexTilingEnabled = dataOpt->hexTilingEnabled;
+            visualSettings.hexBandMask = dataOpt->hexBandMask;
+            visualSettings.hexCellScale = dataOpt->hexCellScale;
+            visualSettings.hexBlendContrast = dataOpt->hexBlendContrast;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -241,6 +256,116 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Roughness", "##ShoreWetRoughness",
                 &visualSettings.shoreWetRoughness, 0.01f, 0.0f, 1.0f, "%.2f");
             ImGui::TextDisabled("Surface roughness at waterline");
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — screen-space reflections
+        if (ImGui::CollapsingHeader("Reflections (SSR)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##SSREnabled", &visualSettings.ssrEnabled);
+            ImGui::TextDisabled("Reflects scene geometry; the IBL cubemap fills misses and edges");
+
+            if (visualSettings.ssrEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Intensity", "##SSRIntensity",
+                    &visualSettings.ssrIntensity, 0.01f, 0.0f, 1.0f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Max Distance", "##SSRMaxDistance",
+                    &visualSettings.ssrMaxDistance, 1.0f, 1.0f, 500.0f, "%.0f m");
+                ImGui::TextDisabled("How far a reflection ray travels before giving up");
+
+                visualSettingsDirty |= labeledDragFloat("Thickness", "##SSRThickness",
+                    &visualSettings.ssrThickness, 0.01f, 0.01f, 5.0f, "%.2f m");
+                ImGui::TextDisabled("Assumed depth of scene geometry; scaled up with distance");
+
+                int steps = static_cast<int>(visualSettings.ssrMaxSteps);
+                ImGui::Text("Max Steps");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderInt("##SSRMaxSteps", &steps, 4, 128))
+                {
+                    visualSettings.ssrMaxSteps = static_cast<uint32_t>(steps);
+                    visualSettingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Higher = fewer missed reflections, more cost");
+
+                ImGui::TextDisabled("Not applied to render-texture or reflection-probe views");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — Beer-Lambert absorption
+        if (ImGui::CollapsingHeader("Absorption (Beer-Lambert)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##BeerLambertEnabled",
+                                                   &visualSettings.beerLambertEnabled);
+            ImGui::TextDisabled("Off = legacy height-based deep/shallow tint (unchanged)");
+
+            if (visualSettings.beerLambertEnabled)
+            {
+                ImGui::Text("Absorption (1/m)");
+                visualSettingsDirty |= ImGui::ColorEdit3("##AbsorptionCoeff",
+                    &visualSettings.absorptionCoeff.x, ImGuiColorEditFlags_Float);
+                ImGui::TextDisabled("Per-channel extinction; red extinguishes first in clear water");
+
+                ImGui::Text("Scattering Color");
+                visualSettingsDirty |= ImGui::ColorEdit3("##ScatteringColor",
+                    &visualSettings.scatteringColor.x, ImGuiColorEditFlags_Float);
+
+                visualSettingsDirty |= labeledDragFloat("Scatter Coefficient", "##ScatterCoeff",
+                    &visualSettings.scatterCoeff, 0.005f, 0.0f, 1.0f, "%.3f");
+
+                visualSettingsDirty |= labeledDragFloat("Max Path Length", "##AbsorptionMaxDistance",
+                    &visualSettings.absorptionMaxDistance, 0.5f, 1.0f, 200.0f, "%.0f m");
+                ImGui::TextDisabled("Clamp; keeps deep water from going fully black");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — hex tile-and-blend anti-tiling
+        if (ImGui::CollapsingHeader("Anti-Tiling (Hex Blend)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##HexEnabled", &visualSettings.hexTilingEnabled);
+            ImGui::TextDisabled("Breaks up the far-field repeat of the FFT patches");
+
+            if (visualSettings.hexTilingEnabled)
+            {
+                ImGui::Spacing();
+                ImGui::Text("Bands");
+                for (uint32_t band = 0; band < 3; ++band)
+                {
+                    const char* labels[] = {"Swell (band 0)##Hex0", "Agitation (band 1)##Hex1",
+                                            "Ripples (band 2)##Hex2"};
+                    bool bandOn = (visualSettings.hexBandMask & (1u << band)) != 0u;
+                    if (ImGui::Checkbox(labels[band], &bandOn))
+                    {
+                        if (bandOn)
+                            visualSettings.hexBandMask |= (1u << band);
+                        else
+                            visualSettings.hexBandMask &= ~(1u << band);
+                        visualSettingsDirty = true;
+                    }
+                    if (band == 0 && ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip(
+                            "The swell band carries most of the wave height, so tiling it costs the\n"
+                            "most (3x samples per vertex AND per buoyancy query). CPU buoyancy\n"
+                            "applies the same blend, so physics still matches the rendered surface.");
+                    }
+                }
+
+                ImGui::Spacing();
+                visualSettingsDirty |= labeledDragFloat("Cell Scale", "##HexCellScale",
+                    &visualSettings.hexCellScale, 0.05f, 0.1f, 8.0f, "%.2f");
+                ImGui::TextDisabled("Hex cells per band patch; higher = finer randomization");
+
+                visualSettingsDirty |= labeledDragFloat("Blend Contrast", "##HexBlendContrast",
+                    &visualSettings.hexBlendContrast, 0.1f, 1.0f, 16.0f, "%.1f");
+                ImGui::TextDisabled("Weight sharpening; higher = harder cell transitions");
+            }
             ImGui::Unindent();
         }
 
