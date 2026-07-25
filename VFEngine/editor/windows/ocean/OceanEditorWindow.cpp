@@ -80,6 +80,17 @@ namespace windows
             visualSettings.shoreWaveCrestFoam = dataOpt->shoreWaveCrestFoam;
             visualSettings.shoreWaveCrestFoamThreshold = dataOpt->shoreWaveCrestFoamThreshold;
             visualSettings.shoreWaveLean = dataOpt->shoreWaveLean;
+            // VK-1606
+            visualSettings.rippleSimEnabled = dataOpt->rippleSimEnabled;
+            visualSettings.ripplePatchSize = dataOpt->ripplePatchSize;
+            visualSettings.rippleWaveSpeed = dataOpt->rippleWaveSpeed;
+            visualSettings.rippleDamping = dataOpt->rippleDamping;
+            visualSettings.rippleHeightScale = dataOpt->rippleHeightScale;
+            visualSettings.rippleNormalScale = dataOpt->rippleNormalScale;
+            visualSettings.rippleFoamGain = dataOpt->rippleFoamGain;
+            visualSettings.rippleFoamScale = dataOpt->rippleFoamScale;
+            visualSettings.rippleFoamDecay = dataOpt->rippleFoamDecay;
+            visualSettings.rippleEdgeFadeStart = dataOpt->rippleEdgeFadeStart;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -465,6 +476,56 @@ namespace windows
                 visualSettingsDirty |= labeledDragFloat("Blend Contrast", "##HexBlendContrast",
                     &visualSettings.hexBlendContrast, 0.1f, 1.0f, 16.0f, "%.1f");
                 ImGui::TextDisabled("Weight sharpening; higher = harder cell transitions");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1606 — interactive ripples (wakes, splashes, scripted impulses)
+        if (ImGui::CollapsingHeader("Interactive Ripples"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##RippleEnabled", &visualSettings.rippleSimEnabled);
+            ImGui::TextDisabled("A camera-following 512^2 patch of damped wave-equation water.");
+            ImGui::TextDisabled("Independent of the FFT bands — works on flat water too.");
+
+            if (visualSettings.rippleSimEnabled)
+            {
+                ImGui::Spacing();
+                ImGui::Text("Simulation");
+                visualSettingsDirty |= labeledDragFloat("Patch Size", "##RipplePatchSize",
+                    &visualSettings.ripplePatchSize, 1.0f, 20.0f, 400.0f, "%.0f m");
+                ImGui::TextDisabled("World size of the patch. Smaller = finer ripples, less coverage.");
+
+                visualSettingsDirty |= labeledDragFloat("Wave Speed", "##RippleWaveSpeed",
+                    &visualSettings.rippleWaveSpeed, 0.05f, 0.1f, 20.0f, "%.2f m/s");
+                ImGui::TextDisabled("Clamped to the CFL stability bound for the current patch size,");
+                ImGui::TextDisabled("so an over-large value is capped rather than blowing up.");
+
+                visualSettingsDirty |= labeledDragFloat("Damping", "##RippleDamping",
+                    &visualSettings.rippleDamping, 0.01f, 0.0f, 10.0f, "%.2f /s");
+                ImGui::TextDisabled("How fast ripples die out. 0 = they ring forever.");
+
+                ImGui::Spacing();
+                ImGui::Text("Appearance");
+                visualSettingsDirty |= labeledDragFloat("Height Scale", "##RippleHeightScale",
+                    &visualSettings.rippleHeightScale, 0.01f, 0.0f, 10.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Normal Scale", "##RippleNormalScale",
+                    &visualSettings.rippleNormalScale, 0.01f, 0.0f, 10.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Foam Gain", "##RippleFoamGain",
+                    &visualSettings.rippleFoamGain, 0.005f, 0.0f, 2.0f, "%.3f");
+                ImGui::TextDisabled("Foam generated per unit of surface curvature");
+                visualSettingsDirty |= labeledDragFloat("Foam Scale", "##RippleFoamScale",
+                    &visualSettings.rippleFoamScale, 0.01f, 0.0f, 5.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Foam Decay", "##RippleFoamDecay",
+                    &visualSettings.rippleFoamDecay, 0.01f, 0.0f, 10.0f, "%.2f /s");
+                visualSettingsDirty |= labeledDragFloat("Edge Fade Start", "##RippleEdgeFade",
+                    &visualSettings.rippleEdgeFadeStart, 0.01f, 0.0f, 0.99f, "%.2f");
+                ImGui::TextDisabled("Where the patch border starts fading out, so the 100 m window");
+                ImGui::TextDisabled("cannot show a square seam against open water.");
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Ripples are render-only: buoyancy does NOT react to them,");
+                ImGui::TextDisabled("so a boat does not bob on its own wake.");
             }
             ImGui::Unindent();
         }

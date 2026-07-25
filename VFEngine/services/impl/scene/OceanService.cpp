@@ -222,6 +222,17 @@ namespace services
                 comp.shoreWaveCrestFoam = cmd.settings.shoreWaveCrestFoam;
                 comp.shoreWaveCrestFoamThreshold = cmd.settings.shoreWaveCrestFoamThreshold;
                 comp.shoreWaveLean = cmd.settings.shoreWaveLean;
+                // VK-1606
+                comp.rippleSimEnabled = cmd.settings.rippleSimEnabled;
+                comp.ripplePatchSize = cmd.settings.ripplePatchSize;
+                comp.rippleWaveSpeed = cmd.settings.rippleWaveSpeed;
+                comp.rippleDamping = cmd.settings.rippleDamping;
+                comp.rippleHeightScale = cmd.settings.rippleHeightScale;
+                comp.rippleNormalScale = cmd.settings.rippleNormalScale;
+                comp.rippleFoamGain = cmd.settings.rippleFoamGain;
+                comp.rippleFoamScale = cmd.settings.rippleFoamScale;
+                comp.rippleFoamDecay = cmd.settings.rippleFoamDecay;
+                comp.rippleEdgeFadeStart = cmd.settings.rippleEdgeFadeStart;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -290,6 +301,19 @@ namespace services
                 lastAppliedBeaufort = -1.0f;
                 lastAppliedWindDirection = -10000.0f;
             });
+
+        // VK-1606
+        dispatcher.registerCommandHandler<events::ocean::AddWaterImpulseCommand>(
+            [this](const events::ocean::AddWaterImpulseCommand& cmd)
+            {
+                queueWaterImpulse({cmd.positionXZ, cmd.radius, cmd.strength});
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetWaterRippleEnabledCommand>(
+            [this](const events::ocean::SetWaterRippleEnabledCommand& cmd)
+            {
+                setRippleSimEnabled(cmd.enabled);
+            });
     }
 
     void OceanService::registerOceanQueryHandlers(::events::EventDispatcher& dispatcher)
@@ -353,6 +377,13 @@ namespace services
             [this](const events::ocean::GetOceanSeaStateQuery&)
             {
                 return getSeaState();
+            });
+
+        // VK-1606
+        dispatcher.registerQueryHandler<events::ocean::IsWaterRippleEnabledQuery>(
+            [this](const events::ocean::IsWaterRippleEnabledQuery&)
+            {
+                return isRippleSimEnabled();
             });
     }
 
@@ -547,6 +578,17 @@ namespace services
         data.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
         data.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
         data.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        data.rippleSimEnabled = comp.rippleSimEnabled;
+        data.ripplePatchSize = comp.ripplePatchSize;
+        data.rippleWaveSpeed = comp.rippleWaveSpeed;
+        data.rippleDamping = comp.rippleDamping;
+        data.rippleHeightScale = comp.rippleHeightScale;
+        data.rippleNormalScale = comp.rippleNormalScale;
+        data.rippleFoamGain = comp.rippleFoamGain;
+        data.rippleFoamScale = comp.rippleFoamScale;
+        data.rippleFoamDecay = comp.rippleFoamDecay;
+        data.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
         data.weatherDriven = comp.weatherDriven;
         data.weatherResponse = comp.weatherResponse;
         data.currentBeaufort = comp.currentBeaufort;
@@ -691,6 +733,120 @@ namespace services
         return status;
     }
 
+    void OceanService::queueWaterImpulse(const water::WaterImpulse& impulse)
+    {
+        if (impulse.radius <= 0.0f || impulse.strength == 0.0f)
+            return;
+
+        std::lock_guard<std::mutex> lock(impulseMutex);
+
+        // Hard cap so a runaway script cannot grow this without bound between two drains. The sim
+        // only consumes MAX_WATER_IMPULSES per step anyway; keep the newest.
+        constexpr std::size_t QUEUE_CAP = 4 * water::MAX_WATER_IMPULSES;
+        if (pendingImpulses.size() >= QUEUE_CAP)
+            pendingImpulses.erase(pendingImpulses.begin());
+
+        pendingImpulses.push_back(impulse);
+    }
+
+    std::vector<water::WaterImpulse> OceanService::drainWaterImpulses()
+    {
+        std::vector<water::WaterImpulse> drained;
+        {
+            std::lock_guard<std::mutex> lock(impulseMutex);
+            pendingImpulses.swap(drained);
+        }
+        return drained;
+    }
+
+    void OceanService::setRippleSimEnabled(bool enabled)
+    {
+        if (!oceanEntity.isValid())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return;
+
+        registry.get<components::OceanComponent>(ent).rippleSimEnabled = enabled;
+    }
+
+    bool OceanService::isRippleSimEnabled() const
+    {
+        if (!oceanEntity.isValid())
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return false;
+
+        return registry.get<components::OceanComponent>(ent).rippleSimEnabled;
+    }
+
+    void OceanService::updateWakeEmitters(float deltaTime)
+    {
+        if (deltaTime <= 0.0f || !isRippleSimEnabled())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterWakeEmitterComponent, components::TransformComponent>();
+
+        const float surfaceBase = getBaseWaterHeight();
+
+        for (auto entity : view)
+        {
+            const auto& emitter = view.get<components::WaterWakeEmitterComponent>(entity);
+            if (!emitter.enabled || emitter.radius <= 0.0f || emitter.strength == 0.0f)
+                continue;
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+            const glm::vec3 world = transform.position + emitter.offset;
+            const glm::vec2 worldXZ(world.x, world.z);
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            // Speed from the change in position rather than from a rigid body, so scripted movers,
+            // navmesh agents and character controllers all emit without needing physics.
+            auto it = emitterWakeTrail.find(handle);
+            if (it == emitterWakeTrail.end())
+            {
+                emitterWakeTrail.emplace(handle, worldXZ);
+                continue;   // no previous sample yet, so no speed yet
+            }
+
+            const glm::vec2 previous = it->second;
+            const float travelled = glm::length(worldXZ - previous);
+            const float speed = travelled / deltaTime;
+
+            if (speed < emitter.minSpeed)
+                continue;
+
+            // Only emit above the waterline-ish: an emitter dragged along under the seabed or high
+            // in the air should not stamp rings on the surface.
+            if (world.y > surfaceBase + emitter.radius || world.y < surfaceBase - emitter.radius)
+                continue;
+
+            const bool travelledEnough = travelled >= emitter.travelInterval;
+            if (!emitter.continuous && !travelledEnough)
+                continue;
+
+            queueWaterImpulse({worldXZ, emitter.radius, emitter.strength});
+            it->second = worldXZ;
+        }
+
+        // Bound the map the same way ControllerServiceImpl bounds its interpolation cache: any key
+        // that is no longer a valid entity belongs to something destroyed.
+        for (auto it = emitterWakeTrail.begin(); it != emitterWakeTrail.end();)
+        {
+            if (registry.valid(internal::fromHandle(it->first)))
+                ++it;
+            else
+                it = emitterWakeTrail.erase(it);
+        }
+    }
+
     float OceanService::getOceanHeightAt(const glm::vec2& worldXZ) const
     {
         if (!oceanEntity.isValid())
@@ -787,6 +943,17 @@ namespace services
         settings.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
         settings.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
         settings.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        settings.rippleSimEnabled = comp.rippleSimEnabled;
+        settings.ripplePatchSize = comp.ripplePatchSize;
+        settings.rippleWaveSpeed = comp.rippleWaveSpeed;
+        settings.rippleDamping = comp.rippleDamping;
+        settings.rippleHeightScale = comp.rippleHeightScale;
+        settings.rippleNormalScale = comp.rippleNormalScale;
+        settings.rippleFoamGain = comp.rippleFoamGain;
+        settings.rippleFoamScale = comp.rippleFoamScale;
+        settings.rippleFoamDecay = comp.rippleFoamDecay;
+        settings.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
 
         return settings;
     }
@@ -867,6 +1034,17 @@ namespace services
         fileData.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
         fileData.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
         fileData.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        fileData.rippleSimEnabled = comp.rippleSimEnabled;
+        fileData.ripplePatchSize = comp.ripplePatchSize;
+        fileData.rippleWaveSpeed = comp.rippleWaveSpeed;
+        fileData.rippleDamping = comp.rippleDamping;
+        fileData.rippleHeightScale = comp.rippleHeightScale;
+        fileData.rippleNormalScale = comp.rippleNormalScale;
+        fileData.rippleFoamGain = comp.rippleFoamGain;
+        fileData.rippleFoamScale = comp.rippleFoamScale;
+        fileData.rippleFoamDecay = comp.rippleFoamDecay;
+        fileData.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -991,6 +1169,17 @@ namespace services
             comp.shoreWaveCrestFoam = fileData.shoreWaveCrestFoam;
             comp.shoreWaveCrestFoamThreshold = fileData.shoreWaveCrestFoamThreshold;
             comp.shoreWaveLean = fileData.shoreWaveLean;
+            // VK-1606
+            comp.rippleSimEnabled = fileData.rippleSimEnabled;
+            comp.ripplePatchSize = fileData.ripplePatchSize;
+            comp.rippleWaveSpeed = fileData.rippleWaveSpeed;
+            comp.rippleDamping = fileData.rippleDamping;
+            comp.rippleHeightScale = fileData.rippleHeightScale;
+            comp.rippleNormalScale = fileData.rippleNormalScale;
+            comp.rippleFoamGain = fileData.rippleFoamGain;
+            comp.rippleFoamScale = fileData.rippleFoamScale;
+            comp.rippleFoamDecay = fileData.rippleFoamDecay;
+            comp.rippleEdgeFadeStart = fileData.rippleEdgeFadeStart;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;
@@ -1132,6 +1321,41 @@ namespace services
                 glm::vec3 angularVelocity = physicsProvider->getAngularVelocity(handle);
                 physicsProvider->applyTorque(handle, -angularVelocity * angularDrag * submersionRatio * mass);
             }
+
+            // VK-1606: automatic wake. Anything moving while partly submerged writes into the ripple
+            // patch, so a boat leaves a trail with no authored emitter at all. Throttled by DISTANCE
+            // rather than time, so the spacing between rings does not depend on how fast the hull is
+            // going (a time throttle bunches them up at low speed and spreads them at high speed).
+            if (comp.rippleSimEnabled)
+            {
+                constexpr float WAKE_MIN_SPEED = 0.75f;         // m/s
+                constexpr float WAKE_TRAVEL_INTERVAL = 0.5f;    // metres between rings
+                constexpr float WAKE_STRENGTH_SCALE = 0.06f;    // impulse per m/s of hull speed
+
+                const float horizontalSpeed = glm::length(glm::vec2(velocity.x, velocity.z));
+                if (horizontalSpeed >= WAKE_MIN_SPEED)
+                {
+                    const glm::vec2 posXZ(pos.x, pos.z);
+                    auto [it, inserted] = buoyancyWakeTrail.try_emplace(handle, posXZ);
+                    if (inserted || glm::distance(posXZ, it->second) >= WAKE_TRAVEL_INTERVAL)
+                    {
+                        it->second = posXZ;
+                        // Negative: a hull pushes the surface DOWN and the water rebounds around it.
+                        const float radius = glm::max(glm::max(colliderSize.x, colliderSize.z), 0.5f);
+                        const float strength = -WAKE_STRENGTH_SCALE * horizontalSpeed * submersionRatio;
+                        queueWaterImpulse({posXZ, radius, strength});
+                    }
+                }
+            }
+        }
+
+        // Same bounded-growth rule as emitterWakeTrail; this map is owned by the physics worker.
+        for (auto it = buoyancyWakeTrail.begin(); it != buoyancyWakeTrail.end();)
+        {
+            if (registry.valid(internal::fromHandle(it->first)))
+                ++it;
+            else
+                it = buoyancyWakeTrail.erase(it);
         }
     }
 
@@ -1167,6 +1391,15 @@ namespace services
     {
         entitiesInWater.clear();
         pendingWaterTransitions.clear();
+
+        // VK-1606: leaving play mode must not leave a stale wake trail behind — the next run would
+        // measure a bogus "distance travelled" from wherever the entity was when play stopped.
+        emitterWakeTrail.clear();
+        buoyancyWakeTrail.clear();
+        {
+            std::lock_guard<std::mutex> lock(impulseMutex);
+            pendingImpulses.clear();
+        }
     }
 
     void OceanService::update(float deltaTime)
@@ -1178,6 +1411,8 @@ namespace services
             updateManualSeaStateTransition(deltaTime);
         else
             updateWeatherDrivenSeaState();
+
+        updateWakeEmitters(deltaTime);   // VK-1606
     }
 
     void OceanService::setSeaState(float beaufort, float transitionSeconds)

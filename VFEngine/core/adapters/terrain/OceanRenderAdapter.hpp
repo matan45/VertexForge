@@ -40,5 +40,7 @@ namespace core
 
         void updateShoreDepthField(const glm::vec2& cameraXZ) override;
         const water::ShoreDepthField* getShoreDepthField() const override;
+
+        std::vector<water::WaterImpulse> drainWaterImpulses() override;
     };
 }

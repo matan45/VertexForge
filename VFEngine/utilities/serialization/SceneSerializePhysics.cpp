@@ -711,6 +711,40 @@ namespace serialization
         }
     }
 
+    json SceneSerialization::serializeWaterWakeEmitter(const components::WaterWakeEmitterComponent& emitter)
+    {
+        json j;
+        j["offset"] = {emitter.offset.x, emitter.offset.y, emitter.offset.z};
+        j["radius"] = emitter.radius;
+        j["strength"] = emitter.strength;
+        j["minSpeed"] = emitter.minSpeed;
+        j["travelInterval"] = emitter.travelInterval;
+        j["continuous"] = emitter.continuous;
+        j["enabled"] = emitter.enabled;
+        return j;
+    }
+
+    void SceneSerialization::deserializeWaterWakeEmitter(const json& j,
+                                                          components::WaterWakeEmitterComponent& emitter)
+    {
+        if (auto it = j.find("offset"); it != j.end() && it->is_array() && it->size() >= 3)
+        {
+            emitter.offset = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+        }
+        if (auto it = j.find("radius"); it != j.end() && it->is_number())
+            emitter.radius = it->get<float>();
+        if (auto it = j.find("strength"); it != j.end() && it->is_number())
+            emitter.strength = it->get<float>();
+        if (auto it = j.find("minSpeed"); it != j.end() && it->is_number())
+            emitter.minSpeed = it->get<float>();
+        if (auto it = j.find("travelInterval"); it != j.end() && it->is_number())
+            emitter.travelInterval = it->get<float>();
+        if (auto it = j.find("continuous"); it != j.end() && it->is_boolean())
+            emitter.continuous = it->get<bool>();
+        if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
+            emitter.enabled = it->get<bool>();
+    }
+
     json SceneSerialization::serializeDestructible(const components::DestructibleComponent& d)
     {
         json j;

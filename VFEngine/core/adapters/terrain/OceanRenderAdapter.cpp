@@ -93,6 +93,13 @@ namespace core
             oceanService->updateShoreDepthField(cameraXZ);
     }
 
+    std::vector<water::WaterImpulse> OceanRenderAdapter::drainWaterImpulses()
+    {
+        if (!oceanService)
+            return {};
+        return oceanService->drainWaterImpulses();
+    }
+
     const water::ShoreDepthField* OceanRenderAdapter::getShoreDepthField() const
     {
         if (!oceanService) return nullptr;

@@ -118,6 +118,13 @@ namespace render
             oceanRenderProvider->updateShoreDepthField(
                 glm::vec2(currentCameraPosition.x, currentCameraPosition.z));
 
+            // VK-1606: hand this frame's water impulses to the ripple sim. Drained here rather than
+            // in the dispatch itself so the service-side queue is emptied exactly once per frame,
+            // whatever the sim then decides to do with them (it may run 0 sub-steps). The dispatch
+            // that consumes them is recorded later in the SAME function that calls this one
+            // (RenderPassHandlerDraw), so the ordering is structural, not incidental.
+            gpuDrivenRenderer->queueWaterImpulses(oceanRenderProvider->drainWaterImpulses());
+
             auto visualSettings = oceanRenderProvider->getOceanVisualSettings();
             float baseHeight = oceanRenderProvider->getBaseWaterHeight();
             auto cfgData = oceanRenderProvider->getOceanFFTConfig();

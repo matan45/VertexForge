@@ -88,6 +88,20 @@ namespace services
         float shoreWaveCrestFoam = 0.6f;
         float shoreWaveCrestFoamThreshold = 0.55f;
         float shoreWaveLean = 0.5f;
+
+        // VK-1606: interactive ripple patch. Off by default, so an existing scene renders exactly as
+        // it did before. patchSize/waveSpeed/damping drive the simulation; the four *Scale values are
+        // pure presentation and never feed back into it.
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;      // metres covered by the 512^2 patch
+        float rippleWaveSpeed = 3.0f;        // m/s, clamped to the CFL bound before it reaches the GPU
+        float rippleDamping = 0.8f;          // per-second velocity decay
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;         // foam per unit of surface curvature
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;        // per-second foam decay
+        float rippleEdgeFadeStart = 0.85f;   // patch-border fade start, 0..1
     };
 
     // VK-1605: editor-facing status of the camera-following shore-depth bake. Surfaced in the
@@ -182,6 +196,20 @@ namespace services
         float shoreWaveCrestFoam = 0.6f;
         float shoreWaveCrestFoamThreshold = 0.55f;
         float shoreWaveLean = 0.5f;
+
+        // VK-1606: interactive ripple patch. Off by default, so an existing scene renders exactly as
+        // it did before. patchSize/waveSpeed/damping drive the simulation; the four *Scale values are
+        // pure presentation and never feed back into it.
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;      // metres covered by the 512^2 patch
+        float rippleWaveSpeed = 3.0f;        // m/s, clamped to the CFL bound before it reaches the GPU
+        float rippleDamping = 0.8f;          // per-second velocity decay
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;         // foam per unit of surface curvature
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;        // per-second foam decay
+        float rippleEdgeFadeStart = 0.85f;   // patch-border fade start, 0..1
 
         // Weather-driven sea state
         bool weatherDriven = false;

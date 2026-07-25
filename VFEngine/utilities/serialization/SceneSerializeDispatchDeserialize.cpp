@@ -127,6 +127,11 @@ namespace serialization
             auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
             deserializeBuoyancy(c["buoyancy"], buoyancyComp);
         }
+        if (c.contains("waterWakeEmitter"))
+        {
+            auto& wakeComp = entity.addOrReplaceComponent<components::WaterWakeEmitterComponent>();
+            deserializeWaterWakeEmitter(c["waterWakeEmitter"], wakeComp);
+        }
         if (c.contains("destructible"))
         {
             auto& destructibleComp = entity.addOrReplaceComponent<components::DestructibleComponent>();

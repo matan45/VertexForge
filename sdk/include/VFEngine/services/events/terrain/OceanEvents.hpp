@@ -36,6 +36,27 @@ namespace events::ocean
         std::string_view getName() const override { return "SetOceanPhysicsSettings"; }
     };
 
+    // VK-1606: push one disturbance into the interactive ripple patch. Fire-and-forget from any
+    // thread — the service queues it under a mutex and the render side drains the batch once per
+    // frame. Positions outside the current patch are simply dropped by the sim.
+    struct AddWaterImpulseCommand : ICommand<void> {
+        glm::vec2 positionXZ{0.0f};
+        float radius = 1.0f;        // metres; the kernel is exactly zero from here outwards
+        float strength = 1.0f;      // vertical velocity kick at the centre (negative = downwards)
+
+        std::string_view getName() const override { return "AddWaterImpulse"; }
+    };
+
+    struct SetWaterRippleEnabledCommand : ICommand<void> {
+        bool enabled = false;
+
+        std::string_view getName() const override { return "SetWaterRippleEnabled"; }
+    };
+
+    struct IsWaterRippleEnabledQuery : IQuery<bool> {
+        std::string_view getName() const override { return "IsWaterRippleEnabled"; }
+    };
+
     // === Ocean FFT Commands ===
 
     struct SetOceanFFTConfigCommand : ICommand<void> {

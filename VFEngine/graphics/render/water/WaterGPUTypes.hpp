@@ -55,7 +55,10 @@ namespace render::water
     // The shore-depth field has completed at least one bake. Gates the fragment stage's use of the
     // interpolated true water depth; until then the screen-space reconstruction is all there is.
     constexpr uint32_t WATER_FLAG_SHORE_FIELD = 1u << 6;
-    // bits 7..15 reserved for VK-1606 (ripples)
+    // VK-1606: the interactive ripple patch (set 9 binding 4) has valid contents. Gates both the
+    // vertex displacement and the fragment foam contribution.
+    constexpr uint32_t WATER_FLAG_RIPPLES = 1u << 7;
+    // bits 8..15 still free
 
     // Flags an RTT / reflection-probe view is allowed to keep. SSR is view-dependent (baking it
     // into a probe cubemap would be wrong from every direction but the capture one) and both SSR
@@ -65,6 +68,18 @@ namespace render::water
     // displacement, and a probe whose water sits at a different height than the main view's would
     // reflect a surface that does not exist. The shore-depth texture is therefore also written into
     // the refraction dummy set (WaterPipeline::createRefractionDummy) which is what RTT views bind.
+    //
+    // VK-1606: RIPPLES follows the same rule for the same reason, and the ripple output texture is
+    // likewise written into the dummy set (WaterPipeline::updateDummyRipple). It is view-independent
+    // — one camera-following patch shared by every view — so there is nothing to suppress.
+    //
+    // CAVEAT, true since VK-1604 and NOT introduced here: this mask only decides what an RTT view is
+    // ALLOWED to keep. RTT views bind the pipeline's dummy set 9, whose UBO is written exactly once
+    // with all-default WaterExtendedParams — including flags = 0. So in practice a probe currently
+    // renders with hex, shoaling, shore waves AND ripples all off, whatever this mask says. Making
+    // probe geometry actually match the main view needs the dummy params buffer to be refreshed per
+    // frame with the vertex-stage flags; that is a behaviour change to VK-1604/VK-1605 and is
+    // deliberately left alone here.
     constexpr uint32_t WATER_VIEW_FLAGS_ALL = 0xFFFFFFFFu;
     constexpr uint32_t WATER_VIEW_FLAGS_RTT = ~(WATER_FLAG_SSR | WATER_FLAG_ABSORPTION);
 
@@ -99,7 +114,10 @@ namespace render::water
         float shoalingGamma = 0.78f;                            // 104  VK-1605  McCowan H/d limit
         float shoreEdgeFadeStart = 0.88f;                       // 108  VK-1605  window fade start
 
-        glm::vec4 reserved0{0.0f};                              // 112  VK-1606 ripple patch window
+        // VK-1606. xy = the ripple patch's min corner in world XZ (texel-snapped), z = patch size in
+        // metres, w = 1/z. Same shape as shoreFieldOrigin below, and for the same reason: the shader
+        // multiplies rather than divides.
+        glm::vec4 ripplePatch{0.0f, 0.0f, 1.0f, 1.0f};           // 112
 
         // VK-1605. shoreFieldOrigin: xy = the shore-depth window's min corner in world XZ,
         // z = window size in metres, w = 1/z (the shader multiplies rather than divides).
@@ -112,8 +130,12 @@ namespace render::water
         glm::vec4 shoreWaveA{0.0f, 12.0f, 0.35f, 1.5f};          // 160
         // x = breakRange, y = crestFoam, z = crestFoamThreshold, w = shoreLean.
         glm::vec4 shoreWaveB{1.0f, 0.6f, 0.55f, 0.5f};           // 176
+
+        // VK-1606. x = ripple height scale (metres per unit of simulated height), y = normal scale,
+        // z = foam scale, w = patch-border fade start in 0..1 (same meaning as shoreEdgeFadeStart).
+        glm::vec4 rippleParams{1.0f, 1.0f, 1.0f, 0.85f};         // 192
     };
-    static_assert(sizeof(WaterExtendedParams) == 192);
+    static_assert(sizeof(WaterExtendedParams) == 208);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

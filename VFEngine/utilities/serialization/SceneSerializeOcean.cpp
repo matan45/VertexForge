@@ -68,6 +68,18 @@ namespace serialization
         j["shoreWaveCrestFoamThreshold"] = ocean.shoreWaveCrestFoamThreshold;
         j["shoreWaveLean"] = ocean.shoreWaveLean;
 
+        // VK-1606
+        j["rippleSimEnabled"] = ocean.rippleSimEnabled;
+        j["ripplePatchSize"] = ocean.ripplePatchSize;
+        j["rippleWaveSpeed"] = ocean.rippleWaveSpeed;
+        j["rippleDamping"] = ocean.rippleDamping;
+        j["rippleHeightScale"] = ocean.rippleHeightScale;
+        j["rippleNormalScale"] = ocean.rippleNormalScale;
+        j["rippleFoamGain"] = ocean.rippleFoamGain;
+        j["rippleFoamScale"] = ocean.rippleFoamScale;
+        j["rippleFoamDecay"] = ocean.rippleFoamDecay;
+        j["rippleEdgeFadeStart"] = ocean.rippleEdgeFadeStart;
+
         // Ocean FFT bands
         auto bandsArray = nlohmann::json::array();
         for (uint32_t i = 0; i < components::MAX_OCEAN_BANDS; ++i)
@@ -213,6 +225,28 @@ namespace serialization
             ocean.shoreWaveCrestFoamThreshold = it->get<float>();
         if (auto it = j.find("shoreWaveLean"); it != j.end() && it->is_number())
             ocean.shoreWaveLean = it->get<float>();
+
+        // VK-1606 — absent keys keep the component defaults, so pre-VK-1606 scenes load unchanged.
+        if (auto it = j.find("rippleSimEnabled"); it != j.end() && it->is_boolean())
+            ocean.rippleSimEnabled = it->get<bool>();
+        if (auto it = j.find("ripplePatchSize"); it != j.end() && it->is_number())
+            ocean.ripplePatchSize = it->get<float>();
+        if (auto it = j.find("rippleWaveSpeed"); it != j.end() && it->is_number())
+            ocean.rippleWaveSpeed = it->get<float>();
+        if (auto it = j.find("rippleDamping"); it != j.end() && it->is_number())
+            ocean.rippleDamping = it->get<float>();
+        if (auto it = j.find("rippleHeightScale"); it != j.end() && it->is_number())
+            ocean.rippleHeightScale = it->get<float>();
+        if (auto it = j.find("rippleNormalScale"); it != j.end() && it->is_number())
+            ocean.rippleNormalScale = it->get<float>();
+        if (auto it = j.find("rippleFoamGain"); it != j.end() && it->is_number())
+            ocean.rippleFoamGain = it->get<float>();
+        if (auto it = j.find("rippleFoamScale"); it != j.end() && it->is_number())
+            ocean.rippleFoamScale = it->get<float>();
+        if (auto it = j.find("rippleFoamDecay"); it != j.end() && it->is_number())
+            ocean.rippleFoamDecay = it->get<float>();
+        if (auto it = j.find("rippleEdgeFadeStart"); it != j.end() && it->is_number())
+            ocean.rippleEdgeFadeStart = it->get<float>();
 
         // Ocean FFT bands
         if (j.contains("oceanBands") && j["oceanBands"].is_array())

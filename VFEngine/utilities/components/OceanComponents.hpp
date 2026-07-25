@@ -100,6 +100,19 @@ namespace components
         float shoreWaveCrestFoamThreshold = 0.55f;
         float shoreWaveLean = 0.5f;         // forward lean along the shore-depth gradient
 
+        // VK-1606: interactive ripple patch (wakes, splashes, scripted impulses). Off by default so
+        // an existing scene renders exactly as it did before.
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;     // metres covered by the 512^2 camera-following patch
+        float rippleWaveSpeed = 3.0f;       // m/s, clamped to the CFL bound before reaching the GPU
+        float rippleDamping = 0.8f;         // per-second velocity decay
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;        // foam per unit of surface curvature
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;       // per-second foam decay
+        float rippleEdgeFadeStart = 0.85f;  // patch-border fade start, 0..1
+
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {
             {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Swell

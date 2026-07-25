@@ -407,9 +407,11 @@ namespace render::gpudriven
         if (water.multiBandOceanLayout) { vkDevice.destroyDescriptorSetLayout(water.multiBandOceanLayout); water.multiBandOceanLayout = nullptr; }
         water.multiBandOceanDescSet = nullptr;
         water.refractionResources.reset();
-        // VK-1605: after the pipeline's dummy set stops referencing it, before the device goes.
+        // VK-1605/VK-1606: after the pipeline's dummy set stops referencing them, before the device
+        // goes. The dummy set holds descriptors pointing at both textures.
         water.pipeline.reset();
         water.shoreDepthResources.reset();
+        water.rippleSim.reset();
         water.meshBuffer.reset();
         depthPrepassPipeline.reset();
         selectionMaskPipeline.reset(); // VK-1490

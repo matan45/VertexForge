@@ -124,6 +124,10 @@ namespace render::water
         // view-independent, so it is safe (and required) to hand it to the dummy path too.
         void updateDummyShoreDepth(vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler);
 
+        // VK-1606: same deal for binding 4, the ripple patch. Ripples displace vertices too, and the
+        // patch is a single camera-following window shared by every view, so a probe must see it.
+        void updateDummyRipple(vk::ImageView rippleView, vk::Sampler rippleSampler);
+
         void render(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
                     WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants);
 
@@ -141,6 +145,7 @@ namespace render::water
         void createDuDvDescriptor();
         void createOceanDummyTexture();
         void createRefractionDummy();
+        void updateDummyBinding(uint32_t binding, vk::ImageView view, vk::Sampler sampler);
         void createGraphicsPipeline(const WaterPipelineLayoutConfig& config);
     };
 }

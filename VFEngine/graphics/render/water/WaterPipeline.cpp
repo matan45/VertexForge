@@ -608,7 +608,7 @@ namespace render::water
         // MUST mirror WaterRefractionResources::createDescriptorLayout() exactly — binding count,
         // types AND stage flags. A divergence makes the two layouts descriptor-set-incompatible,
         // and it only shows up on the paths that actually bind this dummy (ocean disabled, RTT).
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
@@ -630,6 +630,12 @@ namespace render::water
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
+        // VK-1606: ripple patch, vertex|fragment.
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -639,7 +645,7 @@ namespace render::water
         // Create descriptor pool + set
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 3;
+        poolSizes[0].descriptorCount = 4;
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
 
@@ -670,10 +676,11 @@ namespace render::water
             }
         }
 
-        // Bindings 0/1/3 just need a valid image to prevent validation errors. Binding 3 is
-        // re-pointed at the REAL shore-depth texture by updateDummyShoreDepth() once the renderer
-        // has created it — RTT views bind this set and still have to shoal.
-        std::array<vk::DescriptorImageInfo, 3> imageInfos{};
+        // Bindings 0/1/3/4 just need a valid image to prevent validation errors. Bindings 3 and 4 are
+        // re-pointed at the REAL shore-depth and ripple textures by updateDummyShoreDepth() /
+        // updateDummyRipple() once the renderer has created them — RTT views bind this set and still
+        // have to shoal and ripple, or they reflect a surface that is not there.
+        std::array<vk::DescriptorImageInfo, 4> imageInfos{};
         for (auto& info : imageInfos)
             info = {refractionDummySampler, refractionDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
 
@@ -682,7 +689,7 @@ namespace render::water
         dummyParamsInfo.offset = 0;
         dummyParamsInfo.range = sizeof(WaterExtendedParams);
 
-        std::array<vk::WriteDescriptorSet, 4> refrWrites{};
+        std::array<vk::WriteDescriptorSet, 5> refrWrites{};
         for (int i = 0; i < 2; ++i)
         {
             refrWrites[i].dstSet = refractionDummyDescSet;
@@ -703,20 +710,35 @@ namespace render::water
         refrWrites[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         refrWrites[3].pImageInfo = &imageInfos[2];
 
+        refrWrites[4].dstSet = refractionDummyDescSet;
+        refrWrites[4].dstBinding = 4;
+        refrWrites[4].descriptorCount = 1;
+        refrWrites[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        refrWrites[4].pImageInfo = &imageInfos[3];
+
         vkDevice.updateDescriptorSets(refrWrites, nullptr);
     }
 
     void WaterPipeline::updateDummyShoreDepth(vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler)
     {
-        if (!refractionDummyDescSet || !shoreDepthView || !shoreDepthSampler)
+        updateDummyBinding(3, shoreDepthView, shoreDepthSampler);
+    }
+
+    void WaterPipeline::updateDummyRipple(vk::ImageView rippleView, vk::Sampler rippleSampler)
+    {
+        updateDummyBinding(4, rippleView, rippleSampler);
+    }
+
+    void WaterPipeline::updateDummyBinding(uint32_t binding, vk::ImageView view, vk::Sampler sampler)
+    {
+        if (!refractionDummyDescSet || !view || !sampler)
             return;
 
-        vk::DescriptorImageInfo imageInfo{shoreDepthSampler, shoreDepthView,
-                                          vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo imageInfo{sampler, view, vk::ImageLayout::eShaderReadOnlyOptimal};
 
         vk::WriteDescriptorSet write{};
         write.dstSet = refractionDummyDescSet;
-        write.dstBinding = 3;
+        write.dstBinding = binding;
         write.descriptorCount = 1;
         write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
         write.pImageInfo = &imageInfo;

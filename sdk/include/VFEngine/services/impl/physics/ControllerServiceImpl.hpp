@@ -25,6 +25,13 @@ namespace services
         // distinct keys; pruned for destroyed entities in applyControllerMovement.
         std::unordered_map<entt::entity, physics::CharacterInterp> ccInterp;
 
+        // VK-1606: "is there an ocean at all", resolved ONCE per frame in applyControllerMovement.
+        // GetOceanHeightAtQuery returns 0 for "no ocean", which is indistinguishable from a real
+        // water height of 0, so a separate presence check is needed - but it only has to happen once
+        // per tick, not once per character. The height itself IS per character (waves differ across
+        // XZ) but is still sampled only once per frame, not once per fixed sub-step.
+        bool oceanPresentThisFrame = false;
+
     public:
         explicit ControllerServiceImpl(IPhysicsProvider* physicsProvider = nullptr);
 

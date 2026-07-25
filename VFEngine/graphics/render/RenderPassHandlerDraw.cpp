@@ -822,6 +822,14 @@ namespace render
         // any render pass, next to the other out-of-pass GPU writes.
         gpuDrivenRenderer->uploadShoreDepthField(commandBuffer, currentTime);
 
+        // VK-1606: the interactive ripple patch, also outside any render pass. Independent of the
+        // FFT (so ripple-only water still simulates with every band off) but gated on there being an
+        // ocean at all — its parameters come from the OceanComponent, and without one the sim would
+        // keep stepping on whatever settings were last published. The impulses it consumes were
+        // drained in updateGPUDrivenSceneData above.
+        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+            gpuDrivenRenderer->dispatchWaterRipples(commandBuffer, currentTime);
+
         // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run
         // outside the RenderGraph passes, so bracket them with the aux timestamp pool —
         // the scopes surface as rows in the Task Graph Profiler. All no-ops when the

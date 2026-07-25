@@ -57,6 +57,7 @@ namespace windows::details {
         bool hasVolumetricAgent = false;
         bool hasDestructible = false;
         bool hasBuoyancy = false;
+        bool hasWaterWakeEmitter = false;   // VK-1606
         bool hasUIStyle = false;
         bool hasUITooltip = false;
         bool hasUIWindow = false;

@@ -34,6 +34,11 @@ namespace render::gpudriven
         water.shoreDepthResources = std::make_unique<render::water::WaterShoreDepthResources>(device);
         water.shoreDepthResources->init();
 
+        // VK-1606: same rule for the ripple patch at set 9 binding 4 - created once, before the
+        // refraction resources, and never recreated.
+        water.rippleSim = std::make_unique<render::water::WaterRippleSim>(device);
+        water.rippleSim->init();
+
         // Create refraction resources before pipeline so we have the descriptor set layout
         water.refractionResources = std::make_unique<render::water::WaterRefractionResources>(device);
         water.refractionResources->init(
@@ -42,7 +47,9 @@ namespace render::gpudriven
             swapChain.getSwapchainExtent().height,
             sceneDepthView,
             water.shoreDepthResources->getImageView(),
-            water.shoreDepthResources->getSampler());
+            water.shoreDepthResources->getSampler(),
+            water.rippleSim->getOutputView(),
+            water.rippleSim->getSampler());
 
         // Ocean texture layout (from multi-band descriptor if initialized, otherwise WaterPipeline creates dummy)
         vk::DescriptorSetLayout oceanLayout{};
@@ -70,6 +77,8 @@ namespace render::gpudriven
         // view-independent, so the dummy set gets the real texture.
         water.pipeline->updateDummyShoreDepth(water.shoreDepthResources->getImageView(),
                                               water.shoreDepthResources->getSampler());
+        water.pipeline->updateDummyRipple(water.rippleSim->getOutputView(),
+                                          water.rippleSim->getSampler());
     }
 
     void GPUDrivenRenderer::updateWater(const services::OceanVisualSettings& visualSettings,
@@ -200,6 +209,32 @@ namespace render::gpudriven
                 ::water::characteristicWavelength(cfg.windSpeed) * visualSettings.shoalingWavelengthScale;
         }
 
+        // VK-1606: re-centre the ripple patch on the camera. Snapped to the texel lattice, otherwise
+        // the field is resampled at a sub-texel offset every frame and the whole surface crawls.
+        // The origin is computed HERE (not inside the sim) so the UBO written below and the compute
+        // push constants recorded later in the frame cannot disagree about the window.
+        {
+            water.ripplePatchSize = visualSettings.ripplePatchSize > 0.0f
+                ? visualSettings.ripplePatchSize
+                : ::water::RIPPLE_DEFAULT_PATCH_SIZE;
+            water.rippleOrigin = ::water::rippleSnapOrigin(
+                glm::vec2(cameraPosition.x, cameraPosition.z), water.ripplePatchSize);
+            water.rippleEnabled = visualSettings.rippleSimEnabled;
+
+            if (water.rippleSim && water.rippleSim->isInitialized())
+            {
+                render::water::RippleSimParams rippleParams;
+                rippleParams.origin = water.rippleOrigin;
+                rippleParams.patchSize = water.ripplePatchSize;
+                rippleParams.waveSpeed = visualSettings.rippleWaveSpeed;
+                rippleParams.damping = visualSettings.rippleDamping;
+                rippleParams.foamGain = visualSettings.rippleFoamGain;
+                rippleParams.foamDecay = visualSettings.rippleFoamDecay;
+                rippleParams.enabled = water.rippleEnabled;
+                water.rippleSim->setParams(rippleParams);
+            }
+        }
+
         // VK-1604: extended visual params (set 9 binding 2). Filled once per frame; per-view
         // gating rides on WaterPushConstants::viewFlagMask instead (see renderWaterDraw).
         {
@@ -238,6 +273,15 @@ namespace render::gpudriven
                                        visualSettings.shoreWaveCrestFoamThreshold,
                                        visualSettings.shoreWaveLean);
 
+            // VK-1606 ripple rows
+            const float invPatch = water.ripplePatchSize > 0.0f ? 1.0f / water.ripplePatchSize : 1.0f;
+            ext.ripplePatch = glm::vec4(water.rippleOrigin.x, water.rippleOrigin.y,
+                                        water.ripplePatchSize, invPatch);
+            ext.rippleParams = glm::vec4(visualSettings.rippleHeightScale,
+                                         visualSettings.rippleNormalScale,
+                                         visualSettings.rippleFoamScale,
+                                         visualSettings.rippleEdgeFadeStart);
+
             uint32_t flags = 0;
             if (visualSettings.ssrEnabled) flags |= render::water::WATER_FLAG_SSR;
             if (visualSettings.beerLambertEnabled) flags |= render::water::WATER_FLAG_ABSORPTION;
@@ -253,6 +297,10 @@ namespace render::gpudriven
             if (shoreFieldLive && visualSettings.shoreWavesEnabled &&
                 visualSettings.shoreWaveAmplitude > 0.0f)
                 flags |= render::water::WATER_FLAG_SHORE_WAVES;
+            // VK-1606: only once the sim has actually stepped. Until then the output image is the
+            // zero-fill from init, which would displace nothing but would still cost the taps.
+            if (water.rippleEnabled && water.rippleSim && water.rippleSim->hasSimulated())
+                flags |= render::water::WATER_FLAG_RIPPLES;
             ext.flags = flags;
 
             water.cachedExtendedParams = ext;
@@ -828,6 +876,21 @@ namespace render::gpudriven
             water.shoreDepthResources->recordUpload(cmd);
     }
 
+    void GPUDrivenRenderer::queueWaterImpulses(const std::vector<::water::WaterImpulse>& impulses)
+    {
+        if (water.rippleSim)
+            water.rippleSim->queueImpulses(impulses);
+    }
+
+    void GPUDrivenRenderer::dispatchWaterRipples(vk::CommandBuffer cmd, float time)
+    {
+        // Deliberately NOT gated on water.oceanEnabled: the ripple patch is independent of the FFT,
+        // so ripple-only water (a pond, a flat-plane test scene) works with every band switched off.
+        // The sim itself early-outs when its enabled flag is clear.
+        if (water.rippleSim && water.rippleSim->isInitialized())
+            water.rippleSim->dispatch(cmd, time);
+    }
+
     void GPUDrivenRenderer::dispatchOceanFFT(vk::CommandBuffer cmd, float time)
     {
         if (!water.oceanEnabled)
@@ -948,7 +1011,8 @@ namespace render::gpudriven
         if (!water.refractionResources)
             return;
 
-        // VK-1605: recreate() tears the whole set 9 down, so binding 3 has to be handed back in.
+        // VK-1605/VK-1606: recreate() tears the whole set 9 down, so bindings 3 and 4 have to be
+        // handed back in.
         vk::ImageView shoreView{};
         vk::Sampler shoreSampler{};
         if (water.shoreDepthResources && water.shoreDepthResources->isInitialized())
@@ -957,11 +1021,20 @@ namespace render::gpudriven
             shoreSampler = water.shoreDepthResources->getSampler();
         }
 
+        vk::ImageView rippleView{};
+        vk::Sampler rippleSampler{};
+        if (water.rippleSim && water.rippleSim->isInitialized())
+        {
+            rippleView = water.rippleSim->getOutputView();
+            rippleSampler = water.rippleSim->getSampler();
+        }
+
         water.refractionResources->recreate(
             swapChain.getSceneColorFormat(),
             swapChain.getSwapchainExtent().width,
             swapChain.getSwapchainExtent().height,
             sceneDepthView,
-            shoreView, shoreSampler);
+            shoreView, shoreSampler,
+            rippleView, rippleSampler);
     }
 }

@@ -80,6 +80,18 @@ namespace ocean
         float shoreWaveCrestFoamThreshold = 0.55f;
         float shoreWaveLean = 0.5f;
 
+        // VK-1606
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;
+        float rippleWaveSpeed = 3.0f;
+        float rippleDamping = 0.8f;
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;
+        float rippleEdgeFadeStart = 0.85f;
+
         // Physics
         float density = 1000.0f;
         float drag = 0.5f;

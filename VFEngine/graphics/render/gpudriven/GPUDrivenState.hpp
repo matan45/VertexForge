@@ -18,6 +18,7 @@
 #include "../water/WaterRefractionResources.hpp"
 #include "../water/WaterCausticsResources.hpp"
 #include "../water/WaterShoreDepthResources.hpp"
+#include "../water/WaterRippleSim.hpp"
 #include "../../../utilities/water/ShoreWaveMath.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
@@ -153,6 +154,15 @@ namespace render::gpudriven::detail
 
         bool shoreWavesEnabled = false;
         ::water::ShoreWaveParams shoreWaveParams{};
+
+        // VK-1606: the interactive ripple patch. Unlike the shore field there is NO CPU mirror here -
+        // ripple displacement is deliberately absent from getOceanHeightAt, so a boat does not float
+        // on its own wake. rippleOrigin is kept only so updateWater and dispatchWaterRipples agree on
+        // the window within a frame (the UBO and the compute push constants must not disagree).
+        std::unique_ptr<render::water::WaterRippleSim> rippleSim;
+        glm::vec2 rippleOrigin{0.0f};
+        float ripplePatchSize = 1.0f;
+        bool rippleEnabled = false;
 
         // The exact time value that drove camera.u_Time (and the FFT dispatch) for the frame the
         // shader displaced. Buoyancy must use the same one or the breakers it feels are out of

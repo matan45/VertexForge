@@ -51,6 +51,13 @@ namespace services {
         std::optional<BuoyancyComponentData> getBuoyancyData(EntityHandle entity) const;
         bool setBuoyancyData(EntityHandle entity, const BuoyancyComponentData& buoyancyData);
 
+        // Water Wake Emitter Component Operations (VK-1606)
+        bool addWaterWakeEmitterComponent(EntityHandle entity);
+        bool removeWaterWakeEmitterComponent(EntityHandle entity);
+        bool hasWaterWakeEmitterComponent(EntityHandle entity) const;
+        std::optional<WaterWakeEmitterComponentData> getWaterWakeEmitterData(EntityHandle entity) const;
+        bool setWaterWakeEmitterData(EntityHandle entity, const WaterWakeEmitterComponentData& emitterData);
+
         // PhysicsAnimation Component Operations
         bool addPhysicsAnimationComponent(EntityHandle entity);
         bool removePhysicsAnimationComponent(EntityHandle entity);

@@ -212,6 +212,44 @@ namespace core::api
                     return value::Value(dispatcher.query(query));
                 }});
 
+            // VK-1606: ocean.addImpulse(x, z, radius, strength)
+            // Pushes one disturbance into the interactive ripple patch — a splash, a projectile hit,
+            // an oar stroke. Fire-and-forget; impulses outside the current patch are simply dropped.
+            interpreter->registerNativeFunction("_native_ocean_addImpulse",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.size() < 3) return value::Value(std::monostate{});
+
+                    events::ocean::AddWaterImpulseCommand cmd;
+                    cmd.positionXZ = glm::vec2(extractFloat(args[0]), extractFloat(args[1]));
+                    cmd.radius = extractFloat(args[2]);
+                    cmd.strength = args.size() > 3 ? extractFloat(args[3]) : 1.0f;
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // VK-1606: ocean.setRippleSimEnabled(enabled)
+            interpreter->registerNativeFunction("_native_ocean_setRippleEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return value::Value(std::monostate{});
+
+                    events::ocean::SetWaterRippleEnabledCommand cmd;
+                    cmd.enabled = extractBool(args[0]);
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // VK-1606: ocean.isRippleSimEnabled() -> bool
+            interpreter->registerNativeFunction("_native_ocean_isRippleEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::ocean::IsWaterRippleEnabledQuery query;
+                    return value::Value(dispatcher.query(query));
+                }});
+
             // ocean.setWeatherDriven(oceanEntityId, enabled)
             interpreter->registerNativeFunction("_native_ocean_setWeatherDriven",
                 {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{

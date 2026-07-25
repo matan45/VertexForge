@@ -9,10 +9,11 @@ namespace ocean
     {
         nlohmann::json j;
 
-        // VK-1604 bumped this to 2 (adds the SSR / Beer-Lambert / hex-tiling visual keys).
-        // load() does not branch on it — every key is read with a self-defaulting value(), so a
-        // v1 file simply keeps the struct defaults. The field is informational.
-        j["version"] = 2;
+        // VK-1604 bumped this to 2 (SSR / Beer-Lambert / hex tiling); VK-1605 added the shoaling and
+        // breaking-shore-wave keys without bumping; VK-1606 makes it 3 (interactive ripples).
+        // load() does not branch on it — every key is read with a self-defaulting value(), so an
+        // older file simply keeps the struct defaults. The field is informational.
+        j["version"] = 3;
         j["waterHeight"] = data.waterHeight;
         j["physicsEnabled"] = data.physicsEnabled;
 
@@ -68,6 +69,18 @@ namespace ocean
         vis["shoreWaveCrestFoam"] = data.shoreWaveCrestFoam;
         vis["shoreWaveCrestFoamThreshold"] = data.shoreWaveCrestFoamThreshold;
         vis["shoreWaveLean"] = data.shoreWaveLean;
+
+        // VK-1606
+        vis["rippleSimEnabled"] = data.rippleSimEnabled;
+        vis["ripplePatchSize"] = data.ripplePatchSize;
+        vis["rippleWaveSpeed"] = data.rippleWaveSpeed;
+        vis["rippleDamping"] = data.rippleDamping;
+        vis["rippleHeightScale"] = data.rippleHeightScale;
+        vis["rippleNormalScale"] = data.rippleNormalScale;
+        vis["rippleFoamGain"] = data.rippleFoamGain;
+        vis["rippleFoamScale"] = data.rippleFoamScale;
+        vis["rippleFoamDecay"] = data.rippleFoamDecay;
+        vis["rippleEdgeFadeStart"] = data.rippleEdgeFadeStart;
 
         // Physics
         auto& phys = j["physics"];
@@ -205,6 +218,19 @@ namespace ocean
             outData.shoreWaveCrestFoam = vis.value("shoreWaveCrestFoam", outData.shoreWaveCrestFoam);
             outData.shoreWaveCrestFoamThreshold = vis.value("shoreWaveCrestFoamThreshold", outData.shoreWaveCrestFoamThreshold);
             outData.shoreWaveLean = vis.value("shoreWaveLean", outData.shoreWaveLean);
+
+            // VK-1606. Self-defaulting reads are the real compatibility mechanism here - `version`
+            // is written but never branched on, so a v1/v2 file simply keeps these defaults.
+            outData.rippleSimEnabled = vis.value("rippleSimEnabled", outData.rippleSimEnabled);
+            outData.ripplePatchSize = vis.value("ripplePatchSize", outData.ripplePatchSize);
+            outData.rippleWaveSpeed = vis.value("rippleWaveSpeed", outData.rippleWaveSpeed);
+            outData.rippleDamping = vis.value("rippleDamping", outData.rippleDamping);
+            outData.rippleHeightScale = vis.value("rippleHeightScale", outData.rippleHeightScale);
+            outData.rippleNormalScale = vis.value("rippleNormalScale", outData.rippleNormalScale);
+            outData.rippleFoamGain = vis.value("rippleFoamGain", outData.rippleFoamGain);
+            outData.rippleFoamScale = vis.value("rippleFoamScale", outData.rippleFoamScale);
+            outData.rippleFoamDecay = vis.value("rippleFoamDecay", outData.rippleFoamDecay);
+            outData.rippleEdgeFadeStart = vis.value("rippleEdgeFadeStart", outData.rippleEdgeFadeStart);
         }
 
         // Physics

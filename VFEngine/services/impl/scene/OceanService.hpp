@@ -10,13 +10,16 @@
 #include "../../../utilities/terrain/TerrainTypes.hpp"
 #include "../../../utilities/water/SeaState.hpp"
 #include "../../../utilities/water/ShoreDepthField.hpp"
+#include "../../../utilities/water/RippleSimMath.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace components
 {
@@ -109,6 +112,21 @@ namespace services
         std::unique_ptr<::events::SubscriptionToken> terrainChangedSub;
         std::unique_ptr<::events::SubscriptionToken> terrainLoadedSub;
 
+        // VK-1606: water impulses waiting to reach the ripple sim. THREE threads write here — the
+        // AddWaterImpulseCommand handler and the wake emitters on the main thread, and the
+        // auto-wakes inside updateBuoyancy on the physics worker — while the render thread drains
+        // it. One mutex, drain by swap.
+        mutable std::mutex impulseMutex;
+        std::vector<water::WaterImpulse> pendingImpulses;
+
+        // Per-entity distance throttles: the last world XZ at which that entity emitted a wake.
+        // TWO maps, deliberately, because they have different owning threads — emitterWakeTrail is
+        // touched only by updateWakeEmitters (main thread) and buoyancyWakeTrail only by
+        // updateBuoyancy (physics worker). Sharing one map would be a plain data race; only the
+        // impulse queue they both feed is mutex-guarded.
+        std::unordered_map<EntityHandle, glm::vec2, EntityHandle::Hash> emitterWakeTrail;
+        std::unordered_map<EntityHandle, glm::vec2, EntityHandle::Hash> buoyancyWakeTrail;
+
     public:
         explicit OceanService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~OceanService() override;
@@ -165,6 +183,14 @@ namespace services
         float getWaterDepthAt(const glm::vec2& worldXZ) const;
         ShoreDepthFieldStatus getShoreDepthFieldStatus() const;
 
+        // VK-1606: interactive ripples. queueWaterImpulse is callable from any thread;
+        // drainWaterImpulses is called once per frame from the render side (through
+        // IOceanRenderProvider) and hands the batch to the GPU sim.
+        void queueWaterImpulse(const water::WaterImpulse& impulse);
+        std::vector<water::WaterImpulse> drainWaterImpulses();
+        void setRippleSimEnabled(bool enabled);
+        bool isRippleSimEnabled() const;
+
     private:
         void registerOceanCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanQueryHandlers(::events::EventDispatcher& dispatcher);
@@ -186,6 +212,11 @@ namespace services
 
         // VK-1605: take a fresh terrain heightfield snapshot and start a bake centred on cameraXZ.
         void beginShoreFieldRebake(const glm::vec2& cameraXZ);
+
+        // VK-1606: WaterWakeEmitterComponent tick (main thread, from update()). Speed comes from the
+        // change in world position rather than from a rigid body, so scripted movers, navmesh agents
+        // and character controllers all emit wakes without needing physics.
+        void updateWakeEmitters(float deltaTime);
 
         // Sector-driven water tile streaming
         void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);

@@ -334,6 +334,18 @@ namespace services
         float angularDrag = 0.5f;
     };
 
+    // VK-1606
+    struct WaterWakeEmitterComponentData
+    {
+        glm::vec3 offset{0.0f};
+        float radius = 1.5f;
+        float strength = 0.5f;
+        float minSpeed = 0.5f;
+        float travelInterval = 0.5f;
+        bool continuous = false;
+        bool enabled = true;
+    };
+
     struct PhysicsAnimationComponentData
     {
         asset::AssetRef physicsAnimationRef;

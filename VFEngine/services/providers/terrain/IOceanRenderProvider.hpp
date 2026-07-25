@@ -1,8 +1,11 @@
 #pragma once
 
+#include "../../../utilities/water/RippleSimMath.hpp"
+
 #include <functional>
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <vector>
 
 namespace water
 {
@@ -41,5 +44,10 @@ namespace services
         // live view camera position is; OceanService has no camera of its own.
         virtual void updateShoreDepthField(const glm::vec2& cameraXZ) = 0;
         virtual const water::ShoreDepthField* getShoreDepthField() const = 0;
+
+        // VK-1606: take the frame's water impulses (script calls, auto-wakes, wake emitters) and
+        // clear the service-side queue. Called once per frame from the render side, which is the
+        // only thread allowed to talk to the GPU ripple sim.
+        virtual std::vector<water::WaterImpulse> drainWaterImpulses() = 0;
     };
 }

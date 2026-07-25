@@ -14,6 +14,7 @@
 #include "../details/RigidBodyDrawer.hpp"
 #include "../details/VehicleDrawer.hpp"
 #include "../details/BuoyancyDrawer.hpp"
+#include "../details/WaterWakeEmitterDrawer.hpp"
 #include "../details/DestructibleDrawer.hpp"
 #include "../details/PhysicsAnimationDrawer.hpp"
 #include "../details/VFXDrawer.hpp"
@@ -87,6 +88,7 @@ namespace windows
         details::RigidBodyDrawer rigidBodyDrawer;
         details::VehicleDrawer vehicleDrawer;
         details::BuoyancyDrawer buoyancyDrawer;
+        details::WaterWakeEmitterDrawer waterWakeEmitterDrawer;   // VK-1606
         details::DestructibleDrawer destructibleDrawer;
         details::PhysicsAnimationDrawer physicsAnimationDrawer;
         details::VFXDrawer vfxDrawer;

@@ -86,6 +86,12 @@ namespace serialization
                 entity.getComponent<components::BuoyancyComponent>());
         }
 
+        if (entity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            out["waterWakeEmitter"] = SceneSerialization::serializeWaterWakeEmitter(
+                entity.getComponent<components::WaterWakeEmitterComponent>());
+        }
+
         if (entity.hasComponent<components::DestructibleComponent>())
         {
             out["destructible"] = SceneSerialization::serializeDestructible(
@@ -448,6 +454,12 @@ namespace serialization
         {
             auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
             SceneSerialization::deserializeBuoyancy(componentsJson["buoyancy"], buoyancyComp);
+        }
+
+        if (componentsJson.contains("waterWakeEmitter"))
+        {
+            auto& wakeComp = entity.addOrReplaceComponent<components::WaterWakeEmitterComponent>();
+            SceneSerialization::deserializeWaterWakeEmitter(componentsJson["waterWakeEmitter"], wakeComp);
         }
 
         if (componentsJson.contains("destructible"))

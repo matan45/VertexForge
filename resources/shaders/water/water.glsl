@@ -62,6 +62,7 @@ layout(set = 8, binding = 5) uniform sampler2D oceanNorm2;   // Ripples normals
 #include "water_params.glsl"
 #include "hex_tiling.glsl"
 #include "water_shoaling.glsl"
+#include "water_ripple.glsl"
 
 // VK-1605: scale one band's displacement for the water depth it is standing in. Vertical gets the
 // Green's-law gain capped by the breaking limit, horizontal chop gets compressed so the shear
@@ -208,6 +209,21 @@ void main() {
         }
     }
 
+    // VK-1606: the interactive ripple patch rides on top of everything else. Sampled at the
+    // UNDISPLACED position for the same reason the shore field is, and like the shore surge it
+    // deliberately leaves fragOceanDispY on its FFT-only value so the existing height-based colour
+    // ramp is unchanged. RTT views keep this bit: the patch is view-independent, and a probe whose
+    // water sat at a different height would reflect a surface that is not there.
+    if ((vertFlags & WATER_FLAG_RIPPLES) != 0u) {
+        vec4 ripple = rippleSampleRaw(baseXZ);
+        float rippleFade = rippleWindowFade(baseXZ);
+        if (rippleFade > 0.0) {
+            worldPos.y += ripple.x * ext.rippleParams.x * rippleFade;
+            totalNorm = normalize(totalNorm +
+                                  vec3(ripple.y, 0.0, ripple.z) * (ext.rippleParams.y * rippleFade));
+        }
+    }
+
     fragOceanDispY = totalDisp.y;
     fragNormal = normalize(totalNorm);
 
@@ -310,6 +326,7 @@ layout(set = 9, binding = 1) uniform sampler2D sceneDepthTex;
 #include "hex_tiling.glsl"
 #include "water_ssr.glsl"
 #include "water_shoaling.glsl"
+#include "water_ripple.glsl"
 
 void main() {
     // VK-1604: features are gated by the ocean settings AND by the view. RTT / reflection-probe
@@ -538,6 +555,13 @@ void main() {
     // cannot host it). Faded at the shore-field window border like every other shoreline effect.
     if ((effectiveFlags & WATER_FLAG_SHORE_WAVES) != 0u) {
         foam += shoreCrestFoam(fragShoreDepth, camera.u_Time) * fragShoreFade;
+    }
+
+    // VK-1606: wake and splash foam. Sampled per-pixel from set 9 b4 rather than interpolated from
+    // the vertex stage - the varying slots are full (locations 0..7) and a wake trail is finer than
+    // the water mesh, so a per-vertex value would visibly quantise it to the tessellation.
+    if ((effectiveFlags & WATER_FLAG_RIPPLES) != 0u) {
+        foam += rippleSampleRaw(fragWorldPos.xz).w * ext.rippleParams.z * rippleWindowFade(fragWorldPos.xz);
     }
 
     // Shore foam — depth-based foam where water meets terrain

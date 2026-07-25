@@ -19,7 +19,8 @@ namespace render::water
 
     void WaterRefractionResources::init(vk::Format swapchainFormat, uint32_t width, uint32_t height,
                                         vk::ImageView sceneDepthView,
-                                        vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler)
+                                        vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler,
+                                        vk::ImageView rippleView, vk::Sampler rippleSampler)
     {
         createRefractionImage(swapchainFormat, width, height);
         createSampler();
@@ -27,17 +28,19 @@ namespace render::water
         createDescriptorLayout();
         createDescriptorPool();
         allocateDescriptorSet();
-        updateDescriptorSet(sceneDepthView, shoreDepthView, shoreDepthSampler);
+        updateDescriptorSet(sceneDepthView, shoreDepthView, shoreDepthSampler, rippleView, rippleSampler);
         transitionImageInitial();
         initialized = true;
     }
 
     void WaterRefractionResources::recreate(vk::Format swapchainFormat, uint32_t width, uint32_t height,
                                             vk::ImageView sceneDepthView,
-                                            vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler)
+                                            vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler,
+                                            vk::ImageView rippleView, vk::Sampler rippleSampler)
     {
         cleanup();
-        init(swapchainFormat, width, height, sceneDepthView, shoreDepthView, shoreDepthSampler);
+        init(swapchainFormat, width, height, sceneDepthView, shoreDepthView, shoreDepthSampler,
+             rippleView, rippleSampler);
     }
 
     void WaterRefractionResources::cleanup()
@@ -146,7 +149,7 @@ namespace render::water
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
@@ -171,6 +174,13 @@ namespace render::water
         bindings[3].descriptorCount = 1;
         bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
+        // VK-1606: the interactive ripple patch. Vertex displaces the surface with its height,
+        // fragment adds its foam, so both stages again.
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -181,7 +191,7 @@ namespace render::water
     {
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 3;   // VK-1605: colour + depth + shore depth
+        poolSizes[0].descriptorCount = 4;   // colour + depth + shore depth (VK-1605) + ripple (VK-1606)
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 1;
 
@@ -204,11 +214,13 @@ namespace render::water
 
     void WaterRefractionResources::updateDescriptorSet(vk::ImageView sceneDepthView,
                                                        vk::ImageView shoreDepthView,
-                                                       vk::Sampler shoreDepthSampler)
+                                                       vk::Sampler shoreDepthSampler,
+                                                       vk::ImageView rippleView,
+                                                       vk::Sampler rippleSampler)
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorImageInfo, 3> imageInfos{};
+        std::array<vk::DescriptorImageInfo, 4> imageInfos{};
         imageInfos[0].sampler = refractionSampler;
         imageInfos[0].imageView = refractionView;
         imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -245,12 +257,26 @@ namespace render::water
         }
         imageInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
+        // VK-1606: binding 4, the ripple patch. Same init-ordering fallback as the shore field —
+        // the ripple flag stays clear until the sim has actually run, so nothing ever reads it.
+        if (rippleView && rippleSampler)
+        {
+            imageInfos[3].sampler = rippleSampler;
+            imageInfos[3].imageView = rippleView;
+        }
+        else
+        {
+            imageInfos[3].sampler = refractionSampler;
+            imageInfos[3].imageView = refractionView;
+        }
+        imageInfos[3].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
         vk::DescriptorBufferInfo paramsInfo{};
         paramsInfo.buffer = paramsBuffer;
         paramsInfo.offset = 0;
         paramsInfo.range = sizeof(WaterExtendedParams);
 
-        std::array<vk::WriteDescriptorSet, 4> writes{};
+        std::array<vk::WriteDescriptorSet, 5> writes{};
         writes[0].dstSet = descriptorSet;
         writes[0].dstBinding = 0;
         writes[0].descriptorCount = 1;
@@ -274,6 +300,12 @@ namespace render::water
         writes[3].descriptorCount = 1;
         writes[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[3].pImageInfo = &imageInfos[2];
+
+        writes[4].dstSet = descriptorSet;
+        writes[4].dstBinding = 4;
+        writes[4].descriptorCount = 1;
+        writes[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        writes[4].pImageInfo = &imageInfos[3];
 
         vkDevice.updateDescriptorSets(writes, nullptr);
     }

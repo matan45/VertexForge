@@ -103,6 +103,23 @@ public class Ocean {
         _native_ocean_setWeatherDriven(oceanEntityId, enabled);
     }
 
+    // Push one disturbance into the interactive ripple patch: a splash, a projectile hit, an oar
+    // stroke. radius is in metres and the ripple is exactly zero outside it; strength is the
+    // vertical velocity kick at the centre (negative pushes the surface down, which is what an
+    // impact does). Impulses outside the camera-following patch are silently dropped.
+    public static function addImpulse(float x, float z, float radius, float strength): void {
+        _native_ocean_addImpulse(x, z, radius, strength);
+    }
+
+    // Turn the interactive ripple simulation on or off at runtime.
+    public static function setRippleSimEnabled(bool enabled): void {
+        _native_ocean_setRippleEnabled(enabled);
+    }
+
+    public static function isRippleSimEnabled(): bool {
+        return _native_ocean_isRippleEnabled();
+    }
+
     // Set ocean visual settings
     public static function setVisualSettings(int oceanEntityId,
                                               float shallowR, float shallowG, float shallowB, float shallowA,

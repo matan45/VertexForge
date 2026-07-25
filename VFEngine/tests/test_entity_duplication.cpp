@@ -120,6 +120,87 @@ TEST_SUITE("EntityDuplication")
         scene::EntityRegistry::getRegistry().destroy(dst.getHandle());
     }
 
+    TEST_CASE("cloneOptionalComponents keeps water components (VK-1606)")
+    {
+        scene::Entity src("WaterSource");
+        scene::Entity dst("WaterDest");
+
+        // WaterWakeEmitterComponent is new in VK-1606. BuoyancyComponent is NOT - it was simply
+        // missing from components::OptionalComponents, so duplicating a boat silently dropped its
+        // hull tuning. Both are covered here because the fix is one entry in the same type_list.
+        auto& buoyancy = src.addComponent<components::BuoyancyComponent>();
+        buoyancy.buoyancyScale = 2.5f;
+        buoyancy.angularDrag = 0.75f;
+        buoyancy.sampleMode = components::BuoyancyComponent::SampleMode::Custom;
+        buoyancy.customPointCount = 2;
+        buoyancy.customPoints[0] = {1.0f, -0.5f, 2.0f};
+        buoyancy.customPoints[1] = {-1.0f, -0.5f, -2.0f};
+
+        auto& wake = src.addComponent<components::WaterWakeEmitterComponent>();
+        wake.offset = {0.0f, 0.1f, 3.5f};
+        wake.radius = 2.25f;
+        wake.strength = -0.8f;
+        wake.minSpeed = 1.5f;
+        wake.travelInterval = 0.25f;
+        wake.continuous = true;
+        wake.enabled = false;
+
+        components::cloneOptionalComponents(src, dst);
+
+        REQUIRE(dst.hasComponent<components::BuoyancyComponent>());
+        const auto& dBuoyancy = dst.getComponent<components::BuoyancyComponent>();
+        CHECK(dBuoyancy.buoyancyScale == doctest::Approx(2.5f));
+        CHECK(dBuoyancy.angularDrag == doctest::Approx(0.75f));
+        CHECK(dBuoyancy.sampleMode == components::BuoyancyComponent::SampleMode::Custom);
+        CHECK(dBuoyancy.customPointCount == 2);
+        CHECK(dBuoyancy.customPoints[0].z == doctest::Approx(2.0f));
+        CHECK(dBuoyancy.customPoints[1].x == doctest::Approx(-1.0f));
+
+        REQUIRE(dst.hasComponent<components::WaterWakeEmitterComponent>());
+        const auto& dWake = dst.getComponent<components::WaterWakeEmitterComponent>();
+        CHECK(dWake.offset.z == doctest::Approx(3.5f));
+        CHECK(dWake.radius == doctest::Approx(2.25f));
+        CHECK(dWake.strength == doctest::Approx(-0.8f));
+        CHECK(dWake.minSpeed == doctest::Approx(1.5f));
+        CHECK(dWake.travelInterval == doctest::Approx(0.25f));
+        CHECK(dWake.continuous);
+        CHECK_FALSE(dWake.enabled);
+
+        scene::EntityRegistry::getRegistry().destroy(src.getHandle());
+        scene::EntityRegistry::getRegistry().destroy(dst.getHandle());
+    }
+
+    TEST_CASE("cloneOptionalComponents resets swim runtime state (VK-1606)")
+    {
+        scene::Entity src("SwimSource");
+        scene::Entity dst("SwimDest");
+
+        auto& controller = src.addComponent<components::ControllerComponent>();
+        controller.swimEnabled = true;            // authored - must keep
+        controller.swimSpeed = 4.25f;             // authored - must keep
+        controller.floatDepth = 1.4f;             // authored - must keep
+        controller.locomotionConfig.swimState = "Backstroke";
+        controller.isSwimming = true;             // runtime - must reset
+        controller.submersion = 0.9f;             // runtime - must reset
+
+        components::cloneOptionalComponents(src, dst);
+
+        REQUIRE(dst.hasComponent<components::ControllerComponent>());
+        const auto& dController = dst.getComponent<components::ControllerComponent>();
+        CHECK(dController.swimEnabled);
+        CHECK(dController.swimSpeed == doctest::Approx(4.25f));
+        CHECK(dController.floatDepth == doctest::Approx(1.4f));
+        CHECK(dController.locomotionConfig.swimState == "Backstroke");
+
+        // A clone that inherited isSwimming would swim through the air until the first submersion
+        // sample corrected it.
+        CHECK_FALSE(dController.isSwimming);
+        CHECK(dController.submersion == doctest::Approx(0.0f));
+
+        scene::EntityRegistry::getRegistry().destroy(src.getHandle());
+        scene::EntityRegistry::getRegistry().destroy(dst.getHandle());
+    }
+
     TEST_CASE("cloneOptionalComponents does not value-copy ScriptComponent")
     {
         scene::Entity src("ScriptSource");

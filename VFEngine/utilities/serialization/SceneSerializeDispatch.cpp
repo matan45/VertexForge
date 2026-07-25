@@ -69,6 +69,8 @@ namespace serialization
             out["vehicle"] = serializeVehicle(entity.getComponent<components::VehicleComponent>());
         if (entity.hasComponent<components::BuoyancyComponent>())
             out["buoyancy"] = serializeBuoyancy(entity.getComponent<components::BuoyancyComponent>());
+        if (entity.hasComponent<components::WaterWakeEmitterComponent>())
+            out["waterWakeEmitter"] = serializeWaterWakeEmitter(entity.getComponent<components::WaterWakeEmitterComponent>());
         if (entity.hasComponent<components::DestructibleComponent>())
             out["destructible"] = serializeDestructible(entity.getComponent<components::DestructibleComponent>());
         if (entity.hasComponent<components::PhysicsAnimationComponent>())

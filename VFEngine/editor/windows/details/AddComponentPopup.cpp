@@ -323,6 +323,18 @@ namespace windows::details
                 ImGui::SetTooltip("Tunes ocean buoyancy hull sampling (boats: custom hull points + angular drag)");
         }
 
+        if (!c.hasWaterWakeEmitter && matchesFilter("Water Wake Emitter", filter))
+        {
+            if (ImGui::Selectable("  Water Wake Emitter"))
+            {
+                events::scene::AddWaterWakeEmitterComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Writes ripples into the interactive water patch as the entity moves (bow waves, wakes)");
+        }
+
         if (!c.hasDestructible && matchesFilter("Destructible", filter))
         {
             if (ImGui::Selectable("  Destructible"))

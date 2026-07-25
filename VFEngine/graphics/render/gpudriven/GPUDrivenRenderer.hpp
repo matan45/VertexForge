@@ -710,6 +710,14 @@ namespace render::gpudriven
         // outside a render pass; it sits next to dispatchOceanFFT. The copy is a no-op unless the
         // field's version changed.
         void uploadShoreDepthField(vk::CommandBuffer cmd, float time);
+
+        // VK-1606: hand the frame's water impulses (script calls, auto-wakes, wake emitters) to the
+        // ripple sim, then record its fixed sub-steps. queueWaterImpulses is called from
+        // updateGPUDrivenSceneData; dispatchWaterRipples MUST be called outside a render pass and
+        // sits next to dispatchOceanFFT / uploadShoreDepthField.
+        void queueWaterImpulses(const std::vector<::water::WaterImpulse>& impulses);
+        void dispatchWaterRipples(vk::CommandBuffer cmd, float time);
+
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
 

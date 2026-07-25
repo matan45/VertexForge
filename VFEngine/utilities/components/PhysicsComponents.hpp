@@ -46,6 +46,22 @@ namespace components
         float angularDrag = 0.5f;
     };
 
+    // VK-1606: an authored source of ripples on the water surface — a bow wave, a propeller wash, a
+    // dripping torch. Independent of physics: OceanService derives the speed from how far the entity
+    // moved since the last tick, so scripted movers and navmesh agents emit exactly like rigid
+    // bodies do. Moving rigid bodies also get an automatic hull wake in updateBuoyancy; this
+    // component is for placing extra, offset sources on top of that.
+    struct WaterWakeEmitterComponent
+    {
+        glm::vec3 offset{0.0f};       // local-space offset from the entity origin (e.g. the bow)
+        float radius = 1.5f;          // metres of surface the impulse covers
+        float strength = 0.5f;        // vertical velocity kick (negative pushes the surface down)
+        float minSpeed = 0.5f;        // m/s below which it stays quiet
+        float travelInterval = 0.5f;  // metres of travel between impulses
+        bool continuous = false;      // emit every tick above minSpeed, ignoring travelInterval
+        bool enabled = true;
+    };
+
     struct RigidBodyComponent
     {
         RigidBodyType type = RigidBodyType::Dynamic;

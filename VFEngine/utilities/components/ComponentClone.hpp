@@ -79,6 +79,18 @@ namespace components
     }
 
     template <>
+    inline void resetClonedRuntimeState<ControllerComponent>(ControllerComponent& c)
+    {
+        // VK-1606: a duplicated character must not start life believing it is already in the water -
+        // isSwimming feeds the locomotion state and the buoyancy branch, so an inherited `true`
+        // would make the clone swim through the air until the first submersion sample corrects it.
+        // Deliberately narrow: the older runtime fields (isGrounded, currentVelocity, ...) are left
+        // exactly as they were, since changing them would alter existing duplication behaviour.
+        c.isSwimming = false;
+        c.submersion = 0.0f;
+    }
+
+    template <>
     inline void resetClonedRuntimeState<VFXComponent>(VFXComponent& c)
     {
         // VK-1438: mirror the deserialize reset in SceneSerializePhysicsAnimation.cpp:290-291 so a
