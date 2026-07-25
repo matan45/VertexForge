@@ -37,11 +37,9 @@ namespace water
 
     uint32_t WaterTileGrid::selectLOD(float distance, float tileWorldSize)
     {
-        // LOD thresholds as multiples of tile size
-        if (distance < tileWorldSize * 2.0f) return 0;
-        if (distance < tileWorldSize * 5.0f) return 1;
-        if (distance < tileWorldSize * 10.0f) return 2;
-        return 3;
+        // VK-1607: one implementation, in the header, so the CPU height sampler can apply the same
+        // rule without a WaterTileGrid instance. The thresholds themselves are unchanged.
+        return selectTileLod(distance, tileWorldSize);
     }
 
     void WaterTileGrid::buildGPUTileData(
@@ -126,9 +124,12 @@ namespace water
             float tileOriginX = static_cast<float>(t.coord.x) * tileWorldSize;
             float tileOriginZ = static_cast<float>(t.coord.z) * tileWorldSize;
 
+            // VK-1607: .y is the size along Z (square here) and .w carries the per-tile flags -
+            // every band enabled, not a water body.
             WaterTileGPUData tile;
-            tile.worldOriginAndSize = glm::vec4(tileOriginX, 0.0f, tileOriginZ, tileWorldSize);
-            tile.heightAndWave = glm::vec4(waterHeight, 1.0f, static_cast<float>(t.lod), 0.0f);
+            tile.worldOriginAndSize = glm::vec4(tileOriginX, tileWorldSize, tileOriginZ, tileWorldSize);
+            tile.heightAndWave = glm::vec4(waterHeight, 1.0f, static_cast<float>(t.lod),
+                                           static_cast<float>(WATER_TILE_OCEAN_FLAGS));
             lodBuckets[t.lod].push_back(tile);
         }
 

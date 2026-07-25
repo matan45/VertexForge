@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../core/VulkanMemoryManager.hpp"
+#include "WaterGPUTypes.hpp"
 #include <vulkan/vulkan.hpp>
 
 namespace core
@@ -19,11 +20,26 @@ namespace render::water
         WaterRefractionResources(const WaterRefractionResources&) = delete;
         WaterRefractionResources& operator=(const WaterRefractionResources&) = delete;
 
-        void init(vk::Format swapchainFormat, uint32_t width, uint32_t height, vk::ImageView sceneDepthView);
-        void recreate(vk::Format swapchainFormat, uint32_t width, uint32_t height, vk::ImageView sceneDepthView);
+        // VK-1605/VK-1606: the shore-depth image (binding 3) and the ripple output (binding 4) live
+        // outside this class — in WaterShoreDepthResources and WaterRippleSim — but are bound here.
+        // recreate() tears the whole descriptor set down and rebuilds it on every swapchain resize,
+        // so their views+samplers must be re-supplied each time rather than written once; hence they
+        // travel with sceneDepthView instead of having their own setters.
+        void init(vk::Format swapchainFormat, uint32_t width, uint32_t height,
+                  vk::ImageView sceneDepthView,
+                  vk::ImageView shoreDepthView = nullptr, vk::Sampler shoreDepthSampler = nullptr,
+                  vk::ImageView rippleView = nullptr, vk::Sampler rippleSampler = nullptr);
+        void recreate(vk::Format swapchainFormat, uint32_t width, uint32_t height,
+                      vk::ImageView sceneDepthView,
+                      vk::ImageView shoreDepthView = nullptr, vk::Sampler shoreDepthSampler = nullptr,
+                      vk::ImageView rippleView = nullptr, vk::Sampler rippleSampler = nullptr);
         void cleanup();
 
         void copySceneColor(vk::CommandBuffer cmd, vk::Image srcColorImage, uint32_t width, uint32_t height);
+
+        // VK-1604: memcpy into the persistently-mapped set 9 binding 2 UBO. Same single-buffered
+        // per-frame update model the water tile SSBO and the caustics params already use.
+        void updateParams(const WaterExtendedParams& params);
 
         [[nodiscard]] vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
         [[nodiscard]] vk::DescriptorSet getDescriptorSet() const { return descriptorSet; }
@@ -37,6 +53,14 @@ namespace render::water
         vk::ImageView refractionView;
 
         vk::Sampler refractionSampler;
+        // VK-1604: binding 1 samples the scene depth image. Nearest only - linear filtering of a
+        // depth format is not a guaranteed format feature, and bilinear across a depth
+        // discontinuity fabricates an in-between depth that the SSR thickness test accepts as a hit.
+        vk::Sampler depthSampler;
+
+        vk::Buffer paramsBuffer;
+        core::VulkanAllocation paramsAllocation;
+        void* paramsMapped = nullptr;
 
         vk::DescriptorSetLayout descriptorSetLayout;
         vk::DescriptorPool descriptorPool;
@@ -46,10 +70,13 @@ namespace render::water
 
         void createRefractionImage(vk::Format format, uint32_t width, uint32_t height);
         void createSampler();
+        void createParamsBuffer();
         void createDescriptorLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();
-        void updateDescriptorSet(vk::ImageView sceneDepthView);
+        void updateDescriptorSet(vk::ImageView sceneDepthView, vk::ImageView shoreDepthView,
+                                 vk::Sampler shoreDepthSampler,
+                                 vk::ImageView rippleView, vk::Sampler rippleSampler);
         void transitionImageInitial();
     };
 }

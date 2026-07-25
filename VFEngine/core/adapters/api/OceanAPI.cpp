@@ -44,25 +44,40 @@ namespace core::api
                     return value::Value(dispatcher.query(query));
                 }});
 
+            // VK-1605: ocean.getWaterDepthAt(x, z) -> float
+            // Metres from the water surface down to the terrain. Returns a very large value where
+            // there is no bottom, so "open ocean" needs no separate check.
+            interpreter->registerNativeFunction("_native_ocean_getWaterDepthAt",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.size() < 2) return value::Value(0.0f);
+
+                    events::ocean::GetWaterDepthAtQuery query;
+                    query.worldXZ = glm::vec2(
+                        extractFloat(args[0]),
+                        extractFloat(args[1]));
+                    return value::Value(dispatcher.query(query));
+                }});
+
             // ocean.isCameraUnderwater() -> bool
             interpreter->registerNativeFunction("_native_ocean_isCameraUnderwater",
                 {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                     auto& dispatcher = events::EventDispatcher::instance();
                     auto& registry = scene::EntityRegistry::getRegistry();
-                    auto view = registry.view<components::OceanComponent>();
-                    for (auto entity : view)
+
+                    // VK-1607: this used to be gated on an OceanComponent existing, which meant a
+                    // camera submerged in a lake in an ocean-less scene reported "not underwater".
+                    // IsPositionInOceanQuery already resolves bodies first and answers false when
+                    // there is no water at that XZ at all, so the outer ocean loop is gone. The
+                    // query samples the DISPLACED surface, so this still accounts for waves.
+                    auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
+                    for (auto camEntity : camView)
                     {
-                        // Check if the camera position (from CameraComponent) is below the
-                        // displaced wave surface, not just the flat base height
-                        auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
-                        for (auto camEntity : camView)
-                        {
-                            const auto& transform = camView.get<components::TransformComponent>(camEntity);
-                            events::ocean::GetOceanHeightAtQuery query;
-                            query.worldXZ = glm::vec2(transform.position.x, transform.position.z);
-                            if (transform.position.y < dispatcher.query(query))
-                                return value::Value(true);
-                        }
+                        const auto& transform = camView.get<components::TransformComponent>(camEntity);
+                        events::ocean::IsPositionInOceanQuery query;
+                        query.position = transform.position;
+                        if (dispatcher.query(query))
+                            return value::Value(true);
                     }
                     return value::Value(false);
                 }});
@@ -197,6 +212,44 @@ namespace core::api
                     return value::Value(dispatcher.query(query));
                 }});
 
+            // VK-1606: ocean.addImpulse(x, z, radius, strength)
+            // Pushes one disturbance into the interactive ripple patch — a splash, a projectile hit,
+            // an oar stroke. Fire-and-forget; impulses outside the current patch are simply dropped.
+            interpreter->registerNativeFunction("_native_ocean_addImpulse",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.size() < 3) return value::Value(std::monostate{});
+
+                    events::ocean::AddWaterImpulseCommand cmd;
+                    cmd.positionXZ = glm::vec2(extractFloat(args[0]), extractFloat(args[1]));
+                    cmd.radius = extractFloat(args[2]);
+                    cmd.strength = args.size() > 3 ? extractFloat(args[3]) : 1.0f;
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // VK-1606: ocean.setRippleSimEnabled(enabled)
+            interpreter->registerNativeFunction("_native_ocean_setRippleEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.empty()) return value::Value(std::monostate{});
+
+                    events::ocean::SetWaterRippleEnabledCommand cmd;
+                    cmd.enabled = extractBool(args[0]);
+                    dispatcher.execute(cmd);
+
+                    return value::Value(std::monostate{});
+                }});
+
+            // VK-1606: ocean.isRippleSimEnabled() -> bool
+            interpreter->registerNativeFunction("_native_ocean_isRippleEnabled",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    events::ocean::IsWaterRippleEnabledQuery query;
+                    return value::Value(dispatcher.query(query));
+                }});
+
             // ocean.setWeatherDriven(oceanEntityId, enabled)
             interpreter->registerNativeFunction("_native_ocean_setWeatherDriven",
                 {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
@@ -225,6 +278,16 @@ namespace core::api
 
                     events::ocean::SetOceanVisualSettingsCommand cmd;
                     cmd.oceanEntity = services::EntityHandle{static_cast<uint64_t>(id)};
+
+                    // VK-1604: read-modify-write. The service handler writes EVERY field of the
+                    // struct, so sending a default-constructed one would reset refraction,
+                    // caustics, shore, SSR, absorption and anti-tiling to their defaults. Seed
+                    // from the live settings and overwrite only what the script passed.
+                    events::ocean::GetOceanVisualSettingsQuery settingsQuery;
+                    settingsQuery.entity = cmd.oceanEntity;
+                    if (auto current = dispatcher.query(settingsQuery); current.has_value())
+                        cmd.settings = *current;
+
                     cmd.settings.shallowColor = glm::vec4(
                         extractFloat(args[1]), extractFloat(args[2]),
                         extractFloat(args[3]), extractFloat(args[4]));

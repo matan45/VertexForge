@@ -57,6 +57,16 @@ namespace windows::details
                     bandNames[i], band.resolution, band.resolution, band.patchSize, band.windSpeed);
             }
 
+            // VK-1604
+            ImGui::Separator();
+            ImGui::Text("SSR: %s", data.ssrEnabled ? "On" : "Off");
+            ImGui::Text("Beer-Lambert: %s", data.beerLambertEnabled ? "On" : "Off");
+            ImGui::Text("Anti-Tiling: %s", data.hexTilingEnabled ? "On" : "Off");
+
+            // VK-1605
+            ImGui::Text("Shoaling: %s", data.shoalingEnabled ? "On" : "Off");
+            ImGui::Text("Breaking Waves: %s", data.shoreWavesEnabled ? "On" : "Off");
+
             ImGui::Unindent(10.0f);
         }
 

@@ -2,6 +2,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/OceanEvents.hpp"
 #include "water/SeaState.hpp"
+#include "water/WaterBodyMath.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -48,6 +49,49 @@ namespace windows
             visualSettings.shoreWetRange = dataOpt->shoreWetRange;
             visualSettings.shoreWetDarkening = dataOpt->shoreWetDarkening;
             visualSettings.shoreWetRoughness = dataOpt->shoreWetRoughness;
+            // VK-1604
+            visualSettings.ssrEnabled = dataOpt->ssrEnabled;
+            visualSettings.ssrIntensity = dataOpt->ssrIntensity;
+            visualSettings.ssrMaxDistance = dataOpt->ssrMaxDistance;
+            visualSettings.ssrThickness = dataOpt->ssrThickness;
+            visualSettings.ssrMaxSteps = dataOpt->ssrMaxSteps;
+            visualSettings.ssrDebugView = dataOpt->ssrDebugView;
+            visualSettings.beerLambertEnabled = dataOpt->beerLambertEnabled;
+            visualSettings.absorptionCoeff = dataOpt->absorptionCoeff;
+            visualSettings.scatteringColor = dataOpt->scatteringColor;
+            visualSettings.scatterCoeff = dataOpt->scatterCoeff;
+            visualSettings.absorptionMaxDistance = dataOpt->absorptionMaxDistance;
+            visualSettings.hexTilingEnabled = dataOpt->hexTilingEnabled;
+            visualSettings.hexBandMask = dataOpt->hexBandMask;
+            visualSettings.hexCellScale = dataOpt->hexCellScale;
+            visualSettings.hexBlendContrast = dataOpt->hexBlendContrast;
+            // VK-1605
+            visualSettings.shoalingEnabled = dataOpt->shoalingEnabled;
+            visualSettings.shoalingStrength = dataOpt->shoalingStrength;
+            visualSettings.shoalingMinDepth = dataOpt->shoalingMinDepth;
+            visualSettings.shoalingWavelengthScale = dataOpt->shoalingWavelengthScale;
+            visualSettings.shoalingGamma = dataOpt->shoalingGamma;
+            visualSettings.shoreEdgeFadeStart = dataOpt->shoreEdgeFadeStart;
+            visualSettings.shoreWavesEnabled = dataOpt->shoreWavesEnabled;
+            visualSettings.shoreWaveAmplitude = dataOpt->shoreWaveAmplitude;
+            visualSettings.shoreWaveLength = dataOpt->shoreWaveLength;
+            visualSettings.shoreWaveSpeed = dataOpt->shoreWaveSpeed;
+            visualSettings.shoreWaveBreakDepth = dataOpt->shoreWaveBreakDepth;
+            visualSettings.shoreWaveBreakRange = dataOpt->shoreWaveBreakRange;
+            visualSettings.shoreWaveCrestFoam = dataOpt->shoreWaveCrestFoam;
+            visualSettings.shoreWaveCrestFoamThreshold = dataOpt->shoreWaveCrestFoamThreshold;
+            visualSettings.shoreWaveLean = dataOpt->shoreWaveLean;
+            // VK-1606
+            visualSettings.rippleSimEnabled = dataOpt->rippleSimEnabled;
+            visualSettings.ripplePatchSize = dataOpt->ripplePatchSize;
+            visualSettings.rippleWaveSpeed = dataOpt->rippleWaveSpeed;
+            visualSettings.rippleDamping = dataOpt->rippleDamping;
+            visualSettings.rippleHeightScale = dataOpt->rippleHeightScale;
+            visualSettings.rippleNormalScale = dataOpt->rippleNormalScale;
+            visualSettings.rippleFoamGain = dataOpt->rippleFoamGain;
+            visualSettings.rippleFoamScale = dataOpt->rippleFoamScale;
+            visualSettings.rippleFoamDecay = dataOpt->rippleFoamDecay;
+            visualSettings.rippleEdgeFadeStart = dataOpt->rippleEdgeFadeStart;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -96,8 +140,77 @@ namespace windows
                 }
                 ImGui::PopStyleColor(3);
             }
+
+            // VK-1607: OUTSIDE the hasOcean branch on purpose. A lake or a pool is authorable in a
+            // scene with no ocean at all, and that is the case most likely to be reached through
+            // this window.
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            drawWaterBodiesSection();
         }
         ImGui::End();
+    }
+
+    void OceanEditorWindow::drawWaterBodiesSection()
+    {
+        if (!ImGui::CollapsingHeader("Water Bodies", ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        ImGui::Indent();
+
+        ImGui::TextWrapped("Bounded lakes and pools at their own level. They coexist with the ocean "
+                           "and suppress it inside their own footprint.");
+        ImGui::Spacing();
+
+        if (ImGui::Button("Create Water Body", ImVec2(-1, 0)))
+        {
+            events::ocean::CreateWaterBodyCommand cmd;
+            cmd.name = "WaterBody";
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Adds a scene entity with a WaterBodyComponent at the world origin.\n"
+                              "Move and size it from the Details panel or the transform gizmo.");
+
+        ImGui::Spacing();
+
+        const auto bodies = dispatcher.query(events::ocean::GetWaterBodiesQuery{});
+        if (bodies.empty())
+        {
+            ImGui::TextDisabled("No water bodies in this scene.");
+        }
+        else
+        {
+            ImGui::Text("%zu water %s", bodies.size(), bodies.size() == 1 ? "body" : "bodies");
+            ImGui::Separator();
+            for (size_t i = 0; i < bodies.size(); ++i)
+            {
+                const auto& entry = bodies[i];
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::Text("%s  %.1f x %.1f m  %s",
+                            entry.data.type == 1u ? "Pool" : "Lake",
+                            entry.data.halfExtents.x * 2.0f,
+                            entry.data.halfExtents.y * 2.0f,
+                            entry.data.isActive ? "" : "(inactive)");
+                ImGui::PopID();
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Select a body in the hierarchy to edit it.");
+        }
+
+        // Only the nearest MAX_WATER_BODY_CLIP_RECTS suppress the ocean; say so rather than letting
+        // a scene silently double-blend.
+        if (bodies.size() > water::MAX_WATER_BODY_CLIP_RECTS)
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f),
+                               "Only the %u nearest bodies suppress the ocean beneath them.",
+                               water::MAX_WATER_BODY_CLIP_RECTS);
+        }
+
+        ImGui::Unindent();
     }
 
     void OceanEditorWindow::drawCreationSection()
@@ -241,6 +354,249 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Roughness", "##ShoreWetRoughness",
                 &visualSettings.shoreWetRoughness, 0.01f, 0.0f, 1.0f, "%.2f");
             ImGui::TextDisabled("Surface roughness at waterline");
+
+            // VK-1605 — depth-driven shoreline. Everything below needs the shore-depth field.
+            ImGui::Spacing();
+            ImGui::Separator();
+            drawShoreDepthFieldStatus();
+
+            ImGui::Spacing();
+            ImGui::Text("Shoaling");
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##ShoalingEnabled",
+                                                   &visualSettings.shoalingEnabled);
+            ImGui::TextDisabled("Waves feel the bottom: they rise, then the depth limit breaks them");
+
+            if (visualSettings.shoalingEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Strength", "##ShoalingStrength",
+                    &visualSettings.shoalingStrength, 0.01f, 0.0f, 1.0f, "%.2f");
+                ImGui::TextDisabled("0 = off, 1 = full effect");
+
+                visualSettingsDirty |= labeledDragFloat("Wavelength Scale", "##ShoalingWavelength",
+                    &visualSettings.shoalingWavelengthScale, 0.01f, 0.1f, 4.0f, "%.2f");
+                ImGui::TextDisabled("Scales each band's wavelength; higher = shoals further out");
+
+                visualSettingsDirty |= labeledDragFloat("Break Ratio", "##ShoalingGamma",
+                    &visualSettings.shoalingGamma, 0.01f, 0.2f, 1.5f, "%.2f");
+                ImGui::TextDisabled("Wave height / depth at which a wave breaks (0.78 = McCowan)");
+
+                visualSettingsDirty |= labeledDragFloat("Min Depth", "##ShoalingMinDepth",
+                    &visualSettings.shoalingMinDepth, 0.05f, 0.0f, 10.0f, "%.2f m");
+                ImGui::TextDisabled("Depth at which waves are already fully flattened");
+
+                visualSettingsDirty |= labeledDragFloat("Edge Fade", "##ShoreEdgeFade",
+                    &visualSettings.shoreEdgeFadeStart, 0.01f, 0.0f, 0.99f, "%.2f");
+                ImGui::TextDisabled("Where the depth-field window fades out; lower = smoother re-centre");
+            }
+
+            ImGui::Spacing();
+            ImGui::Text("Breaking Waves");
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##ShoreWavesEnabled",
+                                                   &visualSettings.shoreWavesEnabled);
+            ImGui::TextDisabled("Travelling surf that follows the depth contours toward the beach");
+
+            if (visualSettings.shoreWavesEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Amplitude", "##ShoreWaveAmplitude",
+                    &visualSettings.shoreWaveAmplitude, 0.01f, 0.0f, 5.0f, "%.2f m");
+
+                visualSettingsDirty |= labeledDragFloat("Spacing", "##ShoreWaveLength",
+                    &visualSettings.shoreWaveLength, 0.1f, 0.5f, 60.0f, "%.1f m");
+                ImGui::TextDisabled("Depth between successive crests");
+
+                visualSettingsDirty |= labeledDragFloat("Speed", "##ShoreWaveSpeed",
+                    &visualSettings.shoreWaveSpeed, 0.01f, 0.0f, 3.0f, "%.2f");
+                ImGui::TextDisabled("Crests per second, travelling shoreward");
+
+                visualSettingsDirty |= labeledDragFloat("Break Depth", "##ShoreWaveBreakDepth",
+                    &visualSettings.shoreWaveBreakDepth, 0.05f, 0.1f, 20.0f, "%.2f m");
+                ImGui::TextDisabled("Offshore edge of the surf zone");
+
+                visualSettingsDirty |= labeledDragFloat("Break Range", "##ShoreWaveBreakRange",
+                    &visualSettings.shoreWaveBreakRange, 0.05f, 0.05f, 20.0f, "%.2f m");
+                ImGui::TextDisabled("Fade width at the waterline and at the deep edge");
+
+                visualSettingsDirty |= labeledDragFloat("Crest Foam", "##ShoreWaveCrestFoam",
+                    &visualSettings.shoreWaveCrestFoam, 0.01f, 0.0f, 2.0f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Foam Threshold", "##ShoreWaveCrestFoamThr",
+                    &visualSettings.shoreWaveCrestFoamThreshold, 0.01f, 0.0f, 0.99f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Forward Lean", "##ShoreWaveLean",
+                    &visualSettings.shoreWaveLean, 0.01f, 0.0f, 3.0f, "%.2f");
+                ImGui::TextDisabled("Pushes crests along the depth gradient as they break");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — screen-space reflections
+        if (ImGui::CollapsingHeader("Reflections (SSR)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##SSREnabled", &visualSettings.ssrEnabled);
+            ImGui::TextDisabled("Reflects scene geometry; the IBL cubemap fills misses and edges");
+
+            if (visualSettings.ssrEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Intensity", "##SSRIntensity",
+                    &visualSettings.ssrIntensity, 0.01f, 0.0f, 1.0f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Max Distance", "##SSRMaxDistance",
+                    &visualSettings.ssrMaxDistance, 1.0f, 1.0f, 500.0f, "%.0f m");
+                ImGui::TextDisabled("How far a reflection ray travels before giving up");
+
+                visualSettingsDirty |= labeledDragFloat("Thickness", "##SSRThickness",
+                    &visualSettings.ssrThickness, 0.01f, 0.01f, 5.0f, "%.2f m");
+                ImGui::TextDisabled("Assumed depth of scene geometry; scaled up with distance");
+
+                int steps = static_cast<int>(visualSettings.ssrMaxSteps);
+                ImGui::Text("Max Steps");
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderInt("##SSRMaxSteps", &steps, 4, 128))
+                {
+                    visualSettings.ssrMaxSteps = static_cast<uint32_t>(steps);
+                    visualSettingsDirty = true;
+                }
+                ImGui::PopItemWidth();
+                ImGui::TextDisabled("Higher = fewer missed reflections, more cost");
+
+                ImGui::Spacing();
+                visualSettingsDirty |= ImGui::Checkbox("Debug: show confidence", &visualSettings.ssrDebugView);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Renders the raw SSR confidence as greyscale instead of shading the water.\n"
+                        "White = a confident hit, black = miss (IBL fallback). Use this to confirm\n"
+                        "reflections land on the correct side of an off-centre object before tuning\n"
+                        "anything else - a mirrored reflection still looks plausible on water.");
+                }
+
+                ImGui::TextDisabled("Not applied to render-texture or reflection-probe views");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — Beer-Lambert absorption
+        if (ImGui::CollapsingHeader("Absorption (Beer-Lambert)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##BeerLambertEnabled",
+                                                   &visualSettings.beerLambertEnabled);
+            ImGui::TextDisabled("Off = legacy height-based deep/shallow tint (unchanged)");
+
+            if (visualSettings.beerLambertEnabled)
+            {
+                ImGui::Text("Absorption (1/m)");
+                visualSettingsDirty |= ImGui::ColorEdit3("##AbsorptionCoeff",
+                    &visualSettings.absorptionCoeff.x, ImGuiColorEditFlags_Float);
+                ImGui::TextDisabled("Per-channel extinction; red extinguishes first in clear water");
+
+                ImGui::Text("Scattering Color");
+                visualSettingsDirty |= ImGui::ColorEdit3("##ScatteringColor",
+                    &visualSettings.scatteringColor.x, ImGuiColorEditFlags_Float);
+
+                visualSettingsDirty |= labeledDragFloat("Scatter Coefficient", "##ScatterCoeff",
+                    &visualSettings.scatterCoeff, 0.005f, 0.0f, 1.0f, "%.3f");
+
+                visualSettingsDirty |= labeledDragFloat("Max Path Length", "##AbsorptionMaxDistance",
+                    &visualSettings.absorptionMaxDistance, 0.5f, 1.0f, 200.0f, "%.0f m");
+                ImGui::TextDisabled("Clamp; keeps deep water from going fully black");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1604 — hex tile-and-blend anti-tiling
+        if (ImGui::CollapsingHeader("Anti-Tiling (Hex Blend)"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##HexEnabled", &visualSettings.hexTilingEnabled);
+            ImGui::TextDisabled("Breaks up the far-field repeat of the FFT patches");
+
+            if (visualSettings.hexTilingEnabled)
+            {
+                ImGui::Spacing();
+                ImGui::Text("Bands");
+                for (uint32_t band = 0; band < 3; ++band)
+                {
+                    const char* labels[] = {"Swell (band 0)##Hex0", "Agitation (band 1)##Hex1",
+                                            "Ripples (band 2)##Hex2"};
+                    bool bandOn = (visualSettings.hexBandMask & (1u << band)) != 0u;
+                    if (ImGui::Checkbox(labels[band], &bandOn))
+                    {
+                        if (bandOn)
+                            visualSettings.hexBandMask |= (1u << band);
+                        else
+                            visualSettings.hexBandMask &= ~(1u << band);
+                        visualSettingsDirty = true;
+                    }
+                    if (band == 0 && ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip(
+                            "The swell band carries most of the wave height, so tiling it costs the\n"
+                            "most (3x samples per vertex AND per buoyancy query). CPU buoyancy\n"
+                            "applies the same blend, so physics still matches the rendered surface.");
+                    }
+                }
+
+                ImGui::Spacing();
+                visualSettingsDirty |= labeledDragFloat("Cell Scale", "##HexCellScale",
+                    &visualSettings.hexCellScale, 0.05f, 0.1f, 8.0f, "%.2f");
+                ImGui::TextDisabled("Hex cells per band patch; higher = finer randomization");
+
+                visualSettingsDirty |= labeledDragFloat("Blend Contrast", "##HexBlendContrast",
+                    &visualSettings.hexBlendContrast, 0.1f, 1.0f, 16.0f, "%.1f");
+                ImGui::TextDisabled("Weight sharpening; higher = harder cell transitions");
+            }
+            ImGui::Unindent();
+        }
+
+        // VK-1606 — interactive ripples (wakes, splashes, scripted impulses)
+        if (ImGui::CollapsingHeader("Interactive Ripples"))
+        {
+            ImGui::Indent();
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##RippleEnabled", &visualSettings.rippleSimEnabled);
+            ImGui::TextDisabled("A camera-following 512^2 patch of damped wave-equation water.");
+            ImGui::TextDisabled("Independent of the FFT bands — works on flat water too.");
+
+            if (visualSettings.rippleSimEnabled)
+            {
+                ImGui::Spacing();
+                ImGui::Text("Simulation");
+                visualSettingsDirty |= labeledDragFloat("Patch Size", "##RipplePatchSize",
+                    &visualSettings.ripplePatchSize, 1.0f, 20.0f, 400.0f, "%.0f m");
+                ImGui::TextDisabled("World size of the patch. Smaller = finer ripples, less coverage.");
+
+                visualSettingsDirty |= labeledDragFloat("Wave Speed", "##RippleWaveSpeed",
+                    &visualSettings.rippleWaveSpeed, 0.05f, 0.1f, 20.0f, "%.2f m/s");
+                ImGui::TextDisabled("Clamped to the CFL stability bound for the current patch size,");
+                ImGui::TextDisabled("so an over-large value is capped rather than blowing up.");
+
+                visualSettingsDirty |= labeledDragFloat("Damping", "##RippleDamping",
+                    &visualSettings.rippleDamping, 0.01f, 0.0f, 10.0f, "%.2f /s");
+                ImGui::TextDisabled("How fast ripples die out. 0 = they ring forever.");
+
+                ImGui::Spacing();
+                ImGui::Text("Appearance");
+                visualSettingsDirty |= labeledDragFloat("Height Scale", "##RippleHeightScale",
+                    &visualSettings.rippleHeightScale, 0.01f, 0.0f, 10.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Normal Scale", "##RippleNormalScale",
+                    &visualSettings.rippleNormalScale, 0.01f, 0.0f, 10.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Foam Gain", "##RippleFoamGain",
+                    &visualSettings.rippleFoamGain, 0.005f, 0.0f, 2.0f, "%.3f");
+                ImGui::TextDisabled("Foam generated per unit of surface curvature");
+                visualSettingsDirty |= labeledDragFloat("Foam Scale", "##RippleFoamScale",
+                    &visualSettings.rippleFoamScale, 0.01f, 0.0f, 5.0f, "%.2f");
+                visualSettingsDirty |= labeledDragFloat("Foam Decay", "##RippleFoamDecay",
+                    &visualSettings.rippleFoamDecay, 0.01f, 0.0f, 10.0f, "%.2f /s");
+                visualSettingsDirty |= labeledDragFloat("Edge Fade Start", "##RippleEdgeFade",
+                    &visualSettings.rippleEdgeFadeStart, 0.01f, 0.0f, 0.99f, "%.2f");
+                ImGui::TextDisabled("Where the patch border starts fading out, so the 100 m window");
+                ImGui::TextDisabled("cannot show a square seam against open water.");
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("Ripples are render-only: buoyancy does NOT react to them,");
+                ImGui::TextDisabled("so a boat does not bob on its own wake.");
+            }
             ImGui::Unindent();
         }
 
@@ -266,6 +622,39 @@ namespace windows
         ImGui::Spacing();
         if (ImGui::Button("Save Ocean", ImVec2(-1, 0)))
             saveOcean();
+    }
+
+    // VK-1605: without this line "the shoreline isn't doing anything" is ambiguous between
+    // no terrain in the scene, a bake still in flight, and a mis-tuned setting.
+    void OceanEditorWindow::drawShoreDepthFieldStatus()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        const auto status = dispatcher.query(events::ocean::GetShoreDepthFieldStatusQuery{});
+
+        ImGui::Text("Shore Depth Field");
+        if (!status.hasTerrain && !status.baked)
+        {
+            ImGui::TextDisabled("No terrain — water reads as bottomless, shoreline effects are inert");
+            return;
+        }
+
+        if (status.baking)
+        {
+            ImGui::TextDisabled("Baking %.0f%%  (v%u)", status.progress * 100.0f, status.version);
+        }
+        else if (status.baked)
+        {
+            ImGui::TextDisabled("Baked v%u  |  %u^2 over %.0f m  |  centre %.0f, %.0f",
+                                status.version, status.resolution, status.windowSize,
+                                status.center.x, status.center.y);
+        }
+        else
+        {
+            ImGui::TextDisabled("Waiting for the first bake");
+        }
+
+        if (!status.hasTerrain)
+            ImGui::TextDisabled("Terrain went away — the field will read bottomless after the next bake");
     }
 
     void OceanEditorWindow::drawOceanFFTSection()

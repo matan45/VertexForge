@@ -9,6 +9,16 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec2 fragTexCoord;
 layout(location = 3) out float fragOceanDispY;  // ocean wave height displacement
 layout(location = 4) out float fragBaseHeight;   // flat water height (no waves)
+// VK-1605: sampled from the shore-depth field at the UNDISPLACED vertex position. The fragment
+// stage cannot sample it usefully on its own (it only has a screen-space depth reconstruction),
+// and interpolating is both cheaper and consistent with the geometry that was actually displaced.
+layout(location = 5) out float fragShoreDepth;
+layout(location = 6) out float fragShoreFade;
+layout(location = 7) out float fragShoalFactor;  // band 0's shoaling scale, for break foam
+// VK-1607: the tile's own flag bits. The fragment stage needs the is-body bit to know whether it is
+// allowed to clip itself against the water-body rectangles; it cannot read the tile SSBO, which is
+// bound to the vertex stage only.
+layout(location = 8) flat out uint fragTileFlags;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -17,9 +27,13 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     float u_Time;
 } camera;
 
+// Hand-synced twin of water::WaterTileGPUData in VFEngine/utilities/water/WaterTileGrid.hpp.
+// VK-1607 gave two previously constant fields a meaning: worldOriginAndSize.y is the tile's size
+// along Z (tiles are no longer necessarily square, which is how a water body's tile can be exactly
+// its rectangle) and heightAndWave.w carries the per-tile flags.
 struct WaterTileData {
-    vec4 worldOriginAndSize;   // xyz = plane world origin, w = planeSize
-    vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = 0, w = 0
+    vec4 worldOriginAndSize;   // x,z = tile world origin XZ, w = size along X, y = size along Z
+    vec4 heightAndWave;        // x = waterHeight, y = 1.0, z = lodLevel, w = tile flags
 };
 layout(set = 1, binding = 0) readonly buffer TileBuffer {
     WaterTileData tiles[];
@@ -42,6 +56,7 @@ layout(push_constant) uniform PushConstants {
     float shoreFoamRange;
     float shoreFoamIntensity;
     float shoreBreakingStrength;
+    uint  viewFlagMask;          // VK-1604: ANDed with ext.flags; RTT views clear SSR/absorption
 } pc;
 
 // Multi-band ocean textures (set 8)
@@ -52,26 +67,52 @@ layout(set = 8, binding = 3) uniform sampler2D oceanNorm1;   // Agitation normal
 layout(set = 8, binding = 4) uniform sampler2D oceanDisp2;   // Ripples displacement
 layout(set = 8, binding = 5) uniform sampler2D oceanNorm2;   // Ripples normals
 
+#include "water_params.glsl"
+#include "hex_tiling.glsl"
+#include "water_shoaling.glsl"
+#include "water_ripple.glsl"
+
+// VK-1605: scale one band's displacement for the water depth it is standing in. Vertical gets the
+// Green's-law gain capped by the breaking limit, horizontal chop gets compressed so the shear
+// cannot fold the mesh through the beach. Must stay in step with
+// GPUDrivenRenderer::getOceanHeightAt, which applies the identical scale to the CPU band sum.
+// Returns the vertical scale so the caller can forward it to the fragment stage without paying
+// for a second evaluation (shoalingScale costs a pow, a tanh and a sinh).
+float applyBandShoaling(inout vec4 disp, float depth, float wavelength, float strength) {
+    float s = shoalingScale(depth, wavelength, disp.y, strength);
+    disp.y  *= s;
+    disp.xz *= chopCompression(depth, wavelength, strength);
+    return s;
+}
+
 void main() {
     uint tileIndex = gl_InstanceIndex;
     vec4 originSize = tileData.tiles[tileIndex].worldOriginAndSize;
     vec4 heightWave = tileData.tiles[tileIndex].heightAndWave;
 
-    vec3 tileOrigin = originSize.xyz;
-    float tileSize = originSize.w;
+    float tileSizeX = originSize.w;
+    float tileSizeZ = originSize.y;
     float waterHeight = heightWave.x;
 
     vec3 worldPos = vec3(
-        tileOrigin.x + inPosition.x * tileSize,
+        originSize.x + inPosition.x * tileSizeX,
         waterHeight,
-        tileOrigin.z + inPosition.z * tileSize
+        originSize.z + inPosition.z * tileSizeZ
     );
 
     fragBaseHeight = waterHeight;
 
-    // Per-tile simulation LOD: skip expensive bands at coarse LODs
+    // VK-1607: the tile's own flags. Bits 0..2 gate the FFT bands per tile (a water body defaults to
+    // 0 = mirror-flat), bit 3 says this tile belongs to a body rather than the ocean.
+    uint tileFlags = uint(heightWave.w);
+    bool isBodyTile = (tileFlags & WATER_TILE_IS_BODY) != 0u;
+    fragTileFlags = tileFlags;
+
+    // Per-tile simulation LOD: skip expensive bands at coarse LODs.
+    // Twin: water::lodBandMask in utilities/water/WaterTileGrid.hpp, which is what the CPU height
+    // sampler (buoyancy) applies so a floating body cannot bob on a band that was never drawn.
     uint lodLevel = uint(heightWave.z);
-    uint tileBandMask = pc.bandEnableMask;
+    uint tileBandMask = pc.bandEnableMask & (tileFlags & WATER_TILE_BAND_MASK_BITS);
     if (lodLevel >= 2u) tileBandMask &= ~4u;  // skip ripples at LOD2+
     if (lodLevel >= 3u) tileBandMask &= ~2u;  // skip agitation at LOD3
 
@@ -79,35 +120,142 @@ void main() {
     vec4 totalDisp = vec4(0.0);
     vec3 totalNorm = vec3(0.0, 1.0, 0.0);
 
+    // VK-1604: hex tile-and-blend breaks the periodic repeat of each band's patch. Per band,
+    // because it costs 3x the samples. Displacement and normals MUST share the same blend or
+    // the shading would describe a different surface than the geometry.
+    uint hexMask = ((ext.flags & pc.viewFlagMask & WATER_FLAG_HEX) != 0u) ? ext.hexPerBandMask : 0u;
+
+    // VK-1605: the shore-depth field is sampled at the UNDISPLACED position — the same place the
+    // band UVs are derived from, and the same place the CPU height sampler is queried, so the two
+    // agree. Sampling after displacement would make the depth depend on the wave it is scaling.
+    //
+    // effectiveFlags is uniform across the draw. Note the RTT mask does NOT clear these bits: a
+    // reflection probe must displace its water exactly like the main view or it reflects a surface
+    // that is not there (same rule as WATER_FLAG_HEX).
+    //
+    // VK-1607: neither applies to a water body. Both are driven by the shore-depth field, which is
+    // baked from terrain against the OCEAN's level - reading it at a lake 40 m up would shoal the
+    // lake against the sea floor. The ripple patch below is world-space and does apply.
+    uint vertFlags = ext.flags & pc.viewFlagMask;
+    bool shoalingOn = (vertFlags & WATER_FLAG_SHOALING) != 0u && !isBodyTile;
+    bool shoreWavesOn = (vertFlags & WATER_FLAG_SHORE_WAVES) != 0u && !isBodyTile;
+
+    vec2 baseXZ = worldPos.xz;
+    float shoreDepth = SHORE_FIELD_DEEP;
+    float shoreFade = 0.0;
+    if (shoalingOn || shoreWavesOn) {
+        shoreDepth = shoreDepthAt(baseXZ);
+        shoreFade = shoreWindowFade(baseXZ);
+    }
+    // Fading the STRENGTH (rather than the result) is what guarantees the window border is exactly
+    // neutral: shoalingScale/chopCompression both early-out to literal 1.0 at strength 0.
+    float shoalStrength = shoalingOn ? ext.shoalingStrength * shoreFade : 0.0;
+    float shoalFactor0 = 1.0;
+
     // Band 0: Swell (large-scale distant wind waves)
     if ((tileBandMask & 1u) != 0u) {
         vec2 uv0 = worldPos.xz / pc.oceanPatchSize0;
-        totalDisp += texture(oceanDisp0, uv0);
-        totalNorm = texture(oceanNorm0, uv0).xyz;
+        vec4 disp0;
+        if (hexBandEnabled(hexMask, 0u)) {
+            HexBlend hb = hexComputeBlend(uv0, ext.hexCellScale0, ext.hexBlendExponent);
+            disp0 = hexSampleDisplacementLod(oceanDisp0, hb);
+            totalNorm = hexSampleNormalLod(oceanNorm0, hb);
+        } else {
+            disp0 = texture(oceanDisp0, uv0);
+            totalNorm = texture(oceanNorm0, uv0).xyz;
+        }
+        if (shoalStrength > 0.0)
+            shoalFactor0 = applyBandShoaling(disp0, shoreDepth, ext.bandWavelength.x, shoalStrength);
+        totalDisp += disp0;
     }
 
     // Band 1: Agitation (mid-frequency wind chaos)
     if ((tileBandMask & 2u) != 0u) {
         vec2 uv1 = worldPos.xz / pc.oceanPatchSize1;
-        totalDisp += texture(oceanDisp1, uv1);
-        vec3 n1 = texture(oceanNorm1, uv1).xyz;
+        vec4 disp1;
+        vec3 n1;
+        if (hexBandEnabled(hexMask, 1u)) {
+            HexBlend hb = hexComputeBlend(uv1, ext.hexCellScale1, ext.hexBlendExponent);
+            disp1 = hexSampleDisplacementLod(oceanDisp1, hb);
+            n1 = hexSampleNormalLod(oceanNorm1, hb);
+        } else {
+            disp1 = texture(oceanDisp1, uv1);
+            n1 = texture(oceanNorm1, uv1).xyz;
+        }
+        if (shoalStrength > 0.0)
+            applyBandShoaling(disp1, shoreDepth, ext.bandWavelength.y, shoalStrength);
+        totalDisp += disp1;
         totalNorm = normalize(totalNorm + (n1 - vec3(0.0, 1.0, 0.0)));
     }
 
     // Band 2: Ripples (fine surface detail)
     if ((tileBandMask & 4u) != 0u) {
         vec2 uv2 = worldPos.xz / pc.oceanPatchSize2;
-        totalDisp += texture(oceanDisp2, uv2);
-        vec3 n2 = texture(oceanNorm2, uv2).xyz;
+        vec4 disp2;
+        vec3 n2;
+        if (hexBandEnabled(hexMask, 2u)) {
+            HexBlend hb = hexComputeBlend(uv2, ext.hexCellScale2, ext.hexBlendExponent);
+            disp2 = hexSampleDisplacementLod(oceanDisp2, hb);
+            n2 = hexSampleNormalLod(oceanNorm2, hb);
+        } else {
+            disp2 = texture(oceanDisp2, uv2);
+            n2 = texture(oceanNorm2, uv2).xyz;
+        }
+        if (shoalStrength > 0.0)
+            applyBandShoaling(disp2, shoreDepth, ext.bandWavelength.z, shoalStrength);
+        totalDisp += disp2;
         totalNorm = normalize(totalNorm + (n2 - vec3(0.0, 1.0, 0.0)));
     }
+
+    // VK-1607: a body's tile IS its rectangle, so horizontal chop must not shear vertices past the
+    // rim. The fragment clip protects the ocean from the body, not the body from itself. No-op at
+    // the default bandMask of 0, which produces no displacement at all.
+    if (isBodyTile)
+        totalDisp.xz = vec2(0.0);
 
     worldPos.x += totalDisp.x;
     worldPos.y += totalDisp.y;
     worldPos.z += totalDisp.z;
 
+    // VK-1605: the breaking-wave deformer rides on top of the FFT. fragOceanDispY deliberately
+    // keeps its FFT-only value so the existing height-based colour ramp is unchanged.
+    if (shoreWavesOn) {
+        float surge = shoreWaveHeight(shoreDepth, camera.u_Time) * shoreFade;
+        if (surge > 0.0) {
+            worldPos.y += surge;
+
+            // Lean the crest shoreward. The depth gradient points out to sea, so -g is the
+            // direction the water is running. Two extra taps, only on the vertices that carry a
+            // surge at all.
+            float eps = ext.shoreFieldOrigin.z * (1.0 / SHORE_FIELD_RESOLUTION);
+            vec2 g = shoreDepthGradientFwd(baseXZ, shoreDepth, eps);
+            float gl = length(g);
+            if (gl > 1.0e-5)
+                worldPos.xz -= (g / gl) * (surge * ext.shoreWaveB.w);
+        }
+    }
+
+    // VK-1606: the interactive ripple patch rides on top of everything else. Sampled at the
+    // UNDISPLACED position for the same reason the shore field is, and like the shore surge it
+    // deliberately leaves fragOceanDispY on its FFT-only value so the existing height-based colour
+    // ramp is unchanged. RTT views keep this bit: the patch is view-independent, and a probe whose
+    // water sat at a different height would reflect a surface that is not there.
+    if ((vertFlags & WATER_FLAG_RIPPLES) != 0u) {
+        vec4 ripple = rippleSampleRaw(baseXZ);
+        float rippleFade = rippleWindowFade(baseXZ);
+        if (rippleFade > 0.0) {
+            worldPos.y += ripple.x * ext.rippleParams.x * rippleFade;
+            totalNorm = normalize(totalNorm +
+                                  vec3(ripple.y, 0.0, ripple.z) * (ext.rippleParams.y * rippleFade));
+        }
+    }
+
     fragOceanDispY = totalDisp.y;
     fragNormal = normalize(totalNorm);
+
+    fragShoreDepth = shoreDepth;
+    fragShoreFade = shoreFade;
+    fragShoalFactor = shoalFactor0;
 
     fragWorldPos = worldPos;
     fragTexCoord = inTexCoord;
@@ -124,6 +272,10 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragTexCoord;
 layout(location = 3) in float fragOceanDispY;
 layout(location = 4) in float fragBaseHeight;
+layout(location = 5) in float fragShoreDepth;    // VK-1605: true vertical water depth
+layout(location = 6) in float fragShoreFade;
+layout(location = 7) in float fragShoalFactor;
+layout(location = 8) flat in uint fragTileFlags;   // VK-1607: bit 3 = this tile is a water body
 
 layout(location = 0) out vec4 outColor;
 
@@ -190,12 +342,42 @@ layout(push_constant) uniform PushConstants {
     float shoreFoamRange;
     float shoreFoamIntensity;
     float shoreBreakingStrength;
+    uint  viewFlagMask;          // VK-1604: ANDed with ext.flags; RTT views clear SSR/absorption
 } pc;
 
 layout(set = 9, binding = 0) uniform sampler2D refractionColorTex;
+// VK-1604: the real scene depth image (was wired to the color copy before this story).
 layout(set = 9, binding = 1) uniform sampler2D sceneDepthTex;
 
+#include "water_params.glsl"
+#include "hex_tiling.glsl"
+#include "water_ssr.glsl"
+#include "water_shoaling.glsl"
+#include "water_ripple.glsl"
+
 void main() {
+    // VK-1604: features are gated by the ocean settings AND by the view. RTT / reflection-probe
+    // views clear the SSR and absorption bits because set 9 holds the MAIN view's scene colour
+    // copy and depth image, and because a view-dependent reflection baked into a probe cubemap
+    // would be wrong from every direction except the capture one.
+    uint effectiveFlags = ext.flags & pc.viewFlagMask;
+
+    // VK-1607: water bodies suppress the ocean inside their footprint. Water draws with depth writes
+    // off, so without this the two surfaces simply blend over each other and a raised pool shows the
+    // sea through its floor. Earliest possible out - before any texture work.
+    //
+    // Body tiles are exempt (they would otherwise clip themselves, and one body sitting inside
+    // another is a legitimate authoring choice resolved by findBodyAt on the CPU side).
+    if ((effectiveFlags & WATER_FLAG_BODY_CLIP) != 0u &&
+        (fragTileFlags & WATER_TILE_IS_BODY) == 0u) {
+        for (uint i = 0u; i < ext.bodyClipCount; ++i) {
+            vec4 r = ext.bodyClipRects[i];
+            if (all(greaterThanEqual(fragWorldPos.xz, r.xy)) &&
+                all(lessThanEqual(fragWorldPos.xz, r.zw)))
+                discard;
+        }
+    }
+
     vec3 N = normalize(fragNormal);
     vec3 V = normalize(camera.cameraPos - fragWorldPos);
     vec3 R = reflect(-V, N);
@@ -206,6 +388,29 @@ void main() {
 
     float roughness = 0.05;
     vec3 prefilteredColor = textureLod(prefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+
+    // VK-1604: SSR replaces the prefiltered IBL estimate BEFORE the BRDF, not after it. That way
+    // Fresnel, the ambient shadow factor and the foam overlay keep applying uniformly to both,
+    // and confidence -> 0 collapses to exactly the previous expression. Blending further down
+    // (at the mix() with baseColor) would apply Fresnel twice and let reflections sit on top of
+    // foam, which reads as a decal.
+    if ((effectiveFlags & WATER_FLAG_SSR) != 0u)
+    {
+        vec2 screenSize = vec2(textureSize(sceneDepthTex, 0));
+        vec2 pixelUV = gl_FragCoord.xy / screenSize;
+        vec3 fragViewPos = waterSSRViewPosFromDepth(pixelUV, gl_FragCoord.z);
+        vec3 reflectDirView = normalize(mat3(camera.view) * R);
+
+        WaterSSRResult ssr = traceWaterSSR(fragViewPos, reflectDirView);
+        prefilteredColor = mix(prefilteredColor, ssr.color, ssr.confidence);
+
+        if ((effectiveFlags & WATER_FLAG_SSR_DEBUG) != 0u)
+        {
+            outColor = vec4(vec3(ssr.confidence), 1.0);
+            return;
+        }
+    }
+
     vec2 brdf = texture(brdfLUT, vec2(NdotV, roughness)).rg;
     vec3 F0 = vec3(0.02); // Water IOR ~1.33
     vec3 specular = prefilteredColor * (F0 * brdf.x + brdf.y);
@@ -242,6 +447,17 @@ void main() {
 
     float linearZ = linearizeDepth(clusterParams, gl_FragCoord.z);
     uint clusterIdx = getClusterIndex(clusterParams, gl_FragCoord.xy, linearZ);
+
+    // VK-1604: reconstruct the scene depth behind this water pixel ONCE. Both Beer-Lambert
+    // absorption and the shore-foam block below need it, and it used to be computed inside the
+    // shore-foam block (which is gated on shoreFoamRange > 0), so it was unavailable elsewhere.
+    vec2 sceneScreenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTex, 0));
+    float sceneRawDepth = texture(sceneDepthTex, sceneScreenUV).r;
+    float sceneLinearZ = linearizeDepth(clusterParams, sceneRawDepth);
+    bool sceneIsSky = sceneRawDepth >= 1.0;
+    // View-space depth difference scaled by view angle -> approximate vertical water depth.
+    float cosViewAngle = max(abs(dot(normalize(camera.cameraPos - fragWorldPos), vec3(0.0, 1.0, 0.0))), 0.1);
+    float sceneVerticalDepth = max((sceneLinearZ - linearZ) * cosViewAngle, 0.0);
 
     if (lightCounts.pointCount > 0u || lightCounts.spotCount > 0u) {
         ClusterLightData clusterData = clusterLightGrid[clusterIdx];
@@ -310,46 +526,112 @@ void main() {
             refractionColor = texture(refractionColorTex, refractedUV).rgb;
         }
 
-        float depthTint = smoothstep(0.0, 1.0, viewAngleFactor);
-        refractionColor = mix(refractionColor, waterColor, depthTint * 0.5);
+        // VK-1604: Beer-Lambert absorption + in-scattering, or the legacy view-angle tint.
+        // The else branch is the original two lines MOVED VERBATIM: any algebraic restructuring
+        // could shift the last ULP and break the "flag off == byte-identical" guarantee.
+        // effectiveFlags is uniform across the draw, so this branch never diverges.
+        //
+        // sceneIsSky matters: at the horizon there is no geometry behind the water, sceneLinearZ
+        // saturates to the far plane, the path length clamps to its maximum and transmittance
+        // goes to zero — a black band across the whole horizon. Fall back to the legacy tint.
+        if ((effectiveFlags & WATER_FLAG_ABSORPTION) != 0u && !sceneIsSky) {
+            // Light travels down to the sea floor and back up to the viewer, so the path is
+            // longer than the vertical depth — and increasingly so at grazing angles, which is
+            // exactly where water is usually seen.
+            float pathLength = clamp(sceneVerticalDepth * (1.0 + 1.0 / max(NdotV, 0.1)) * 0.5,
+                                      0.0, ext.absorptionMaxDistance);
+            vec3 transmittance = exp(-ext.absorptionCoeff.rgb * pathLength);
+            vec3 inscatter = ext.scatterColor.rgb * (1.0 - exp(-ext.scatterCoeff.rgb * pathLength));
+            refractionColor = refractionColor * transmittance + inscatter;
+        } else {
+            float depthTint = smoothstep(0.0, 1.0, viewAngleFactor);
+            refractionColor = mix(refractionColor, waterColor, depthTint * 0.5);
+        }
     }
 
     vec3 baseColor = (pc.refractionStrength > 0.0) ? refractionColor : waterColor;
     vec3 color = mix(baseColor, specular, fresnel) * ambientShadowFactor + directLighting;
 
     // Ocean foam blending — sum foam from all active bands
+    // VK-1604: hex-tiled bands must have their foam tiled the same way, or the foam pattern
+    // keeps repeating on a surface whose geometry no longer does. Derivatives are taken from the
+    // CONTINUOUS (un-offset) UV: the per-cell offsets are discontinuous across cell edges, so
+    // implicit derivatives would spike there and produce a blurred grid of seams plus shimmer
+    // under motion — the hazard documented for triplanar sampling in
+    // material/terrain_material_generated.glsl (VK-1209).
+    // Note these UVs use the DISPLACED fragWorldPos while the vertex stage uses the undisplaced
+    // position; that mismatch predates VK-1604 and is left alone (foam is an independent layer,
+    // and unifying it would change existing content for no benefit).
+    uint fragHexMask = ((effectiveFlags & WATER_FLAG_HEX) != 0u) ? ext.hexPerBandMask : 0u;
+
+    // VK-1607: the same per-tile band gate the vertex stage applies. Without it a water body with
+    // the default bandMask = 0 renders geometrically flat (no band displaced it) while still
+    // accumulating full ocean FFT foam, i.e. a mirror pool covered in drifting sea foam that has no
+    // geometry under it. Ocean tiles carry all three bits, so this is a no-op for the ocean.
+    //
+    // Deliberately NOT including the vertex stage's LOD band culling (lodLevel >= 2 drops ripples,
+    // >= 3 drops agitation): that is a distance optimisation on displacement only, and folding it in
+    // here would remove foam from far ocean tiles that have always had it.
+    uint fragBandMask = pc.bandEnableMask & (fragTileFlags & WATER_TILE_BAND_MASK_BITS);
+
     float foam = 0.0;
-    if ((pc.bandEnableMask & 1u) != 0u) {
+    if ((fragBandMask & 1u) != 0u) {
         vec2 foamUV0 = fragWorldPos.xz / pc.oceanPatchSize0;
-        foam += texture(frag_oceanDisp0, foamUV0).w;
+        if (hexBandEnabled(fragHexMask, 0u)) {
+            HexBlend hb = hexComputeBlend(foamUV0, ext.hexCellScale0, ext.hexBlendExponent);
+            foam += hexSampleFoamGrad(frag_oceanDisp0, hb, dFdx(foamUV0), dFdy(foamUV0));
+        } else {
+            foam += texture(frag_oceanDisp0, foamUV0).w;
+        }
     }
-    if ((pc.bandEnableMask & 2u) != 0u) {
+    if ((fragBandMask & 2u) != 0u) {
         vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize1;
-        foam += texture(frag_oceanDisp1, foamUV1).w * 0.5;
+        if (hexBandEnabled(fragHexMask, 1u)) {
+            HexBlend hb = hexComputeBlend(foamUV1, ext.hexCellScale1, ext.hexBlendExponent);
+            foam += hexSampleFoamGrad(frag_oceanDisp1, hb, dFdx(foamUV1), dFdy(foamUV1)) * 0.5;
+        } else {
+            foam += texture(frag_oceanDisp1, foamUV1).w * 0.5;
+        }
     }
-    if ((pc.bandEnableMask & 4u) != 0u) {
+    if ((fragBandMask & 4u) != 0u) {
         vec2 foamUV2 = fragWorldPos.xz / pc.oceanPatchSize2;
-        foam += texture(frag_oceanDisp2, foamUV2).w * 0.3;
+        if (hexBandEnabled(fragHexMask, 2u)) {
+            HexBlend hb = hexComputeBlend(foamUV2, ext.hexCellScale2, ext.hexBlendExponent);
+            foam += hexSampleFoamGrad(frag_oceanDisp2, hb, dFdx(foamUV2), dFdy(foamUV2)) * 0.3;
+        } else {
+            foam += texture(frag_oceanDisp2, foamUV2).w * 0.3;
+        }
+    }
+
+    // VK-1605: breaking-wave crest foam. World-space and shore-anchored, so it deliberately does
+    // NOT go through the per-band advected foam ping-pong (that buffer is periodic patch space and
+    // cannot host it). Faded at the shore-field window border like every other shoreline effect.
+    if ((effectiveFlags & WATER_FLAG_SHORE_WAVES) != 0u) {
+        foam += shoreCrestFoam(fragShoreDepth, camera.u_Time) * fragShoreFade;
+    }
+
+    // VK-1606: wake and splash foam. Sampled per-pixel from set 9 b4 rather than interpolated from
+    // the vertex stage - the varying slots are full (locations 0..7) and a wake trail is finer than
+    // the water mesh, so a per-vertex value would visibly quantise it to the tessellation.
+    if ((effectiveFlags & WATER_FLAG_RIPPLES) != 0u) {
+        foam += rippleSampleRaw(fragWorldPos.xz).w * ext.rippleParams.z * rippleWindowFade(fragWorldPos.xz);
     }
 
     // Shore foam — depth-based foam where water meets terrain
     if (pc.shoreFoamRange > 0.0) {
-        vec2 screenUV = gl_FragCoord.xy / vec2(textureSize(sceneDepthTex, 0));
-        float terrainDepthRaw = texture(sceneDepthTex, screenUV).r;
-
-        // Reconstruct terrain world position from depth buffer
-        float near = clusterParams.depthParams.x;
-        float far  = clusterParams.depthParams.y;
-        float terrainLinearZ = near * far / max(far - terrainDepthRaw * (far - near), 0.0001);
-        float waterLinearZ   = near * far / max(far - gl_FragCoord.z * (far - near), 0.0001);
-
-        // Use view-space depth difference scaled by view angle to approximate
-        // the vertical water depth (how deep the terrain is below the water surface)
-        float viewDepthDiff = terrainLinearZ - waterLinearZ;
-
-        // Convert to approximate world-space vertical depth using view direction
-        float cosViewAngle = max(abs(dot(normalize(camera.cameraPos - fragWorldPos), vec3(0.0, 1.0, 0.0))), 0.1);
-        float shoreDepth = max(viewDepthDiff * cosViewAngle, 0.0);
+        // VK-1604: reuses the hoisted reconstruction above. sceneDepthTex is now the real scene
+        // depth image (set 9 b1) — before VK-1604 the descriptor pointed at the scene *color*
+        // copy, so this linearized the red channel and shore foam tracked scene brightness
+        // rather than distance to geometry.
+        //
+        // VK-1605: once the shore-depth field is live, take the MIN of the two. The field knows the
+        // true vertical depth to the terrain (which the screen-space reconstruction only
+        // approximates, and gets wrong at grazing angles), while the screen-space value still
+        // catches foam against boats, piers and anything else that is not terrain. The min keeps
+        // both. With the flag clear this is the untouched VK-1604 expression.
+        float shoreDepth = sceneVerticalDepth;
+        if ((effectiveFlags & WATER_FLAG_SHORE_FIELD) != 0u)
+            shoreDepth = min(fragShoreDepth, sceneVerticalDepth);
 
         // Skip shore effects for deep water or when terrain is far behind
         if (shoreDepth < pc.shoreFoamRange * 2.0) {
@@ -371,6 +653,14 @@ void main() {
                 float shoreProximity = 1.0 - smoothstep(0.0, effectiveShoreRange * 1.5, shoreDepth);
                 float waveSteepness = 1.0 - dot(N, vec3(0.0, 1.0, 0.0));
                 float breaking = shoreProximity * waveSteepness * 2.0 * pc.shoreBreakingStrength;
+
+                // VK-1605: a band that the bottom has capped IS a breaking wave — that is exactly
+                // what the depth limit models — so drive foam off how much was cut. The factor is
+                // interpolated from the vertex stage (band 0) rather than recomputed, since the
+                // shoaling math is far too heavy to run per pixel.
+                if ((effectiveFlags & WATER_FLAG_SHOALING) != 0u)
+                    breaking += (1.0 - fragShoalFactor) * pc.shoreBreakingStrength;
+
                 foam += clamp(breaking, 0.0, 1.0);
             }
         }

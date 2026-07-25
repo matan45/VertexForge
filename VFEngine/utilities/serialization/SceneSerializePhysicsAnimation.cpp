@@ -682,6 +682,15 @@ namespace serialization
         j["stepHeight"] = controller.stepHeight;
         j["maxSlopeAngle"] = controller.maxSlopeAngle;
 
+        // VK-1606
+        j["swimEnabled"] = controller.swimEnabled;
+        j["swimSpeed"] = controller.swimSpeed;
+        j["swimUpSpeed"] = controller.swimUpSpeed;
+        j["waterDrag"] = controller.waterDrag;
+        j["floatDepth"] = controller.floatDepth;
+        j["swimBuoyancyStiffness"] = controller.swimBuoyancyStiffness;
+        j["swimEnterSubmersion"] = controller.swimEnterSubmersion;
+
         const auto& config = controller.locomotionConfig;
         json lc;
         lc["syncToAnimator"] = config.syncToAnimator;
@@ -690,6 +699,7 @@ namespace serialization
         lc["runState"] = config.runState;
         lc["jumpState"] = config.jumpState;
         lc["fallState"] = config.fallState;
+        lc["swimState"] = config.swimState;   // VK-1606
 
         json paramsArr = json::array();
         for (const auto& mapping : config.paramMappings)
@@ -732,6 +742,23 @@ namespace serialization
                 controller.stepHeight = it->get<float>();
             if (auto it = j.find("maxSlopeAngle"); it != j.end() && it->is_number())
                 controller.maxSlopeAngle = it->get<float>();
+
+            // VK-1606 — absent keys keep the component defaults, so pre-VK-1606 scenes load with
+            // swimming off and behave exactly as they did.
+            if (auto it = j.find("swimEnabled"); it != j.end() && it->is_boolean())
+                controller.swimEnabled = it->get<bool>();
+            if (auto it = j.find("swimSpeed"); it != j.end() && it->is_number())
+                controller.swimSpeed = it->get<float>();
+            if (auto it = j.find("swimUpSpeed"); it != j.end() && it->is_number())
+                controller.swimUpSpeed = it->get<float>();
+            if (auto it = j.find("waterDrag"); it != j.end() && it->is_number())
+                controller.waterDrag = it->get<float>();
+            if (auto it = j.find("floatDepth"); it != j.end() && it->is_number())
+                controller.floatDepth = it->get<float>();
+            if (auto it = j.find("swimBuoyancyStiffness"); it != j.end() && it->is_number())
+                controller.swimBuoyancyStiffness = it->get<float>();
+            if (auto it = j.find("swimEnterSubmersion"); it != j.end() && it->is_number())
+                controller.swimEnterSubmersion = it->get<float>();
         }
 
         void deserializeLocomotionConfig(const json& j, components::ControllerComponent& controller)
@@ -753,6 +780,8 @@ namespace serialization
                 config.jumpState = it->get<std::string>();
             if (auto it = lc.find("fallState"); it != lc.end() && it->is_string())
                 config.fallState = it->get<std::string>();
+            if (auto it = lc.find("swimState"); it != lc.end() && it->is_string())
+                config.swimState = it->get<std::string>();   // VK-1606
 
             if (lc.contains("paramMappings") && lc["paramMappings"].is_array())
             {
@@ -782,6 +811,11 @@ namespace serialization
             controller.characterControllerActive = false;
             controller.hasMoveToTarget = false;
             controller.moveToDestination = glm::vec3(0.0f);
+            // VK-1606 runtime state. Also mirrored by ComponentClone's fold, which value-copies the
+            // component and then calls resetClonedRuntimeState<ControllerComponent> - so a duplicated
+            // swimmer does not start the frame believing it is already in the water.
+            controller.isSwimming = false;
+            controller.submersion = 0.0f;
         }
     } // anonymous namespace
 

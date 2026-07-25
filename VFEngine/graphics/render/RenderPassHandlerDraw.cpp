@@ -709,8 +709,10 @@ namespace render
         bool hasTerrainToRender = gpuDrivenRenderer && gpuDrivenRenderer->isTerrainRenderingEnabled()
             && terrainRenderProvider && terrainRenderProvider->hasActiveTerrain();
 
+        // VK-1607: hasWaterToRender() covers the ocean AND any water body, so a lake-only scene
+        // still asks for the mesh pass.
         bool hasWaterToRender = gpuDrivenRenderer && gpuDrivenRenderer->isWaterRenderingEnabled()
-            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
+            && oceanRenderProvider && oceanRenderProvider->hasWaterToRender();
 
         bool hasBillboardsToRender = gpuDrivenRenderer && gpuDrivenRenderer->isBillboardRenderingEnabled();
 
@@ -815,6 +817,27 @@ namespace render
             gpuDrivenRenderer->readbackOceanDisplacement();
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
+
+        // VK-1605: shore-depth upload. Unconditional (not gated on the FFT) because the shoreline
+        // deformer is analytic and works on a flat water plane too, and because this is where the
+        // CPU buoyancy path picks up the exact frame time that drives camera.u_Time. Still outside
+        // any render pass, next to the other out-of-pass GPU writes.
+        gpuDrivenRenderer->uploadShoreDepthField(commandBuffer, currentTime);
+
+        // VK-1606: the interactive ripple patch, also outside any render pass. Independent of the
+        // FFT (so ripple-only water still simulates with every band off). The impulses it consumes
+        // were drained in updateGPUDrivenSceneData above.
+        //
+        // VK-1607 review: hasWaterToRender(), matching the gate the DRAIN runs under. This one used
+        // to ask hasActiveOcean(), so in a lake-only scene the service queue was emptied into the
+        // sim every frame by a dispatch that never ran — impulses from Ocean.addImpulse and from
+        // every wake emitter latched there, up to 64 of them, and all fired at once the moment an
+        // ocean entity appeared. Ripples on a water body still need an ocean for their settings
+        // (updateWater publishes a default-constructed OceanVisualSettings without one, so
+        // params.enabled is false); the difference is that dispatch now takes its disabled branch,
+        // which drops the queue and arms the reset instead of letting it accumulate.
+        if (oceanRenderProvider && oceanRenderProvider->hasWaterToRender())
+            gpuDrivenRenderer->dispatchWaterRipples(commandBuffer, currentTime);
 
         // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run
         // outside the RenderGraph passes, so bracket them with the aux timestamp pool —
@@ -1056,7 +1079,10 @@ namespace render
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            // VK-1604: water reads the scene depth image (set 9 b1), so it draws in its own
+            // scope with depth bound read-only. Everything after it may write depth, hence the
+            // restore + re-begin below.
+            meshPipeline->beginWaterReadOnlyDepthPassGraphManaged(commandBuffer, imageIndex);
 
             vk::Viewport viewport{0.0f, 0.0f,
                                    static_cast<float>(extent.width),
@@ -1067,6 +1093,12 @@ namespace render
             commandBuffer.setScissor(0, scissor);
 
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterWater(commandBuffer);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            commandBuffer.setViewport(0, viewport);
+            commandBuffer.setScissor(0, scissor);
 
             if (hasBillboards)
                 gpuDrivenRenderer->renderBillboardDraw(commandBuffer, iblDescriptorSet, currentTime);
@@ -1132,7 +1164,7 @@ namespace render
             gpuDrivenRenderer->renderGrassDraw(commandBuffer);
 
         bool hasWater = gpuDrivenRenderer->isWaterRenderingEnabled()
-            && oceanRenderProvider && oceanRenderProvider->hasActiveOcean();
+            && oceanRenderProvider && oceanRenderProvider->hasWaterToRender();   // VK-1607
 
         if (hasWater)
         {
@@ -1143,7 +1175,10 @@ namespace render
                 offscreenResources.colorImages[imageIndex].colorImage,
                 extent.width, extent.height);
 
-            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            // VK-1604: water reads the scene depth image (set 9 b1), so it draws in its own
+            // scope with depth bound read-only, then depth is restored to AttachmentOptimal for
+            // the billboards / custom meshes / debug / plugin draws that follow.
+            meshPipeline->beginWaterReadOnlyDepthPassGraphManaged(commandBuffer, imageIndex);
 
             auto waterExtent = swapChain.getSwapchainExtent();
             vk::Viewport waterViewport{0.0f, 0.0f,
@@ -1155,6 +1190,12 @@ namespace render
             commandBuffer.setScissor(0, waterScissor);
 
             gpuDrivenRenderer->renderWaterDraw(commandBuffer, iblDescriptorSet);
+
+            meshPipeline->endRenderPassGraphManaged(commandBuffer, imageIndex);
+            meshPipeline->restoreDepthAfterWater(commandBuffer);
+            meshPipeline->beginWaterContinuePassGraphManaged(commandBuffer, imageIndex);
+            commandBuffer.setViewport(0, waterViewport);
+            commandBuffer.setScissor(0, waterScissor);
         }
 
         if (gpuDrivenRenderer->isBillboardRenderingEnabled())

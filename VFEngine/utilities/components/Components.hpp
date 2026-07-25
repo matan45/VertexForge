@@ -53,5 +53,12 @@ namespace components
                                                FogVolumeComponent, ReflectionProbeComponent,
                                                VolumetricNavVolumeComponent, VolumetricAgentComponent,
                                                WeatherZoneComponent,
-                                               DestructibleComponent, FragmentComponent>;
+                                               DestructibleComponent, FragmentComponent,
+                                               // VK-1606. BuoyancyComponent was missing from this
+                                               // list, so duplicating a buoyant entity silently
+                                               // dropped its hull tuning — cloning folds over
+                                               // exactly this type_list (see ComponentClone.hpp).
+                                               BuoyancyComponent, WaterWakeEmitterComponent,
+                                               // VK-1607
+                                               WaterBodyComponent>;
 }

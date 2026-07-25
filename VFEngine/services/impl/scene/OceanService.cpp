@@ -14,6 +14,9 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include "../../../utilities/water/BuoyancySampling.hpp"
+#include "../../../utilities/water/WakeMath.hpp"
+#include <algorithm>
+#include <cmath>
 
 namespace services
 {
@@ -57,6 +60,20 @@ namespace services
             worldLoadedSub.reset();
         }
 
+        // VK-1605: the two terrain subscriptions that request a shore-field rebake. They capture
+        // `this` exactly like every subscription above, so leaving them live would let a terrain
+        // load after teardown write into a destroyed OceanService.
+        if (terrainChangedSub && terrainChangedSub->isValid())
+        {
+            dispatcher.unsubscribe(*terrainChangedSub);
+            terrainChangedSub.reset();
+        }
+        if (terrainLoadedSub && terrainLoadedSub->isValid())
+        {
+            dispatcher.unsubscribe(*terrainLoadedSub);
+            terrainLoadedSub.reset();
+        }
+
         waterTileGrid.reset();
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
@@ -71,15 +88,36 @@ namespace services
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanSeaStateCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanWeatherDrivenCommand>();
 
+        // VK-1606
+        dispatcher.unregisterCommandHandler<events::ocean::AddWaterImpulseCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetWaterRippleEnabledCommand>();
+
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanEntityQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanDataQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetOceanVisualSettingsQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::HasOceanComponentQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanFFTConfigQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterDepthAtQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetShoreDepthFieldStatusQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
+
+        // VK-1606
+        dispatcher.unregisterQueryHandler<events::ocean::IsWaterRippleEnabledQuery>();
+
+        // VK-1607
+        dispatcher.unregisterCommandHandler<events::ocean::CreateWaterBodyCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::AddWaterBodyComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::RemoveWaterBodyComponentCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetWaterBodyDataCommand>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodyDataQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::HasWaterBodyComponentQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterBodiesQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::HasAnyWaterQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterSurfaceAtQuery>();
     }
 
     void OceanService::registerEventHandlers()
@@ -89,6 +127,7 @@ namespace services
         registerOceanCoreHandlers(dispatcher);
         registerOceanQueryHandlers(dispatcher);
         registerOceanFFTHandlers(dispatcher);
+        registerWaterBodyHandlers(dispatcher);
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
@@ -125,6 +164,24 @@ namespace services
                 activateWaterTilesForLoadedSectors();
             });
         worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
+
+        // VK-1605: the shore-depth field is baked from a terrain snapshot, so it has to be redone
+        // whenever the terrain itself changes shape or extent. Note there is no "heights sculpted"
+        // notification in the engine — an in-editor sculpt only reaches the field on the next
+        // camera-driven rebake (or by toggling shoaling off/on).
+        auto terrainCreatedToken = dispatcher.subscribe<events::terrain::TerrainCreatedNotification>(
+            [this](const events::terrain::TerrainCreatedNotification&)
+            {
+                shoreFieldRebakeRequested = true;
+            });
+        terrainChangedSub = std::make_unique<events::SubscriptionToken>(terrainCreatedToken);
+
+        auto terrainLoadedToken = dispatcher.subscribe<events::terrain::TerrainLoadedNotification>(
+            [this](const events::terrain::TerrainLoadedNotification&)
+            {
+                shoreFieldRebakeRequested = true;
+            });
+        terrainLoadedSub = std::make_unique<events::SubscriptionToken>(terrainLoadedToken);
     }
 
     void OceanService::registerOceanCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -168,6 +225,49 @@ namespace services
                 comp.shoreWetRange = cmd.settings.shoreWetRange;
                 comp.shoreWetDarkening = cmd.settings.shoreWetDarkening;
                 comp.shoreWetRoughness = cmd.settings.shoreWetRoughness;
+                // VK-1604
+                comp.ssrEnabled = cmd.settings.ssrEnabled;
+                comp.ssrIntensity = cmd.settings.ssrIntensity;
+                comp.ssrMaxDistance = cmd.settings.ssrMaxDistance;
+                comp.ssrThickness = cmd.settings.ssrThickness;
+                comp.ssrMaxSteps = cmd.settings.ssrMaxSteps;
+                comp.ssrDebugView = cmd.settings.ssrDebugView;
+                comp.beerLambertEnabled = cmd.settings.beerLambertEnabled;
+                comp.absorptionCoeff = cmd.settings.absorptionCoeff;
+                comp.scatteringColor = cmd.settings.scatteringColor;
+                comp.scatterCoeff = cmd.settings.scatterCoeff;
+                comp.absorptionMaxDistance = cmd.settings.absorptionMaxDistance;
+                comp.hexTilingEnabled = cmd.settings.hexTilingEnabled;
+                comp.hexBandMask = cmd.settings.hexBandMask;
+                comp.hexCellScale = cmd.settings.hexCellScale;
+                comp.hexBlendContrast = cmd.settings.hexBlendContrast;
+                // VK-1605
+                comp.shoalingEnabled = cmd.settings.shoalingEnabled;
+                comp.shoalingStrength = cmd.settings.shoalingStrength;
+                comp.shoalingMinDepth = cmd.settings.shoalingMinDepth;
+                comp.shoalingWavelengthScale = cmd.settings.shoalingWavelengthScale;
+                comp.shoalingGamma = cmd.settings.shoalingGamma;
+                comp.shoreEdgeFadeStart = cmd.settings.shoreEdgeFadeStart;
+                comp.shoreWavesEnabled = cmd.settings.shoreWavesEnabled;
+                comp.shoreWaveAmplitude = cmd.settings.shoreWaveAmplitude;
+                comp.shoreWaveLength = cmd.settings.shoreWaveLength;
+                comp.shoreWaveSpeed = cmd.settings.shoreWaveSpeed;
+                comp.shoreWaveBreakDepth = cmd.settings.shoreWaveBreakDepth;
+                comp.shoreWaveBreakRange = cmd.settings.shoreWaveBreakRange;
+                comp.shoreWaveCrestFoam = cmd.settings.shoreWaveCrestFoam;
+                comp.shoreWaveCrestFoamThreshold = cmd.settings.shoreWaveCrestFoamThreshold;
+                comp.shoreWaveLean = cmd.settings.shoreWaveLean;
+                // VK-1606
+                comp.rippleSimEnabled = cmd.settings.rippleSimEnabled;
+                comp.ripplePatchSize = cmd.settings.ripplePatchSize;
+                comp.rippleWaveSpeed = cmd.settings.rippleWaveSpeed;
+                comp.rippleDamping = cmd.settings.rippleDamping;
+                comp.rippleHeightScale = cmd.settings.rippleHeightScale;
+                comp.rippleNormalScale = cmd.settings.rippleNormalScale;
+                comp.rippleFoamGain = cmd.settings.rippleFoamGain;
+                comp.rippleFoamScale = cmd.settings.rippleFoamScale;
+                comp.rippleFoamDecay = cmd.settings.rippleFoamDecay;
+                comp.rippleEdgeFadeStart = cmd.settings.rippleEdgeFadeStart;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -236,6 +336,19 @@ namespace services
                 lastAppliedBeaufort = -1.0f;
                 lastAppliedWindDirection = -10000.0f;
             });
+
+        // VK-1606
+        dispatcher.registerCommandHandler<events::ocean::AddWaterImpulseCommand>(
+            [this](const events::ocean::AddWaterImpulseCommand& cmd)
+            {
+                queueWaterImpulse({cmd.positionXZ, cmd.radius, cmd.strength});
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetWaterRippleEnabledCommand>(
+            [this](const events::ocean::SetWaterRippleEnabledCommand& cmd)
+            {
+                setRippleSimEnabled(cmd.enabled);
+            });
     }
 
     void OceanService::registerOceanQueryHandlers(::events::EventDispatcher& dispatcher)
@@ -252,6 +365,12 @@ namespace services
                 return getOceanData(query.entity);
             });
 
+        dispatcher.registerQueryHandler<events::ocean::GetOceanVisualSettingsQuery>(
+            [this](const events::ocean::GetOceanVisualSettingsQuery& query)
+            {
+                return getOceanVisualSettings(query.entity);
+            });
+
         dispatcher.registerQueryHandler<events::ocean::HasOceanComponentQuery>(
             [this](const events::ocean::HasOceanComponentQuery& query)
             {
@@ -262,6 +381,19 @@ namespace services
             [this](const events::ocean::GetOceanHeightAtQuery& query)
             {
                 return getOceanHeightAt(query.worldXZ);
+            });
+
+        // VK-1605
+        dispatcher.registerQueryHandler<events::ocean::GetWaterDepthAtQuery>(
+            [this](const events::ocean::GetWaterDepthAtQuery& query)
+            {
+                return getWaterDepthAt(query.worldXZ);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetShoreDepthFieldStatusQuery>(
+            [this](const events::ocean::GetShoreDepthFieldStatusQuery&)
+            {
+                return getShoreDepthFieldStatus();
             });
 
         dispatcher.registerQueryHandler<events::ocean::IsPositionInOceanQuery>(
@@ -280,6 +412,13 @@ namespace services
             [this](const events::ocean::GetOceanSeaStateQuery&)
             {
                 return getSeaState();
+            });
+
+        // VK-1606
+        dispatcher.registerQueryHandler<events::ocean::IsWaterRippleEnabledQuery>(
+            [this](const events::ocean::IsWaterRippleEnabledQuery&)
+            {
+                return isRippleSimEnabled();
             });
     }
 
@@ -403,6 +542,11 @@ namespace services
         oceanConfig = OceanFFTConfigData{};
         oceanConfigVersion++;
 
+        // A shore bake spans ~8 frames and the driver stops ticking it as soon as the last water is
+        // gone, so an in-flight one has to be dropped here or it pins the terrain snapshot and later
+        // commits this scene's bathymetry over the next one.
+        abandonShoreFieldBake();
+
         events::ocean::OceanDeletedNotification notification;
         notification.oceanEntity = entity;
         events::EventDispatcher::instance().publish(notification);
@@ -442,6 +586,49 @@ namespace services
         data.shoreWetRange = comp.shoreWetRange;
         data.shoreWetDarkening = comp.shoreWetDarkening;
         data.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        data.ssrEnabled = comp.ssrEnabled;
+        data.ssrIntensity = comp.ssrIntensity;
+        data.ssrMaxDistance = comp.ssrMaxDistance;
+        data.ssrThickness = comp.ssrThickness;
+        data.ssrMaxSteps = comp.ssrMaxSteps;
+        data.ssrDebugView = comp.ssrDebugView;
+        data.beerLambertEnabled = comp.beerLambertEnabled;
+        data.absorptionCoeff = comp.absorptionCoeff;
+        data.scatteringColor = comp.scatteringColor;
+        data.scatterCoeff = comp.scatterCoeff;
+        data.absorptionMaxDistance = comp.absorptionMaxDistance;
+        data.hexTilingEnabled = comp.hexTilingEnabled;
+        data.hexBandMask = comp.hexBandMask;
+        data.hexCellScale = comp.hexCellScale;
+        data.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        data.shoalingEnabled = comp.shoalingEnabled;
+        data.shoalingStrength = comp.shoalingStrength;
+        data.shoalingMinDepth = comp.shoalingMinDepth;
+        data.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        data.shoalingGamma = comp.shoalingGamma;
+        data.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        data.shoreWavesEnabled = comp.shoreWavesEnabled;
+        data.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        data.shoreWaveLength = comp.shoreWaveLength;
+        data.shoreWaveSpeed = comp.shoreWaveSpeed;
+        data.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        data.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        data.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        data.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        data.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        data.rippleSimEnabled = comp.rippleSimEnabled;
+        data.ripplePatchSize = comp.ripplePatchSize;
+        data.rippleWaveSpeed = comp.rippleWaveSpeed;
+        data.rippleDamping = comp.rippleDamping;
+        data.rippleHeightScale = comp.rippleHeightScale;
+        data.rippleNormalScale = comp.rippleNormalScale;
+        data.rippleFoamGain = comp.rippleFoamGain;
+        data.rippleFoamScale = comp.rippleFoamScale;
+        data.rippleFoamDecay = comp.rippleFoamDecay;
+        data.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
         data.weatherDriven = comp.weatherDriven;
         data.weatherResponse = comp.weatherResponse;
         data.currentBeaufort = comp.currentBeaufort;
@@ -481,14 +668,351 @@ namespace services
 
     bool OceanService::isPositionInOcean(const glm::vec3& worldPos) const
     {
+        // VK-1607: a water body counts as water even with no ocean in the scene, so the old
+        // "no ocean entity -> not in water" early-out cannot stand on its own any more. Bodies are
+        // bounded, which is why this resolves through resolveSurfaceHeight rather than
+        // getOceanHeightAt: outside every body AND with no ocean there is simply no surface, and
+        // that is different from a surface at y = 0.
+        const glm::vec2 worldXZ(worldPos.x, worldPos.z);
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+
+        // Bodies first, so the ocean height sampler (which sums every FFT band) is only paid for
+        // when the point is actually over open water. The 3D lookup also bounds the body from
+        // below - under its floor there is no water, so the query falls through to the ocean.
+        const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), worldPos);
+        if (bodyIndex >= 0)
+            return worldPos.y <= bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+
         if (!oceanEntity.isValid())
             return false;
 
-        float height = getOceanHeightAt(glm::vec2(worldPos.x, worldPos.z));
-        return worldPos.y <= height;
+        return worldPos.y <= getOceanSurfaceHeightAt(worldXZ);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // VK-1605: shore depth field
+    // ------------------------------------------------------------------------------------------
+
+    void OceanService::beginShoreFieldRebake(const glm::vec2& cameraXZ)
+    {
+        // One snapshot per rebake, never one query per sample: GetTerrainHeightAtQuery linearly
+        // scans every tile per call, so the 65 536 samples a bake needs would be O(samples x tiles).
+        // The snapshot is a full copy of the loaded height data, which is why it is released again
+        // as soon as the bake completes.
+        terrainSnapshot = {};
+        terrainGrid = {};
+
+        try
+        {
+            terrainSnapshot = ::events::EventDispatcher::instance().query(
+                ::events::terrain::GetTerrainHeightfieldQuery{});
+        }
+        catch (...)
+        {
+            // No terrain service registered (e.g. a runtime build without terrain) — bake a field
+            // of "no bottom", which makes every shoreline factor exactly 1.
+        }
+
+        if (terrainSnapshot.valid && !terrainSnapshot.heights.empty())
+        {
+            terrainGrid.worldOriginX = terrainSnapshot.worldOriginX;
+            terrainGrid.worldOriginZ = terrainSnapshot.worldOriginZ;
+            terrainGrid.tileWorldSize = terrainSnapshot.tileWorldSize;
+            terrainGrid.vertexSpacing = terrainSnapshot.vertexSpacing;
+            terrainGrid.gridCountX = terrainSnapshot.gridCountX;
+            terrainGrid.gridCountZ = terrainSnapshot.gridCountZ;
+            terrainGrid.verticesPerTile = terrainSnapshot.verticesPerTile;
+            terrainGrid.heights = terrainSnapshot.heights.data();
+            terrainGrid.heightCount = terrainSnapshot.heights.size();
+            terrainGrid.tileValid = terrainSnapshot.tileValid.empty()
+                                        ? nullptr : terrainSnapshot.tileValid.data();
+            terrainGrid.tileValidCount = terrainSnapshot.tileValid.size();
+        }
+        shoreFieldHadTerrain = terrainGrid.isValid();
+
+        const float waterHeight = getBaseWaterHeight();
+        shoreFieldWaterHeight = waterHeight;
+        const water::TerrainHeightGrid* grid = &terrainGrid;
+
+        shoreDepthField.beginRebake(cameraXZ, waterHeight,
+            [grid](float worldX, float worldZ, float& outHeight)
+            {
+                return grid->sample(worldX, worldZ, outHeight);
+            });
+
+        shoreFieldRebakeRequested = false;
+    }
+
+    void OceanService::abandonShoreFieldBake()
+    {
+        shoreDepthField.cancelBake();
+        terrainGrid = {};
+        terrainSnapshot = {};
+        // Whatever comes next starts from scratch: the field's front buffer still holds the old
+        // scene's bathymetry, so it must not be reused just because the camera has not moved.
+        shoreFieldRebakeRequested = true;
+        shoreFieldWaterHeight = 0.0f;
+    }
+
+    void OceanService::updateShoreDepthField(const glm::vec2& cameraXZ)
+    {
+        // VK-1607: no ocean gate. The field is just "water level minus terrain height", and the
+        // render-side driver already calls this under hasWaterToRender() - so in a lake-only scene
+        // it bakes against a base water height of 0, i.e. a plain terrain-relative datum that
+        // getWaterDepthAt then re-references to whichever body owns the query point. Gating on the
+        // ocean entity here is what left Ocean.getWaterDepthAt reporting SHORE_FIELD_DEEP forever
+        // in a scene whose only water is a lake, and left a bake stranded mid-flight when the ocean
+        // was deleted inside the ~8 frames one takes.
+
+        // The field stores waterHeight - terrainHeight, so raising or lowering the ocean
+        // invalidates every texel just as surely as moving the window does.
+        const bool waterHeightChanged =
+            std::abs(getBaseWaterHeight() - shoreFieldWaterHeight) > 0.001f;
+
+        if (!shoreDepthField.isBaking() &&
+            (shoreFieldRebakeRequested || waterHeightChanged || shoreDepthField.needsRebake(cameraXZ)))
+        {
+            beginShoreFieldRebake(cameraXZ);
+        }
+
+        if (shoreDepthField.bakeRows(water::SHORE_FIELD_ROWS_PER_TICK))
+        {
+            // Bake committed — the snapshot has done its job and can go. It is the largest
+            // transient allocation in this path, so hold it no longer than necessary.
+            terrainGrid = {};
+            terrainSnapshot = {};
+        }
+    }
+
+    float OceanService::getWaterDepthAt(const glm::vec2& worldXZ) const
+    {
+        // VK-1607 review: body-aware, and honest about "there is no water here".
+        //
+        // The field bakes (baseWaterHeight - terrainHeight), so re-referencing it to a body's own
+        // surface is a single add: depth_body = (surface_body - terrainHeight)
+        //                                    = field + (surface_body - baseWaterHeight).
+        // Before this, a scene whose only water was a lake never baked at all and every caller of
+        // Ocean.getWaterDepthAt got SHORE_FIELD_DEEP (1e4) - so wade-vs-swim, drowning and
+        // shallow-water VFX all took the deep-ocean branch in a two-metre pond.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+        {
+            const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+            if (!shoreDepthField.hasBakedOnce())
+                return std::max(body.depth, 0.0f);   // no terrain sampled yet: the authored floor
+
+            const float depth = shoreDepthField.sample(worldXZ) + (body.surfaceHeight - getBaseWaterHeight());
+            // Never deeper than the body's own floor - the terrain under a rooftop pool is
+            // irrelevant to how much water is in it.
+            return std::clamp(depth, 0.0f, std::max(body.depth, 0.0f));
+        }
+
+        if (!hasActiveOcean())
+            return 0.0f;   // no water at this XZ at all; 0, not "bottomless"
+
+        return shoreDepthField.sample(worldXZ);
+    }
+
+    ShoreDepthFieldStatus OceanService::getShoreDepthFieldStatus() const
+    {
+        ShoreDepthFieldStatus status;
+        status.hasTerrain = shoreFieldHadTerrain;
+        status.baked = shoreDepthField.hasBakedOnce();
+        status.baking = shoreDepthField.isBaking();
+        status.progress = shoreDepthField.bakeProgress();
+        status.version = shoreDepthField.version();
+        status.center = shoreDepthField.center();
+        status.windowSize = shoreDepthField.windowSize();
+        status.resolution = shoreDepthField.resolution();
+        return status;
+    }
+
+    void OceanService::queueWaterImpulse(const water::WaterImpulse& impulse)
+    {
+        if (impulse.radius <= 0.0f || impulse.strength == 0.0f)
+            return;
+
+        std::lock_guard<std::mutex> lock(impulseMutex);
+
+        // Hard cap so a runaway script cannot grow this without bound between two drains. The sim
+        // only consumes MAX_WATER_IMPULSES per step anyway; keep the newest.
+        constexpr std::size_t QUEUE_CAP = 4 * water::MAX_WATER_IMPULSES;
+        if (pendingImpulses.size() >= QUEUE_CAP)
+            pendingImpulses.erase(pendingImpulses.begin());
+
+        pendingImpulses.push_back(impulse);
+    }
+
+    std::vector<water::WaterImpulse> OceanService::drainWaterImpulses()
+    {
+        std::vector<water::WaterImpulse> drained;
+        {
+            std::lock_guard<std::mutex> lock(impulseMutex);
+            pendingImpulses.swap(drained);
+        }
+        return drained;
+    }
+
+    void OceanService::setRippleSimEnabled(bool enabled)
+    {
+        if (!oceanEntity.isValid())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return;
+
+        registry.get<components::OceanComponent>(ent).rippleSimEnabled = enabled;
+    }
+
+    bool OceanService::isRippleSimEnabled() const
+    {
+        if (!oceanEntity.isValid())
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return false;
+
+        return registry.get<components::OceanComponent>(ent).rippleSimEnabled;
+    }
+
+    void OceanService::updateWakeEmitters(float deltaTime)
+    {
+        if (deltaTime <= 0.0f || !isRippleSimEnabled())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterWakeEmitterComponent, components::TransformComponent>();
+
+        // VK-1607 review: the waterline test is resolved PER EMITTER against the surface at its own
+        // XZ, not once against the ocean's base height. A boat on a lake authored at y = 40 failed
+        // the old test on every tick and produced no ripples at all, silently.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const float oceanBase = getBaseWaterHeight();
+        const bool oceanActive = hasActiveOcean();
+
+        for (auto entity : view)
+        {
+            const auto& emitter = view.get<components::WaterWakeEmitterComponent>(entity);
+            if (!emitter.enabled || emitter.radius <= 0.0f || emitter.strength == 0.0f)
+                continue;
+
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            // VK-1607 review: `offset` is documented and shown in the inspector as LOCAL space
+            // ("put it on the bow, not the hull centre"). Adding it to the local position in world
+            // axes left a bow emitter pointing north whichever way the hull faced, and put an
+            // emitter on a child entity near the world origin instead of on the boat. The world
+            // matrix SceneGraphSystem already publishes carries both the rotation and the parent
+            // chain; entities that have not been through it (scene roots) fall back to the local
+            // position, which for a root is the world position.
+            glm::vec3 world;
+            if (registry.all_of<components::WorldTransformComponent>(entity))
+            {
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+                world = glm::vec3(worldTransform.worldMatrix * glm::vec4(emitter.offset, 1.0f));
+            }
+            else
+            {
+                world = transform.position + emitter.offset;
+            }
+            const glm::vec2 worldXZ(world.x, world.z);
+
+            EntityHandle handle = internal::toHandle(entity);
+
+            // Speed from the change in position rather than from a rigid body, so scripted movers,
+            // navmesh agents and character controllers all emit without needing physics.
+            auto it = emitterWakeTrail.find(handle);
+            if (it == emitterWakeTrail.end())
+            {
+                emitterWakeTrail.emplace(handle, water::WakeTrailState{worldXZ, worldXZ});
+                continue;   // no previous sample yet, so no speed yet
+            }
+
+            water::WakeTrailState& trail = it->second;
+
+            // TWO baselines. lastPositionXZ is rewritten unconditionally below, so `speed` is always
+            // this tick's speed; lastEmitXZ only moves when a ring is actually stamped, so the
+            // travel interval measures ring spacing. Sharing one anchor is what let a sub-minSpeed
+            // drifter accumulate travel for ten seconds and then report 30 m/s.
+            const float speed = water::wakeFrameSpeed(worldXZ, trail.lastPositionXZ, deltaTime);
+            const float travelledSinceEmit = glm::length(worldXZ - trail.lastEmitXZ);
+            trail.lastPositionXZ = worldXZ;
+
+            if (!water::wakeShouldEmit(speed, travelledSinceEmit, emitter.minSpeed,
+                                       emitter.travelInterval, emitter.continuous))
+                continue;
+
+            // Only emit near the waterline: an emitter dragged along under the seabed or high in the
+            // air should not stamp rings on the surface.
+            bool foundSurface = false;
+            const float surfaceHere = water::resolveSurfaceHeight(bodies.data(), bodies.size(), world,
+                                                                  oceanBase, oceanActive, foundSurface);
+            if (!foundSurface)
+                continue;
+            if (world.y > surfaceHere + emitter.radius || world.y < surfaceHere - emitter.radius)
+                continue;
+
+            queueWaterImpulse({worldXZ, emitter.radius, emitter.strength});
+            trail.lastEmitXZ = worldXZ;
+        }
+
+        // Bound the map the same way ControllerServiceImpl bounds its interpolation cache: any key
+        // that is no longer a valid entity belongs to something destroyed.
+        for (auto it = emitterWakeTrail.begin(); it != emitterWakeTrail.end();)
+        {
+            if (registry.valid(internal::fromHandle(it->first)))
+                ++it;
+            else
+                it = emitterWakeTrail.erase(it);
+        }
     }
 
     float OceanService::getOceanHeightAt(const glm::vec2& worldXZ) const
+    {
+        // VK-1607: water bodies win over the ocean wherever they cover the point. This is the single
+        // choke point every consumer already goes through - GetOceanHeightAtQuery, the
+        // Ocean.getOceanHeightAt script native, and updateBuoyancy's per-sample-point call - so
+        // making it body-aware makes all of them body-aware with no API change.
+        //
+        // A body is flat by definition, so there is no FFT displacement to add on top.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+            return bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+
+        return getOceanSurfaceHeightAt(worldXZ);
+    }
+
+    std::optional<float> OceanService::getWaterSurfaceAt(const glm::vec3& worldPos) const
+    {
+        const glm::vec2 worldXZ(worldPos.x, worldPos.z);
+
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), worldPos);
+        if (bodyIndex >= 0)
+        {
+            // VK-1607 review: a physics-disabled body is a HOLE, exactly as updateBuoyancy treats
+            // it - something occupies that footprint, it just floats nothing. Returning its surface
+            // here let a character swim in a pool that a crate falls straight through, and falling
+            // back to the ocean would be worse still (the pool is not sea water).
+            const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+            if (body.physicsEnabled == 0u)
+                return std::nullopt;
+            return body.surfaceHeight;
+        }
+
+        if (!oceanEntity.isValid())
+            return std::nullopt;
+
+        return getOceanSurfaceHeightAt(worldXZ);
+    }
+
+    float OceanService::getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const
     {
         if (!oceanEntity.isValid())
             return 0.0f;
@@ -507,6 +1031,218 @@ namespace services
         return baseHeight;
     }
 
+    // ------------------------------------------------------------------------------------------
+    // VK-1607: water bodies
+    // ------------------------------------------------------------------------------------------
+
+    bool OceanService::hasWaterToRender() const
+    {
+        if (hasActiveOcean())
+            return true;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent>();
+        for (auto entity : view)
+        {
+            if (view.get<components::WaterBodyComponent>(entity).isActive)
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<water::WaterBodyDesc> OceanService::collectWaterBodies() const
+    {
+        std::vector<water::WaterBodyDesc> bodies;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent, components::TransformComponent>();
+
+        for (auto entity : view)
+        {
+            const auto& body = view.get<components::WaterBodyComponent>(entity);
+            if (!body.isActive)
+                continue;
+
+            // transform.position rather than a resolved world matrix, matching how VK-1606's
+            // updateWakeEmitters reads emitter positions. Bodies are authored at the scene root, so
+            // the two agree; parenting a body under a moving entity is out of scope for this
+            // milestone.
+            const auto& transform = view.get<components::TransformComponent>(entity);
+
+            water::WaterBodyDesc desc;
+            desc.center = glm::vec2(transform.position.x, transform.position.z);
+            desc.halfExtents = glm::max(body.halfExtents, glm::vec2(0.0f));
+            desc.surfaceHeight = transform.position.y + body.waterHeight;
+            desc.depth = std::max(body.depth, 0.0f);
+            desc.bandMask = body.bandMask & water::WATER_TILE_BAND_MASK_BITS;
+            desc.physicsEnabled = body.physicsEnabled ? 1u : 0u;
+            bodies.push_back(desc);
+        }
+
+        return bodies;
+    }
+
+    EntityHandle OceanService::createWaterBody(const WaterBodyComponentData& data,
+                                               const glm::vec3& position, const std::string& name)
+    {
+        scene::Entity entity(name.empty() ? std::string("WaterBody") : name);
+        sceneGraph->addChild(sceneGraph->GetRoot(), entity);
+
+        entity.getComponent<components::TransformComponent>().position = position;
+
+        auto& comp = entity.addComponent<components::WaterBodyComponent>();
+        applyWaterBodyData(comp, data);
+
+        vfLogInfo("Created water body entity");
+        return internal::toHandle(entity.getHandle());
+    }
+
+    void OceanService::applyWaterBodyData(components::WaterBodyComponent& comp,
+                                          const WaterBodyComponentData& data)
+    {
+        comp.type = data.type == 1u ? components::WaterBodyType::Pool : components::WaterBodyType::Lake;
+        comp.waterHeight = data.waterHeight;
+        comp.halfExtents = glm::max(data.halfExtents, glm::vec2(0.0f));
+        comp.depth = std::max(data.depth, 0.0f);
+        comp.bandMask = data.bandMask & water::WATER_TILE_BAND_MASK_BITS;
+        comp.physicsEnabled = data.physicsEnabled;
+        comp.isActive = data.isActive;
+    }
+
+    WaterBodyComponentData OceanService::waterBodyDataFromComponent(const components::WaterBodyComponent& comp)
+    {
+        WaterBodyComponentData data;
+        data.type = static_cast<uint32_t>(comp.type);
+        data.waterHeight = comp.waterHeight;
+        data.halfExtents = comp.halfExtents;
+        data.depth = comp.depth;
+        data.bandMask = comp.bandMask;
+        data.physicsEnabled = comp.physicsEnabled;
+        data.isActive = comp.isActive;
+        return data;
+    }
+
+    void OceanService::addWaterBodyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        registry.emplace<components::WaterBodyComponent>(ent);
+    }
+
+    void OceanService::removeWaterBodyComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        registry.remove<components::WaterBodyComponent>(ent);
+    }
+
+    void OceanService::setWaterBodyData(EntityHandle entity, const WaterBodyComponentData& data)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return;
+
+        applyWaterBodyData(registry.get<components::WaterBodyComponent>(ent), data);
+    }
+
+    std::optional<WaterBodyComponentData> OceanService::getWaterBodyData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::WaterBodyComponent>(ent))
+            return std::nullopt;
+
+        return waterBodyDataFromComponent(registry.get<components::WaterBodyComponent>(ent));
+    }
+
+    bool OceanService::hasWaterBodyComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        return registry.valid(ent) && registry.all_of<components::WaterBodyComponent>(ent);
+    }
+
+    std::vector<WaterBodyEntry> OceanService::getWaterBodies() const
+    {
+        std::vector<WaterBodyEntry> entries;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::WaterBodyComponent>();
+        for (auto entity : view)
+        {
+            WaterBodyEntry entry;
+            entry.entity = internal::toHandle(entity);
+            entry.data = waterBodyDataFromComponent(view.get<components::WaterBodyComponent>(entity));
+            entries.push_back(entry);
+        }
+
+        return entries;
+    }
+
+    void OceanService::registerWaterBodyHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::ocean::CreateWaterBodyCommand>(
+            [this](const events::ocean::CreateWaterBodyCommand& cmd)
+            {
+                return createWaterBody(cmd.data, cmd.position, cmd.name);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::AddWaterBodyComponentCommand>(
+            [this](const events::ocean::AddWaterBodyComponentCommand& cmd)
+            {
+                addWaterBodyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::RemoveWaterBodyComponentCommand>(
+            [this](const events::ocean::RemoveWaterBodyComponentCommand& cmd)
+            {
+                removeWaterBodyComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::ocean::SetWaterBodyDataCommand>(
+            [this](const events::ocean::SetWaterBodyDataCommand& cmd)
+            {
+                setWaterBodyData(cmd.entity, cmd.data);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterBodyDataQuery>(
+            [this](const events::ocean::GetWaterBodyDataQuery& query)
+            {
+                return getWaterBodyData(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::HasWaterBodyComponentQuery>(
+            [this](const events::ocean::HasWaterBodyComponentQuery& query)
+            {
+                return hasWaterBodyComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterBodiesQuery>(
+            [this](const events::ocean::GetWaterBodiesQuery&)
+            {
+                return getWaterBodies();
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::HasAnyWaterQuery>(
+            [this](const events::ocean::HasAnyWaterQuery&)
+            {
+                return hasWaterToRender();
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetWaterSurfaceAtQuery>(
+            [this](const events::ocean::GetWaterSurfaceAtQuery& query)
+            {
+                return getWaterSurfaceAt(glm::vec3(query.worldXZ.x, query.worldY, query.worldXZ.y));
+            });
+    }
+
     OceanVisualSettings OceanService::getOceanVisualSettings() const
     {
         OceanVisualSettings settings;
@@ -518,7 +1254,25 @@ namespace services
         if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
             return settings;
 
-        const auto& comp = registry.get<components::OceanComponent>(ent);
+        return visualSettingsFromComponent(registry.get<components::OceanComponent>(ent));
+    }
+
+    std::optional<OceanVisualSettings> OceanService::getOceanVisualSettings(EntityHandle entity) const
+    {
+        if (!entity.isValid())
+            return std::nullopt;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(entity);
+        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
+            return std::nullopt;
+
+        return visualSettingsFromComponent(registry.get<components::OceanComponent>(ent));
+    }
+
+    OceanVisualSettings OceanService::visualSettingsFromComponent(const components::OceanComponent& comp)
+    {
+        OceanVisualSettings settings;
         settings.shallowColor = comp.shallowColor;
         settings.deepColor = comp.deepColor;
         settings.maxVisibleDepth = comp.maxVisibleDepth;
@@ -534,6 +1288,49 @@ namespace services
         settings.shoreWetRange = comp.shoreWetRange;
         settings.shoreWetDarkening = comp.shoreWetDarkening;
         settings.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        settings.ssrEnabled = comp.ssrEnabled;
+        settings.ssrIntensity = comp.ssrIntensity;
+        settings.ssrMaxDistance = comp.ssrMaxDistance;
+        settings.ssrThickness = comp.ssrThickness;
+        settings.ssrMaxSteps = comp.ssrMaxSteps;
+        settings.ssrDebugView = comp.ssrDebugView;
+        settings.beerLambertEnabled = comp.beerLambertEnabled;
+        settings.absorptionCoeff = comp.absorptionCoeff;
+        settings.scatteringColor = comp.scatteringColor;
+        settings.scatterCoeff = comp.scatterCoeff;
+        settings.absorptionMaxDistance = comp.absorptionMaxDistance;
+        settings.hexTilingEnabled = comp.hexTilingEnabled;
+        settings.hexBandMask = comp.hexBandMask;
+        settings.hexCellScale = comp.hexCellScale;
+        settings.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        settings.shoalingEnabled = comp.shoalingEnabled;
+        settings.shoalingStrength = comp.shoalingStrength;
+        settings.shoalingMinDepth = comp.shoalingMinDepth;
+        settings.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        settings.shoalingGamma = comp.shoalingGamma;
+        settings.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        settings.shoreWavesEnabled = comp.shoreWavesEnabled;
+        settings.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        settings.shoreWaveLength = comp.shoreWaveLength;
+        settings.shoreWaveSpeed = comp.shoreWaveSpeed;
+        settings.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        settings.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        settings.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        settings.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        settings.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        settings.rippleSimEnabled = comp.rippleSimEnabled;
+        settings.ripplePatchSize = comp.ripplePatchSize;
+        settings.rippleWaveSpeed = comp.rippleWaveSpeed;
+        settings.rippleDamping = comp.rippleDamping;
+        settings.rippleHeightScale = comp.rippleHeightScale;
+        settings.rippleNormalScale = comp.rippleNormalScale;
+        settings.rippleFoamGain = comp.rippleFoamGain;
+        settings.rippleFoamScale = comp.rippleFoamScale;
+        settings.rippleFoamDecay = comp.rippleFoamDecay;
+        settings.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
 
         return settings;
     }
@@ -582,6 +1379,49 @@ namespace services
         fileData.shoreWetRange = comp.shoreWetRange;
         fileData.shoreWetDarkening = comp.shoreWetDarkening;
         fileData.shoreWetRoughness = comp.shoreWetRoughness;
+        // VK-1604
+        fileData.ssrEnabled = comp.ssrEnabled;
+        fileData.ssrIntensity = comp.ssrIntensity;
+        fileData.ssrMaxDistance = comp.ssrMaxDistance;
+        fileData.ssrThickness = comp.ssrThickness;
+        fileData.ssrMaxSteps = comp.ssrMaxSteps;
+        fileData.ssrDebugView = comp.ssrDebugView;
+        fileData.beerLambertEnabled = comp.beerLambertEnabled;
+        fileData.absorptionCoeff = comp.absorptionCoeff;
+        fileData.scatteringColor = comp.scatteringColor;
+        fileData.scatterCoeff = comp.scatterCoeff;
+        fileData.absorptionMaxDistance = comp.absorptionMaxDistance;
+        fileData.hexTilingEnabled = comp.hexTilingEnabled;
+        fileData.hexBandMask = comp.hexBandMask;
+        fileData.hexCellScale = comp.hexCellScale;
+        fileData.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        fileData.shoalingEnabled = comp.shoalingEnabled;
+        fileData.shoalingStrength = comp.shoalingStrength;
+        fileData.shoalingMinDepth = comp.shoalingMinDepth;
+        fileData.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        fileData.shoalingGamma = comp.shoalingGamma;
+        fileData.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        fileData.shoreWavesEnabled = comp.shoreWavesEnabled;
+        fileData.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        fileData.shoreWaveLength = comp.shoreWaveLength;
+        fileData.shoreWaveSpeed = comp.shoreWaveSpeed;
+        fileData.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        fileData.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        fileData.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        fileData.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        fileData.shoreWaveLean = comp.shoreWaveLean;
+        // VK-1606
+        fileData.rippleSimEnabled = comp.rippleSimEnabled;
+        fileData.ripplePatchSize = comp.ripplePatchSize;
+        fileData.rippleWaveSpeed = comp.rippleWaveSpeed;
+        fileData.rippleDamping = comp.rippleDamping;
+        fileData.rippleHeightScale = comp.rippleHeightScale;
+        fileData.rippleNormalScale = comp.rippleNormalScale;
+        fileData.rippleFoamGain = comp.rippleFoamGain;
+        fileData.rippleFoamScale = comp.rippleFoamScale;
+        fileData.rippleFoamDecay = comp.rippleFoamDecay;
+        fileData.rippleEdgeFadeStart = comp.rippleEdgeFadeStart;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -674,6 +1514,49 @@ namespace services
             comp.shoreWetRange = fileData.shoreWetRange;
             comp.shoreWetDarkening = fileData.shoreWetDarkening;
             comp.shoreWetRoughness = fileData.shoreWetRoughness;
+            // VK-1604
+            comp.ssrEnabled = fileData.ssrEnabled;
+            comp.ssrIntensity = fileData.ssrIntensity;
+            comp.ssrMaxDistance = fileData.ssrMaxDistance;
+            comp.ssrThickness = fileData.ssrThickness;
+            comp.ssrMaxSteps = fileData.ssrMaxSteps;
+            comp.ssrDebugView = fileData.ssrDebugView;
+            comp.beerLambertEnabled = fileData.beerLambertEnabled;
+            comp.absorptionCoeff = fileData.absorptionCoeff;
+            comp.scatteringColor = fileData.scatteringColor;
+            comp.scatterCoeff = fileData.scatterCoeff;
+            comp.absorptionMaxDistance = fileData.absorptionMaxDistance;
+            comp.hexTilingEnabled = fileData.hexTilingEnabled;
+            comp.hexBandMask = fileData.hexBandMask;
+            comp.hexCellScale = fileData.hexCellScale;
+            comp.hexBlendContrast = fileData.hexBlendContrast;
+            // VK-1605
+            comp.shoalingEnabled = fileData.shoalingEnabled;
+            comp.shoalingStrength = fileData.shoalingStrength;
+            comp.shoalingMinDepth = fileData.shoalingMinDepth;
+            comp.shoalingWavelengthScale = fileData.shoalingWavelengthScale;
+            comp.shoalingGamma = fileData.shoalingGamma;
+            comp.shoreEdgeFadeStart = fileData.shoreEdgeFadeStart;
+            comp.shoreWavesEnabled = fileData.shoreWavesEnabled;
+            comp.shoreWaveAmplitude = fileData.shoreWaveAmplitude;
+            comp.shoreWaveLength = fileData.shoreWaveLength;
+            comp.shoreWaveSpeed = fileData.shoreWaveSpeed;
+            comp.shoreWaveBreakDepth = fileData.shoreWaveBreakDepth;
+            comp.shoreWaveBreakRange = fileData.shoreWaveBreakRange;
+            comp.shoreWaveCrestFoam = fileData.shoreWaveCrestFoam;
+            comp.shoreWaveCrestFoamThreshold = fileData.shoreWaveCrestFoamThreshold;
+            comp.shoreWaveLean = fileData.shoreWaveLean;
+            // VK-1606
+            comp.rippleSimEnabled = fileData.rippleSimEnabled;
+            comp.ripplePatchSize = fileData.ripplePatchSize;
+            comp.rippleWaveSpeed = fileData.rippleWaveSpeed;
+            comp.rippleDamping = fileData.rippleDamping;
+            comp.rippleHeightScale = fileData.rippleHeightScale;
+            comp.rippleNormalScale = fileData.rippleNormalScale;
+            comp.rippleFoamGain = fileData.rippleFoamGain;
+            comp.rippleFoamScale = fileData.rippleFoamScale;
+            comp.rippleFoamDecay = fileData.rippleFoamDecay;
+            comp.rippleEdgeFadeStart = fileData.rippleEdgeFadeStart;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;
@@ -692,16 +1575,33 @@ namespace services
 
     void OceanService::updateBuoyancy()
     {
-        if (!physicsProvider || !oceanEntity.isValid())
+        if (!physicsProvider)
             return;
 
         auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(oceanEntity);
-        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
-            return;
 
-        const auto& comp = registry.get<components::OceanComponent>(ent);
-        if (!comp.physicsEnabled)
+        // VK-1607: this used to bail whenever there was no ocean entity. A scene whose only water is
+        // a lake still has to float boats, so the ocean is now one optional water source among
+        // several. The tuning (density / drag / buoyancyStrength) still comes from the OceanComponent
+        // when there is one, and falls back to its own defaults when there is not.
+        static const components::OceanComponent defaultOceanTuning{};
+        const components::OceanComponent* oceanComp = nullptr;
+        if (oceanEntity.isValid())
+        {
+            entt::entity ent = internal::fromHandle(oceanEntity);
+            if (registry.valid(ent) && registry.all_of<components::OceanComponent>(ent))
+                oceanComp = &registry.get<components::OceanComponent>(ent);
+        }
+
+        // Ocean water only participates when its own physics switch is on; bodies carry their own.
+        const bool oceanPhysicsActive = oceanComp != nullptr && oceanComp->physicsEnabled;
+        const auto& comp = oceanComp ? *oceanComp : defaultOceanTuning;
+
+        // Hoisted out of the per-body, per-sample-point loops below: one registry walk per physics
+        // step instead of one per sample point.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+
+        if (!oceanPhysicsActive && bodies.empty())
             return;
 
         glm::vec3 gravity = physicsProvider->getGravity();
@@ -766,7 +1666,40 @@ namespace services
             for (uint32_t i = 0; i < samples.count; ++i)
             {
                 pointWorld[i] = pos + rot * samples.points[i];
-                float waterHeight = getOceanHeightAt(glm::vec2(pointWorld[i].x, pointWorld[i].z));
+                const glm::vec2 pointXZ(pointWorld[i].x, pointWorld[i].z);
+
+                // VK-1607: bodies first, ocean second - the same precedence getOceanHeightAt uses,
+                // but resolved against the hoisted list and short-circuiting BEFORE the ocean height
+                // sampler runs (that one sums every FFT band and is far from free). A body whose
+                // physics switch is off is a hole in the water rather than a fall-through to the
+                // ocean: something is occupying that footprint, it just does not float anything.
+                //
+                // findBodyAtPoint, not findBodyAt: a body has a floor now, and a sample point below
+                // it is under the pool rather than in it. Without the Y test a crate on the floor
+                // below a rooftop pool would take buoyancy up through the ceiling.
+                const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), pointWorld[i]);
+
+                float waterHeight;
+                if (bodyIndex >= 0)
+                {
+                    const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+                    if (body.physicsEnabled == 0u)
+                    {
+                        pointSubmersion[i] = 0.0f;
+                        continue;
+                    }
+                    waterHeight = body.surfaceHeight;
+                }
+                else
+                {
+                    if (!oceanPhysicsActive)
+                    {
+                        pointSubmersion[i] = 0.0f;
+                        continue;
+                    }
+                    waterHeight = getOceanSurfaceHeightAt(pointXZ);
+                }
+
                 pointSubmersion[i] = water::computeSubmersion(pointWorld[i].y, waterHeight, halfHeight);
                 totalSubmersion += pointSubmersion[i];
             }
@@ -815,6 +1748,41 @@ namespace services
                 glm::vec3 angularVelocity = physicsProvider->getAngularVelocity(handle);
                 physicsProvider->applyTorque(handle, -angularVelocity * angularDrag * submersionRatio * mass);
             }
+
+            // VK-1606: automatic wake. Anything moving while partly submerged writes into the ripple
+            // patch, so a boat leaves a trail with no authored emitter at all. Throttled by DISTANCE
+            // rather than time, so the spacing between rings does not depend on how fast the hull is
+            // going (a time throttle bunches them up at low speed and spreads them at high speed).
+            if (comp.rippleSimEnabled)
+            {
+                constexpr float WAKE_MIN_SPEED = 0.75f;         // m/s
+                constexpr float WAKE_TRAVEL_INTERVAL = 0.5f;    // metres between rings
+                constexpr float WAKE_STRENGTH_SCALE = 0.06f;    // impulse per m/s of hull speed
+
+                const float horizontalSpeed = glm::length(glm::vec2(velocity.x, velocity.z));
+                if (horizontalSpeed >= WAKE_MIN_SPEED)
+                {
+                    const glm::vec2 posXZ(pos.x, pos.z);
+                    auto [it, inserted] = buoyancyWakeTrail.try_emplace(handle, posXZ);
+                    if (inserted || glm::distance(posXZ, it->second) >= WAKE_TRAVEL_INTERVAL)
+                    {
+                        it->second = posXZ;
+                        // Negative: a hull pushes the surface DOWN and the water rebounds around it.
+                        const float radius = glm::max(glm::max(colliderSize.x, colliderSize.z), 0.5f);
+                        const float strength = -WAKE_STRENGTH_SCALE * horizontalSpeed * submersionRatio;
+                        queueWaterImpulse({posXZ, radius, strength});
+                    }
+                }
+            }
+        }
+
+        // Same bounded-growth rule as emitterWakeTrail; this map is owned by the physics worker.
+        for (auto it = buoyancyWakeTrail.begin(); it != buoyancyWakeTrail.end();)
+        {
+            if (registry.valid(internal::fromHandle(it->first)))
+                ++it;
+            else
+                it = buoyancyWakeTrail.erase(it);
         }
     }
 
@@ -850,17 +1818,32 @@ namespace services
     {
         entitiesInWater.clear();
         pendingWaterTransitions.clear();
+
+        // VK-1606: leaving play mode must not leave a stale wake trail behind — the next run would
+        // measure a bogus "distance travelled" from wherever the entity was when play stopped.
+        emitterWakeTrail.clear();
+        buoyancyWakeTrail.clear();
+        {
+            std::lock_guard<std::mutex> lock(impulseMutex);
+            pendingImpulses.clear();
+        }
     }
 
     void OceanService::update(float deltaTime)
     {
-        if (!oceanEntity.isValid())
-            return;
+        // Sea state is an ocean-only concept; wake emitters are not. VK-1607 moved the emitter tick
+        // out from under the ocean gate so an emitter riding a lake is at least reachable - it still
+        // early-outs on isRippleSimEnabled(), which does require an ocean entity to supply the
+        // ripple settings (the documented limitation, unchanged).
+        if (oceanEntity.isValid())
+        {
+            if (seaStateTransitionActive)
+                updateManualSeaStateTransition(deltaTime);
+            else
+                updateWeatherDrivenSeaState();
+        }
 
-        if (seaStateTransitionActive)
-            updateManualSeaStateTransition(deltaTime);
-        else
-            updateWeatherDrivenSeaState();
+        updateWakeEmitters(deltaTime);   // VK-1606
     }
 
     void OceanService::setSeaState(float beaufort, float transitionSeconds)
@@ -1033,6 +2016,8 @@ namespace services
         seaStateTransitionActive = false;
         lastAppliedBeaufort = -1.0f;
         lastAppliedWindDirection = -10000.0f;
+        // VK-1605: a new scene means a new bathymetry.
+        shoreFieldRebakeRequested = true;
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto oceanView = registry.view<components::OceanComponent>();
@@ -1089,6 +2074,8 @@ namespace services
         oceanEntity = {};
         oceanConfig = OceanFFTConfigData{};
         oceanConfigVersion++;
+
+        abandonShoreFieldBake();
 
         vfLogInfo("OceanService: Cleared ocean on scene clear");
     }

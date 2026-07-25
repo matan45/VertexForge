@@ -213,6 +213,11 @@ namespace events::terrain
         int32_t gridCountZ = 0;
         uint32_t verticesPerTile = 33;
         std::vector<float> heights; // packed tile-by-tile, row-major (Z outer, X inner)
+        // VK-1605: one flag per grid cell (gridCountZ * gridCountX, same indexing as `heights`),
+        // non-zero where a tile with real height data exists. Tiles that are absent or not yet
+        // streamed are zero-filled in `heights` and would otherwise be indistinguishable from a
+        // genuine sea-level beach — which kills the shoreline waves over a hole in the grid.
+        std::vector<uint8_t> tileValid;
         bool valid = false;
     };
 

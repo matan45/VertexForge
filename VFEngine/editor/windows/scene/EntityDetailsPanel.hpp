@@ -14,6 +14,7 @@
 #include "../details/RigidBodyDrawer.hpp"
 #include "../details/VehicleDrawer.hpp"
 #include "../details/BuoyancyDrawer.hpp"
+#include "../details/WaterWakeEmitterDrawer.hpp"
 #include "../details/DestructibleDrawer.hpp"
 #include "../details/PhysicsAnimationDrawer.hpp"
 #include "../details/VFXDrawer.hpp"
@@ -26,6 +27,7 @@
 #include "../details/TerrainDrawer.hpp"
 #include "../details/TerrainTileDrawer.hpp"
 #include "../details/OceanDrawer.hpp"
+#include "../details/WaterBodyDrawer.hpp"
 #include "../details/UICanvasDrawer.hpp"
 #include "../details/UIRectDrawer.hpp"
 #include "../details/UIImageDrawer.hpp"
@@ -87,6 +89,7 @@ namespace windows
         details::RigidBodyDrawer rigidBodyDrawer;
         details::VehicleDrawer vehicleDrawer;
         details::BuoyancyDrawer buoyancyDrawer;
+        details::WaterWakeEmitterDrawer waterWakeEmitterDrawer;   // VK-1606
         details::DestructibleDrawer destructibleDrawer;
         details::PhysicsAnimationDrawer physicsAnimationDrawer;
         details::VFXDrawer vfxDrawer;
@@ -99,6 +102,7 @@ namespace windows
         details::TerrainDrawer terrainDrawer;
         details::TerrainTileDrawer terrainTileDrawer;
         details::OceanDrawer oceanDrawer;
+        details::WaterBodyDrawer waterBodyDrawer;   // VK-1607
         details::UICanvasDrawer uiCanvasDrawer;
         details::UIRectDrawer uiRectDrawer;
         details::UIImageDrawer uiImageDrawer;

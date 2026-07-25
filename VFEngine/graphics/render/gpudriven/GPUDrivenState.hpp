@@ -17,6 +17,9 @@
 #include "../water/OceanFFT.hpp"
 #include "../water/WaterRefractionResources.hpp"
 #include "../water/WaterCausticsResources.hpp"
+#include "../water/WaterShoreDepthResources.hpp"
+#include "../water/WaterRippleSim.hpp"
+#include "../../../utilities/water/ShoreWaveMath.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
@@ -102,7 +105,19 @@ namespace render::gpudriven::detail
         std::unique_ptr<render::water::WaterMeshBuffer> meshBuffer;
         std::vector<render::water::WaterTileGPUData> tileData;
         uint32_t lodTileCounts[render::water::WATER_LOD_COUNT] = {};
+        // VK-1607: the 128-instance budget is shared between the ocean grid and the water bodies.
+        // Latched so a scene that is permanently over budget logs once, not every frame.
+        bool tileBudgetWarned = false;
         render::water::WaterPushConstants cachedPushConstants{};
+        // VK-1604: last uploaded set 9 b2 params, kept for debug/inspection.
+        render::water::WaterExtendedParams cachedExtendedParams{};
+        // VK-1604: hex-tiling settings mirrored for the CPU buoyancy height path so the physics
+        // surface matches the rendered one. Written on the render thread in updateWater, read on
+        // the physics worker via the injected ocean height sampler.
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
         bool renderingEnabled = true;
         // VK-1415: layer bit tested against the current view's cullingMask (RTT views can exclude water).
         uint32_t renderLayer = 0;
@@ -121,6 +136,52 @@ namespace render::gpudriven::detail
         std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
         // Caustics
         std::unique_ptr<render::water::WaterCausticsResources> causticsResources;
+
+        // VK-1605: shore depth field. The GPU texture feeds the vertex shader; the CPU copy feeds
+        // getOceanHeightAt, so buoyancy shoals exactly like the rendered surface. Same benign
+        // publish pattern as the hex settings above - written on the render thread in updateWater,
+        // read on the physics worker through the injected height sampler.
+        std::unique_ptr<render::water::WaterShoreDepthResources> shoreDepthResources;
+        std::vector<float> shoreDepthData;
+        glm::vec2 shoreFieldOrigin{0.0f};
+        float shoreFieldWindow = 1.0f;
+        uint32_t shoreFieldResolution = 0;
+        uint32_t shoreFieldVersion = 0;         // 0 = never baked
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoalingMinDepth = 0.0f;
+        glm::vec3 bandWavelength{0.0f};
+
+        bool shoreWavesEnabled = false;
+        ::water::ShoreWaveParams shoreWaveParams{};
+
+        // VK-1606: the interactive ripple patch. Unlike the shore field there is NO CPU mirror here -
+        // ripple displacement is deliberately absent from getOceanHeightAt, so a boat does not float
+        // on its own wake. rippleOrigin is kept only so updateWater and dispatchWaterRipples agree on
+        // the window within a frame (the UBO and the compute push constants must not disagree).
+        std::unique_ptr<render::water::WaterRippleSim> rippleSim;
+        glm::vec2 rippleOrigin{0.0f};
+        float ripplePatchSize = 1.0f;
+        bool rippleEnabled = false;
+
+        // VK-1607: enough of this frame's tile layout to answer "what simulation LOD is this world
+        // XZ on" without touching the tile array. The vertex shader drops the ripple band at LOD 2
+        // and the agitation band at LOD 3, so getOceanHeightAt has to drop the same ones or a
+        // floating body bobs on waves that were never drawn under it. Scalars only, written on the
+        // render thread in updateWater and read on the physics worker - exactly the publish pattern
+        // shoreDepthData above already uses.
+        bool lodWorldMode = false;
+        float lodTileSize = 1.0f;
+        glm::vec2 lodGridOriginXZ{0.0f};   // editor mode: the camera-snapped centre tile's origin
+        glm::vec2 lodCameraXZ{0.0f};       // world mode: the camera the tile distances were taken from
+
+        // The exact time value that drove camera.u_Time (and the FFT dispatch) for the frame the
+        // shader displaced. Buoyancy must use the same one or the breakers it feels are out of
+        // phase with the ones being drawn.
+        float lastFrameTime = 0.0f;
 
         // Timing (microseconds)
         float readbackUs = 0.0f;

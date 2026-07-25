@@ -3,6 +3,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/animation/AnimatorEvents.hpp"
+#include "../../events/terrain/OceanEvents.hpp"
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -11,6 +12,7 @@
 #include "components/NavmeshComponents.hpp"
 #include "components/PhysicsComponents.hpp"
 #include "components/MediaComponents.hpp"
+#include "water/SwimMath.hpp"
 #include <glm/glm.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/norm.hpp>
@@ -27,6 +29,30 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         auto& dispatcher = ::events::EventDispatcher::instance();
         auto view = registry.view<components::ControllerComponent, components::TransformComponent>();
+
+        // VK-1606: resolve "is there water" once per tick rather than once per character.
+        // GetOceanHeightAtQuery cannot answer it - it returns 0 both for "no water" and for "the
+        // water really is at y = 0". Skipped entirely in the common case where nothing swims.
+        //
+        // VK-1607: this used to ask GetOceanEntityQuery, i.e. "is there an OCEAN entity", so a
+        // character could not swim in a lake unless the scene also happened to contain an ocean.
+        waterPresentThisFrame = false;
+        {
+            bool anySwimmer = false;
+            for (auto entity : view)
+            {
+                if (view.get<components::ControllerComponent>(entity).swimEnabled)
+                {
+                    anySwimmer = true;
+                    break;
+                }
+            }
+            if (anySwimmer)
+            {
+                ::events::ocean::HasAnyWaterQuery waterQuery;
+                waterPresentThisFrame = dispatcher.query(waterQuery);
+            }
+        }
 
         for (auto entity : view)
         {
@@ -127,9 +153,63 @@ namespace services
         const float fixedDt = physicsProvider->getFixedTimestep();
         const float alpha = physicsProvider->getInterpolationAlpha();
 
-        const float targetSpeed = controller.wantsSprint
-            ? controller.moveSpeed * controller.sprintMultiplier
-            : controller.moveSpeed;
+        // VK-1606: decide whether this character is swimming, ONCE for the whole frame. Sampling the
+        // surface per fixed sub-step would multiply an already expensive query by the step count for
+        // a height that moves a few millimetres in between.
+        //
+        // Note this samples at the RENDERED position, which lags the authoritative one by the
+        // interpolation alpha. Over one frame that is centimetres, far below the hysteresis band, so
+        // it cannot make the swim state flicker.
+        bool swimming = false;
+        float waterSurfaceY = 0.0f;
+        float swimHalfHeight = 0.0f;
+        // VK-1607: GetWaterSurfaceAtQuery, not GetOceanHeightAtQuery. A bounded water body covers
+        // part of the world and dry land covers the rest, so "no water here" has to be expressible -
+        // otherwise a character standing beside a lake reads the fallback 0 as a surface and can
+        // register submersion on dry ground. With an infinite ocean present the optional is always
+        // engaged, so ocean-only scenes behave exactly as before.
+        bool overWater = false;
+        if (controller.swimEnabled && waterPresentThisFrame)
+        {
+            ::events::ocean::GetWaterSurfaceAtQuery surfaceQuery;
+            surfaceQuery.worldXZ = glm::vec2(transform.position.x, transform.position.z);
+            // The capsule CENTRE. A body has a floor, so a character in a corridor beneath a
+            // rooftop pool must not read the pool as the water it is standing in.
+            surfaceQuery.worldY = transform.position.y;
+            if (auto surface = ::events::EventDispatcher::instance().query(surfaceQuery))
+            {
+                overWater = true;
+                waterSurfaceY = *surface;
+            }
+        }
+
+        if (overWater)
+        {
+            // The capsule the character controller actually uses comes from its collider; fall back
+            // to a 1.8 m humanoid so a controller authored without one still floats sensibly.
+            swimHalfHeight = 0.9f;
+            if (registry.all_of<components::ColliderComponent>(entity))
+            {
+                const auto& collider = registry.get<components::ColliderComponent>(entity);
+                swimHalfHeight = water::colliderHalfHeight(collider.shape, collider.size, collider.height);
+            }
+
+            controller.submersion =
+                water::capsuleSubmersion(transform.position.y, swimHalfHeight, waterSurfaceY);
+            swimming = water::swimStateFor(controller.isSwimming, controller.submersion,
+                                           controller.swimEnterSubmersion);
+        }
+        else
+        {
+            controller.submersion = 0.0f;
+        }
+        controller.isSwimming = swimming;
+
+        // Swimming replaces the ground speed outright; sprinting is a land affordance.
+        const float targetSpeed = swimming
+            ? controller.swimSpeed
+            : (controller.wantsSprint ? controller.moveSpeed * controller.sprintMultiplier
+                                       : controller.moveSpeed);
 
         glm::vec3 desiredHorizontal{0.0f};
         if (glm::length2(controller.moveInput) > 0.001f)
@@ -138,6 +218,9 @@ namespace services
         }
 
         const glm::vec3 gravity = physicsProvider->getGravity();
+        const float swimTargetY = swimming
+            ? water::swimTargetCenterY(waterSurfaceY, swimHalfHeight, controller.floatDepth)
+            : 0.0f;
 
         // Two persistent sim snapshots for this entity (prev = after sub-step N-1, curr =
         // after sub-step N). On first sight, seed both onto the current transform (freshly
@@ -177,13 +260,33 @@ namespace services
             }
 
             float verticalVel = controller.currentVelocity.y;
-            verticalVel += gravity.y * fixedDt;
 
-            // Latch the jump to the first sub-step: a multi-step frame must not
-            // apply the impulse more than once.
-            if (i == 0 && controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
+            if (swimming)
             {
-                verticalVel = controller.jumpForce;
+                // VK-1606: buoyancy REPLACES gravity while swimming. A CharacterVirtual has no
+                // solver body for OceanService::updateBuoyancy to push, so the spring is integrated
+                // here instead. Backward Euler, so a frame hitch cannot launch the character.
+                verticalVel = water::buoyancyStep(interp.curr.y, swimTargetY, verticalVel,
+                                                  controller.swimBuoyancyStiffness, fixedDt);
+                verticalVel = water::applyWaterDrag(verticalVel, controller.waterDrag, fixedDt);
+
+                // Jump means "swim up" in water — and unlike the ground jump it does NOT require
+                // being grounded, which is the whole point.
+                if (i == 0 && controller.wantsJump)
+                {
+                    verticalVel = controller.swimUpSpeed;
+                }
+            }
+            else
+            {
+                verticalVel += gravity.y * fixedDt;
+
+                // Latch the jump to the first sub-step: a multi-step frame must not
+                // apply the impulse more than once.
+                if (i == 0 && controller.wantsJump && controller.jumpForce > 0.0f && controller.isGrounded)
+                {
+                    verticalVel = controller.jumpForce;
+                }
             }
 
             glm::vec3 fullVelocity{currentHorizontal.x, verticalVel, currentHorizontal.z};
@@ -191,6 +294,13 @@ namespace services
 
             controller.isGrounded = result.isGrounded;
             controller.currentVelocity = result.linearVelocity;
+
+            // A swimmer brushing the seabed is not standing on it. Left alone, the ground contact
+            // would pick Idle/Walk out of deriveLocomotionState and the character would appear to
+            // walk along the bottom while floating.
+            if (swimming)
+                controller.isGrounded = false;
+
             physics::pushSimStep(interp, result.position);   // shift prev<-curr, curr<-new
         }
 
@@ -276,7 +386,13 @@ namespace services
 
         const std::string* newState = nullptr;
 
-        if (!controller.isGrounded)
+        // VK-1606: swimming wins over everything else. It is checked first because a swimmer is
+        // deliberately never grounded, so the fall branch below would otherwise claim it.
+        if (controller.isSwimming)
+        {
+            newState = &config.swimState;
+        }
+        else if (!controller.isGrounded)
         {
             newState = controller.verticalVelocity > 0.1f
                 ? &config.jumpState

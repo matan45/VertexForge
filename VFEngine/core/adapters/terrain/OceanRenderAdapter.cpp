@@ -24,6 +24,17 @@ namespace core
         return oceanService && oceanService->hasActiveOcean();
     }
 
+    bool OceanRenderAdapter::hasWaterToRender() const
+    {
+        return oceanService && oceanService->hasWaterToRender();
+    }
+
+    std::vector<water::WaterBodyDesc> OceanRenderAdapter::getWaterBodies() const
+    {
+        if (!oceanService) return {};
+        return oceanService->collectWaterBodies();
+    }
+
     services::OceanVisualSettings OceanRenderAdapter::getOceanVisualSettings() const
     {
         if (!oceanService) return {};
@@ -85,5 +96,24 @@ namespace core
     {
         if (oceanService)
             oceanService->processPendingSectorTileActions();
+    }
+
+    void OceanRenderAdapter::updateShoreDepthField(const glm::vec2& cameraXZ)
+    {
+        if (oceanService)
+            oceanService->updateShoreDepthField(cameraXZ);
+    }
+
+    std::vector<water::WaterImpulse> OceanRenderAdapter::drainWaterImpulses()
+    {
+        if (!oceanService)
+            return {};
+        return oceanService->drainWaterImpulses();
+    }
+
+    const water::ShoreDepthField* OceanRenderAdapter::getShoreDepthField() const
+    {
+        if (!oceanService) return nullptr;
+        return oceanService->getShoreDepthField();
     }
 }

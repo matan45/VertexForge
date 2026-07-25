@@ -162,6 +162,9 @@ namespace render::mesh
         void beginRenderPassForSecondaryGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void restoreDepthAfterVFX(const vk::CommandBuffer& commandBuffer) const;
+        // VK-1604: water-only scope with depth bound read-only so water.glsl can sample it (set 9 b1).
+        void beginWaterReadOnlyDepthPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        void restoreDepthAfterWater(const vk::CommandBuffer& commandBuffer) const;
         void beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void endRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
 
@@ -241,6 +244,11 @@ namespace render::mesh
 
     private:
         void unloadAllMeshes();
+
+        // VK-1604: the two scene-depth layout transitions, extracted so the VFX and water
+        // read-only-depth scopes share one implementation instead of duplicating the barrier.
+        void transitionDepthToReadOnly(const vk::CommandBuffer& commandBuffer) const;
+        void transitionDepthToAttachment(const vk::CommandBuffer& commandBuffer) const;
 
         void loadShaders();
         void createDescriptorSetLayout();

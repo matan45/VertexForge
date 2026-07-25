@@ -51,14 +51,13 @@ namespace render::water
             createOceanDummyTexture();
         }
 
+        // VK-1605: the dummy set is now built UNCONDITIONALLY. It used to be created only when no
+        // real refraction layout was supplied — but initWaterSubsystems always supplies one and
+        // recreate() never creates it either, so on the normal path refractionDummyDescSet stayed
+        // null and renderWaterDraw's RTT branch bound a null descriptor set for set 9.
+        createRefractionDummy();
         if (config.refractionLayout)
-        {
             refractionLayout = config.refractionLayout;
-        }
-        else
-        {
-            createRefractionDummy();
-        }
 
         createGraphicsPipeline(config);
 
@@ -208,6 +207,23 @@ namespace render::water
             vkDevice.destroyDescriptorSetLayout(refractionDummyLayout);
             refractionDummyLayout = nullptr;
         }
+        if (refractionDummyParamsBuffer)
+        {
+            core::BufferUtilities::destroyBuffer(vkDevice, refractionDummyParamsBuffer,
+                                                 refractionDummyParamsAllocation, device.getMemoryManager());
+            refractionDummyParamsBuffer = nullptr;
+            refractionDummyParamsAllocation = {};
+        }
+        // VK-1605: the dummy set's own 1x1 image
+        if (refractionDummySampler) { vkDevice.destroySampler(refractionDummySampler); refractionDummySampler = nullptr; }
+        if (refractionDummyView)    { vkDevice.destroyImageView(refractionDummyView); refractionDummyView = nullptr; }
+        if (refractionDummyImage)   { vkDevice.destroyImage(refractionDummyImage); refractionDummyImage = nullptr; }
+        if (refractionDummyImageAllocation)
+        {
+            device.getMemoryManager().free(refractionDummyImageAllocation);
+            refractionDummyImageAllocation = {};
+        }
+        refractionDummyDescSet = nullptr;
         refractionLayout = nullptr;
 
         if (waterShader)
@@ -556,8 +572,58 @@ namespace render::water
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        // Create descriptor set layout (2 combined image samplers for fragment stage)
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        // VK-1605: own 1x1 image instead of borrowing the ocean dummy's. The ocean dummy only
+        // exists when no ocean layout was supplied, which is precisely why this function could not
+        // be called unconditionally before.
+        {
+            core::ImageInfoRequest imgReq(vkDevice, device.getPhysicalDevice(),
+                1, 1, 1, 1,
+                vk::Format::eR16G16B16A16Sfloat,
+                vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+            core::ImageUtilities::createImage(imgReq, refractionDummyImage,
+                                              refractionDummyImageAllocation, device.getMemoryManager());
+
+            core::ImageViewInfoRequest viewReq(vkDevice, refractionDummyImage,
+                vk::Format::eR16G16B16A16Sfloat,
+                vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D);
+            core::ImageUtilities::createImageView(viewReq, refractionDummyView);
+
+            // VK-1607: CLEARED, not merely transitioned. This texel is what set 9 binding 1
+            // (sceneDepthTex) resolves to on every dummy-set view, and water.glsl reads it
+            // unconditionally to reconstruct the depth behind the surface — an undefined texel makes
+            // the whole RTT water sheet flip between correct and solid white depending on residual
+            // VRAM contents. 1.0 is the neutral value: it decodes as the far plane, so sceneIsSky is
+            // true, sceneVerticalDepth saturates and the shore-foam test falls straight through.
+            auto transitionCmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
+            core::ImageUtilities::transitionImageLayout(transitionCmd.get(), refractionDummyImage,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            const vk::ClearColorValue dummyClear{std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f}};
+            const vk::ImageSubresourceRange dummyRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+            transitionCmd.get().clearColorImage(refractionDummyImage,
+                vk::ImageLayout::eTransferDstOptimal, dummyClear, dummyRange);
+
+            core::ImageUtilities::transitionImageLayout(transitionCmd.get(), refractionDummyImage,
+                vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            core::Utilities::endSingleTimeCommands(device, transitionCmd);
+
+            vk::SamplerCreateInfo dummySamplerInfo{};
+            dummySamplerInfo.magFilter = vk::Filter::eLinear;
+            dummySamplerInfo.minFilter = vk::Filter::eLinear;
+            dummySamplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            dummySamplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            dummySamplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            refractionDummySampler = vkDevice.createSampler(dummySamplerInfo);
+        }
+
+        // MUST mirror WaterRefractionResources::createDescriptorLayout() exactly — binding count,
+        // types AND stage flags. A divergence makes the two layouts descriptor-set-incompatible,
+        // and it only shows up on the paths that actually bind this dummy (ocean disabled, RTT).
+        std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[0].descriptorCount = 1;
@@ -568,6 +634,23 @@ namespace render::water
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        // VK-1605: shore-depth field, vertex|fragment.
+        bindings[3].binding = 3;
+        bindings[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
+        // VK-1606: ripple patch, vertex|fragment.
+        bindings[4].binding = 4;
+        bindings[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        bindings[4].descriptorCount = 1;
+        bindings[4].stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -575,14 +658,16 @@ namespace render::water
         refractionLayout = refractionDummyLayout;
 
         // Create descriptor pool + set
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.type = vk::DescriptorType::eCombinedImageSampler;
-        poolSize.descriptorCount = 2;
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[0].descriptorCount = 4;
+        poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[1].descriptorCount = 1;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.maxSets = 1;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
         refractionDummyPool = vkDevice.createDescriptorPool(poolInfo);
 
         vk::DescriptorSetAllocateInfo allocInfo{};
@@ -591,12 +676,37 @@ namespace render::water
         allocInfo.pSetLayouts = &refractionDummyLayout;
         refractionDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // Update with the ocean dummy texture (just needs a valid image to prevent validation errors)
-        std::array<vk::DescriptorImageInfo, 2> imageInfos{};
-        imageInfos[0] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
-        imageInfos[1] = {oceanDummySampler, oceanDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        // VK-1604: params buffer for the dummy path. Seeded with the struct defaults (every feature
+        // flag clear) so the frames before the first updateWater read sane values; VK-1607 refreshes
+        // it every frame through updateDummyParams.
+        {
+            core::BufferInfoRequest req(vkDevice, device.getPhysicalDevice());
+            req.size = sizeof(WaterExtendedParams);
+            req.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+            req.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+            core::BufferUtilities::createBuffer(req, refractionDummyParamsBuffer,
+                                                refractionDummyParamsAllocation, device.getMemoryManager());
+            if (refractionDummyParamsAllocation.mappedPtr)
+            {
+                WaterExtendedParams defaults{};
+                std::memcpy(refractionDummyParamsAllocation.mappedPtr, &defaults, sizeof(WaterExtendedParams));
+            }
+        }
 
-        std::array<vk::WriteDescriptorSet, 2> refrWrites{};
+        // Bindings 0/1/3/4 just need a valid image to prevent validation errors. Bindings 3 and 4 are
+        // re-pointed at the REAL shore-depth and ripple textures by updateDummyShoreDepth() /
+        // updateDummyRipple() once the renderer has created them — RTT views bind this set and still
+        // have to shoal and ripple, or they reflect a surface that is not there.
+        std::array<vk::DescriptorImageInfo, 4> imageInfos{};
+        for (auto& info : imageInfos)
+            info = {refractionDummySampler, refractionDummyView, vk::ImageLayout::eShaderReadOnlyOptimal};
+
+        vk::DescriptorBufferInfo dummyParamsInfo{};
+        dummyParamsInfo.buffer = refractionDummyParamsBuffer;
+        dummyParamsInfo.offset = 0;
+        dummyParamsInfo.range = sizeof(WaterExtendedParams);
+
+        std::array<vk::WriteDescriptorSet, 5> refrWrites{};
         for (int i = 0; i < 2; ++i)
         {
             refrWrites[i].dstSet = refractionDummyDescSet;
@@ -605,7 +715,60 @@ namespace render::water
             refrWrites[i].descriptorType = vk::DescriptorType::eCombinedImageSampler;
             refrWrites[i].pImageInfo = &imageInfos[i];
         }
+        refrWrites[2].dstSet = refractionDummyDescSet;
+        refrWrites[2].dstBinding = 2;
+        refrWrites[2].descriptorCount = 1;
+        refrWrites[2].descriptorType = vk::DescriptorType::eUniformBuffer;
+        refrWrites[2].pBufferInfo = &dummyParamsInfo;
+
+        refrWrites[3].dstSet = refractionDummyDescSet;
+        refrWrites[3].dstBinding = 3;
+        refrWrites[3].descriptorCount = 1;
+        refrWrites[3].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        refrWrites[3].pImageInfo = &imageInfos[2];
+
+        refrWrites[4].dstSet = refractionDummyDescSet;
+        refrWrites[4].dstBinding = 4;
+        refrWrites[4].descriptorCount = 1;
+        refrWrites[4].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        refrWrites[4].pImageInfo = &imageInfos[3];
+
         vkDevice.updateDescriptorSets(refrWrites, nullptr);
+    }
+
+    void WaterPipeline::updateDummyShoreDepth(vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler)
+    {
+        updateDummyBinding(3, shoreDepthView, shoreDepthSampler);
+    }
+
+    void WaterPipeline::updateDummyRipple(vk::ImageView rippleView, vk::Sampler rippleSampler)
+    {
+        updateDummyBinding(4, rippleView, rippleSampler);
+    }
+
+    void WaterPipeline::updateDummyParams(const WaterExtendedParams& params)
+    {
+        // Persistently mapped, host-coherent, single-buffered — the same per-frame update model
+        // WaterRefractionResources::updateParams uses for the real set 9 binding 2.
+        if (refractionDummyParamsAllocation.mappedPtr)
+            std::memcpy(refractionDummyParamsAllocation.mappedPtr, &params, sizeof(WaterExtendedParams));
+    }
+
+    void WaterPipeline::updateDummyBinding(uint32_t binding, vk::ImageView view, vk::Sampler sampler)
+    {
+        if (!refractionDummyDescSet || !view || !sampler)
+            return;
+
+        vk::DescriptorImageInfo imageInfo{sampler, view, vk::ImageLayout::eShaderReadOnlyOptimal};
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = refractionDummyDescSet;
+        write.dstBinding = binding;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo = &imageInfo;
+
+        device.getLogicalDevice().updateDescriptorSets(write, nullptr);
     }
 
     void WaterPipeline::createGraphicsPipeline(const WaterPipelineLayoutConfig& layoutConfig)

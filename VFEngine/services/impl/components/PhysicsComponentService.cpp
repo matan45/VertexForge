@@ -429,6 +429,107 @@ namespace services
         return true;
     }
 
+    // ========== WATER WAKE EMITTER COMPONENT OPERATIONS (VK-1606) ==========
+
+    bool PhysicsComponentService::addWaterWakeEmitterComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            sceneEntity.addComponent<components::WaterWakeEmitterComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeWaterWakeEmitterComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            sceneEntity.removeComponent<components::WaterWakeEmitterComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::hasWaterWakeEmitterComponent(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        return sceneEntity.hasComponent<components::WaterWakeEmitterComponent>();
+    }
+
+    std::optional<WaterWakeEmitterComponentData>
+    PhysicsComponentService::getWaterWakeEmitterData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return std::nullopt;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            return std::nullopt;
+        }
+
+        const auto& comp = sceneEntity.getComponent<components::WaterWakeEmitterComponent>();
+        WaterWakeEmitterComponentData data;
+        data.offset = comp.offset;
+        data.radius = comp.radius;
+        data.strength = comp.strength;
+        data.minSpeed = comp.minSpeed;
+        data.travelInterval = comp.travelInterval;
+        data.continuous = comp.continuous;
+        data.enabled = comp.enabled;
+        return data;
+    }
+
+    bool PhysicsComponentService::setWaterWakeEmitterData(EntityHandle entity,
+                                                           const WaterWakeEmitterComponentData& emitterData)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            sceneEntity.addComponent<components::WaterWakeEmitterComponent>();
+        }
+
+        auto& comp = sceneEntity.getComponent<components::WaterWakeEmitterComponent>();
+        comp.offset = emitterData.offset;
+        comp.radius = emitterData.radius;
+        comp.strength = emitterData.strength;
+        comp.minSpeed = emitterData.minSpeed;
+        comp.travelInterval = emitterData.travelInterval;
+        comp.continuous = emitterData.continuous;
+        comp.enabled = emitterData.enabled;
+        return true;
+    }
+
     // ========== PHYSICS ANIMATION COMPONENT OPERATIONS ==========
 
     bool PhysicsComponentService::addPhysicsAnimationComponent(EntityHandle entity)
@@ -685,6 +786,37 @@ namespace services
             [this](const events::scene::GetBuoyancyDataQuery& query)
             {
                 return getBuoyancyData(query.entity);
+            });
+
+        // Water wake emitter component handlers (VK-1606)
+        dispatcher.registerCommandHandler<events::scene::AddWaterWakeEmitterComponentCommand>(
+            [this](const events::scene::AddWaterWakeEmitterComponentCommand& cmd)
+            {
+                return addWaterWakeEmitterComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveWaterWakeEmitterComponentCommand>(
+            [this](const events::scene::RemoveWaterWakeEmitterComponentCommand& cmd)
+            {
+                return removeWaterWakeEmitterComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetWaterWakeEmitterDataCommand>(
+            [this](const events::scene::SetWaterWakeEmitterDataCommand& cmd)
+            {
+                return setWaterWakeEmitterData(cmd.entity, cmd.emitterData);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::HasWaterWakeEmitterComponentQuery>(
+            [this](const events::scene::HasWaterWakeEmitterComponentQuery& query)
+            {
+                return hasWaterWakeEmitterComponent(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetWaterWakeEmitterDataQuery>(
+            [this](const events::scene::GetWaterWakeEmitterDataQuery& query)
+            {
+                return getWaterWakeEmitterData(query.entity);
             });
 
         // PhysicsAnimation component handlers

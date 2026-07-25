@@ -92,6 +92,8 @@ namespace windows
         bool hasRigidBody = rigidBodyDrawer.draw(handle);
         bool hasVehicle = vehicleDrawer.draw(handle);
         bool hasBuoyancy = buoyancyDrawer.draw(handle);
+        bool hasWaterWakeEmitter = waterWakeEmitterDrawer.draw(handle);   // VK-1606
+        bool hasWaterBody = waterBodyDrawer.draw(handle);                // VK-1607
         bool hasDestructible = destructibleDrawer.draw(handle);
         bool hasPhysicsAnimation = physicsAnimationDrawer.draw(handle);
         bool hasVFX = vfxDrawer.draw(handle);
@@ -167,7 +169,8 @@ namespace windows
                                 hasUIAnimation, hasUIMask,
                                 hasUIDraggable, hasUIDropTarget, hasNavInvoker,
                                 hasVolumetricNavVolume, hasVolumetricAgent,
-                                hasDestructible, hasBuoyancy, hasUIStyle, hasUITooltip, hasUIWindow,
+                                hasDestructible, hasBuoyancy, hasWaterWakeEmitter, hasWaterBody,
+                                hasUIStyle, hasUITooltip, hasUIWindow,
                                 hasUIListView});
     }
 

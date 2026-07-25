@@ -43,6 +43,55 @@ namespace ocean
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
 
+        // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;
+        float ssrThickness = 0.35f;
+        uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;
+
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;
+        float absorptionMaxDistance = 30.0f;
+
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
+
+        // VK-1605 — mirrors components::OceanComponent; see that header for the rationale.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingMinDepth = 0.0f;
+        float shoalingWavelengthScale = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;
+        float shoreWaveLength = 12.0f;
+        float shoreWaveSpeed = 0.35f;
+        float shoreWaveBreakDepth = 1.5f;
+        float shoreWaveBreakRange = 1.0f;
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;
+
+        // VK-1606
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;
+        float rippleWaveSpeed = 3.0f;
+        float rippleDamping = 0.8f;
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;
+        float rippleEdgeFadeStart = 0.85f;
+
         // Physics
         float density = 1000.0f;
         float drag = 0.5f;

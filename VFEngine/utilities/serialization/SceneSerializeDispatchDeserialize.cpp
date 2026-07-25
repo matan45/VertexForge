@@ -127,6 +127,11 @@ namespace serialization
             auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
             deserializeBuoyancy(c["buoyancy"], buoyancyComp);
         }
+        if (c.contains("waterWakeEmitter"))
+        {
+            auto& wakeComp = entity.addOrReplaceComponent<components::WaterWakeEmitterComponent>();
+            deserializeWaterWakeEmitter(c["waterWakeEmitter"], wakeComp);
+        }
         if (c.contains("destructible"))
         {
             auto& destructibleComp = entity.addOrReplaceComponent<components::DestructibleComponent>();
@@ -209,6 +214,11 @@ namespace serialization
         {
             auto& oceanComp = entity.addOrReplaceComponent<components::OceanComponent>();
             deserializeOcean(c["ocean"], oceanComp);
+        }
+        if (c.contains("waterBody"))   // VK-1607
+        {
+            auto& bodyComp = entity.addOrReplaceComponent<components::WaterBodyComponent>();
+            deserializeWaterBody(c["waterBody"], bodyComp);
         }
         if (c.contains("meshBrushInstance"))
         {

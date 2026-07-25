@@ -9,7 +9,11 @@ namespace ocean
     {
         nlohmann::json j;
 
-        j["version"] = 1;
+        // VK-1604 bumped this to 2 (SSR / Beer-Lambert / hex tiling); VK-1605 added the shoaling and
+        // breaking-shore-wave keys without bumping; VK-1606 makes it 3 (interactive ripples).
+        // load() does not branch on it — every key is read with a self-defaulting value(), so an
+        // older file simply keeps the struct defaults. The field is informational.
+        j["version"] = 3;
         j["waterHeight"] = data.waterHeight;
         j["physicsEnabled"] = data.physicsEnabled;
 
@@ -32,6 +36,51 @@ namespace ocean
         vis["shoreWetRange"] = data.shoreWetRange;
         vis["shoreWetDarkening"] = data.shoreWetDarkening;
         vis["shoreWetRoughness"] = data.shoreWetRoughness;
+
+        // VK-1604
+        vis["ssrEnabled"] = data.ssrEnabled;
+        vis["ssrIntensity"] = data.ssrIntensity;
+        vis["ssrMaxDistance"] = data.ssrMaxDistance;
+        vis["ssrThickness"] = data.ssrThickness;
+        vis["ssrMaxSteps"] = data.ssrMaxSteps;
+        vis["ssrDebugView"] = data.ssrDebugView;
+        vis["beerLambertEnabled"] = data.beerLambertEnabled;
+        vis["absorptionCoeff"] = {data.absorptionCoeff.r, data.absorptionCoeff.g, data.absorptionCoeff.b};
+        vis["scatteringColor"] = {data.scatteringColor.r, data.scatteringColor.g, data.scatteringColor.b};
+        vis["scatterCoeff"] = data.scatterCoeff;
+        vis["absorptionMaxDistance"] = data.absorptionMaxDistance;
+        vis["hexTilingEnabled"] = data.hexTilingEnabled;
+        vis["hexBandMask"] = data.hexBandMask;
+        vis["hexCellScale"] = data.hexCellScale;
+        vis["hexBlendContrast"] = data.hexBlendContrast;
+        // VK-1605
+        vis["shoalingEnabled"] = data.shoalingEnabled;
+        vis["shoalingStrength"] = data.shoalingStrength;
+        vis["shoalingMinDepth"] = data.shoalingMinDepth;
+        vis["shoalingWavelengthScale"] = data.shoalingWavelengthScale;
+        vis["shoalingGamma"] = data.shoalingGamma;
+        vis["shoreEdgeFadeStart"] = data.shoreEdgeFadeStart;
+        vis["shoreWavesEnabled"] = data.shoreWavesEnabled;
+        vis["shoreWaveAmplitude"] = data.shoreWaveAmplitude;
+        vis["shoreWaveLength"] = data.shoreWaveLength;
+        vis["shoreWaveSpeed"] = data.shoreWaveSpeed;
+        vis["shoreWaveBreakDepth"] = data.shoreWaveBreakDepth;
+        vis["shoreWaveBreakRange"] = data.shoreWaveBreakRange;
+        vis["shoreWaveCrestFoam"] = data.shoreWaveCrestFoam;
+        vis["shoreWaveCrestFoamThreshold"] = data.shoreWaveCrestFoamThreshold;
+        vis["shoreWaveLean"] = data.shoreWaveLean;
+
+        // VK-1606
+        vis["rippleSimEnabled"] = data.rippleSimEnabled;
+        vis["ripplePatchSize"] = data.ripplePatchSize;
+        vis["rippleWaveSpeed"] = data.rippleWaveSpeed;
+        vis["rippleDamping"] = data.rippleDamping;
+        vis["rippleHeightScale"] = data.rippleHeightScale;
+        vis["rippleNormalScale"] = data.rippleNormalScale;
+        vis["rippleFoamGain"] = data.rippleFoamGain;
+        vis["rippleFoamScale"] = data.rippleFoamScale;
+        vis["rippleFoamDecay"] = data.rippleFoamDecay;
+        vis["rippleEdgeFadeStart"] = data.rippleEdgeFadeStart;
 
         // Physics
         auto& phys = j["physics"];
@@ -125,6 +174,63 @@ namespace ocean
             outData.shoreWetRange = vis.value("shoreWetRange", 5.0f);
             outData.shoreWetDarkening = vis.value("shoreWetDarkening", 0.3f);
             outData.shoreWetRoughness = vis.value("shoreWetRoughness", 0.15f);
+
+            // VK-1604 — self-defaulting reads (fall back to the struct default), so v1 files
+            // that predate these keys load with every new feature off.
+            outData.ssrEnabled = vis.value("ssrEnabled", outData.ssrEnabled);
+            outData.ssrIntensity = vis.value("ssrIntensity", outData.ssrIntensity);
+            outData.ssrMaxDistance = vis.value("ssrMaxDistance", outData.ssrMaxDistance);
+            outData.ssrThickness = vis.value("ssrThickness", outData.ssrThickness);
+            outData.ssrMaxSteps = vis.value("ssrMaxSteps", outData.ssrMaxSteps);
+            outData.ssrDebugView = vis.value("ssrDebugView", outData.ssrDebugView);
+            outData.beerLambertEnabled = vis.value("beerLambertEnabled", outData.beerLambertEnabled);
+            if (vis.contains("absorptionCoeff") && vis["absorptionCoeff"].is_array()
+                && vis["absorptionCoeff"].size() >= 3)
+            {
+                auto& c = vis["absorptionCoeff"];
+                outData.absorptionCoeff = glm::vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>());
+            }
+            if (vis.contains("scatteringColor") && vis["scatteringColor"].is_array()
+                && vis["scatteringColor"].size() >= 3)
+            {
+                auto& c = vis["scatteringColor"];
+                outData.scatteringColor = glm::vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>());
+            }
+            outData.scatterCoeff = vis.value("scatterCoeff", outData.scatterCoeff);
+            outData.absorptionMaxDistance = vis.value("absorptionMaxDistance", outData.absorptionMaxDistance);
+            outData.hexTilingEnabled = vis.value("hexTilingEnabled", outData.hexTilingEnabled);
+            outData.hexBandMask = vis.value("hexBandMask", outData.hexBandMask);
+            outData.hexCellScale = vis.value("hexCellScale", outData.hexCellScale);
+            outData.hexBlendContrast = vis.value("hexBlendContrast", outData.hexBlendContrast);
+            // VK-1605 — self-defaulting, so a v2 file written before this story loads unchanged.
+            outData.shoalingEnabled = vis.value("shoalingEnabled", outData.shoalingEnabled);
+            outData.shoalingStrength = vis.value("shoalingStrength", outData.shoalingStrength);
+            outData.shoalingMinDepth = vis.value("shoalingMinDepth", outData.shoalingMinDepth);
+            outData.shoalingWavelengthScale = vis.value("shoalingWavelengthScale", outData.shoalingWavelengthScale);
+            outData.shoalingGamma = vis.value("shoalingGamma", outData.shoalingGamma);
+            outData.shoreEdgeFadeStart = vis.value("shoreEdgeFadeStart", outData.shoreEdgeFadeStart);
+            outData.shoreWavesEnabled = vis.value("shoreWavesEnabled", outData.shoreWavesEnabled);
+            outData.shoreWaveAmplitude = vis.value("shoreWaveAmplitude", outData.shoreWaveAmplitude);
+            outData.shoreWaveLength = vis.value("shoreWaveLength", outData.shoreWaveLength);
+            outData.shoreWaveSpeed = vis.value("shoreWaveSpeed", outData.shoreWaveSpeed);
+            outData.shoreWaveBreakDepth = vis.value("shoreWaveBreakDepth", outData.shoreWaveBreakDepth);
+            outData.shoreWaveBreakRange = vis.value("shoreWaveBreakRange", outData.shoreWaveBreakRange);
+            outData.shoreWaveCrestFoam = vis.value("shoreWaveCrestFoam", outData.shoreWaveCrestFoam);
+            outData.shoreWaveCrestFoamThreshold = vis.value("shoreWaveCrestFoamThreshold", outData.shoreWaveCrestFoamThreshold);
+            outData.shoreWaveLean = vis.value("shoreWaveLean", outData.shoreWaveLean);
+
+            // VK-1606. Self-defaulting reads are the real compatibility mechanism here - `version`
+            // is written but never branched on, so a v1/v2 file simply keeps these defaults.
+            outData.rippleSimEnabled = vis.value("rippleSimEnabled", outData.rippleSimEnabled);
+            outData.ripplePatchSize = vis.value("ripplePatchSize", outData.ripplePatchSize);
+            outData.rippleWaveSpeed = vis.value("rippleWaveSpeed", outData.rippleWaveSpeed);
+            outData.rippleDamping = vis.value("rippleDamping", outData.rippleDamping);
+            outData.rippleHeightScale = vis.value("rippleHeightScale", outData.rippleHeightScale);
+            outData.rippleNormalScale = vis.value("rippleNormalScale", outData.rippleNormalScale);
+            outData.rippleFoamGain = vis.value("rippleFoamGain", outData.rippleFoamGain);
+            outData.rippleFoamScale = vis.value("rippleFoamScale", outData.rippleFoamScale);
+            outData.rippleFoamDecay = vis.value("rippleFoamDecay", outData.rippleFoamDecay);
+            outData.rippleEdgeFadeStart = vis.value("rippleEdgeFadeStart", outData.rippleEdgeFadeStart);
         }
 
         // Physics

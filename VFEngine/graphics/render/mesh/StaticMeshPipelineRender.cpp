@@ -709,13 +709,27 @@ namespace render::mesh
         commandBuffer.beginRendering(renderingInfo);
     }
 
-    void StaticMeshPipeline::beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    void StaticMeshPipeline::transitionDepthToReadOnly(const vk::CommandBuffer& commandBuffer) const
     {
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
             vk::ImageLayout::eDepthStencilAttachmentOptimal,
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+    }
+
+    void StaticMeshPipeline::transitionDepthToAttachment(const vk::CommandBuffer& commandBuffer) const
+    {
+        core::ImageUtilities::transitionImageLayout(commandBuffer,
+            offscreenResources.depthImage.depthImage,
+            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal,
+            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+    }
+
+    void StaticMeshPipeline::beginVFXRenderPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        transitionDepthToReadOnly(commandBuffer);
 
         vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
         vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
@@ -730,11 +744,35 @@ namespace render::mesh
 
     void StaticMeshPipeline::restoreDepthAfterVFX(const vk::CommandBuffer& commandBuffer) const
     {
-        core::ImageUtilities::transitionImageLayout(commandBuffer,
-            offscreenResources.depthImage.depthImage,
-            vk::ImageLayout::eDepthStencilReadOnlyOptimal,
-            vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+        transitionDepthToAttachment(commandBuffer);
+    }
+
+    // VK-1604: water samples the scene depth image (set 9 binding 1) for SSR / Beer-Lambert /
+    // shore foam while depth-testing against it. Legal only while the attachment is read-only,
+    // which the water pipeline already satisfies (depthWriteEnable = false). Mirrors the VFX pass.
+    // The caller MUST close this scope and call restoreDepthAfterWater() before anything that
+    // writes depth (billboards, custom-shader meshes, debug renderer, plugin pipelines) and before
+    // the pass callback returns - the render graph assumes depth ends in AttachmentOptimal.
+    void StaticMeshPipeline::beginWaterReadOnlyDepthPassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const
+    {
+        transitionDepthToReadOnly(commandBuffer);
+
+        vk::ImageView colorView = offscreenResources.colorImages[imageIndex].colorImageView;
+        vk::ImageView depthView = offscreenResources.depthImage.depthImageView;
+
+        core::DynamicRenderingInfo info{};
+        info.extent = swapChain.getSwapchainExtent();
+        info.colorAttachments = { core::colorLoad(colorView) };
+        info.depthAttachment = core::depthReadOnly(depthView);
+
+        core::beginDynamicRendering(commandBuffer, info);
+        // Water runs post-resolve into the single-sample scene color.
+        commandBuffer.setRasterizationSamplesEXT(vk::SampleCountFlagBits::e1);
+    }
+
+    void StaticMeshPipeline::restoreDepthAfterWater(const vk::CommandBuffer& commandBuffer) const
+    {
+        transitionDepthToAttachment(commandBuffer);
     }
 
     void StaticMeshPipeline::beginWaterContinuePassGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const

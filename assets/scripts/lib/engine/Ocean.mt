@@ -28,6 +28,12 @@ public class Ocean {
         return _native_ocean_getOceanHeightAt(x, z);
     }
 
+    // Get the water depth (surface down to the sea floor) at a world XZ position.
+    // Returns a very large value where there is no terrain below - i.e. open ocean.
+    public static function getWaterDepthAt(float x, float z): float {
+        return _native_ocean_getWaterDepthAt(x, z);
+    }
+
     // Check if the camera is currently underwater
     public static function isCameraUnderwater(): bool {
         return _native_ocean_isCameraUnderwater();
@@ -95,6 +101,23 @@ public class Ocean {
     // Enable/disable weather-driven sea state (ocean follows WeatherState wind/gusts)
     public static function setWeatherDriven(int oceanEntityId, bool enabled): void {
         _native_ocean_setWeatherDriven(oceanEntityId, enabled);
+    }
+
+    // Push one disturbance into the interactive ripple patch: a splash, a projectile hit, an oar
+    // stroke. radius is in metres and the ripple is exactly zero outside it; strength is the
+    // vertical velocity kick at the centre (negative pushes the surface down, which is what an
+    // impact does). Impulses outside the camera-following patch are silently dropped.
+    public static function addImpulse(float x, float z, float radius, float strength): void {
+        _native_ocean_addImpulse(x, z, radius, strength);
+    }
+
+    // Turn the interactive ripple simulation on or off at runtime.
+    public static function setRippleSimEnabled(bool enabled): void {
+        _native_ocean_setRippleEnabled(enabled);
+    }
+
+    public static function isRippleSimEnabled(): bool {
+        return _native_ocean_isRippleEnabled();
     }
 
     // Set ocean visual settings

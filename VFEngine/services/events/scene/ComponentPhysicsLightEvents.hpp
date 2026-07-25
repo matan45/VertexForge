@@ -230,6 +230,41 @@ namespace events::scene {
     };
 
     // ============================================
+    // Water Wake Emitter Component Events (VK-1606)
+    // ============================================
+
+    struct AddWaterWakeEmitterComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddWaterWakeEmitterComponent"; }
+    };
+
+    struct RemoveWaterWakeEmitterComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveWaterWakeEmitterComponent"; }
+    };
+
+    struct SetWaterWakeEmitterDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::WaterWakeEmitterComponentData emitterData;
+
+        std::string_view getName() const override { return "SetWaterWakeEmitterData"; }
+    };
+
+    struct HasWaterWakeEmitterComponentQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "HasWaterWakeEmitterComponent"; }
+    };
+
+    struct GetWaterWakeEmitterDataQuery : IQuery<std::optional<services::WaterWakeEmitterComponentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetWaterWakeEmitterData"; }
+    };
+
+    // ============================================
     // Physics Animation Component Events
     // ============================================
 

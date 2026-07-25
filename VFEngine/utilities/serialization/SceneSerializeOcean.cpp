@@ -33,6 +33,53 @@ namespace serialization
         j["shoreWetDarkening"] = ocean.shoreWetDarkening;
         j["shoreWetRoughness"] = ocean.shoreWetRoughness;
 
+        // VK-1604
+        j["ssrEnabled"] = ocean.ssrEnabled;
+        j["ssrIntensity"] = ocean.ssrIntensity;
+        j["ssrMaxDistance"] = ocean.ssrMaxDistance;
+        j["ssrThickness"] = ocean.ssrThickness;
+        j["ssrMaxSteps"] = ocean.ssrMaxSteps;
+        j["ssrDebugView"] = ocean.ssrDebugView;
+        j["beerLambertEnabled"] = ocean.beerLambertEnabled;
+        j["absorptionCoeff"] = json::array({ocean.absorptionCoeff.x, ocean.absorptionCoeff.y,
+                                             ocean.absorptionCoeff.z});
+        j["scatteringColor"] = json::array({ocean.scatteringColor.x, ocean.scatteringColor.y,
+                                             ocean.scatteringColor.z});
+        j["scatterCoeff"] = ocean.scatterCoeff;
+        j["absorptionMaxDistance"] = ocean.absorptionMaxDistance;
+        j["hexTilingEnabled"] = ocean.hexTilingEnabled;
+        j["hexBandMask"] = ocean.hexBandMask;
+        j["hexCellScale"] = ocean.hexCellScale;
+        j["hexBlendContrast"] = ocean.hexBlendContrast;
+        // VK-1605
+        j["shoalingEnabled"] = ocean.shoalingEnabled;
+        j["shoalingStrength"] = ocean.shoalingStrength;
+        j["shoalingMinDepth"] = ocean.shoalingMinDepth;
+        j["shoalingWavelengthScale"] = ocean.shoalingWavelengthScale;
+        j["shoalingGamma"] = ocean.shoalingGamma;
+        j["shoreEdgeFadeStart"] = ocean.shoreEdgeFadeStart;
+        j["shoreWavesEnabled"] = ocean.shoreWavesEnabled;
+        j["shoreWaveAmplitude"] = ocean.shoreWaveAmplitude;
+        j["shoreWaveLength"] = ocean.shoreWaveLength;
+        j["shoreWaveSpeed"] = ocean.shoreWaveSpeed;
+        j["shoreWaveBreakDepth"] = ocean.shoreWaveBreakDepth;
+        j["shoreWaveBreakRange"] = ocean.shoreWaveBreakRange;
+        j["shoreWaveCrestFoam"] = ocean.shoreWaveCrestFoam;
+        j["shoreWaveCrestFoamThreshold"] = ocean.shoreWaveCrestFoamThreshold;
+        j["shoreWaveLean"] = ocean.shoreWaveLean;
+
+        // VK-1606
+        j["rippleSimEnabled"] = ocean.rippleSimEnabled;
+        j["ripplePatchSize"] = ocean.ripplePatchSize;
+        j["rippleWaveSpeed"] = ocean.rippleWaveSpeed;
+        j["rippleDamping"] = ocean.rippleDamping;
+        j["rippleHeightScale"] = ocean.rippleHeightScale;
+        j["rippleNormalScale"] = ocean.rippleNormalScale;
+        j["rippleFoamGain"] = ocean.rippleFoamGain;
+        j["rippleFoamScale"] = ocean.rippleFoamScale;
+        j["rippleFoamDecay"] = ocean.rippleFoamDecay;
+        j["rippleEdgeFadeStart"] = ocean.rippleEdgeFadeStart;
+
         // Ocean FFT bands
         auto bandsArray = nlohmann::json::array();
         for (uint32_t i = 0; i < components::MAX_OCEAN_BANDS; ++i)
@@ -112,6 +159,94 @@ namespace serialization
             ocean.shoreWetDarkening = it->get<float>();
         if (auto it = j.find("shoreWetRoughness"); it != j.end() && it->is_number())
             ocean.shoreWetRoughness = it->get<float>();
+
+        // VK-1604 — absent keys leave the component defaults (all features off), so scenes
+        // saved before this story load unchanged.
+        if (auto it = j.find("ssrEnabled"); it != j.end() && it->is_boolean())
+            ocean.ssrEnabled = it->get<bool>();
+        if (auto it = j.find("ssrIntensity"); it != j.end() && it->is_number())
+            ocean.ssrIntensity = it->get<float>();
+        if (auto it = j.find("ssrMaxDistance"); it != j.end() && it->is_number())
+            ocean.ssrMaxDistance = it->get<float>();
+        if (auto it = j.find("ssrThickness"); it != j.end() && it->is_number())
+            ocean.ssrThickness = it->get<float>();
+        if (auto it = j.find("ssrMaxSteps"); it != j.end() && it->is_number_unsigned())
+            ocean.ssrMaxSteps = it->get<uint32_t>();
+        if (auto it = j.find("ssrDebugView"); it != j.end() && it->is_boolean())
+            ocean.ssrDebugView = it->get<bool>();
+        if (auto it = j.find("beerLambertEnabled"); it != j.end() && it->is_boolean())
+            ocean.beerLambertEnabled = it->get<bool>();
+        if (auto it = j.find("absorptionCoeff"); it != j.end() && it->is_array() && it->size() >= 3)
+            ocean.absorptionCoeff = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(),
+                                               (*it)[2].get<float>());
+        if (auto it = j.find("scatteringColor"); it != j.end() && it->is_array() && it->size() >= 3)
+            ocean.scatteringColor = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(),
+                                               (*it)[2].get<float>());
+        if (auto it = j.find("scatterCoeff"); it != j.end() && it->is_number())
+            ocean.scatterCoeff = it->get<float>();
+        if (auto it = j.find("absorptionMaxDistance"); it != j.end() && it->is_number())
+            ocean.absorptionMaxDistance = it->get<float>();
+        if (auto it = j.find("hexTilingEnabled"); it != j.end() && it->is_boolean())
+            ocean.hexTilingEnabled = it->get<bool>();
+        if (auto it = j.find("hexBandMask"); it != j.end() && it->is_number_unsigned())
+            ocean.hexBandMask = it->get<uint32_t>();
+        if (auto it = j.find("hexCellScale"); it != j.end() && it->is_number())
+            ocean.hexCellScale = it->get<float>();
+        if (auto it = j.find("hexBlendContrast"); it != j.end() && it->is_number())
+            ocean.hexBlendContrast = it->get<float>();
+        // VK-1605 — type-guarded like the rest; a scene saved before this story keeps the defaults.
+        if (auto it = j.find("shoalingEnabled"); it != j.end() && it->is_boolean())
+            ocean.shoalingEnabled = it->get<bool>();
+        if (auto it = j.find("shoalingStrength"); it != j.end() && it->is_number())
+            ocean.shoalingStrength = it->get<float>();
+        if (auto it = j.find("shoalingMinDepth"); it != j.end() && it->is_number())
+            ocean.shoalingMinDepth = it->get<float>();
+        if (auto it = j.find("shoalingWavelengthScale"); it != j.end() && it->is_number())
+            ocean.shoalingWavelengthScale = it->get<float>();
+        if (auto it = j.find("shoalingGamma"); it != j.end() && it->is_number())
+            ocean.shoalingGamma = it->get<float>();
+        if (auto it = j.find("shoreEdgeFadeStart"); it != j.end() && it->is_number())
+            ocean.shoreEdgeFadeStart = it->get<float>();
+        if (auto it = j.find("shoreWavesEnabled"); it != j.end() && it->is_boolean())
+            ocean.shoreWavesEnabled = it->get<bool>();
+        if (auto it = j.find("shoreWaveAmplitude"); it != j.end() && it->is_number())
+            ocean.shoreWaveAmplitude = it->get<float>();
+        if (auto it = j.find("shoreWaveLength"); it != j.end() && it->is_number())
+            ocean.shoreWaveLength = it->get<float>();
+        if (auto it = j.find("shoreWaveSpeed"); it != j.end() && it->is_number())
+            ocean.shoreWaveSpeed = it->get<float>();
+        if (auto it = j.find("shoreWaveBreakDepth"); it != j.end() && it->is_number())
+            ocean.shoreWaveBreakDepth = it->get<float>();
+        if (auto it = j.find("shoreWaveBreakRange"); it != j.end() && it->is_number())
+            ocean.shoreWaveBreakRange = it->get<float>();
+        if (auto it = j.find("shoreWaveCrestFoam"); it != j.end() && it->is_number())
+            ocean.shoreWaveCrestFoam = it->get<float>();
+        if (auto it = j.find("shoreWaveCrestFoamThreshold"); it != j.end() && it->is_number())
+            ocean.shoreWaveCrestFoamThreshold = it->get<float>();
+        if (auto it = j.find("shoreWaveLean"); it != j.end() && it->is_number())
+            ocean.shoreWaveLean = it->get<float>();
+
+        // VK-1606 — absent keys keep the component defaults, so pre-VK-1606 scenes load unchanged.
+        if (auto it = j.find("rippleSimEnabled"); it != j.end() && it->is_boolean())
+            ocean.rippleSimEnabled = it->get<bool>();
+        if (auto it = j.find("ripplePatchSize"); it != j.end() && it->is_number())
+            ocean.ripplePatchSize = it->get<float>();
+        if (auto it = j.find("rippleWaveSpeed"); it != j.end() && it->is_number())
+            ocean.rippleWaveSpeed = it->get<float>();
+        if (auto it = j.find("rippleDamping"); it != j.end() && it->is_number())
+            ocean.rippleDamping = it->get<float>();
+        if (auto it = j.find("rippleHeightScale"); it != j.end() && it->is_number())
+            ocean.rippleHeightScale = it->get<float>();
+        if (auto it = j.find("rippleNormalScale"); it != j.end() && it->is_number())
+            ocean.rippleNormalScale = it->get<float>();
+        if (auto it = j.find("rippleFoamGain"); it != j.end() && it->is_number())
+            ocean.rippleFoamGain = it->get<float>();
+        if (auto it = j.find("rippleFoamScale"); it != j.end() && it->is_number())
+            ocean.rippleFoamScale = it->get<float>();
+        if (auto it = j.find("rippleFoamDecay"); it != j.end() && it->is_number())
+            ocean.rippleFoamDecay = it->get<float>();
+        if (auto it = j.find("rippleEdgeFadeStart"); it != j.end() && it->is_number())
+            ocean.rippleEdgeFadeStart = it->get<float>();
 
         // Ocean FFT bands
         if (j.contains("oceanBands") && j["oceanBands"].is_array())

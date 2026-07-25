@@ -4,16 +4,30 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/OceanData.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../../utilities/world/WorldTypes.hpp"
 #include "../../../utilities/terrain/TerrainTypes.hpp"
 #include "../../../utilities/water/SeaState.hpp"
+#include "../../../utilities/water/ShoreDepthField.hpp"
+#include "../../../utilities/water/RippleSimMath.hpp"
+#include "../../../utilities/water/WaterBodyMath.hpp"
+#include "../../../utilities/water/WakeMath.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
+
+namespace components
+{
+    struct OceanComponent;
+    struct WaterBodyComponent;
+}
 
 namespace scene
 {
@@ -89,6 +103,36 @@ namespace services
         std::mutex pendingActionsMutex;
         std::vector<PendingWaterTileAction> pendingSectorTileActions;
 
+        // VK-1605: shore depth field. The terrain snapshot is a full copy of every loaded tile's
+        // height data, so it is taken ONCE per rebake and released the moment the bake completes -
+        // it stays resident for the ~8 frames the time-sliced bake takes, not permanently.
+        water::ShoreDepthField shoreDepthField;
+        ::events::terrain::TerrainHeightfieldResult terrainSnapshot;
+        water::TerrainHeightGrid terrainGrid;
+        bool shoreFieldRebakeRequested = true;
+        bool shoreFieldHadTerrain = false;   // did the last rebake find a heightfield to sample?
+        float shoreFieldWaterHeight = 0.0f;  // waterHeight the current field was baked against
+        std::unique_ptr<::events::SubscriptionToken> terrainChangedSub;
+        std::unique_ptr<::events::SubscriptionToken> terrainLoadedSub;
+
+        // VK-1606: water impulses waiting to reach the ripple sim. THREE threads write here — the
+        // AddWaterImpulseCommand handler and the wake emitters on the main thread, and the
+        // auto-wakes inside updateBuoyancy on the physics worker — while the render thread drains
+        // it. One mutex, drain by swap.
+        mutable std::mutex impulseMutex;
+        std::vector<water::WaterImpulse> pendingImpulses;
+
+        // Per-entity distance throttles: the last world XZ at which that entity emitted a wake.
+        // TWO maps, deliberately, because they have different owning threads — emitterWakeTrail is
+        // touched only by updateWakeEmitters (main thread) and buoyancyWakeTrail only by
+        // updateBuoyancy (physics worker). Sharing one map would be a plain data race; only the
+        // impulse queue they both feed is mutex-guarded.
+        // VK-1607 review: the emitter trail carries TWO anchors — see water::WakeTrailState. The
+        // buoyancy trail still needs only one, because its speed comes from the rigid body's own
+        // velocity rather than from a position delta.
+        std::unordered_map<EntityHandle, water::WakeTrailState, EntityHandle::Hash> emitterWakeTrail;
+        std::unordered_map<EntityHandle, glm::vec2, EntityHandle::Hash> buoyancyWakeTrail;
+
     public:
         explicit OceanService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~OceanService() override;
@@ -106,10 +150,31 @@ namespace services
 
         bool hasActiveOcean() const { return oceanEntity.isValid(); }
 
+        // VK-1607: is there ANY water to draw and submerge in - the ocean, or at least one water
+        // body. Every render-side gate that used to ask hasActiveOcean() asks this instead, so a
+        // scene with a lake and no ocean still renders, floats and goes underwater.
+        bool hasWaterToRender() const;
+
+        // Every active body in the scene, resolved against its TransformComponent. Rebuilt on
+        // demand rather than cached: the callers are once-per-frame (renderer, underwater post) or
+        // once-per-physics-step (updateBuoyancy hoists it out of its inner loops), and a cache
+        // would need invalidating from the transform, the component and the hierarchy.
+        std::vector<water::WaterBodyDesc> collectWaterBodies() const;
+
         bool isPositionInOcean(const glm::vec3& worldPos) const;
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
+        // VK-1607: the water surface at a point, or nullopt when there is no water there at all.
+        // getOceanHeightAt cannot express "no water" - it returns 0, which is indistinguishable from
+        // a real surface at y = 0. Callers that need the difference (character swimming) use this.
+        // Takes a full position, not an XZ column: a body is bounded below by its floor now, so
+        // "is there water here" genuinely depends on the query's Y. Also returns nullopt for a
+        // physics-disabled body - a hole, matching updateBuoyancy.
+        std::optional<float> getWaterSurfaceAt(const glm::vec3& worldPos) const;
+
         OceanVisualSettings getOceanVisualSettings() const;
+        // VK-1604: per-entity overload behind GetOceanVisualSettingsQuery.
+        std::optional<OceanVisualSettings> getOceanVisualSettings(EntityHandle entity) const;
         float getBaseWaterHeight() const;
 
         bool isOceanFFTEnabled() const { return oceanConfig.enabled; }
@@ -135,19 +200,76 @@ namespace services
         const water::WaterTileGrid* getWaterTileGrid() const;
         void processPendingSectorTileActions();
 
+        // VK-1605: shore depth field. updateShoreDepthField is the per-frame tick (starts a rebake
+        // when the camera has drifted far enough, otherwise advances the current one by a fixed
+        // number of rows); getWaterDepthAt is the script-facing sampler.
+        void updateShoreDepthField(const glm::vec2& cameraXZ);
+        const water::ShoreDepthField* getShoreDepthField() const { return &shoreDepthField; }
+        float getWaterDepthAt(const glm::vec2& worldXZ) const;
+        ShoreDepthFieldStatus getShoreDepthFieldStatus() const;
+
+        // VK-1606: interactive ripples. queueWaterImpulse is callable from any thread;
+        // drainWaterImpulses is called once per frame from the render side (through
+        // IOceanRenderProvider) and hands the batch to the GPU sim.
+        void queueWaterImpulse(const water::WaterImpulse& impulse);
+        std::vector<water::WaterImpulse> drainWaterImpulses();
+        void setRippleSimEnabled(bool enabled);
+        bool isRippleSimEnabled() const;
+
+        // VK-1607: water bodies. Entity-level create plus the per-entity component quintet - all
+        // handled here rather than in PhysicsComponentService, because body-vs-ocean height
+        // resolution lives in this service.
+        EntityHandle createWaterBody(const WaterBodyComponentData& data, const glm::vec3& position,
+                                     const std::string& name);
+        void addWaterBodyComponent(EntityHandle entity);
+        void removeWaterBodyComponent(EntityHandle entity);
+        void setWaterBodyData(EntityHandle entity, const WaterBodyComponentData& data);
+        std::optional<WaterBodyComponentData> getWaterBodyData(EntityHandle entity) const;
+        bool hasWaterBodyComponent(EntityHandle entity) const;
+        std::vector<WaterBodyEntry> getWaterBodies() const;
+
     private:
         void registerOceanCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanQueryHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanFFTHandlers(::events::EventDispatcher& dispatcher);
+        void registerWaterBodyHandlers(::events::EventDispatcher& dispatcher);
+
+        // VK-1607: the ocean-only half of getOceanHeightAt (base level + FFT displacement), split
+        // out so the body-aware wrapper and the buoyancy fast path can both reach it without
+        // re-running the body lookup.
+        float getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const;
+
+        static void applyWaterBodyData(components::WaterBodyComponent& comp,
+                                       const WaterBodyComponentData& data);
+        static WaterBodyComponentData waterBodyDataFromComponent(const components::WaterBodyComponent& comp);
 
         void onEntityDeleted(EntityHandle entity);
         void onSceneCleared();
+
+        // VK-1604: the single component -> OceanVisualSettings copy. Both getOceanVisualSettings
+        // overloads go through it, so there is exactly one place to extend when a visual field
+        // is added.
+        static OceanVisualSettings visualSettingsFromComponent(const components::OceanComponent& comp);
 
         // Sea state helpers
         void applySeaState(const water::SeaState& state);
         water::SeaState seaStateFromComponentBands() const;
         void updateWeatherDrivenSeaState();
         void updateManualSeaStateTransition(float deltaTime);
+
+        // VK-1605: take a fresh terrain heightfield snapshot and start a bake centred on cameraXZ.
+        void beginShoreFieldRebake(const glm::vec2& cameraXZ);
+
+        // Abandon an in-flight bake and release the terrain snapshot it pinned. Called when the
+        // scene stops ticking the field at all (scene cleared, ocean deleted) - updateShoreDepthField
+        // is driven from the render side under hasWaterToRender(), so a bake started just before the
+        // last water disappeared would otherwise stay half-finished forever.
+        void abandonShoreFieldBake();
+
+        // VK-1606: WaterWakeEmitterComponent tick (main thread, from update()). Speed comes from the
+        // change in world position rather than from a rigid body, so scripted movers, navmesh agents
+        // and character controllers all emit wakes without needing physics.
+        void updateWakeEmitters(float deltaTime);
 
         // Sector-driven water tile streaming
         void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);

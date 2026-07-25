@@ -113,6 +113,7 @@ namespace services
 namespace water
 {
     class WaterTileGrid;
+    class ShoreDepthField;
 }
 
 namespace vegetation
@@ -401,6 +402,9 @@ namespace render::gpudriven
         static vk::DescriptorSet getThreadLocalCullDescriptorSet();
         static bool tryGetThreadLocalTerrainViewProjection(glm::mat4& outVP);
         static uint32_t getThreadLocalRTTCullingMask();
+        // VK-1604: true while an RTT / reflection-probe view is being recorded on this thread.
+        // Distinct from the culling mask, whose "all layers" default is ambiguous.
+        static bool isThreadLocalRTTContext();
 
         void dispatchCompute(vk::CommandBuffer cmd, uint32_t imageIndex = 0);
 
@@ -693,12 +697,32 @@ namespace render::gpudriven
         // profile changed. Cheap (12 KB); called before the scene pass, next to the SVT
         // upload. No-op unless a profile row is dirty.
         void uploadToonProfiles(vk::CommandBuffer cmd);
+        // VK-1607: `waterBodies` are bounded lakes/pools that contribute their own tiles alongside
+        // the ocean's, and `oceanActive` says whether to emit the ocean tile grid at all - a scene
+        // whose only water is a lake still gets here, it just has no ocean to tile.
         void updateWater(const services::OceanVisualSettings& visualSettings,
                          float baseWaterHeight,
                          const glm::vec3& cameraPosition,
                          float oceanPatchSize,
                          bool worldMode = false,
-                         const ::water::WaterTileGrid* tileGrid = nullptr);
+                         const ::water::WaterTileGrid* tileGrid = nullptr,
+                         const ::water::ShoreDepthField* shoreField = nullptr,
+                         const std::vector<::water::WaterBodyDesc>& waterBodies = {},
+                         bool oceanActive = true);
+
+        // VK-1605: record the shore-depth texture upload and latch the frame time that drives
+        // camera.u_Time (so CPU buoyancy stays in phase with the drawn breakers). MUST be called
+        // outside a render pass; it sits next to dispatchOceanFFT. The copy is a no-op unless the
+        // field's version changed.
+        void uploadShoreDepthField(vk::CommandBuffer cmd, float time);
+
+        // VK-1606: hand the frame's water impulses (script calls, auto-wakes, wake emitters) to the
+        // ripple sim, then record its fixed sub-steps. queueWaterImpulses is called from
+        // updateGPUDrivenSceneData; dispatchWaterRipples MUST be called outside a render pass and
+        // sits next to dispatchOceanFFT / uploadShoreDepthField.
+        void queueWaterImpulses(const std::vector<::water::WaterImpulse>& impulses);
+        void dispatchWaterRipples(vk::CommandBuffer cmd, float time);
+
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
 
@@ -721,6 +745,11 @@ namespace render::gpudriven
         void dispatchOceanFFT(vk::CommandBuffer cmd, float time);
         void readbackOceanDisplacement();
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
+
+        // VK-1607: which per-tile simulation LOD this world XZ falls on, from the tile layout the
+        // last updateWater published. Public so it can be exercised directly; getOceanHeightAt uses
+        // it to drop exactly the bands the vertex shader dropped (see water::lodBandMask).
+        [[nodiscard]] uint32_t waterTileLodAt(const glm::vec2& worldXZ) const;
 
         // Vegetation rendering
         void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,

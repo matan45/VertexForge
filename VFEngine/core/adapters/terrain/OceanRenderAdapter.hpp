@@ -24,6 +24,8 @@ namespace core
         void setOceanHeightSampler(std::function<float(const glm::vec2&)> sampler) override;
 
         bool hasActiveOcean() const override;
+        bool hasWaterToRender() const override;
+        std::vector<water::WaterBodyDesc> getWaterBodies() const override;
 
         services::OceanVisualSettings getOceanVisualSettings() const override;
         float getBaseWaterHeight() const override;
@@ -37,5 +39,10 @@ namespace core
         bool isWorldModeActive() const override;
         const water::WaterTileGrid* getWaterTileGrid() const override;
         void processWaterTileStreaming() override;
+
+        void updateShoreDepthField(const glm::vec2& cameraXZ) override;
+        const water::ShoreDepthField* getShoreDepthField() const override;
+
+        std::vector<water::WaterImpulse> drainWaterImpulses() override;
     };
 }

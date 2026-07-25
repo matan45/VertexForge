@@ -86,6 +86,18 @@ namespace serialization
                 entity.getComponent<components::BuoyancyComponent>());
         }
 
+        if (entity.hasComponent<components::WaterWakeEmitterComponent>())
+        {
+            out["waterWakeEmitter"] = SceneSerialization::serializeWaterWakeEmitter(
+                entity.getComponent<components::WaterWakeEmitterComponent>());
+        }
+
+        if (entity.hasComponent<components::WaterBodyComponent>())   // VK-1607
+        {
+            out["waterBody"] = SceneSerialization::serializeWaterBody(
+                entity.getComponent<components::WaterBodyComponent>());
+        }
+
         if (entity.hasComponent<components::DestructibleComponent>())
         {
             out["destructible"] = SceneSerialization::serializeDestructible(
@@ -448,6 +460,18 @@ namespace serialization
         {
             auto& buoyancyComp = entity.addOrReplaceComponent<components::BuoyancyComponent>();
             SceneSerialization::deserializeBuoyancy(componentsJson["buoyancy"], buoyancyComp);
+        }
+
+        if (componentsJson.contains("waterWakeEmitter"))
+        {
+            auto& wakeComp = entity.addOrReplaceComponent<components::WaterWakeEmitterComponent>();
+            SceneSerialization::deserializeWaterWakeEmitter(componentsJson["waterWakeEmitter"], wakeComp);
+        }
+
+        if (componentsJson.contains("waterBody"))   // VK-1607
+        {
+            auto& bodyComp = entity.addOrReplaceComponent<components::WaterBodyComponent>();
+            SceneSerialization::deserializeWaterBody(componentsJson["waterBody"], bodyComp);
         }
 
         if (componentsJson.contains("destructible"))

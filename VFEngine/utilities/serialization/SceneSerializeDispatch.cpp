@@ -69,6 +69,8 @@ namespace serialization
             out["vehicle"] = serializeVehicle(entity.getComponent<components::VehicleComponent>());
         if (entity.hasComponent<components::BuoyancyComponent>())
             out["buoyancy"] = serializeBuoyancy(entity.getComponent<components::BuoyancyComponent>());
+        if (entity.hasComponent<components::WaterWakeEmitterComponent>())
+            out["waterWakeEmitter"] = serializeWaterWakeEmitter(entity.getComponent<components::WaterWakeEmitterComponent>());
         if (entity.hasComponent<components::DestructibleComponent>())
             out["destructible"] = serializeDestructible(entity.getComponent<components::DestructibleComponent>());
         if (entity.hasComponent<components::PhysicsAnimationComponent>())
@@ -95,6 +97,8 @@ namespace serialization
             out["grass"] = serializeGrass(entity.getComponent<components::GrassComponent>());
         if (entity.hasComponent<components::OceanComponent>())
             out["ocean"] = serializeOcean(entity.getComponent<components::OceanComponent>());
+        if (entity.hasComponent<components::WaterBodyComponent>())   // VK-1607
+            out["waterBody"] = serializeWaterBody(entity.getComponent<components::WaterBodyComponent>());
         if (entity.hasComponent<components::MeshBrushInstanceComponent>())
             out["meshBrushInstance"] = serializeMeshBrushInstance(entity.getComponent<components::MeshBrushInstanceComponent>());
     }

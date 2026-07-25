@@ -51,6 +51,72 @@ namespace services
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
+
+        // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;
+        float ssrThickness = 0.35f;
+        uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;
+
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;
+        float absorptionMaxDistance = 30.0f;
+
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
+
+        // VK-1605 — mirrors components::OceanComponent; see that header for the rationale.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingMinDepth = 0.0f;
+        float shoalingWavelengthScale = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;
+        float shoreWaveLength = 12.0f;
+        float shoreWaveSpeed = 0.35f;
+        float shoreWaveBreakDepth = 1.5f;
+        float shoreWaveBreakRange = 1.0f;
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;
+
+        // VK-1606: interactive ripple patch. Off by default, so an existing scene renders exactly as
+        // it did before. patchSize/waveSpeed/damping drive the simulation; the four *Scale values are
+        // pure presentation and never feed back into it.
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;      // metres covered by the 512^2 patch
+        float rippleWaveSpeed = 3.0f;        // m/s, clamped to the CFL bound before it reaches the GPU
+        float rippleDamping = 0.8f;          // per-second velocity decay
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;         // foam per unit of surface curvature
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;        // per-second foam decay
+        float rippleEdgeFadeStart = 0.85f;   // patch-border fade start, 0..1
+    };
+
+    // VK-1605: editor-facing status of the camera-following shore-depth bake. Surfaced in the
+    // Ocean window so an artist can tell "the shoreline is not shoaling" (no terrain) apart from
+    // "it has not finished baking yet".
+    struct ShoreDepthFieldStatus
+    {
+        bool hasTerrain = false;    // the last rebake found a terrain heightfield to sample
+        bool baked = false;         // at least one bake has completed
+        bool baking = false;
+        float progress = 0.0f;      // 0..1 while baking
+        uint32_t version = 0;
+        glm::vec2 center{0.0f};     // world XZ the current field is centred on
+        float windowSize = 0.0f;
+        uint32_t resolution = 0;
     };
 
     struct OceanPhysicsSettings
@@ -93,6 +159,57 @@ namespace services
         float shoreWetRange = 5.0f;
         float shoreWetDarkening = 0.3f;
         float shoreWetRoughness = 0.15f;
+
+        // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
+        bool ssrEnabled = false;
+        float ssrIntensity = 1.0f;
+        float ssrMaxDistance = 60.0f;
+        float ssrThickness = 0.35f;
+        uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;
+
+        bool beerLambertEnabled = false;
+        glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
+        glm::vec3 scatteringColor{0.0f, 0.35f, 0.30f};
+        float scatterCoeff = 0.05f;
+        float absorptionMaxDistance = 30.0f;
+
+        bool hexTilingEnabled = false;
+        uint32_t hexBandMask = 0x6;
+        float hexCellScale = 1.0f;
+        float hexBlendContrast = 4.0f;
+
+        // VK-1605 — mirrors components::OceanComponent; see that header for the rationale.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingMinDepth = 0.0f;
+        float shoalingWavelengthScale = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;
+        float shoreWaveLength = 12.0f;
+        float shoreWaveSpeed = 0.35f;
+        float shoreWaveBreakDepth = 1.5f;
+        float shoreWaveBreakRange = 1.0f;
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;
+
+        // VK-1606: interactive ripple patch. Off by default, so an existing scene renders exactly as
+        // it did before. patchSize/waveSpeed/damping drive the simulation; the four *Scale values are
+        // pure presentation and never feed back into it.
+        bool rippleSimEnabled = false;
+        float ripplePatchSize = 100.0f;      // metres covered by the 512^2 patch
+        float rippleWaveSpeed = 3.0f;        // m/s, clamped to the CFL bound before it reaches the GPU
+        float rippleDamping = 0.8f;          // per-second velocity decay
+        float rippleHeightScale = 1.0f;
+        float rippleNormalScale = 1.0f;
+        float rippleFoamGain = 0.1f;         // foam per unit of surface curvature
+        float rippleFoamScale = 1.0f;
+        float rippleFoamDecay = 1.5f;        // per-second foam decay
+        float rippleEdgeFadeStart = 0.85f;   // patch-border fade start, 0..1
 
         // Weather-driven sea state
         bool weatherDriven = false;
