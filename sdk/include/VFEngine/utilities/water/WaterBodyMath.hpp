@@ -34,6 +34,13 @@ namespace water
         glm::vec2 center{0.0f, 0.0f};        // world XZ centre
         glm::vec2 halfExtents{0.0f, 0.0f};   // world metres, entity scale deliberately ignored
         float surfaceHeight = 0.0f;          // absolute world Y of the surface
+        // VK-1607 review: metres of water BELOW the surface. Without it a body is an infinite column
+        // and claims every Y in the world under its footprint - a rooftop pool at y = 12 then floods
+        // the ground-floor room at y = 0 with underwater post-processing and floats crates through
+        // the ceiling. Authored rather than read off the terrain, because the cases that fail worst
+        // (interior pools, rooftops, flooded basements) are exactly the ones with no terrain under
+        // them to read.
+        float depth = 10.0f;
         uint32_t bandMask = 0u;              // 0 = flat; bits 0..2 = swell / agitation / ripples
         uint32_t physicsEnabled = 1u;
     };
@@ -62,6 +69,31 @@ namespace water
         return 4.0f * std::max(body.halfExtents.x, 0.0f) * std::max(body.halfExtents.y, 0.0f);
     }
 
+    // World Y of the body's floor. A non-positive depth degenerates to a surface-only sheet rather
+    // than inverting the extent - the same clamp-at-the-source rule the half extents get.
+    [[nodiscard]] inline float bodyFloorHeight(const WaterBodyDesc& body)
+    {
+        return body.surfaceHeight - std::max(body.depth, 0.0f);
+    }
+
+    // Full 3D containment: inside the XZ rectangle AND at or above the floor. There is deliberately
+    // no upper bound - a point above the surface is "over" this body, which is what lets the
+    // submersion and buoyancy math see a negative depth and report zero rather than "no water".
+    [[nodiscard]] inline bool containsPoint(const WaterBodyDesc& body, const glm::vec3& worldPos)
+    {
+        return containsXZ(body, glm::vec2(worldPos.x, worldPos.z)) &&
+               worldPos.y >= bodyFloorHeight(body);
+    }
+
+    // Does `c` outrank `b`? The overlap precedence documented on findBodyAt, in one place so the XZ
+    // and the 3D resolution can never drift apart.
+    [[nodiscard]] inline bool bodyOutranks(const WaterBodyDesc& c, const WaterBodyDesc& b)
+    {
+        if (c.surfaceHeight > b.surfaceHeight)
+            return true;
+        return c.surfaceHeight == b.surfaceHeight && bodyArea(c) < bodyArea(b);
+    }
+
     // Index of the body owning this point, or -1. Overlap precedence, in order:
     //   1. highest surface wins   - higher water physically covers lower water
     //   2. smaller area wins      - a pool carved into a lake at the same level
@@ -78,18 +110,26 @@ namespace water
             if (!containsXZ(bodies[i], worldXZ))
                 continue;
 
-            if (best < 0)
-            {
+            if (best < 0 || bodyOutranks(bodies[i], bodies[static_cast<size_t>(best)]))
                 best = static_cast<int>(i);
+        }
+        return best;
+    }
+
+    // Same precedence, but the body must actually reach this Y. Everything that HAS a Y to test -
+    // buoyancy sample points, the underwater post-process, the character-controller swim query -
+    // uses this one; findBodyAt stays for the genuinely XZ-only contracts (the ocean.getOceanHeightAt
+    // script native, and the clip rectangles the shader gets, which are a footprint by definition).
+    [[nodiscard]] inline int findBodyAtPoint(const WaterBodyDesc* bodies, size_t count,
+                                             const glm::vec3& worldPos)
+    {
+        int best = -1;
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (!containsPoint(bodies[i], worldPos))
                 continue;
-            }
 
-            const WaterBodyDesc& b = bodies[static_cast<size_t>(best)];
-            const WaterBodyDesc& c = bodies[i];
-
-            if (c.surfaceHeight > b.surfaceHeight)
-                best = static_cast<int>(i);
-            else if (c.surfaceHeight == b.surfaceHeight && bodyArea(c) < bodyArea(b))
+            if (best < 0 || bodyOutranks(bodies[i], bodies[static_cast<size_t>(best)]))
                 best = static_cast<int>(i);
         }
         return best;
@@ -103,6 +143,24 @@ namespace water
                                                     bool oceanActive, bool& outFound)
     {
         const int idx = findBodyAt(bodies, count, worldXZ);
+        if (idx >= 0)
+        {
+            outFound = true;
+            return bodies[static_cast<size_t>(idx)].surfaceHeight;
+        }
+
+        outFound = oceanActive;
+        return oceanActive ? oceanHeight : 0.0f;
+    }
+
+    // 3D overload: a body only answers for points between its floor and (unbounded) above its
+    // surface. Below the floor it is not water at all, so the query falls through to the ocean the
+    // same way a point outside the footprint does.
+    [[nodiscard]] inline float resolveSurfaceHeight(const WaterBodyDesc* bodies, size_t count,
+                                                    const glm::vec3& worldPos, float oceanHeight,
+                                                    bool oceanActive, bool& outFound)
+    {
+        const int idx = findBodyAtPoint(bodies, count, worldPos);
         if (idx >= 0)
         {
             outFound = true;

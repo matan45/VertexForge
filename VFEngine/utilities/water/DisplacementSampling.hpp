@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace water
 {
@@ -65,5 +66,20 @@ namespace water
         if (patchSize <= 0.0f)
             return glm::vec2(0.0f);
         return worldXZ / patchSize;
+    }
+
+    // World XZ -> band height, guarding the degenerate patch size that patchUV cannot express.
+    //
+    // patchUV substitutes uv = (0,0) for a non-positive patch size, which sampleBilinearWrapped
+    // would happily interpolate into a real (non-zero) texel value - the same value at EVERY world
+    // position, i.e. a constant offset surface rather than "no height". A band with patchSize 0 has
+    // no mapping from world space at all, so the only correct answer is 0. This is the guard
+    // OceanFFTReadback::sampleHeightAt used to carry inline before the VK-1604 extraction.
+    template <typename Fetch>
+    float sampleBandHeight(Fetch&& fetch, uint32_t resolution, const glm::vec2& worldXZ, float patchSize)
+    {
+        if (patchSize <= 0.0f)
+            return 0.0f;
+        return sampleBilinearWrapped(std::forward<Fetch>(fetch), resolution, patchUV(worldXZ, patchSize));
     }
 }

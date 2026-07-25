@@ -173,6 +173,9 @@ namespace services
         {
             ::events::ocean::GetWaterSurfaceAtQuery surfaceQuery;
             surfaceQuery.worldXZ = glm::vec2(transform.position.x, transform.position.z);
+            // The capsule CENTRE. A body has a floor, so a character in a corridor beneath a
+            // rooftop pool must not read the pool as the water it is standing in.
+            surfaceQuery.worldY = transform.position.y;
             if (auto surface = ::events::EventDispatcher::instance().query(surfaceQuery))
             {
                 overWater = true;

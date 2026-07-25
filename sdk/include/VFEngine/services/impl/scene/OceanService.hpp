@@ -12,6 +12,7 @@
 #include "../../../utilities/water/ShoreDepthField.hpp"
 #include "../../../utilities/water/RippleSimMath.hpp"
 #include "../../../utilities/water/WaterBodyMath.hpp"
+#include "../../../utilities/water/WakeMath.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
@@ -126,7 +127,10 @@ namespace services
         // touched only by updateWakeEmitters (main thread) and buoyancyWakeTrail only by
         // updateBuoyancy (physics worker). Sharing one map would be a plain data race; only the
         // impulse queue they both feed is mutex-guarded.
-        std::unordered_map<EntityHandle, glm::vec2, EntityHandle::Hash> emitterWakeTrail;
+        // VK-1607 review: the emitter trail carries TWO anchors — see water::WakeTrailState. The
+        // buoyancy trail still needs only one, because its speed comes from the rigid body's own
+        // velocity rather than from a position delta.
+        std::unordered_map<EntityHandle, water::WakeTrailState, EntityHandle::Hash> emitterWakeTrail;
         std::unordered_map<EntityHandle, glm::vec2, EntityHandle::Hash> buoyancyWakeTrail;
 
     public:
@@ -163,7 +167,10 @@ namespace services
         // VK-1607: the water surface at a point, or nullopt when there is no water there at all.
         // getOceanHeightAt cannot express "no water" - it returns 0, which is indistinguishable from
         // a real surface at y = 0. Callers that need the difference (character swimming) use this.
-        std::optional<float> getWaterSurfaceAt(const glm::vec2& worldXZ) const;
+        // Takes a full position, not an XZ column: a body is bounded below by its floor now, so
+        // "is there water here" genuinely depends on the query's Y. Also returns nullopt for a
+        // physics-disabled body - a hole, matching updateBuoyancy.
+        std::optional<float> getWaterSurfaceAt(const glm::vec3& worldPos) const;
 
         OceanVisualSettings getOceanVisualSettings() const;
         // VK-1604: per-entity overload behind GetOceanVisualSettingsQuery.
@@ -252,6 +259,12 @@ namespace services
 
         // VK-1605: take a fresh terrain heightfield snapshot and start a bake centred on cameraXZ.
         void beginShoreFieldRebake(const glm::vec2& cameraXZ);
+
+        // Abandon an in-flight bake and release the terrain snapshot it pinned. Called when the
+        // scene stops ticking the field at all (scene cleared, ocean deleted) - updateShoreDepthField
+        // is driven from the render side under hasWaterToRender(), so a bake started just before the
+        // last water disappeared would otherwise stay half-finished forever.
+        void abandonShoreFieldBake();
 
         // VK-1606: WaterWakeEmitterComponent tick (main thread, from update()). Speed comes from the
         // change in world position rather than from a rigid body, so scripted movers, navmesh agents

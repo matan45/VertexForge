@@ -245,6 +245,10 @@ namespace events::ocean
     // covers part of the world and dry land covers the rest.
     struct GetWaterSurfaceAtQuery : IQuery<std::optional<float>> {
         glm::vec2 worldXZ{0.0f};
+        // A water body has a floor, so the answer depends on how deep the query is: below the floor
+        // there is no body here at all and the ocean (if any) takes over. Leave at 0 for callers
+        // that genuinely only have a column - they get the body whenever y = 0 is inside it.
+        float worldY = 0.0f;
 
         std::string_view getName() const override { return "GetWaterSurfaceAt"; }
     };

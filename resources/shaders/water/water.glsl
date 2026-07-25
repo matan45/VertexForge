@@ -108,7 +108,9 @@ void main() {
     bool isBodyTile = (tileFlags & WATER_TILE_IS_BODY) != 0u;
     fragTileFlags = tileFlags;
 
-    // Per-tile simulation LOD: skip expensive bands at coarse LODs
+    // Per-tile simulation LOD: skip expensive bands at coarse LODs.
+    // Twin: water::lodBandMask in utilities/water/WaterTileGrid.hpp, which is what the CPU height
+    // sampler (buoyancy) applies so a floating body cannot bob on a band that was never drawn.
     uint lodLevel = uint(heightWave.z);
     uint tileBandMask = pc.bandEnableMask & (tileFlags & WATER_TILE_BAND_MASK_BITS);
     if (lodLevel >= 2u) tileBandMask &= ~4u;  // skip ripples at LOD2+
@@ -562,8 +564,18 @@ void main() {
     // and unifying it would change existing content for no benefit).
     uint fragHexMask = ((effectiveFlags & WATER_FLAG_HEX) != 0u) ? ext.hexPerBandMask : 0u;
 
+    // VK-1607: the same per-tile band gate the vertex stage applies. Without it a water body with
+    // the default bandMask = 0 renders geometrically flat (no band displaced it) while still
+    // accumulating full ocean FFT foam, i.e. a mirror pool covered in drifting sea foam that has no
+    // geometry under it. Ocean tiles carry all three bits, so this is a no-op for the ocean.
+    //
+    // Deliberately NOT including the vertex stage's LOD band culling (lodLevel >= 2 drops ripples,
+    // >= 3 drops agitation): that is a distance optimisation on displacement only, and folding it in
+    // here would remove foam from far ocean tiles that have always had it.
+    uint fragBandMask = pc.bandEnableMask & (fragTileFlags & WATER_TILE_BAND_MASK_BITS);
+
     float foam = 0.0;
-    if ((pc.bandEnableMask & 1u) != 0u) {
+    if ((fragBandMask & 1u) != 0u) {
         vec2 foamUV0 = fragWorldPos.xz / pc.oceanPatchSize0;
         if (hexBandEnabled(fragHexMask, 0u)) {
             HexBlend hb = hexComputeBlend(foamUV0, ext.hexCellScale0, ext.hexBlendExponent);
@@ -572,7 +584,7 @@ void main() {
             foam += texture(frag_oceanDisp0, foamUV0).w;
         }
     }
-    if ((pc.bandEnableMask & 2u) != 0u) {
+    if ((fragBandMask & 2u) != 0u) {
         vec2 foamUV1 = fragWorldPos.xz / pc.oceanPatchSize1;
         if (hexBandEnabled(fragHexMask, 1u)) {
             HexBlend hb = hexComputeBlend(foamUV1, ext.hexCellScale1, ext.hexBlendExponent);
@@ -581,7 +593,7 @@ void main() {
             foam += texture(frag_oceanDisp1, foamUV1).w * 0.5;
         }
     }
-    if ((pc.bandEnableMask & 4u) != 0u) {
+    if ((fragBandMask & 4u) != 0u) {
         vec2 foamUV2 = fragWorldPos.xz / pc.oceanPatchSize2;
         if (hexBandEnabled(fragHexMask, 2u)) {
             HexBlend hb = hexComputeBlend(foamUV2, ext.hexCellScale2, ext.hexBlendExponent);

@@ -746,6 +746,11 @@ namespace render::gpudriven
         void readbackOceanDisplacement();
         float getOceanHeightAt(const glm::vec2& worldXZ) const;
 
+        // VK-1607: which per-tile simulation LOD this world XZ falls on, from the tile layout the
+        // last updateWater published. Public so it can be exercised directly; getOceanHeightAt uses
+        // it to drop exactly the bands the vertex shader dropped (see water::lodBandMask).
+        [[nodiscard]] uint32_t waterTileLodAt(const glm::vec2& worldXZ) const;
+
         // Vegetation rendering
         void initVegetationSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                      const std::vector<vk::Format>& colorFormats, vk::Format depthFormat);

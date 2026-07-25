@@ -825,15 +825,18 @@ namespace render
         gpuDrivenRenderer->uploadShoreDepthField(commandBuffer, currentTime);
 
         // VK-1606: the interactive ripple patch, also outside any render pass. Independent of the
-        // FFT (so ripple-only water still simulates with every band off) but gated on there being an
-        // ocean at all — its parameters come from the OceanComponent, and without one the sim would
-        // keep stepping on whatever settings were last published. The impulses it consumes were
-        // drained in updateGPUDrivenSceneData above.
+        // FFT (so ripple-only water still simulates with every band off). The impulses it consumes
+        // were drained in updateGPUDrivenSceneData above.
         //
-        // VK-1607 deliberately leaves this one on hasActiveOcean() while the other water gates moved
-        // to hasWaterToRender(): the reason above still holds, so ripples on a water body require an
-        // ocean entity to be present for its settings.
-        if (oceanRenderProvider && oceanRenderProvider->hasActiveOcean())
+        // VK-1607 review: hasWaterToRender(), matching the gate the DRAIN runs under. This one used
+        // to ask hasActiveOcean(), so in a lake-only scene the service queue was emptied into the
+        // sim every frame by a dispatch that never ran — impulses from Ocean.addImpulse and from
+        // every wake emitter latched there, up to 64 of them, and all fired at once the moment an
+        // ocean entity appeared. Ripples on a water body still need an ocean for their settings
+        // (updateWater publishes a default-constructed OceanVisualSettings without one, so
+        // params.enabled is false); the difference is that dispatch now takes its disabled branch,
+        // which drops the queue and arms the reset instead of letting it accumulate.
+        if (oceanRenderProvider && oceanRenderProvider->hasWaterToRender())
             gpuDrivenRenderer->dispatchWaterRipples(commandBuffer, currentTime);
 
         // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run

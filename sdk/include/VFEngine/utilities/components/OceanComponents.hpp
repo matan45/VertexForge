@@ -155,6 +155,11 @@ namespace components
         // position. Entity scale is deliberately not applied - these numbers mean what they say.
         glm::vec2 halfExtents{10.0f, 10.0f};
 
+        // Metres of water below the surface. The body claims points from surfaceHeight - depth up
+        // to (and above) the surface, and nothing below that: without it a body is an infinite
+        // column and a rooftop pool submerges the room underneath it.
+        float depth = 10.0f;
+
         // Bits 0..2 = swell / agitation / ripples, ANDed with the ocean's own band mask. 0 (the
         // default) is a mirror-flat surface, which is what a pool should be; the VK-1606 ripple
         // patch still applies on top because it is a world-space overlay, not a band.

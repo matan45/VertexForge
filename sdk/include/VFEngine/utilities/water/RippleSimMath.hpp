@@ -183,6 +183,20 @@ namespace water
         return glm::vec2(std::floor(raw.x / ts) * ts, std::floor(raw.y / ts) * ts);
     }
 
+    // VK-1607 review: has the patch size changed enough that the existing field is meaningless?
+    //
+    // Everything about the ping-pong state is expressed in texels, and the texel size IS
+    // patchSize / resolution. Change the patch size and every surviving texel silently starts
+    // representing a different amount of world: the Laplacian is divided by a spacing the field was
+    // never simulated with, and - worse - the scroll re-index compares an origin snapped to the NEW
+    // lattice against a previous origin snapped to the OLD one, so what is supposed to be an exact
+    // whole-texel shift becomes an arbitrary one that re-indexes every texel to the wrong neighbour.
+    // The field has to be dropped, which the sim already knows how to do for free via needsReset.
+    [[nodiscard]] inline bool rippleNeedsReset(float previousPatchSize, float newPatchSize)
+    {
+        return std::abs(newPatchSize - previousPatchSize) > 1.0e-4f;
+    }
+
     inline glm::vec2 rippleTexelCenter(const glm::ivec2& index, const glm::vec2& origin, float texelSize)
     {
         return origin + (glm::vec2(index) + 0.5f) * texelSize;

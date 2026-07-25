@@ -207,6 +207,53 @@ TEST_CASE("impulse kernel is compact and smooth at the rim") {
     }
 }
 
+// VK-1607 review finding #10: changing the patch size at runtime silently re-interpreted the whole
+// ping-pong state at a new texel scale and compared origins snapped to two different lattices.
+TEST_CASE("a patch-size change invalidates the field") {
+    SUBCASE("any real change arms the reset") {
+        CHECK(water::rippleNeedsReset(100.0f, 200.0f));
+        CHECK(water::rippleNeedsReset(200.0f, 100.0f));
+        CHECK(water::rippleNeedsReset(100.0f, 100.01f));
+        // The editor slider's whole authored range, against the default.
+        CHECK(water::rippleNeedsReset(water::RIPPLE_DEFAULT_PATCH_SIZE, 20.0f));
+        CHECK(water::rippleNeedsReset(water::RIPPLE_DEFAULT_PATCH_SIZE, 400.0f));
+    }
+
+    SUBCASE("re-publishing the same value does not") {
+        // updateWater pushes the params EVERY frame, so a reset on equality would clear the patch
+        // continuously and nothing would ever ripple.
+        CHECK_FALSE(water::rippleNeedsReset(100.0f, 100.0f));
+        CHECK_FALSE(water::rippleNeedsReset(water::RIPPLE_DEFAULT_PATCH_SIZE,
+                                            water::RIPPLE_DEFAULT_PATCH_SIZE));
+        CHECK_FALSE(water::rippleNeedsReset(100.0f, 100.0f + 1.0e-6f));
+    }
+}
+
+TEST_CASE("origin snapping holds at non-default patch sizes") {
+    // The editor exposes 20..400 m; every other ripple test uses only the 100 m default, so the
+    // lattice maths at the ends of that range was untested.
+    for (float patch : {20.0f, 37.5f, 400.0f}) {
+        const float ts = water::rippleTexelSize(patch);
+        REQUIRE(ts > 0.0f);
+
+        const glm::vec2 cam(1234.5f, -987.25f);
+        const glm::vec2 origin = water::rippleSnapOrigin(cam, patch);
+
+        CHECK(std::abs(origin.x / ts - std::round(origin.x / ts)) < 1.0e-3f);
+        CHECK(std::abs(origin.y / ts - std::round(origin.y / ts)) < 1.0e-3f);
+
+        // Moving by whole texels moves the origin by exactly that, at this patch size too.
+        const glm::vec2 moved = water::rippleSnapOrigin(cam + glm::vec2(5.0f * ts, 0.0f), patch);
+        CHECK(moved.x - origin.x == doctest::Approx(5.0f * ts));
+        CHECK(moved.y == doctest::Approx(origin.y));
+
+        // And the scroll between them is the exact integer shift the re-index depends on.
+        const glm::ivec2 scroll = water::rippleScrollOffset(moved, origin, ts);
+        CHECK(scroll.x == 5);
+        CHECK(scroll.y == 0);
+    }
+}
+
 TEST_CASE("origin snapping quantises camera motion to whole texels") {
     const float patch = water::RIPPLE_DEFAULT_PATCH_SIZE;
     const float ts = water::rippleTexelSize(patch);

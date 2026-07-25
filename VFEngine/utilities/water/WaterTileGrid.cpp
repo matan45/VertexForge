@@ -37,11 +37,9 @@ namespace water
 
     uint32_t WaterTileGrid::selectLOD(float distance, float tileWorldSize)
     {
-        // LOD thresholds as multiples of tile size
-        if (distance < tileWorldSize * 2.0f) return 0;
-        if (distance < tileWorldSize * 5.0f) return 1;
-        if (distance < tileWorldSize * 10.0f) return 2;
-        return 3;
+        // VK-1607: one implementation, in the header, so the CPU height sampler can apply the same
+        // rule without a WaterTileGrid instance. The thresholds themselves are unchanged.
+        return selectTileLod(distance, tileWorldSize);
     }
 
     void WaterTileGrid::buildGPUTileData(

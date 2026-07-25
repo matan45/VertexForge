@@ -110,6 +110,13 @@ namespace windows::details
             ImGui::SetTooltip("Half size of the XZ box, in WORLD METRES around the entity position.\n"
                               "Entity scale is not applied — these numbers mean what they say.");
 
+        if (ImGui::DragFloat("Depth", &bodyData.depth, 0.1f, 0.0f, 1000.0f, "%.2f"))
+            changed = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Metres of water below the surface — the body's floor.\n"
+                              "Buoyancy, swimming and the underwater post-process all stop below it,\n"
+                              "so a rooftop pool does not submerge the room underneath.");
+
         ImGui::Spacing();
         if (ImGui::Checkbox("Physics Enabled", &bodyData.physicsEnabled))
             changed = true;

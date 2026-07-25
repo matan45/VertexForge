@@ -109,6 +109,16 @@ namespace water
         // also when the buffers swap, the origin is committed and version() increments.
         bool bakeRows(uint32_t rowCount);
 
+        // Abandon an in-flight bake without committing it. The front buffer, its origin and
+        // version() are untouched - only the pending work is dropped.
+        //
+        // A bake spans SHORE_FIELD_RESOLUTION / SHORE_FIELD_ROWS_PER_TICK ticks, and its sampler
+        // holds a reference to the caller's terrain snapshot. If the owner stops ticking mid-bake
+        // (scene cleared, the last water in the scene deleted), `baking` would otherwise stay true
+        // forever: the snapshot stays pinned, the !isBaking() guard blocks every future rebake, and
+        // the next tick that does arrive finishes and commits the PREVIOUS scene's bathymetry.
+        void cancelBake();
+
         // Bilinear, clamp-to-edge. Always safe to call - returns SHORE_FIELD_DEEP before any bake.
         [[nodiscard]] float sample(const glm::vec2& worldXZ) const;
 

@@ -38,6 +38,55 @@ namespace water
     // only thing gating ocean bands.
     constexpr uint32_t WATER_TILE_OCEAN_FLAGS = WATER_TILE_BAND_MASK_BITS;
 
+    // ---------------------------------------------------------------------------------------------
+    // Per-tile simulation LOD
+    //
+    // The water vertex shader skips the expensive bands on distant tiles. Anything that has to agree
+    // with the RENDERED surface - CPU buoyancy above all - has to skip exactly the same ones, or a
+    // floating body bobs on waves that were never drawn under it.
+    //
+    // Twin: resources/shaders/water/water.glsl (the vertex stage's tileBandMask). One rule, two
+    // languages, no codegen - change both in one edit.
+    // ---------------------------------------------------------------------------------------------
+
+    // Bands a tile at this LOD actually simulates. Bit 2 (ripples) goes at LOD 2, bit 1 (agitation)
+    // at LOD 3; bit 0 (swell) is never dropped, which is why the pre-VK-1604 CPU sampler - which
+    // only ever read band 0 - never diverged from the shader.
+    [[nodiscard]] inline constexpr uint32_t lodBandMask(uint32_t bandMask, uint32_t lodLevel)
+    {
+        if (lodLevel >= 2u) bandMask &= ~4u;
+        if (lodLevel >= 3u) bandMask &= ~2u;
+        return bandMask;
+    }
+
+    // Editor-mode LOD: the 9x9 grid is bucketed by Chebyshev ring around the camera's tile.
+    // Reproduces GPUDrivenRenderer::updateWater's ring bucketing exactly.
+    [[nodiscard]] inline constexpr uint32_t editorRingLod(int ring)
+    {
+        if (ring <= 1) return 0u;
+        if (ring <= 2) return 1u;
+        if (ring <= 3) return 2u;
+        return 3u;
+    }
+
+    // World-mode LOD by distance from the camera to the tile centre.
+    //
+    // CAVEAT for CPU callers: buildGPUTileData additionally clamps each tile to its neighbours'
+    // LOD + 1 to close T-junction cracks, and that pass can only ever LOWER a tile's LOD. A CPU
+    // query therefore matches the GPU everywhere except on the handful of tiles the crack-clamp
+    // refined, where it may drop a band the GPU kept. That is strictly better than not mirroring the
+    // rule at all (which diverges on every tile past ring 2), and reproducing it exactly would mean
+    // publishing the whole per-tile map across the render/physics thread boundary.
+    [[nodiscard]] inline uint32_t selectTileLod(float distance, float tileWorldSize)
+    {
+        if (tileWorldSize <= 0.0f)
+            return 0u;
+        if (distance < tileWorldSize * 2.0f) return 0u;
+        if (distance < tileWorldSize * 5.0f) return 1u;
+        if (distance < tileWorldSize * 10.0f) return 2u;
+        return 3u;
+    }
+
     struct WaterTileInfo
     {
         terrain::TileCoord coord;

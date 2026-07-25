@@ -129,7 +129,17 @@ namespace render::water
 
     float OceanFFTReadback::sampleHeightAt(const glm::vec2& worldXZ, uint32_t resolution, float patchSize) const
     {
-        return sampleHeightAtUV(::water::patchUV(worldXZ, patchSize), resolution);
+        // Through sampleBandHeight rather than patchUV directly: a non-positive patch size has no
+        // world -> UV mapping at all, and patchUV's uv = (0,0) substitute would otherwise be
+        // interpolated into a real texel and returned as a constant, non-zero surface everywhere.
+        if (cpuDisplacementData.empty() || resolution == 0)
+            return 0.0f;
+        if (cpuDisplacementData.size() < static_cast<size_t>(resolution) * resolution)
+            return 0.0f;
+
+        return ::water::sampleBandHeight(
+            [this](uint32_t index) { return cpuDisplacementData[index].y; },
+            resolution, worldXZ, patchSize);
     }
 
     // VK-1604: UV overload so the hex-tiling height path can sample the same band at three

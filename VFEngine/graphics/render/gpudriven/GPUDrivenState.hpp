@@ -167,6 +167,17 @@ namespace render::gpudriven::detail
         float ripplePatchSize = 1.0f;
         bool rippleEnabled = false;
 
+        // VK-1607: enough of this frame's tile layout to answer "what simulation LOD is this world
+        // XZ on" without touching the tile array. The vertex shader drops the ripple band at LOD 2
+        // and the agitation band at LOD 3, so getOceanHeightAt has to drop the same ones or a
+        // floating body bobs on waves that were never drawn under it. Scalars only, written on the
+        // render thread in updateWater and read on the physics worker - exactly the publish pattern
+        // shoreDepthData above already uses.
+        bool lodWorldMode = false;
+        float lodTileSize = 1.0f;
+        glm::vec2 lodGridOriginXZ{0.0f};   // editor mode: the camera-snapped centre tile's origin
+        glm::vec2 lodCameraXZ{0.0f};       // world mode: the camera the tile distances were taken from
+
         // The exact time value that drove camera.u_Time (and the FFT dispatch) for the frame the
         // shader displaced. Buoyancy must use the same one or the breakers it feels are out of
         // phase with the ones being drawn.

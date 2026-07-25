@@ -128,6 +128,14 @@ namespace render::water
         // patch is a single camera-following window shared by every view, so a probe must see it.
         void updateDummyRipple(vk::ImageView rippleView, vk::Sampler rippleSampler);
 
+        // VK-1607: refresh the DUMMY set 9's binding 2 (WaterExtendedParams) with this frame's real
+        // values. It used to be written exactly once at init with the struct defaults - flags = 0 -
+        // so every view that binds the dummy set (RTT / reflection probes, and the ocean-disabled
+        // path) silently ran with hex tiling, shoaling, shore waves, ripples AND the water-body clip
+        // all off, whatever WATER_VIEW_FLAGS_RTT said it was allowed to keep. The caller is expected
+        // to hand over a copy whose flags are already masked to what a dummy-set view may use.
+        void updateDummyParams(const WaterExtendedParams& params);
+
         void render(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
                     WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants);
 

@@ -353,6 +353,7 @@ namespace services
         uint32_t type = 0;                    // 0 = Lake, 1 = Pool
         float waterHeight = 0.0f;             // offset above the entity transform's Y
         glm::vec2 halfExtents{10.0f, 10.0f};  // world metres
+        float depth = 10.0f;                  // world metres below the surface
         uint32_t bandMask = 0u;
         bool physicsEnabled = true;
         bool isActive = true;

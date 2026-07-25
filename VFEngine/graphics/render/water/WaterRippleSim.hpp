@@ -81,7 +81,9 @@ namespace render::water
         // more than one already a frame old).
         void queueImpulses(const std::vector<::water::WaterImpulse>& impulses);
 
-        void setParams(const RippleSimParams& params) { this->params = params; }
+        // VK-1607 review: NOT a plain setter. A change to patchSize invalidates the whole ping-pong
+        // state (see ::water::rippleNeedsReset), so this arms the reset the next dispatch consumes.
+        void setParams(const RippleSimParams& newParams);
         [[nodiscard]] const RippleSimParams& getParams() const { return params; }
 
         // Records the impulse upload, the fixed sub-steps and the output barrier. MUST be called

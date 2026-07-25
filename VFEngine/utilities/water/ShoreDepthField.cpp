@@ -174,6 +174,17 @@ namespace water
         return true;
     }
 
+    void ShoreDepthField::cancelBake()
+    {
+        if (!baking)
+            return;
+
+        // Drop the sampler first: it is what keeps the caller's terrain snapshot alive.
+        pendingSampler = nullptr;
+        nextRow = 0;
+        baking = false;
+    }
+
     float sampleShoreDepth(const std::vector<float>& data, uint32_t resolution,
                            const glm::vec2& origin, float windowSize, const glm::vec2& worldXZ)
     {

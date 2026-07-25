@@ -13,6 +13,8 @@
 #include "../../../utilities/water/WaterBodyMath.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <chrono>
 
@@ -99,6 +101,15 @@ namespace render::gpudriven
 
         float tileSize = oceanPatchSize * 2.0f;
 
+        // VK-1607: publish the tile layout the CPU height sampler needs to reproduce this frame's
+        // per-tile band LOD. Set before the branches below so every path leaves it consistent.
+        const bool worldTiles = worldMode && tileGrid && tileGrid->tileCount() > 0;
+        water.lodWorldMode = oceanActive && worldTiles;
+        water.lodTileSize = tileSize > 0.0f ? tileSize : 1.0f;
+        water.lodCameraXZ = glm::vec2(cameraPosition.x, cameraPosition.z);
+        water.lodGridOriginXZ = glm::vec2(std::floor(cameraPosition.x / water.lodTileSize) * water.lodTileSize,
+                                          std::floor(cameraPosition.z / water.lodTileSize) * water.lodTileSize);
+
         if (!oceanActive)
         {
             // VK-1607: no ocean, so no ocean tiles - the water bodies appended below are the whole
@@ -108,7 +119,7 @@ namespace render::gpudriven
             for (uint32_t lod = 0; lod < render::water::WATER_LOD_COUNT; ++lod)
                 water.lodTileCounts[lod] = 0;
         }
-        else if (worldMode && tileGrid && tileGrid->tileCount() > 0)
+        else if (worldTiles)
         {
             // World mode: sector-driven tiles from WaterTileGrid
             water.tileData.clear();
@@ -387,6 +398,24 @@ namespace render::gpudriven
             water.cachedExtendedParams = ext;
             if (water.refractionResources && water.refractionResources->isInitialized())
                 water.refractionResources->updateParams(ext);
+
+            // VK-1607: the DUMMY set 9 gets this frame's params too. It used to be written once at
+            // init with the struct defaults, so every view that binds it — RTT / reflection probes,
+            // and the ocean-disabled path — ran with flags = 0: no hex, no shoaling, no shore waves,
+            // no ripples and, since this story, no water-body clip either, which is what made a
+            // probe show the sea through a raised pool's floor.
+            //
+            // Masked by WATER_VIEW_FLAGS_RTT rather than copied verbatim. The RTT path already
+            // clears SSR and absorption through pc.viewFlagMask, but the ocean-disabled path does
+            // not — and both of them are looking at a 1x1 stand-in instead of the scene colour copy
+            // and depth image those two features read. Masking here is what makes the buffer correct
+            // for every consumer of the dummy set rather than just for RTT.
+            if (water.pipeline)
+            {
+                render::water::WaterExtendedParams dummyExt = ext;
+                dummyExt.flags = ext.flags & render::water::WATER_VIEW_FLAGS_RTT;
+                water.pipeline->updateDummyParams(dummyExt);
+            }
         }
 
         // VK-1604: CPU buoyancy mirrors the shader's hex blend, so the height sampler needs the
@@ -466,11 +495,19 @@ namespace render::gpudriven
         // Bind the dummy set instead (renderMultiLOD substitutes it for a null handle) and
         // suppress refraction so the dummy texture never shows. The override lives on a local
         // copy - mutating water.cachedPushConstants would leak into the main-view draw.
+        //
+        // VK-1607: the refraction suppression follows whether the DUMMY set will be bound, not
+        // whether this is an RTT view. The dummy is also what gets bound when the refraction
+        // resources are absent, and its binding 0 is a 1x1 stand-in - sampling that as refraction
+        // colour tints the whole surface with a single texel.
         const bool inRTT = isThreadLocalRTTContext();
+        const bool refractionReady = water.refractionResources && water.refractionResources->isInitialized();
+        const bool usingRefractionDummy = inRTT || !refractionReady;
+
         render::water::WaterPushConstants drawPushConstants = water.cachedPushConstants;
         drawPushConstants.viewFlagMask = inRTT ? render::water::WATER_VIEW_FLAGS_RTT
                                                : render::water::WATER_VIEW_FLAGS_ALL;
-        if (inRTT)
+        if (usingRefractionDummy)
             drawPushConstants.refractionStrength = 0.0f;
 
         render::water::WaterRenderDescriptors waterDescriptors{
@@ -482,8 +519,7 @@ namespace render::gpudriven
             shadowSystem && shadowSystem->isInitialized() ? shadowSystem->getShadowTextureDescSet() : vk::DescriptorSet{},
             (water.oceanEnabled && water.multiBandDescriptorValid && water.multiBandOceanDescSet)
                 ? water.multiBandOceanDescSet : vk::DescriptorSet{},
-            (!inRTT && water.refractionResources && water.refractionResources->isInitialized())
-                ? water.refractionResources->getDescriptorSet() : vk::DescriptorSet{}
+            usingRefractionDummy ? vk::DescriptorSet{} : water.refractionResources->getDescriptorSet()
         };
         water.pipeline->renderMultiLOD(cmd, waterDescriptors, *water.meshBuffer,
                                        drawPushConstants, water.lodTileCounts);
@@ -1008,6 +1044,28 @@ namespace render::gpudriven
         water.readbackUs = std::chrono::duration<float, std::micro>(readbackEnd - readbackStart).count();
     }
 
+    uint32_t GPUDrivenRenderer::waterTileLodAt(const glm::vec2& worldXZ) const
+    {
+        const float tileSize = water.lodTileSize > 0.0f ? water.lodTileSize : 1.0f;
+
+        if (water.lodWorldMode)
+        {
+            // Same measurement buildGPUTileData takes: camera to TILE CENTRE, not to the sample
+            // point, so every point inside one tile resolves to that tile's LOD.
+            const glm::vec2 tileOrigin(std::floor(worldXZ.x / tileSize) * tileSize,
+                                       std::floor(worldXZ.y / tileSize) * tileSize);
+            const glm::vec2 tileCenter = tileOrigin + glm::vec2(tileSize * 0.5f);
+            return ::water::selectTileLod(glm::length(tileCenter - water.lodCameraXZ), tileSize);
+        }
+
+        // Editor mode: Chebyshev ring around the camera's snapped centre tile, exactly as the 9x9
+        // grid is bucketed in updateWater. Past the grid's edge the answer is the coarsest LOD,
+        // which is also what the outermost ring carries.
+        const int tx = static_cast<int>(std::floor((worldXZ.x - water.lodGridOriginXZ.x) / tileSize));
+        const int tz = static_cast<int>(std::floor((worldXZ.y - water.lodGridOriginXZ.y) / tileSize));
+        return ::water::editorRingLod(std::max(std::abs(tx), std::abs(tz)));
+    }
+
     float GPUDrivenRenderer::getOceanHeightAt(const glm::vec2& worldXZ) const
     {
         if (!water.oceanEnabled)
@@ -1038,11 +1096,20 @@ namespace render::gpudriven
         }
         const float shoalStrength = water.shoalingEnabled ? water.shoalingStrength * shoreFade : 0.0f;
 
+        // VK-1607: apply the same per-tile band LOD the vertex stage applies. Summing every band
+        // regardless of distance is what let a body on a ring-3 tile bob on agitation and ripple
+        // waves the shader had already culled from the geometry it was drawn against. See
+        // water::lodBandMask (and its documented world-mode caveat) for the shared rule.
+        const uint32_t bandMask = ::water::lodBandMask(::water::WATER_TILE_BAND_MASK_BITS,
+                                                       waterTileLodAt(worldXZ));
+
         float height = 0.0f;
         for (uint32_t i = 0; i < static_cast<uint32_t>(water.oceanBands.size()); ++i)
         {
             const auto& band = water.oceanBands[i];
             if (!band || !band->isInitialized())
+                continue;
+            if ((bandMask & (1u << i)) == 0u)
                 continue;
 
             float bandHeight;

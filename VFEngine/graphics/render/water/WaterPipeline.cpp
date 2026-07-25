@@ -590,9 +590,24 @@ namespace render::water
                 vk::ImageAspectFlagBits::eColor, vk::ImageViewType::e2D);
             core::ImageUtilities::createImageView(viewReq, refractionDummyView);
 
+            // VK-1607: CLEARED, not merely transitioned. This texel is what set 9 binding 1
+            // (sceneDepthTex) resolves to on every dummy-set view, and water.glsl reads it
+            // unconditionally to reconstruct the depth behind the surface — an undefined texel makes
+            // the whole RTT water sheet flip between correct and solid white depending on residual
+            // VRAM contents. 1.0 is the neutral value: it decodes as the far plane, so sceneIsSky is
+            // true, sceneVerticalDepth saturates and the shore-foam test falls straight through.
             auto transitionCmd = core::Utilities::beginSingleTimeCommands(vkDevice, device.getStagingCommandPool());
             core::ImageUtilities::transitionImageLayout(transitionCmd.get(), refractionDummyImage,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageAspectFlagBits::eColor);
+
+            const vk::ClearColorValue dummyClear{std::array<float, 4>{1.0f, 1.0f, 1.0f, 1.0f}};
+            const vk::ImageSubresourceRange dummyRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+            transitionCmd.get().clearColorImage(refractionDummyImage,
+                vk::ImageLayout::eTransferDstOptimal, dummyClear, dummyRange);
+
+            core::ImageUtilities::transitionImageLayout(transitionCmd.get(), refractionDummyImage,
+                vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
             core::Utilities::endSingleTimeCommands(device, transitionCmd);
 
@@ -661,7 +676,9 @@ namespace render::water
         allocInfo.pSetLayouts = &refractionDummyLayout;
         refractionDummyDescSet = vkDevice.allocateDescriptorSets(allocInfo)[0];
 
-        // VK-1604: all-defaults params buffer (every feature flag clear) for the dummy path.
+        // VK-1604: params buffer for the dummy path. Seeded with the struct defaults (every feature
+        // flag clear) so the frames before the first updateWater read sane values; VK-1607 refreshes
+        // it every frame through updateDummyParams.
         {
             core::BufferInfoRequest req(vkDevice, device.getPhysicalDevice());
             req.size = sizeof(WaterExtendedParams);
@@ -727,6 +744,14 @@ namespace render::water
     void WaterPipeline::updateDummyRipple(vk::ImageView rippleView, vk::Sampler rippleSampler)
     {
         updateDummyBinding(4, rippleView, rippleSampler);
+    }
+
+    void WaterPipeline::updateDummyParams(const WaterExtendedParams& params)
+    {
+        // Persistently mapped, host-coherent, single-buffered — the same per-frame update model
+        // WaterRefractionResources::updateParams uses for the real set 9 binding 2.
+        if (refractionDummyParamsAllocation.mappedPtr)
+            std::memcpy(refractionDummyParamsAllocation.mappedPtr, &params, sizeof(WaterExtendedParams));
     }
 
     void WaterPipeline::updateDummyBinding(uint32_t binding, vk::ImageView view, vk::Sampler sampler)

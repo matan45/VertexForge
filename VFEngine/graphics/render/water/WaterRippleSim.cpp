@@ -340,6 +340,19 @@ namespace render::water
         core::Utilities::endSingleTimeCommands(device, cmd);
     }
 
+    void WaterRippleSim::setParams(const RippleSimParams& newParams)
+    {
+        // Resizing the patch re-scales what every stored texel means AND moves the snap lattice the
+        // previous origin sits on, so the scroll re-index would no longer be the exact whole-texel
+        // shift it is documented to be. Dropping the field is the only coherent answer, and the
+        // reset path costs nothing (dispatch parks the previous origin a patch away, so every texel
+        // re-indexes out of the old window and reads zero).
+        if (::water::rippleNeedsReset(params.patchSize, newParams.patchSize))
+            needsReset = true;
+
+        params = newParams;
+    }
+
     void WaterRippleSim::queueImpulses(const std::vector<::water::WaterImpulse>& impulses)
     {
         if (!initialized || impulses.empty())

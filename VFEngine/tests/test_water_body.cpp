@@ -29,12 +29,14 @@ namespace
     using json = nlohmann::json;
 
     water::WaterBodyDesc makeBody(float cx, float cz, float hx, float hz, float height,
-                                  uint32_t bandMask = 0u, uint32_t physics = 1u)
+                                  uint32_t bandMask = 0u, uint32_t physics = 1u,
+                                  float depth = 10.0f)
     {
         water::WaterBodyDesc b;
         b.center = {cx, cz};
         b.halfExtents = {hx, hz};
         b.surfaceHeight = height;
+        b.depth = depth;
         b.bandMask = bandMask;
         b.physicsEnabled = physics;
         return b;
@@ -332,6 +334,192 @@ TEST_SUITE("WaterBody")
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // VK-1607 review finding #3: a body used to be an infinite column in Y.
+    // ---------------------------------------------------------------------------------------------
+
+    TEST_CASE("a body is bounded below by its floor")
+    {
+        // A rooftop pool: surface at y = 12, two metres deep, so its floor is at y = 10.
+        const auto pool = makeBody(0.0f, 0.0f, 5.0f, 5.0f, 12.0f, 0u, 1u, 2.0f);
+
+        SUBCASE("the floor height is surface minus depth")
+        {
+            CHECK(water::bodyFloorHeight(pool) == doctest::Approx(10.0f));
+        }
+
+        SUBCASE("points between the floor and the surface are inside")
+        {
+            CHECK(water::containsPoint(pool, {0.0f, 10.0f, 0.0f}));   // exactly on the floor
+            CHECK(water::containsPoint(pool, {0.0f, 11.0f, 0.0f}));
+            CHECK(water::containsPoint(pool, {0.0f, 12.0f, 0.0f}));   // exactly on the surface
+        }
+
+        SUBCASE("there is no upper bound - above the surface is still over this body")
+        {
+            // The submersion math needs to see a NEGATIVE depth here, not "no water": a camera or a
+            // hull just above the waterline is over the pool, it is simply not submerged.
+            CHECK(water::containsPoint(pool, {0.0f, 100.0f, 0.0f}));
+        }
+
+        SUBCASE("below the floor is not this body")
+        {
+            CHECK_FALSE(water::containsPoint(pool, {0.0f, 9.999f, 0.0f}));
+            // The regression: a ground-floor room directly under a rooftop pool.
+            CHECK_FALSE(water::containsPoint(pool, {0.0f, 0.0f, 0.0f}));
+        }
+
+        SUBCASE("outside the footprint is not this body at any height")
+        {
+            CHECK_FALSE(water::containsPoint(pool, {50.0f, 11.0f, 0.0f}));
+        }
+
+        SUBCASE("a non-positive depth degenerates to a surface-only sheet, never inverts")
+        {
+            const auto sheet = makeBody(0.0f, 0.0f, 5.0f, 5.0f, 12.0f, 0u, 1u, 0.0f);
+            CHECK(water::bodyFloorHeight(sheet) == doctest::Approx(12.0f));
+            CHECK(water::containsPoint(sheet, {0.0f, 12.0f, 0.0f}));
+            CHECK_FALSE(water::containsPoint(sheet, {0.0f, 11.999f, 0.0f}));
+
+            // A negative depth is clamped, not honoured - otherwise the floor would rise ABOVE the
+            // surface and the body would contain nothing at all.
+            const auto negative = makeBody(0.0f, 0.0f, 5.0f, 5.0f, 12.0f, 0u, 1u, -5.0f);
+            CHECK(water::bodyFloorHeight(negative) == doctest::Approx(12.0f));
+            CHECK(water::containsPoint(negative, {0.0f, 12.0f, 0.0f}));
+        }
+    }
+
+    TEST_CASE("findBodyAtPoint keeps findBodyAt's precedence and adds the floor test")
+    {
+        SUBCASE("co-planar bodies resolve identically to the XZ lookup")
+        {
+            std::vector<water::WaterBodyDesc> bodies = {
+                makeBody(0.0f, 0.0f, 20.0f, 20.0f, 1.0f),
+                makeBody(0.0f, 0.0f, 2.0f, 2.0f, 5.0f),     // small, HIGH <- should win
+                makeBody(0.0f, 0.0f, 50.0f, 50.0f, 5.0f),   // huge, equally high
+            };
+
+            const glm::vec3 inside{0.0f, 0.0f, 0.0f};   // inside every body's 10 m default depth
+            CHECK(water::findBodyAtPoint(bodies.data(), bodies.size(), inside) ==
+                  water::findBodyAt(bodies.data(), bodies.size(), {0.0f, 0.0f}));
+            CHECK(water::findBodyAtPoint(bodies.data(), bodies.size(), inside) == 1);
+        }
+
+        SUBCASE("a shallow winner hands over to the deeper body underneath it")
+        {
+            // A 1 m paddling pool at y = 5 sitting inside a 20 m lake at y = 0. At y = 4.5 the pool
+            // wins (higher surface); at y = -2 the pool's floor is above the query, so the lake does.
+            std::vector<water::WaterBodyDesc> bodies = {
+                makeBody(0.0f, 0.0f, 50.0f, 50.0f, 0.0f, 0u, 1u, 20.0f),   // lake
+                makeBody(0.0f, 0.0f, 3.0f, 3.0f, 5.0f, 0u, 1u, 1.0f),      // paddling pool
+            };
+
+            CHECK(water::findBodyAtPoint(bodies.data(), bodies.size(), {0.0f, 4.5f, 0.0f}) == 1);
+            CHECK(water::findBodyAtPoint(bodies.data(), bodies.size(), {0.0f, -2.0f, 0.0f}) == 0);
+            // Below both floors there is no body at all.
+            CHECK(water::findBodyAtPoint(bodies.data(), bodies.size(), {0.0f, -50.0f, 0.0f}) == -1);
+        }
+
+        SUBCASE("an empty list is still -1")
+        {
+            CHECK(water::findBodyAtPoint(nullptr, 0, {0.0f, 0.0f, 0.0f}) == -1);
+        }
+    }
+
+    TEST_CASE("the 3D surface resolution falls through to the ocean below a body's floor")
+    {
+        const auto pool = makeBody(0.0f, 0.0f, 5.0f, 5.0f, 12.0f, 0u, 1u, 2.0f);
+        const std::vector<water::WaterBodyDesc> bodies{pool};
+
+        bool found = false;
+
+        SUBCASE("inside the body it wins over the ocean")
+        {
+            const float h = water::resolveSurfaceHeight(bodies.data(), bodies.size(),
+                                                        glm::vec3(0.0f, 11.0f, 0.0f),
+                                                        0.0f, true, found);
+            CHECK(found);
+            CHECK(h == doctest::Approx(12.0f));
+        }
+
+        SUBCASE("under the floor the ocean answers instead")
+        {
+            const float h = water::resolveSurfaceHeight(bodies.data(), bodies.size(),
+                                                        glm::vec3(0.0f, 0.0f, 0.0f),
+                                                        0.0f, true, found);
+            CHECK(found);
+            CHECK(h == doctest::Approx(0.0f));
+        }
+
+        SUBCASE("under the floor with no ocean there is no water at all")
+        {
+            const float h = water::resolveSurfaceHeight(bodies.data(), bodies.size(),
+                                                        glm::vec3(0.0f, 0.0f, 0.0f),
+                                                        0.0f, false, found);
+            CHECK_FALSE(found);
+            CHECK(h == doctest::Approx(0.0f));
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // VK-1607 review finding #5: the CPU height sampler summed bands the vertex shader LOD-culls.
+    // ---------------------------------------------------------------------------------------------
+
+    TEST_CASE("the band LOD rule matches what the water vertex shader applies")
+    {
+        SUBCASE("swell is never dropped")
+        {
+            for (uint32_t lod = 0; lod < water::WATER_TILE_LOD_COUNT; ++lod)
+                CHECK((water::lodBandMask(water::WATER_TILE_BAND_MASK_BITS, lod) & 1u) != 0u);
+        }
+
+        SUBCASE("ripples go at LOD 2, agitation at LOD 3")
+        {
+            CHECK(water::lodBandMask(0x7u, 0u) == 0x7u);
+            CHECK(water::lodBandMask(0x7u, 1u) == 0x7u);
+            CHECK(water::lodBandMask(0x7u, 2u) == 0x3u);   // ripples cleared
+            CHECK(water::lodBandMask(0x7u, 3u) == 0x1u);   // agitation cleared too
+        }
+
+        SUBCASE("a band the tile never had stays off")
+        {
+            CHECK(water::lodBandMask(0u, 0u) == 0u);
+            CHECK(water::lodBandMask(0x1u, 3u) == 0x1u);
+        }
+    }
+
+    TEST_CASE("tile LOD selection mirrors both tile-building paths")
+    {
+        SUBCASE("editor ring buckets match the 9x9 grid")
+        {
+            CHECK(water::editorRingLod(0) == 0u);
+            CHECK(water::editorRingLod(1) == 0u);
+            CHECK(water::editorRingLod(2) == 1u);
+            CHECK(water::editorRingLod(3) == 2u);
+            CHECK(water::editorRingLod(4) == 3u);
+            // Past the grid edge the coarsest LOD is also what the outermost ring carries.
+            CHECK(water::editorRingLod(99) == 3u);
+        }
+
+        SUBCASE("world-mode distance thresholds are multiples of the tile size")
+        {
+            constexpr float tile = 100.0f;
+            CHECK(water::selectTileLod(0.0f, tile) == 0u);
+            CHECK(water::selectTileLod(199.0f, tile) == 0u);
+            CHECK(water::selectTileLod(200.0f, tile) == 1u);
+            CHECK(water::selectTileLod(499.0f, tile) == 1u);
+            CHECK(water::selectTileLod(500.0f, tile) == 2u);
+            CHECK(water::selectTileLod(999.0f, tile) == 2u);
+            CHECK(water::selectTileLod(1000.0f, tile) == 3u);
+        }
+
+        SUBCASE("a degenerate tile size cannot divide by zero")
+        {
+            CHECK(water::selectTileLod(500.0f, 0.0f) == 0u);
+            CHECK(water::selectTileLod(500.0f, -1.0f) == 0u);
+        }
+    }
+
     TEST_CASE("a water body survives a scene round trip")
     {
         resetWaterBodyTestRoot();
@@ -341,6 +529,7 @@ TEST_SUITE("WaterBody")
         body.type = components::WaterBodyType::Pool;
         body.waterHeight = 12.25f;
         body.halfExtents = glm::vec2(7.5f, 3.25f);
+        body.depth = 3.75f;
         body.bandMask = 0x5u;
         body.physicsEnabled = false;   // non-default so a key mismatch is caught
         body.isActive = false;
@@ -360,6 +549,7 @@ TEST_SUITE("WaterBody")
         CHECK(after.waterHeight == doctest::Approx(12.25f));
         CHECK(after.halfExtents.x == doctest::Approx(7.5f));
         CHECK(after.halfExtents.y == doctest::Approx(3.25f));
+        CHECK(after.depth == doctest::Approx(3.75f));
         CHECK(after.bandMask == 0x5u);
         CHECK(after.physicsEnabled == false);
         CHECK(after.isActive == false);
@@ -396,6 +586,7 @@ TEST_SUITE("WaterBody")
         CHECK(after.type == defaults.type);
         CHECK(after.halfExtents.x == doctest::Approx(defaults.halfExtents.x));
         CHECK(after.halfExtents.y == doctest::Approx(defaults.halfExtents.y));
+        CHECK(after.depth == doctest::Approx(defaults.depth));
         CHECK(after.bandMask == defaults.bandMask);
         CHECK(after.physicsEnabled == defaults.physicsEnabled);
         CHECK(after.isActive == defaults.isActive);

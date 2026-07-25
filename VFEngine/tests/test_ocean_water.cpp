@@ -406,4 +406,28 @@ TEST_CASE("DisplacementSampling: patchUV mirrors worldPos.xz / patchSize") {
     CHECK(water::patchUV({1.0f, 1.0f}, -5.0f).y == doctest::Approx(0.0f));
 }
 
+// VK-1607 review finding #12: patchUV's uv = (0,0) substitute is NOT the same thing as "no height".
+// Sampling a real grid at (0,0) returns a real texel, and it returns the SAME one for every world
+// position - a constant offset surface that buoyancy reads as the water level.
+TEST_CASE("DisplacementSampling: a degenerate patch size has no height, not a constant one") {
+    // Deliberately non-zero at UV (0,0) so the guard is the only thing that can produce 0.
+    const std::vector<float> grid = {5.0f, 6.0f,
+                                      7.0f, 8.0f};
+    auto fetch = [&grid](uint32_t i) { return grid[i]; };
+
+    SUBCASE("a valid patch size samples normally") {
+        CHECK(water::sampleBandHeight(fetch, 2, {0.0f, 0.0f}, 4.0f) ==
+              doctest::Approx(water::sampleBilinearWrapped(fetch, 2, water::patchUV({0.0f, 0.0f}, 4.0f))));
+    }
+
+    SUBCASE("a non-positive patch size is exactly zero everywhere") {
+        CHECK(water::sampleBandHeight(fetch, 2, {0.0f, 0.0f}, 0.0f) == 0.0f);
+        CHECK(water::sampleBandHeight(fetch, 2, {123.0f, -456.0f}, 0.0f) == 0.0f);
+        CHECK(water::sampleBandHeight(fetch, 2, {0.0f, 0.0f}, -5.0f) == 0.0f);
+
+        // What it would have returned without the guard - proof the guard is load-bearing.
+        CHECK(water::sampleBilinearWrapped(fetch, 2, water::patchUV({123.0f, -456.0f}, 0.0f)) != 0.0f);
+    }
+}
+
 } // TEST_SUITE("OceanWater")

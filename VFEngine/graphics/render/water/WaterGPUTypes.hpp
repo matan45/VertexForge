@@ -78,13 +78,13 @@ namespace render::water
     // likewise written into the dummy set (WaterPipeline::updateDummyRipple). It is view-independent
     // — one camera-following patch shared by every view — so there is nothing to suppress.
     //
-    // CAVEAT, true since VK-1604 and NOT introduced here: this mask only decides what an RTT view is
-    // ALLOWED to keep. RTT views bind the pipeline's dummy set 9, whose UBO is written exactly once
-    // with all-default WaterExtendedParams — including flags = 0. So in practice a probe currently
-    // renders with hex, shoaling, shore waves AND ripples all off, whatever this mask says. Making
-    // probe geometry actually match the main view needs the dummy params buffer to be refreshed per
-    // frame with the vertex-stage flags; that is a behaviour change to VK-1604/VK-1605 and is
-    // deliberately left alone here.
+    // VK-1607: this mask is now load-bearing on the RTT path rather than aspirational. RTT views
+    // bind the pipeline's dummy set 9, whose UBO was previously written exactly once with all-default
+    // WaterExtendedParams (flags = 0), so a probe rendered with hex, shoaling, shore waves, ripples
+    // and the water-body clip all off whatever this said. GPUDrivenRenderer::updateWater now calls
+    // WaterPipeline::updateDummyParams every frame with a copy of the real params whose flags are
+    // pre-masked by exactly this constant — so the dummy buffer can never re-enable SSR or
+    // absorption, which are the two features that genuinely need the main view's set 9.
     constexpr uint32_t WATER_VIEW_FLAGS_ALL = 0xFFFFFFFFu;
     constexpr uint32_t WATER_VIEW_FLAGS_RTT = ~(WATER_FLAG_SSR | WATER_FLAG_ABSORPTION);
 

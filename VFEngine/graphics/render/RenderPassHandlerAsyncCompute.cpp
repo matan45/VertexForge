@@ -324,14 +324,17 @@ namespace render
         if (!oceanRenderProvider || !oceanRenderProvider->hasWaterToRender())
             return;
 
-        const glm::vec2 camXZ(currentCameraPosition.x, currentCameraPosition.z);
-
         // VK-1607: bodies take precedence over the ocean at their own footprint, exactly as they do
         // for buoyancy. Note this uses the ocean's BASE height rather than the displaced surface -
         // unchanged behaviour, and the 1 m ramp below is far wider than the waves anyway.
+        //
+        // Resolved against the full camera POSITION, not its XZ column: a body is bounded below by
+        // its floor, so standing in a ground-floor room under a rooftop pool is dry. With the XZ
+        // overload the pool claimed every Y beneath it and the underwater post played indoors.
         const auto bodies = oceanRenderProvider->getWaterBodies();
         bool found = false;
-        const float waterH = ::water::resolveSurfaceHeight(bodies.data(), bodies.size(), camXZ,
+        const float waterH = ::water::resolveSurfaceHeight(bodies.data(), bodies.size(),
+                                                            currentCameraPosition,
                                                             oceanRenderProvider->getBaseWaterHeight(),
                                                             oceanRenderProvider->hasActiveOcean(),
                                                             found);

@@ -14,6 +14,7 @@ namespace serialization
         j["type"] = static_cast<uint32_t>(body.type);
         j["waterHeight"] = body.waterHeight;
         j["halfExtents"] = {body.halfExtents.x, body.halfExtents.y};
+        j["depth"] = body.depth;
         j["bandMask"] = body.bandMask;
         j["physicsEnabled"] = body.physicsEnabled;
         j["isActive"] = body.isActive;
@@ -31,6 +32,8 @@ namespace serialization
             body.waterHeight = it->get<float>();
         if (auto it = j.find("halfExtents"); it != j.end() && it->is_array() && it->size() >= 2)
             body.halfExtents = glm::vec2((*it)[0].get<float>(), (*it)[1].get<float>());
+        if (auto it = j.find("depth"); it != j.end() && it->is_number())
+            body.depth = it->get<float>();
         if (auto it = j.find("bandMask"); it != j.end() && it->is_number_unsigned())
             body.bandMask = it->get<uint32_t>();
         if (auto it = j.find("physicsEnabled"); it != j.end() && it->is_boolean())

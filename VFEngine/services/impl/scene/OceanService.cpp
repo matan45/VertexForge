@@ -14,6 +14,8 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include "../../../utilities/water/BuoyancySampling.hpp"
+#include "../../../utilities/water/WakeMath.hpp"
+#include <algorithm>
 #include <cmath>
 
 namespace services
@@ -58,6 +60,20 @@ namespace services
             worldLoadedSub.reset();
         }
 
+        // VK-1605: the two terrain subscriptions that request a shore-field rebake. They capture
+        // `this` exactly like every subscription above, so leaving them live would let a terrain
+        // load after teardown write into a destroyed OceanService.
+        if (terrainChangedSub && terrainChangedSub->isValid())
+        {
+            dispatcher.unsubscribe(*terrainChangedSub);
+            terrainChangedSub.reset();
+        }
+        if (terrainLoadedSub && terrainLoadedSub->isValid())
+        {
+            dispatcher.unsubscribe(*terrainLoadedSub);
+            terrainLoadedSub.reset();
+        }
+
         waterTileGrid.reset();
 
         dispatcher.unregisterCommandHandler<events::ocean::CreateOceanCommand>();
@@ -72,6 +88,10 @@ namespace services
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanSeaStateCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanWeatherDrivenCommand>();
 
+        // VK-1606
+        dispatcher.unregisterCommandHandler<events::ocean::AddWaterImpulseCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetWaterRippleEnabledCommand>();
+
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanEntityQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanDataQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanVisualSettingsQuery>();
@@ -84,6 +104,9 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
+
+        // VK-1606
+        dispatcher.unregisterQueryHandler<events::ocean::IsWaterRippleEnabledQuery>();
 
         // VK-1607
         dispatcher.unregisterCommandHandler<events::ocean::CreateWaterBodyCommand>();
@@ -519,6 +542,11 @@ namespace services
         oceanConfig = OceanFFTConfigData{};
         oceanConfigVersion++;
 
+        // A shore bake spans ~8 frames and the driver stops ticking it as soon as the last water is
+        // gone, so an in-flight one has to be dropped here or it pins the terrain snapshot and later
+        // commits this scene's bathymetry over the next one.
+        abandonShoreFieldBake();
+
         events::ocean::OceanDeletedNotification notification;
         notification.oceanEntity = entity;
         events::EventDispatcher::instance().publish(notification);
@@ -649,8 +677,9 @@ namespace services
         const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
 
         // Bodies first, so the ocean height sampler (which sums every FFT band) is only paid for
-        // when the point is actually over open water.
-        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        // when the point is actually over open water. The 3D lookup also bounds the body from
+        // below - under its floor there is no water, so the query falls through to the ocean.
+        const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), worldPos);
         if (bodyIndex >= 0)
             return worldPos.y <= bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
 
@@ -714,10 +743,26 @@ namespace services
         shoreFieldRebakeRequested = false;
     }
 
+    void OceanService::abandonShoreFieldBake()
+    {
+        shoreDepthField.cancelBake();
+        terrainGrid = {};
+        terrainSnapshot = {};
+        // Whatever comes next starts from scratch: the field's front buffer still holds the old
+        // scene's bathymetry, so it must not be reused just because the camera has not moved.
+        shoreFieldRebakeRequested = true;
+        shoreFieldWaterHeight = 0.0f;
+    }
+
     void OceanService::updateShoreDepthField(const glm::vec2& cameraXZ)
     {
-        if (!oceanEntity.isValid())
-            return;
+        // VK-1607: no ocean gate. The field is just "water level minus terrain height", and the
+        // render-side driver already calls this under hasWaterToRender() - so in a lake-only scene
+        // it bakes against a base water height of 0, i.e. a plain terrain-relative datum that
+        // getWaterDepthAt then re-references to whichever body owns the query point. Gating on the
+        // ocean entity here is what left Ocean.getWaterDepthAt reporting SHORE_FIELD_DEEP forever
+        // in a scene whose only water is a lake, and left a bake stranded mid-flight when the ocean
+        // was deleted inside the ~8 frames one takes.
 
         // The field stores waterHeight - terrainHeight, so raising or lowering the ocean
         // invalidates every texel just as surely as moving the window does.
@@ -741,6 +786,31 @@ namespace services
 
     float OceanService::getWaterDepthAt(const glm::vec2& worldXZ) const
     {
+        // VK-1607 review: body-aware, and honest about "there is no water here".
+        //
+        // The field bakes (baseWaterHeight - terrainHeight), so re-referencing it to a body's own
+        // surface is a single add: depth_body = (surface_body - terrainHeight)
+        //                                    = field + (surface_body - baseWaterHeight).
+        // Before this, a scene whose only water was a lake never baked at all and every caller of
+        // Ocean.getWaterDepthAt got SHORE_FIELD_DEEP (1e4) - so wade-vs-swim, drowning and
+        // shallow-water VFX all took the deep-ocean branch in a two-metre pond.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        if (bodyIndex >= 0)
+        {
+            const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+            if (!shoreDepthField.hasBakedOnce())
+                return std::max(body.depth, 0.0f);   // no terrain sampled yet: the authored floor
+
+            const float depth = shoreDepthField.sample(worldXZ) + (body.surfaceHeight - getBaseWaterHeight());
+            // Never deeper than the body's own floor - the terrain under a rooftop pool is
+            // irrelevant to how much water is in it.
+            return std::clamp(depth, 0.0f, std::max(body.depth, 0.0f));
+        }
+
+        if (!hasActiveOcean())
+            return 0.0f;   // no water at this XZ at all; 0, not "bottomless"
+
         return shoreDepthField.sample(worldXZ);
     }
 
@@ -818,7 +888,12 @@ namespace services
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::WaterWakeEmitterComponent, components::TransformComponent>();
 
-        const float surfaceBase = getBaseWaterHeight();
+        // VK-1607 review: the waterline test is resolved PER EMITTER against the surface at its own
+        // XZ, not once against the ocean's base height. A boat on a lake authored at y = 40 failed
+        // the old test on every tick and produced no ripples at all, silently.
+        const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
+        const float oceanBase = getBaseWaterHeight();
+        const bool oceanActive = hasActiveOcean();
 
         for (auto entity : view)
         {
@@ -827,7 +902,24 @@ namespace services
                 continue;
 
             const auto& transform = view.get<components::TransformComponent>(entity);
-            const glm::vec3 world = transform.position + emitter.offset;
+
+            // VK-1607 review: `offset` is documented and shown in the inspector as LOCAL space
+            // ("put it on the bow, not the hull centre"). Adding it to the local position in world
+            // axes left a bow emitter pointing north whichever way the hull faced, and put an
+            // emitter on a child entity near the world origin instead of on the boat. The world
+            // matrix SceneGraphSystem already publishes carries both the rotation and the parent
+            // chain; entities that have not been through it (scene roots) fall back to the local
+            // position, which for a root is the world position.
+            glm::vec3 world;
+            if (registry.all_of<components::WorldTransformComponent>(entity))
+            {
+                const auto& worldTransform = registry.get<components::WorldTransformComponent>(entity);
+                world = glm::vec3(worldTransform.worldMatrix * glm::vec4(emitter.offset, 1.0f));
+            }
+            else
+            {
+                world = transform.position + emitter.offset;
+            }
             const glm::vec2 worldXZ(world.x, world.z);
 
             EntityHandle handle = internal::toHandle(entity);
@@ -837,28 +929,36 @@ namespace services
             auto it = emitterWakeTrail.find(handle);
             if (it == emitterWakeTrail.end())
             {
-                emitterWakeTrail.emplace(handle, worldXZ);
+                emitterWakeTrail.emplace(handle, water::WakeTrailState{worldXZ, worldXZ});
                 continue;   // no previous sample yet, so no speed yet
             }
 
-            const glm::vec2 previous = it->second;
-            const float travelled = glm::length(worldXZ - previous);
-            const float speed = travelled / deltaTime;
+            water::WakeTrailState& trail = it->second;
 
-            if (speed < emitter.minSpeed)
+            // TWO baselines. lastPositionXZ is rewritten unconditionally below, so `speed` is always
+            // this tick's speed; lastEmitXZ only moves when a ring is actually stamped, so the
+            // travel interval measures ring spacing. Sharing one anchor is what let a sub-minSpeed
+            // drifter accumulate travel for ten seconds and then report 30 m/s.
+            const float speed = water::wakeFrameSpeed(worldXZ, trail.lastPositionXZ, deltaTime);
+            const float travelledSinceEmit = glm::length(worldXZ - trail.lastEmitXZ);
+            trail.lastPositionXZ = worldXZ;
+
+            if (!water::wakeShouldEmit(speed, travelledSinceEmit, emitter.minSpeed,
+                                       emitter.travelInterval, emitter.continuous))
                 continue;
 
-            // Only emit above the waterline-ish: an emitter dragged along under the seabed or high
-            // in the air should not stamp rings on the surface.
-            if (world.y > surfaceBase + emitter.radius || world.y < surfaceBase - emitter.radius)
+            // Only emit near the waterline: an emitter dragged along under the seabed or high in the
+            // air should not stamp rings on the surface.
+            bool foundSurface = false;
+            const float surfaceHere = water::resolveSurfaceHeight(bodies.data(), bodies.size(), world,
+                                                                  oceanBase, oceanActive, foundSurface);
+            if (!foundSurface)
                 continue;
-
-            const bool travelledEnough = travelled >= emitter.travelInterval;
-            if (!emitter.continuous && !travelledEnough)
+            if (world.y > surfaceHere + emitter.radius || world.y < surfaceHere - emitter.radius)
                 continue;
 
             queueWaterImpulse({worldXZ, emitter.radius, emitter.strength});
-            it->second = worldXZ;
+            trail.lastEmitXZ = worldXZ;
         }
 
         // Bound the map the same way ControllerServiceImpl bounds its interpolation cache: any key
@@ -888,12 +988,23 @@ namespace services
         return getOceanSurfaceHeightAt(worldXZ);
     }
 
-    std::optional<float> OceanService::getWaterSurfaceAt(const glm::vec2& worldXZ) const
+    std::optional<float> OceanService::getWaterSurfaceAt(const glm::vec3& worldPos) const
     {
+        const glm::vec2 worldXZ(worldPos.x, worldPos.z);
+
         const std::vector<water::WaterBodyDesc> bodies = collectWaterBodies();
-        const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), worldXZ);
+        const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), worldPos);
         if (bodyIndex >= 0)
-            return bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
+        {
+            // VK-1607 review: a physics-disabled body is a HOLE, exactly as updateBuoyancy treats
+            // it - something occupies that footprint, it just floats nothing. Returning its surface
+            // here let a character swim in a pool that a crate falls straight through, and falling
+            // back to the ocean would be worse still (the pool is not sea water).
+            const water::WaterBodyDesc& body = bodies[static_cast<size_t>(bodyIndex)];
+            if (body.physicsEnabled == 0u)
+                return std::nullopt;
+            return body.surfaceHeight;
+        }
 
         if (!oceanEntity.isValid())
             return std::nullopt;
@@ -962,6 +1073,7 @@ namespace services
             desc.center = glm::vec2(transform.position.x, transform.position.z);
             desc.halfExtents = glm::max(body.halfExtents, glm::vec2(0.0f));
             desc.surfaceHeight = transform.position.y + body.waterHeight;
+            desc.depth = std::max(body.depth, 0.0f);
             desc.bandMask = body.bandMask & water::WATER_TILE_BAND_MASK_BITS;
             desc.physicsEnabled = body.physicsEnabled ? 1u : 0u;
             bodies.push_back(desc);
@@ -991,6 +1103,7 @@ namespace services
         comp.type = data.type == 1u ? components::WaterBodyType::Pool : components::WaterBodyType::Lake;
         comp.waterHeight = data.waterHeight;
         comp.halfExtents = glm::max(data.halfExtents, glm::vec2(0.0f));
+        comp.depth = std::max(data.depth, 0.0f);
         comp.bandMask = data.bandMask & water::WATER_TILE_BAND_MASK_BITS;
         comp.physicsEnabled = data.physicsEnabled;
         comp.isActive = data.isActive;
@@ -1002,6 +1115,7 @@ namespace services
         data.type = static_cast<uint32_t>(comp.type);
         data.waterHeight = comp.waterHeight;
         data.halfExtents = comp.halfExtents;
+        data.depth = comp.depth;
         data.bandMask = comp.bandMask;
         data.physicsEnabled = comp.physicsEnabled;
         data.isActive = comp.isActive;
@@ -1125,7 +1239,7 @@ namespace services
         dispatcher.registerQueryHandler<events::ocean::GetWaterSurfaceAtQuery>(
             [this](const events::ocean::GetWaterSurfaceAtQuery& query)
             {
-                return getWaterSurfaceAt(query.worldXZ);
+                return getWaterSurfaceAt(glm::vec3(query.worldXZ.x, query.worldY, query.worldXZ.y));
             });
     }
 
@@ -1559,7 +1673,11 @@ namespace services
                 // sampler runs (that one sums every FFT band and is far from free). A body whose
                 // physics switch is off is a hole in the water rather than a fall-through to the
                 // ocean: something is occupying that footprint, it just does not float anything.
-                const int bodyIndex = water::findBodyAt(bodies.data(), bodies.size(), pointXZ);
+                //
+                // findBodyAtPoint, not findBodyAt: a body has a floor now, and a sample point below
+                // it is under the pool rather than in it. Without the Y test a crate on the floor
+                // below a rooftop pool would take buoyancy up through the ceiling.
+                const int bodyIndex = water::findBodyAtPoint(bodies.data(), bodies.size(), pointWorld[i]);
 
                 float waterHeight;
                 if (bodyIndex >= 0)
@@ -1713,13 +1831,17 @@ namespace services
 
     void OceanService::update(float deltaTime)
     {
-        if (!oceanEntity.isValid())
-            return;
-
-        if (seaStateTransitionActive)
-            updateManualSeaStateTransition(deltaTime);
-        else
-            updateWeatherDrivenSeaState();
+        // Sea state is an ocean-only concept; wake emitters are not. VK-1607 moved the emitter tick
+        // out from under the ocean gate so an emitter riding a lake is at least reachable - it still
+        // early-outs on isRippleSimEnabled(), which does require an ocean entity to supply the
+        // ripple settings (the documented limitation, unchanged).
+        if (oceanEntity.isValid())
+        {
+            if (seaStateTransitionActive)
+                updateManualSeaStateTransition(deltaTime);
+            else
+                updateWeatherDrivenSeaState();
+        }
 
         updateWakeEmitters(deltaTime);   // VK-1606
     }
@@ -1952,6 +2074,8 @@ namespace services
         oceanEntity = {};
         oceanConfig = OceanFFTConfigData{};
         oceanConfigVersion++;
+
+        abandonShoreFieldBake();
 
         vfLogInfo("OceanService: Cleared ocean on scene clear");
     }
