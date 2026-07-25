@@ -116,7 +116,14 @@ TEST_CASE("linearizeDepth: matches the shared cluster_culling.glsl helper") {
 
     // A standard (non-reverse) projection maps the near plane to windowZ 0 and far to 1.
     CHECK(water::linearizeDepth(nearPlane, farPlane, 0.0f) == doctest::Approx(nearPlane));
-    CHECK(water::linearizeDepth(nearPlane, farPlane, 1.0f) == doctest::Approx(farPlane));
+
+    // At windowZ = 1 the denominator (far - z*(far-near)) cancels 1000.0 - 999.9 down to ~0.1
+    // from operands of magnitude 1000, losing about four decimal digits: 999.9f is really
+    // 999.900024, so the result lands near 1000.24 rather than exactly 1000. That ~0.02% error
+    // is float32 cancellation, not a formula error - the shader runs the same arithmetic and
+    // gets the same value, which is irrelevant for depth comparisons and path lengths.
+    // Do not tighten this tolerance; it will fail again.
+    CHECK(water::linearizeDepth(nearPlane, farPlane, 1.0f) == doctest::Approx(farPlane).epsilon(0.001));
 
     // Monotone increasing in windowZ — required for the SSR thickness test to mean anything.
     float previous = -1.0f;
