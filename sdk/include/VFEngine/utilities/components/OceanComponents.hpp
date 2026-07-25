@@ -58,6 +58,7 @@ namespace components
         float ssrMaxDistance = 60.0f;       // metres
         float ssrThickness = 0.35f;         // metres; range-scaled in the shader
         uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;          // renders SSR confidence as greyscale
 
         // VK-1604: Beer-Lambert absorption / in-scattering. OFF keeps the legacy height-based
         // deep/shallow tint byte-for-byte, so existing content is unaffected until opted in.
@@ -74,6 +75,30 @@ namespace components
         uint32_t hexBandMask = 0x6;         // bands 1 and 2 by default
         float hexCellScale = 1.0f;          // hex cells per band patch
         float hexBlendContrast = 4.0f;      // weight sharpening exponent
+
+        // VK-1605: shoaling. Each band's amplitude follows Green's law once it feels the bottom,
+        // capped by the depth-limited breaking height so it collapses at the waterline instead of
+        // growing through the beach. Both this and the breakers below need the camera-following
+        // shore-depth field (waterHeight - terrainHeight); with no terrain the field reads "no
+        // bottom" everywhere and every factor is exactly 1, leaving deep-ocean scenes untouched.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;      // 0..1 blend toward the full effect
+        float shoalingMinDepth = 0.0f;      // depth at which a band is already fully flattened
+        float shoalingWavelengthScale = 1.0f; // scales each band's Pierson-Moskowitz peak wavelength
+        float shoalingGamma = 0.78f;        // McCowan depth-limited breaking ratio H/d
+        float shoreEdgeFadeStart = 0.88f;   // 0..1, where the shore-field window starts fading out
+
+        // VK-1605: traveling breakers. Phase is measured in water DEPTH, so crests follow iso-depth
+        // contours - they arrive parallel to the shore and wrap headlands with no bathymetry solve.
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;    // metres; 0 disables
+        float shoreWaveLength = 12.0f;      // metres of depth between successive crests
+        float shoreWaveSpeed = 0.35f;       // crests per second, travelling shoreward
+        float shoreWaveBreakDepth = 1.5f;   // offshore edge of the surf zone
+        float shoreWaveBreakRange = 1.0f;   // envelope fade width at both ends
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;         // forward lean along the shore-depth gradient
 
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {

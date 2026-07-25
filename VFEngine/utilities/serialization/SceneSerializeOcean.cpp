@@ -51,6 +51,22 @@ namespace serialization
         j["hexBandMask"] = ocean.hexBandMask;
         j["hexCellScale"] = ocean.hexCellScale;
         j["hexBlendContrast"] = ocean.hexBlendContrast;
+        // VK-1605
+        j["shoalingEnabled"] = ocean.shoalingEnabled;
+        j["shoalingStrength"] = ocean.shoalingStrength;
+        j["shoalingMinDepth"] = ocean.shoalingMinDepth;
+        j["shoalingWavelengthScale"] = ocean.shoalingWavelengthScale;
+        j["shoalingGamma"] = ocean.shoalingGamma;
+        j["shoreEdgeFadeStart"] = ocean.shoreEdgeFadeStart;
+        j["shoreWavesEnabled"] = ocean.shoreWavesEnabled;
+        j["shoreWaveAmplitude"] = ocean.shoreWaveAmplitude;
+        j["shoreWaveLength"] = ocean.shoreWaveLength;
+        j["shoreWaveSpeed"] = ocean.shoreWaveSpeed;
+        j["shoreWaveBreakDepth"] = ocean.shoreWaveBreakDepth;
+        j["shoreWaveBreakRange"] = ocean.shoreWaveBreakRange;
+        j["shoreWaveCrestFoam"] = ocean.shoreWaveCrestFoam;
+        j["shoreWaveCrestFoamThreshold"] = ocean.shoreWaveCrestFoamThreshold;
+        j["shoreWaveLean"] = ocean.shoreWaveLean;
 
         // Ocean FFT bands
         auto bandsArray = nlohmann::json::array();
@@ -166,6 +182,37 @@ namespace serialization
             ocean.hexCellScale = it->get<float>();
         if (auto it = j.find("hexBlendContrast"); it != j.end() && it->is_number())
             ocean.hexBlendContrast = it->get<float>();
+        // VK-1605 — type-guarded like the rest; a scene saved before this story keeps the defaults.
+        if (auto it = j.find("shoalingEnabled"); it != j.end() && it->is_boolean())
+            ocean.shoalingEnabled = it->get<bool>();
+        if (auto it = j.find("shoalingStrength"); it != j.end() && it->is_number())
+            ocean.shoalingStrength = it->get<float>();
+        if (auto it = j.find("shoalingMinDepth"); it != j.end() && it->is_number())
+            ocean.shoalingMinDepth = it->get<float>();
+        if (auto it = j.find("shoalingWavelengthScale"); it != j.end() && it->is_number())
+            ocean.shoalingWavelengthScale = it->get<float>();
+        if (auto it = j.find("shoalingGamma"); it != j.end() && it->is_number())
+            ocean.shoalingGamma = it->get<float>();
+        if (auto it = j.find("shoreEdgeFadeStart"); it != j.end() && it->is_number())
+            ocean.shoreEdgeFadeStart = it->get<float>();
+        if (auto it = j.find("shoreWavesEnabled"); it != j.end() && it->is_boolean())
+            ocean.shoreWavesEnabled = it->get<bool>();
+        if (auto it = j.find("shoreWaveAmplitude"); it != j.end() && it->is_number())
+            ocean.shoreWaveAmplitude = it->get<float>();
+        if (auto it = j.find("shoreWaveLength"); it != j.end() && it->is_number())
+            ocean.shoreWaveLength = it->get<float>();
+        if (auto it = j.find("shoreWaveSpeed"); it != j.end() && it->is_number())
+            ocean.shoreWaveSpeed = it->get<float>();
+        if (auto it = j.find("shoreWaveBreakDepth"); it != j.end() && it->is_number())
+            ocean.shoreWaveBreakDepth = it->get<float>();
+        if (auto it = j.find("shoreWaveBreakRange"); it != j.end() && it->is_number())
+            ocean.shoreWaveBreakRange = it->get<float>();
+        if (auto it = j.find("shoreWaveCrestFoam"); it != j.end() && it->is_number())
+            ocean.shoreWaveCrestFoam = it->get<float>();
+        if (auto it = j.find("shoreWaveCrestFoamThreshold"); it != j.end() && it->is_number())
+            ocean.shoreWaveCrestFoamThreshold = it->get<float>();
+        if (auto it = j.find("shoreWaveLean"); it != j.end() && it->is_number())
+            ocean.shoreWaveLean = it->get<float>();
 
         // Ocean FFT bands
         if (j.contains("oceanBands") && j["oceanBands"].is_array())

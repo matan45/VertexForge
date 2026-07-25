@@ -63,6 +63,10 @@ namespace windows::details
             ImGui::Text("Beer-Lambert: %s", data.beerLambertEnabled ? "On" : "Off");
             ImGui::Text("Anti-Tiling: %s", data.hexTilingEnabled ? "On" : "Off");
 
+            // VK-1605
+            ImGui::Text("Shoaling: %s", data.shoalingEnabled ? "On" : "Off");
+            ImGui::Text("Breaking Waves: %s", data.shoreWavesEnabled ? "On" : "Off");
+
             ImGui::Unindent(10.0f);
         }
 

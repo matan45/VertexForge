@@ -492,6 +492,8 @@ namespace services
         // Allocate heights buffer (zeroed)
         size_t totalHeights = static_cast<size_t>(gridCountX) * gridCountZ * vpt * vpt;
         result.heights.resize(totalHeights, 0.0f);
+        // VK-1605: parallel per-tile presence mask — see TerrainHeightfieldResult::tileValid.
+        result.tileValid.assign(static_cast<size_t>(gridCountX) * gridCountZ, 0u);
 
         // Pack each tile's heightData into the correct grid position
         for (auto* tile : allTiles)
@@ -510,6 +512,8 @@ namespace services
             std::memcpy(result.heights.data() + baseOffset,
                         tile->heightData.data(),
                         copyCount * sizeof(float));
+            if (tileIndex < result.tileValid.size())
+                result.tileValid[tileIndex] = 1u;
         }
 
         result.valid = true;

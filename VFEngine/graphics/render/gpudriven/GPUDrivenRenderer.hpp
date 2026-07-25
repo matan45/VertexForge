@@ -113,6 +113,7 @@ namespace services
 namespace water
 {
     class WaterTileGrid;
+    class ShoreDepthField;
 }
 
 namespace vegetation
@@ -701,7 +702,14 @@ namespace render::gpudriven
                          const glm::vec3& cameraPosition,
                          float oceanPatchSize,
                          bool worldMode = false,
-                         const ::water::WaterTileGrid* tileGrid = nullptr);
+                         const ::water::WaterTileGrid* tileGrid = nullptr,
+                         const ::water::ShoreDepthField* shoreField = nullptr);
+
+        // VK-1605: record the shore-depth texture upload and latch the frame time that drives
+        // camera.u_Time (so CPU buoyancy stays in phase with the drawn breakers). MUST be called
+        // outside a render pass; it sits next to dispatchOceanFFT. The copy is a no-op unless the
+        // field's version changed.
+        void uploadShoreDepthField(vk::CommandBuffer cmd, float time);
         void renderWaterDraw(vk::CommandBuffer cmd, vk::DescriptorSet iblDescriptorSet);
         void clearWaterData();
 

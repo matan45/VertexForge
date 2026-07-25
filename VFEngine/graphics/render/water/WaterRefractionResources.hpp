@@ -20,8 +20,16 @@ namespace render::water
         WaterRefractionResources(const WaterRefractionResources&) = delete;
         WaterRefractionResources& operator=(const WaterRefractionResources&) = delete;
 
-        void init(vk::Format swapchainFormat, uint32_t width, uint32_t height, vk::ImageView sceneDepthView);
-        void recreate(vk::Format swapchainFormat, uint32_t width, uint32_t height, vk::ImageView sceneDepthView);
+        // VK-1605: the shore-depth image lives outside this class (WaterShoreDepthResources) but is
+        // bound here at binding 3. recreate() tears the whole descriptor set down and rebuilds it on
+        // every swapchain resize, so the view+sampler must be re-supplied each time rather than
+        // written once — hence they travel with sceneDepthView instead of having their own setter.
+        void init(vk::Format swapchainFormat, uint32_t width, uint32_t height,
+                  vk::ImageView sceneDepthView,
+                  vk::ImageView shoreDepthView = nullptr, vk::Sampler shoreDepthSampler = nullptr);
+        void recreate(vk::Format swapchainFormat, uint32_t width, uint32_t height,
+                      vk::ImageView sceneDepthView,
+                      vk::ImageView shoreDepthView = nullptr, vk::Sampler shoreDepthSampler = nullptr);
         void cleanup();
 
         void copySceneColor(vk::CommandBuffer cmd, vk::Image srcColorImage, uint32_t width, uint32_t height);
@@ -63,7 +71,8 @@ namespace render::water
         void createDescriptorLayout();
         void createDescriptorPool();
         void allocateDescriptorSet();
-        void updateDescriptorSet(vk::ImageView sceneDepthView);
+        void updateDescriptorSet(vk::ImageView sceneDepthView, vk::ImageView shoreDepthView,
+                                 vk::Sampler shoreDepthSampler);
         void transitionImageInitial();
     };
 }

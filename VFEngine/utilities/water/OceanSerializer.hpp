@@ -62,6 +62,24 @@ namespace ocean
         float hexCellScale = 1.0f;
         float hexBlendContrast = 4.0f;
 
+        // VK-1605 — mirrors components::OceanComponent; see that header for the rationale.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingMinDepth = 0.0f;
+        float shoalingWavelengthScale = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;
+        float shoreWaveLength = 12.0f;
+        float shoreWaveSpeed = 0.35f;
+        float shoreWaveBreakDepth = 1.5f;
+        float shoreWaveBreakRange = 1.0f;
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;
+
         // Physics
         float density = 1000.0f;
         float drag = 0.5f;

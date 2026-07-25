@@ -76,6 +76,30 @@ namespace components
         float hexCellScale = 1.0f;          // hex cells per band patch
         float hexBlendContrast = 4.0f;      // weight sharpening exponent
 
+        // VK-1605: shoaling. Each band's amplitude follows Green's law once it feels the bottom,
+        // capped by the depth-limited breaking height so it collapses at the waterline instead of
+        // growing through the beach. Both this and the breakers below need the camera-following
+        // shore-depth field (waterHeight - terrainHeight); with no terrain the field reads "no
+        // bottom" everywhere and every factor is exactly 1, leaving deep-ocean scenes untouched.
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;      // 0..1 blend toward the full effect
+        float shoalingMinDepth = 0.0f;      // depth at which a band is already fully flattened
+        float shoalingWavelengthScale = 1.0f; // scales each band's Pierson-Moskowitz peak wavelength
+        float shoalingGamma = 0.78f;        // McCowan depth-limited breaking ratio H/d
+        float shoreEdgeFadeStart = 0.88f;   // 0..1, where the shore-field window starts fading out
+
+        // VK-1605: traveling breakers. Phase is measured in water DEPTH, so crests follow iso-depth
+        // contours - they arrive parallel to the shore and wrap headlands with no bathymetry solve.
+        bool shoreWavesEnabled = false;
+        float shoreWaveAmplitude = 0.4f;    // metres; 0 disables
+        float shoreWaveLength = 12.0f;      // metres of depth between successive crests
+        float shoreWaveSpeed = 0.35f;       // crests per second, travelling shoreward
+        float shoreWaveBreakDepth = 1.5f;   // offshore edge of the surf zone
+        float shoreWaveBreakRange = 1.0f;   // envelope fade width at both ends
+        float shoreWaveCrestFoam = 0.6f;
+        float shoreWaveCrestFoamThreshold = 0.55f;
+        float shoreWaveLean = 0.5f;         // forward lean along the shore-depth gradient
+
         // Ocean FFT bands
         OceanBandData oceanBands[MAX_OCEAN_BANDS] = {
             {256, 500.0f, 12.0f, 45.0f, 0.00005f, 1.5f, -0.1f, 4.0f, true, 0.85f, 0.5f},   // Swell

@@ -52,6 +52,22 @@ namespace ocean
         vis["hexBandMask"] = data.hexBandMask;
         vis["hexCellScale"] = data.hexCellScale;
         vis["hexBlendContrast"] = data.hexBlendContrast;
+        // VK-1605
+        vis["shoalingEnabled"] = data.shoalingEnabled;
+        vis["shoalingStrength"] = data.shoalingStrength;
+        vis["shoalingMinDepth"] = data.shoalingMinDepth;
+        vis["shoalingWavelengthScale"] = data.shoalingWavelengthScale;
+        vis["shoalingGamma"] = data.shoalingGamma;
+        vis["shoreEdgeFadeStart"] = data.shoreEdgeFadeStart;
+        vis["shoreWavesEnabled"] = data.shoreWavesEnabled;
+        vis["shoreWaveAmplitude"] = data.shoreWaveAmplitude;
+        vis["shoreWaveLength"] = data.shoreWaveLength;
+        vis["shoreWaveSpeed"] = data.shoreWaveSpeed;
+        vis["shoreWaveBreakDepth"] = data.shoreWaveBreakDepth;
+        vis["shoreWaveBreakRange"] = data.shoreWaveBreakRange;
+        vis["shoreWaveCrestFoam"] = data.shoreWaveCrestFoam;
+        vis["shoreWaveCrestFoamThreshold"] = data.shoreWaveCrestFoamThreshold;
+        vis["shoreWaveLean"] = data.shoreWaveLean;
 
         // Physics
         auto& phys = j["physics"];
@@ -173,6 +189,22 @@ namespace ocean
             outData.hexBandMask = vis.value("hexBandMask", outData.hexBandMask);
             outData.hexCellScale = vis.value("hexCellScale", outData.hexCellScale);
             outData.hexBlendContrast = vis.value("hexBlendContrast", outData.hexBlendContrast);
+            // VK-1605 — self-defaulting, so a v2 file written before this story loads unchanged.
+            outData.shoalingEnabled = vis.value("shoalingEnabled", outData.shoalingEnabled);
+            outData.shoalingStrength = vis.value("shoalingStrength", outData.shoalingStrength);
+            outData.shoalingMinDepth = vis.value("shoalingMinDepth", outData.shoalingMinDepth);
+            outData.shoalingWavelengthScale = vis.value("shoalingWavelengthScale", outData.shoalingWavelengthScale);
+            outData.shoalingGamma = vis.value("shoalingGamma", outData.shoalingGamma);
+            outData.shoreEdgeFadeStart = vis.value("shoreEdgeFadeStart", outData.shoreEdgeFadeStart);
+            outData.shoreWavesEnabled = vis.value("shoreWavesEnabled", outData.shoreWavesEnabled);
+            outData.shoreWaveAmplitude = vis.value("shoreWaveAmplitude", outData.shoreWaveAmplitude);
+            outData.shoreWaveLength = vis.value("shoreWaveLength", outData.shoreWaveLength);
+            outData.shoreWaveSpeed = vis.value("shoreWaveSpeed", outData.shoreWaveSpeed);
+            outData.shoreWaveBreakDepth = vis.value("shoreWaveBreakDepth", outData.shoreWaveBreakDepth);
+            outData.shoreWaveBreakRange = vis.value("shoreWaveBreakRange", outData.shoreWaveBreakRange);
+            outData.shoreWaveCrestFoam = vis.value("shoreWaveCrestFoam", outData.shoreWaveCrestFoam);
+            outData.shoreWaveCrestFoamThreshold = vis.value("shoreWaveCrestFoamThreshold", outData.shoreWaveCrestFoamThreshold);
+            outData.shoreWaveLean = vis.value("shoreWaveLean", outData.shoreWaveLean);
         }
 
         // Physics

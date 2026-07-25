@@ -49,11 +49,22 @@ namespace render::water
     constexpr uint32_t WATER_FLAG_ABSORPTION = 1u << 1;
     constexpr uint32_t WATER_FLAG_HEX = 1u << 2;
     constexpr uint32_t WATER_FLAG_SSR_DEBUG = 1u << 3;
-    // bits 4..15 reserved for VK-1605 (shoaling / shore waves) and VK-1606 (ripples)
+    // VK-1605
+    constexpr uint32_t WATER_FLAG_SHOALING = 1u << 4;
+    constexpr uint32_t WATER_FLAG_SHORE_WAVES = 1u << 5;
+    // The shore-depth field has completed at least one bake. Gates the fragment stage's use of the
+    // interpolated true water depth; until then the screen-space reconstruction is all there is.
+    constexpr uint32_t WATER_FLAG_SHORE_FIELD = 1u << 6;
+    // bits 7..15 reserved for VK-1606 (ripples)
 
     // Flags an RTT / reflection-probe view is allowed to keep. SSR is view-dependent (baking it
     // into a probe cubemap would be wrong from every direction but the capture one) and both SSR
     // and absorption read set 9, which belongs to the main view.
+    //
+    // VK-1605: SHOALING and SHORE_WAVES are deliberately NOT cleared. Like HEX they change VERTEX
+    // displacement, and a probe whose water sits at a different height than the main view's would
+    // reflect a surface that does not exist. The shore-depth texture is therefore also written into
+    // the refraction dummy set (WaterPipeline::createRefractionDummy) which is what RTT views bind.
     constexpr uint32_t WATER_VIEW_FLAGS_ALL = 0xFFFFFFFFu;
     constexpr uint32_t WATER_VIEW_FLAGS_RTT = ~(WATER_FLAG_SSR | WATER_FLAG_ABSORPTION);
 
@@ -84,13 +95,25 @@ namespace render::water
         uint32_t hexPerBandMask = 0x6u;                         //  92  default: bands 1 and 2
 
         uint32_t flags = 0u;                                    //  96
-        float reservedShoreField = 0.0f;                        // 100  VK-1605
-        float reservedShoaling = 0.0f;                          // 104  VK-1605
-        float reservedShoreWaves = 0.0f;                        // 108  VK-1605
+        float shoalingStrength = 0.0f;                          // 100  VK-1605  0 = no shoaling
+        float shoalingGamma = 0.78f;                            // 104  VK-1605  McCowan H/d limit
+        float shoreEdgeFadeStart = 0.88f;                       // 108  VK-1605  window fade start
 
         glm::vec4 reserved0{0.0f};                              // 112  VK-1606 ripple patch window
+
+        // VK-1605. shoreFieldOrigin: xy = the shore-depth window's min corner in world XZ,
+        // z = window size in metres, w = 1/z (the shader multiplies rather than divides).
+        glm::vec4 shoreFieldOrigin{0.0f, 0.0f, 1.0f, 1.0f};      // 128
+        // xyz = each band's characteristic wavelength in metres (Pierson-Moskowitz peak from its
+        // own wind speed, times the user's scale), w = shoalingMinDepth.
+        glm::vec4 bandWavelength{0.0f, 0.0f, 0.0f, 0.0f};        // 144
+        // x = amplitude, y = length (metres of depth per crest), z = speed (crests/s),
+        // w = breakDepth.
+        glm::vec4 shoreWaveA{0.0f, 12.0f, 0.35f, 1.5f};          // 160
+        // x = breakRange, y = crestFoam, z = crestFoamThreshold, w = shoreLean.
+        glm::vec4 shoreWaveB{1.0f, 0.6f, 0.55f, 0.5f};           // 176
     };
-    static_assert(sizeof(WaterExtendedParams) == 128);
+    static_assert(sizeof(WaterExtendedParams) == 192);
 
     // Vertex format for the subdivided unit quad
     struct WaterVertex

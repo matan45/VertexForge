@@ -111,14 +111,22 @@ namespace render
         {
             oceanRenderProvider->processWaterTileStreaming();
 
+            // VK-1605: tick the time-sliced shore-depth bake. It has to be driven from here rather
+            // than from OceanService::update because this is where the actual view camera position
+            // lives - the same one the water tile grid centres on (in the Editor that is the
+            // viewport camera, not a scene CameraComponent).
+            oceanRenderProvider->updateShoreDepthField(
+                glm::vec2(currentCameraPosition.x, currentCameraPosition.z));
+
             auto visualSettings = oceanRenderProvider->getOceanVisualSettings();
             float baseHeight = oceanRenderProvider->getBaseWaterHeight();
             auto cfgData = oceanRenderProvider->getOceanFFTConfig();
             const auto* tileGrid = oceanRenderProvider->getWaterTileGrid();
+            const auto* shoreField = oceanRenderProvider->getShoreDepthField();
             bool worldMode = oceanRenderProvider->isWorldModeActive();
             gpuDrivenRenderer->updateWater(visualSettings, baseHeight,
                                             currentCameraPosition, cfgData.bands[0].patchSize,
-                                            worldMode, tileGrid);
+                                            worldMode, tileGrid, shoreField);
         }
 
         if (oceanRenderProvider && gpuDrivenRenderer)

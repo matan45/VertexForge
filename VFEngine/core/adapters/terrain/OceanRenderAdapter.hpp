@@ -37,5 +37,8 @@ namespace core
         bool isWorldModeActive() const override;
         const water::WaterTileGrid* getWaterTileGrid() const override;
         void processWaterTileStreaming() override;
+
+        void updateShoreDepthField(const glm::vec2& cameraXZ) override;
+        const water::ShoreDepthField* getShoreDepthField() const override;
     };
 }

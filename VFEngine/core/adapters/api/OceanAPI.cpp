@@ -44,6 +44,21 @@ namespace core::api
                     return value::Value(dispatcher.query(query));
                 }});
 
+            // VK-1605: ocean.getWaterDepthAt(x, z) -> float
+            // Metres from the water surface down to the terrain. Returns a very large value where
+            // there is no bottom, so "open ocean" needs no separate check.
+            interpreter->registerNativeFunction("_native_ocean_getWaterDepthAt",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    auto& dispatcher = events::EventDispatcher::instance();
+                    if (args.size() < 2) return value::Value(0.0f);
+
+                    events::ocean::GetWaterDepthAtQuery query;
+                    query.worldXZ = glm::vec2(
+                        extractFloat(args[0]),
+                        extractFloat(args[1]));
+                    return value::Value(dispatcher.query(query));
+                }});
+
             // ocean.isCameraUnderwater() -> bool
             interpreter->registerNativeFunction("_native_ocean_isCameraUnderwater",
                 {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{

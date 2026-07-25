@@ -86,4 +86,16 @@ namespace core
         if (oceanService)
             oceanService->processPendingSectorTileActions();
     }
+
+    void OceanRenderAdapter::updateShoreDepthField(const glm::vec2& cameraXZ)
+    {
+        if (oceanService)
+            oceanService->updateShoreDepthField(cameraXZ);
+    }
+
+    const water::ShoreDepthField* OceanRenderAdapter::getShoreDepthField() const
+    {
+        if (!oceanService) return nullptr;
+        return oceanService->getShoreDepthField();
+    }
 }

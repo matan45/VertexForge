@@ -17,6 +17,8 @@
 #include "../water/OceanFFT.hpp"
 #include "../water/WaterRefractionResources.hpp"
 #include "../water/WaterCausticsResources.hpp"
+#include "../water/WaterShoreDepthResources.hpp"
+#include "../../../utilities/water/ShoreWaveMath.hpp"
 #include "../vegetation/WindSystem.hpp"
 #include "../vegetation/VegetationBufferManager.hpp"
 #include "../vegetation/GrassStreamManager.hpp"
@@ -130,6 +132,32 @@ namespace render::gpudriven::detail
         std::unique_ptr<render::water::WaterRefractionResources> refractionResources;
         // Caustics
         std::unique_ptr<render::water::WaterCausticsResources> causticsResources;
+
+        // VK-1605: shore depth field. The GPU texture feeds the vertex shader; the CPU copy feeds
+        // getOceanHeightAt, so buoyancy shoals exactly like the rendered surface. Same benign
+        // publish pattern as the hex settings above - written on the render thread in updateWater,
+        // read on the physics worker through the injected height sampler.
+        std::unique_ptr<render::water::WaterShoreDepthResources> shoreDepthResources;
+        std::vector<float> shoreDepthData;
+        glm::vec2 shoreFieldOrigin{0.0f};
+        float shoreFieldWindow = 1.0f;
+        uint32_t shoreFieldResolution = 0;
+        uint32_t shoreFieldVersion = 0;         // 0 = never baked
+        float shoreEdgeFadeStart = 0.88f;
+
+        bool shoalingEnabled = false;
+        float shoalingStrength = 1.0f;
+        float shoalingGamma = 0.78f;
+        float shoalingMinDepth = 0.0f;
+        glm::vec3 bandWavelength{0.0f};
+
+        bool shoreWavesEnabled = false;
+        ::water::ShoreWaveParams shoreWaveParams{};
+
+        // The exact time value that drove camera.u_Time (and the FFT dispatch) for the frame the
+        // shader displaced. Buoyancy must use the same one or the breakers it feels are out of
+        // phase with the ones being drawn.
+        float lastFrameTime = 0.0f;
 
         // Timing (microseconds)
         float readbackUs = 0.0f;

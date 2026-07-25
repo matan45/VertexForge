@@ -816,6 +816,12 @@ namespace render
             gpuDrivenRenderer->dispatchOceanFFT(commandBuffer, currentTime);
         }
 
+        // VK-1605: shore-depth upload. Unconditional (not gated on the FFT) because the shoreline
+        // deformer is analytic and works on a flat water plane too, and because this is where the
+        // CPU buoyancy path picks up the exact frame time that drives camera.u_Time. Still outside
+        // any render pass, next to the other out-of-pass GPU writes.
+        gpuDrivenRenderer->uploadShoreDepthField(commandBuffer, currentTime);
+
         // VK-1480: the raw VT commands below (RVT bake, SVT update, feedback copies) run
         // outside the RenderGraph passes, so bracket them with the aux timestamp pool —
         // the scopes surface as rows in the Task Graph Profiler. All no-ops when the

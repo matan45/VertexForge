@@ -112,6 +112,19 @@ namespace events::ocean
         std::string_view getName() const override { return "GetOceanHeightAt"; }
     };
 
+    // VK-1605: water depth (surface to sea floor) from the shore-depth field. Returns a very large
+    // value where there is no terrain — "no bottom here" — rather than 0, so callers can treat it
+    // as open ocean without a separate validity flag.
+    struct GetWaterDepthAtQuery : IQuery<float> {
+        glm::vec2 worldXZ{0.0f};
+
+        std::string_view getName() const override { return "GetWaterDepthAt"; }
+    };
+
+    struct GetShoreDepthFieldStatusQuery : IQuery<services::ShoreDepthFieldStatus> {
+        std::string_view getName() const override { return "GetShoreDepthFieldStatus"; }
+    };
+
     struct IsPositionInOceanQuery : IQuery<bool> {
         glm::vec3 position{0.0f};
 

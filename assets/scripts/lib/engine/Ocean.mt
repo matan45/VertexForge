@@ -28,6 +28,12 @@ public class Ocean {
         return _native_ocean_getOceanHeightAt(x, z);
     }
 
+    // Get the water depth (surface down to the sea floor) at a world XZ position.
+    // Returns a very large value where there is no terrain below - i.e. open ocean.
+    public static function getWaterDepthAt(float x, float z): float {
+        return _native_ocean_getWaterDepthAt(x, z);
+    }
+
     // Check if the camera is currently underwater
     public static function isCameraUnderwater(): bool {
         return _native_ocean_isCameraUnderwater();

@@ -4,10 +4,12 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/OceanData.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
+#include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../../utilities/world/WorldTypes.hpp"
 #include "../../../utilities/terrain/TerrainTypes.hpp"
 #include "../../../utilities/water/SeaState.hpp"
+#include "../../../utilities/water/ShoreDepthField.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
@@ -95,6 +97,18 @@ namespace services
         std::mutex pendingActionsMutex;
         std::vector<PendingWaterTileAction> pendingSectorTileActions;
 
+        // VK-1605: shore depth field. The terrain snapshot is a full copy of every loaded tile's
+        // height data, so it is taken ONCE per rebake and released the moment the bake completes -
+        // it stays resident for the ~8 frames the time-sliced bake takes, not permanently.
+        water::ShoreDepthField shoreDepthField;
+        ::events::terrain::TerrainHeightfieldResult terrainSnapshot;
+        water::TerrainHeightGrid terrainGrid;
+        bool shoreFieldRebakeRequested = true;
+        bool shoreFieldHadTerrain = false;   // did the last rebake find a heightfield to sample?
+        float shoreFieldWaterHeight = 0.0f;  // waterHeight the current field was baked against
+        std::unique_ptr<::events::SubscriptionToken> terrainChangedSub;
+        std::unique_ptr<::events::SubscriptionToken> terrainLoadedSub;
+
     public:
         explicit OceanService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph);
         ~OceanService() override;
@@ -143,6 +157,14 @@ namespace services
         const water::WaterTileGrid* getWaterTileGrid() const;
         void processPendingSectorTileActions();
 
+        // VK-1605: shore depth field. updateShoreDepthField is the per-frame tick (starts a rebake
+        // when the camera has drifted far enough, otherwise advances the current one by a fixed
+        // number of rows); getWaterDepthAt is the script-facing sampler.
+        void updateShoreDepthField(const glm::vec2& cameraXZ);
+        const water::ShoreDepthField* getShoreDepthField() const { return &shoreDepthField; }
+        float getWaterDepthAt(const glm::vec2& worldXZ) const;
+        ShoreDepthFieldStatus getShoreDepthFieldStatus() const;
+
     private:
         void registerOceanCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerOceanQueryHandlers(::events::EventDispatcher& dispatcher);
@@ -161,6 +183,9 @@ namespace services
         water::SeaState seaStateFromComponentBands() const;
         void updateWeatherDrivenSeaState();
         void updateManualSeaStateTransition(float deltaTime);
+
+        // VK-1605: take a fresh terrain heightfield snapshot and start a bake centred on cameraXZ.
+        void beginShoreFieldRebake(const glm::vec2& cameraXZ);
 
         // Sector-driven water tile streaming
         void onSectorActivated(const world::SectorCoord& coord, const world::SectorConfig& config);

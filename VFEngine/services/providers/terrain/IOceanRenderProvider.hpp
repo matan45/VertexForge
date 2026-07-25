@@ -7,6 +7,7 @@
 namespace water
 {
     class WaterTileGrid;
+    class ShoreDepthField;
 }
 
 namespace services
@@ -34,5 +35,11 @@ namespace services
         virtual bool isWorldModeActive() const = 0;
         virtual const water::WaterTileGrid* getWaterTileGrid() const = 0;
         virtual void processWaterTileStreaming() = 0;
+
+        // VK-1605: advance the time-sliced shore-depth bake and hand the field to the renderer.
+        // Driven from the render side (like processWaterTileStreaming) because that is where the
+        // live view camera position is; OceanService has no camera of its own.
+        virtual void updateShoreDepthField(const glm::vec2& cameraXZ) = 0;
+        virtual const water::ShoreDepthField* getShoreDepthField() const = 0;
     };
 }

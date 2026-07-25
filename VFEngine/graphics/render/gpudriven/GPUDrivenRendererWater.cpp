@@ -7,6 +7,9 @@
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include "../../../utilities/water/HexTiling.hpp"
 #include "../../../utilities/water/DisplacementSampling.hpp"
+#include "../../../utilities/water/ShoreDepthField.hpp"
+#include "../../../utilities/water/ShoalingMath.hpp"
+#include "../../../utilities/water/ShoreWaveMath.hpp"
 #include "print/Log.hpp"
 #include <cstring>
 #include <chrono>
@@ -25,13 +28,21 @@ namespace render::gpudriven
             device.getStagingCommandPool()
         );
 
+        // VK-1605: the shore-depth texture must exist BEFORE the refraction resources, which bind
+        // it at set 9 binding 3. Its size is a compile-time constant, so it is created once and
+        // never recreated - only its contents are re-uploaded.
+        water.shoreDepthResources = std::make_unique<render::water::WaterShoreDepthResources>(device);
+        water.shoreDepthResources->init();
+
         // Create refraction resources before pipeline so we have the descriptor set layout
         water.refractionResources = std::make_unique<render::water::WaterRefractionResources>(device);
         water.refractionResources->init(
             swapChain.getSceneColorFormat(),
             swapChain.getSwapchainExtent().width,
             swapChain.getSwapchainExtent().height,
-            sceneDepthView);
+            sceneDepthView,
+            water.shoreDepthResources->getImageView(),
+            water.shoreDepthResources->getSampler());
 
         // Ocean texture layout (from multi-band descriptor if initialized, otherwise WaterPipeline creates dummy)
         vk::DescriptorSetLayout oceanLayout{};
@@ -53,6 +64,12 @@ namespace render::gpudriven
             colorFormats, depthFormat
         });
 
+        // VK-1605: RTT / reflection-probe views bind the pipeline's DUMMY set 9 (they must not
+        // sample the main view's scene colour and depth), but they still have to displace their
+        // water identically or they reflect a surface that is not there. The shore field is
+        // view-independent, so the dummy set gets the real texture.
+        water.pipeline->updateDummyShoreDepth(water.shoreDepthResources->getImageView(),
+                                              water.shoreDepthResources->getSampler());
     }
 
     void GPUDrivenRenderer::updateWater(const services::OceanVisualSettings& visualSettings,
@@ -60,7 +77,8 @@ namespace render::gpudriven
                                           const glm::vec3& cameraPosition,
                                           float oceanPatchSize,
                                           bool worldMode,
-                                          const ::water::WaterTileGrid* tileGrid)
+                                          const ::water::WaterTileGrid* tileGrid,
+                                          const ::water::ShoreDepthField* shoreField)
     {
         auto updateStart = std::chrono::high_resolution_clock::now();
         if (!initialized || !water.renderingEnabled || !water.pipeline)
@@ -151,6 +169,37 @@ namespace render::gpudriven
             water.causticsResources->updateParams(params);
         }
 
+        // VK-1605: adopt a completed shore-depth bake. The CPU copy serves BOTH the GPU upload and
+        // getOceanHeightAt, so buoyancy and pixels can never disagree about where the bottom is.
+        // Copying only on a version change keeps this to one 256 KB memcpy every few seconds.
+        if (shoreField)
+        {
+            water.shoreFieldOrigin = shoreField->origin();
+            water.shoreFieldWindow = shoreField->windowSize();
+            water.shoreFieldResolution = shoreField->resolution();
+
+            if (shoreField->version() != water.shoreFieldVersion)
+            {
+                water.shoreFieldVersion = shoreField->version();
+                water.shoreDepthData = shoreField->data();
+                if (water.shoreDepthResources && water.shoreDepthResources->isInitialized())
+                    water.shoreDepthResources->stage(water.shoreDepthData);
+            }
+        }
+
+        // Per-band characteristic wavelength: the Pierson-Moskowitz peak for that band's own wind
+        // speed, which is what actually decides the depth at which the band feels the bottom.
+        // patchSize is only a tiling period and would put swell's onset in 250 m of water.
+        glm::vec3 bandWavelength{0.0f};
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            if (!water.oceanBands[i] || !water.oceanBands[i]->isInitialized())
+                continue;
+            const auto& cfg = water.oceanBands[i]->getConfig();
+            bandWavelength[static_cast<int>(i)] =
+                ::water::characteristicWavelength(cfg.windSpeed) * visualSettings.shoalingWavelengthScale;
+        }
+
         // VK-1604: extended visual params (set 9 binding 2). Filled once per frame; per-view
         // gating rides on WaterPushConstants::viewFlagMask instead (see renderWaterDraw).
         {
@@ -171,11 +220,39 @@ namespace render::gpudriven
             ext.hexCellScale2 = visualSettings.hexCellScale;
             ext.hexPerBandMask = visualSettings.hexBandMask;
 
+            // VK-1605 shoreline rows
+            ext.shoalingStrength = visualSettings.shoalingStrength;
+            ext.shoalingGamma = visualSettings.shoalingGamma;
+            ext.shoreEdgeFadeStart = visualSettings.shoreEdgeFadeStart;
+
+            const float invWindow = water.shoreFieldWindow > 0.0f ? 1.0f / water.shoreFieldWindow : 1.0f;
+            ext.shoreFieldOrigin = glm::vec4(water.shoreFieldOrigin.x, water.shoreFieldOrigin.y,
+                                             water.shoreFieldWindow, invWindow);
+            ext.bandWavelength = glm::vec4(bandWavelength, visualSettings.shoalingMinDepth);
+            ext.shoreWaveA = glm::vec4(visualSettings.shoreWaveAmplitude,
+                                       visualSettings.shoreWaveLength,
+                                       visualSettings.shoreWaveSpeed,
+                                       visualSettings.shoreWaveBreakDepth);
+            ext.shoreWaveB = glm::vec4(visualSettings.shoreWaveBreakRange,
+                                       visualSettings.shoreWaveCrestFoam,
+                                       visualSettings.shoreWaveCrestFoamThreshold,
+                                       visualSettings.shoreWaveLean);
+
             uint32_t flags = 0;
             if (visualSettings.ssrEnabled) flags |= render::water::WATER_FLAG_SSR;
             if (visualSettings.beerLambertEnabled) flags |= render::water::WATER_FLAG_ABSORPTION;
             if (visualSettings.hexTilingEnabled) flags |= render::water::WATER_FLAG_HEX;
             if (visualSettings.ssrDebugView) flags |= render::water::WATER_FLAG_SSR_DEBUG;
+            // The shoreline features need a field that has actually finished a bake; before that
+            // the texture reads SHORE_FIELD_DEEP everywhere and would simply do nothing, but
+            // leaving the bits clear also keeps the fragment shore-foam path byte-identical.
+            const bool shoreFieldLive = water.shoreFieldVersion > 0;
+            if (shoreFieldLive) flags |= render::water::WATER_FLAG_SHORE_FIELD;
+            if (shoreFieldLive && visualSettings.shoalingEnabled)
+                flags |= render::water::WATER_FLAG_SHOALING;
+            if (shoreFieldLive && visualSettings.shoreWavesEnabled &&
+                visualSettings.shoreWaveAmplitude > 0.0f)
+                flags |= render::water::WATER_FLAG_SHORE_WAVES;
             ext.flags = flags;
 
             water.cachedExtendedParams = ext;
@@ -190,6 +267,25 @@ namespace render::gpudriven
         water.hexBandMask = visualSettings.hexBandMask;
         water.hexCellScale = visualSettings.hexCellScale;
         water.hexBlendContrast = visualSettings.hexBlendContrast;
+
+        // VK-1605: the same publish for the shoreline params. getOceanHeightAt reads these to apply
+        // the identical per-band shoaling and shore-wave surge the vertex shader just applied.
+        water.shoalingEnabled = water.shoreFieldVersion > 0 && visualSettings.shoalingEnabled;
+        water.shoalingStrength = visualSettings.shoalingStrength;
+        water.shoalingGamma = visualSettings.shoalingGamma;
+        water.shoalingMinDepth = visualSettings.shoalingMinDepth;
+        water.shoreEdgeFadeStart = visualSettings.shoreEdgeFadeStart;
+        water.bandWavelength = bandWavelength;
+
+        water.shoreWavesEnabled = water.shoreFieldVersion > 0 && visualSettings.shoreWavesEnabled &&
+                                  visualSettings.shoreWaveAmplitude > 0.0f;
+        water.shoreWaveParams.amplitude = visualSettings.shoreWaveAmplitude;
+        water.shoreWaveParams.length = visualSettings.shoreWaveLength;
+        water.shoreWaveParams.speed = visualSettings.shoreWaveSpeed;
+        water.shoreWaveParams.breakDepth = visualSettings.shoreWaveBreakDepth;
+        water.shoreWaveParams.breakRange = visualSettings.shoreWaveBreakRange;
+        water.shoreWaveParams.crestFoam = visualSettings.shoreWaveCrestFoam;
+        water.shoreWaveParams.crestFoamThreshold = visualSettings.shoreWaveCrestFoamThreshold;
 
         auto updateEnd = std::chrono::high_resolution_clock::now();
         water.updateUs = std::chrono::duration<float, std::micro>(updateEnd - updateStart).count();
@@ -722,6 +818,16 @@ namespace render::gpudriven
         }
     }
 
+    void GPUDrivenRenderer::uploadShoreDepthField(vk::CommandBuffer cmd, float time)
+    {
+        // `time` is the same currentTime that fills CameraUBO::u_Time, so recording it here gives
+        // the CPU shore-wave path the exact clock the vertex shader is running on.
+        water.lastFrameTime = time;
+
+        if (water.shoreDepthResources && water.shoreDepthResources->isInitialized())
+            water.shoreDepthResources->recordUpload(cmd);
+    }
+
     void GPUDrivenRenderer::dispatchOceanFFT(vk::CommandBuffer cmd, float time)
     {
         if (!water.oceanEnabled)
@@ -771,6 +877,23 @@ namespace render::gpudriven
         // integer hash, same variance-preserving combine), so buoyancy keeps matching the
         // rendered surface on whichever bands are tiled. Costs 3x the bilinear taps, but only
         // for the bands the user actually enabled.
+        // VK-1605: shoaling and the breaking-wave surge are applied here with the same math and the
+        // same inputs the vertex shader used - same shore depth, same window fade, same per-band
+        // wavelength, and the same frame time that drove camera.u_Time. Anything less and a floating
+        // body sits at a different height than the water it is drawn in.
+        const bool shoreActive = water.shoalingEnabled || water.shoreWavesEnabled;
+        float shoreDepth = ::water::SHORE_FIELD_DEEP;
+        float shoreFade = 0.0f;
+        if (shoreActive)
+        {
+            shoreDepth = ::water::sampleShoreDepth(water.shoreDepthData, water.shoreFieldResolution,
+                                                   water.shoreFieldOrigin, water.shoreFieldWindow,
+                                                   worldXZ);
+            shoreFade = ::water::shoreWindowFade(worldXZ, water.shoreFieldOrigin,
+                                                 water.shoreFieldWindow, water.shoreEdgeFadeStart);
+        }
+        const float shoalStrength = water.shoalingEnabled ? water.shoalingStrength * shoreFade : 0.0f;
+
         float height = 0.0f;
         for (uint32_t i = 0; i < static_cast<uint32_t>(water.oceanBands.size()); ++i)
         {
@@ -778,22 +901,37 @@ namespace render::gpudriven
             if (!band || !band->isInitialized())
                 continue;
 
+            float bandHeight;
             if (water.hexTilingEnabled && ::water::hexBandEnabled(water.hexBandMask, i))
             {
                 const float patchSize = band->getConfig().patchSize;
                 const glm::vec2 uv = ::water::patchUV(worldXZ, patchSize);
                 const ::water::HexBlend hb =
                     ::water::hexComputeBlend(uv, water.hexCellScale, water.hexBlendContrast);
-                height += ::water::hexCombineVariancePreserving(hb,
+                bandHeight = ::water::hexCombineVariancePreserving(hb,
                     band->sampleHeightAtUV(hb.uv[0]),
                     band->sampleHeightAtUV(hb.uv[1]),
                     band->sampleHeightAtUV(hb.uv[2]));
             }
             else
             {
-                height += band->sampleHeightAt(worldXZ);
+                bandHeight = band->sampleHeightAt(worldXZ);
             }
+
+            if (shoalStrength > 0.0f)
+            {
+                bandHeight *= ::water::shoalingScale(shoreDepth,
+                                                     water.bandWavelength[static_cast<int>(i)],
+                                                     bandHeight, shoalStrength,
+                                                     water.shoalingGamma, water.shoalingMinDepth);
+            }
+
+            height += bandHeight;
         }
+
+        if (water.shoreWavesEnabled)
+            height += ::water::shoreWaveHeight(shoreDepth, water.lastFrameTime,
+                                               water.shoreWaveParams) * shoreFade;
 
         return height;
     }
@@ -810,10 +948,20 @@ namespace render::gpudriven
         if (!water.refractionResources)
             return;
 
+        // VK-1605: recreate() tears the whole set 9 down, so binding 3 has to be handed back in.
+        vk::ImageView shoreView{};
+        vk::Sampler shoreSampler{};
+        if (water.shoreDepthResources && water.shoreDepthResources->isInitialized())
+        {
+            shoreView = water.shoreDepthResources->getImageView();
+            shoreSampler = water.shoreDepthResources->getSampler();
+        }
+
         water.refractionResources->recreate(
             swapChain.getSceneColorFormat(),
             swapChain.getSwapchainExtent().width,
             swapChain.getSwapchainExtent().height,
-            sceneDepthView);
+            sceneDepthView,
+            shoreView, shoreSampler);
     }
 }

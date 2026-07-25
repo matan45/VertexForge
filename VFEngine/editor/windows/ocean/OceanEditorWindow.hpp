@@ -44,6 +44,7 @@ namespace windows
         void drawCreationSection();
         void drawSettingsSection();
         void drawOceanFFTSection();
+        void drawShoreDepthFieldStatus();   // VK-1605
         void drawInfoSection();
         void createOcean();
         void deleteOcean();

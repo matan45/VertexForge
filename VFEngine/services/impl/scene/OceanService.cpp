@@ -14,6 +14,7 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../../../utilities/water/WaterTileGrid.hpp"
 #include "../../../utilities/water/BuoyancySampling.hpp"
+#include <cmath>
 
 namespace services
 {
@@ -78,6 +79,8 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanFFTConfigQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsOceanFFTEnabledQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanHeightAtQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetWaterDepthAtQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetShoreDepthFieldStatusQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
@@ -126,6 +129,24 @@ namespace services
                 activateWaterTilesForLoadedSectors();
             });
         worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
+
+        // VK-1605: the shore-depth field is baked from a terrain snapshot, so it has to be redone
+        // whenever the terrain itself changes shape or extent. Note there is no "heights sculpted"
+        // notification in the engine — an in-editor sculpt only reaches the field on the next
+        // camera-driven rebake (or by toggling shoaling off/on).
+        auto terrainCreatedToken = dispatcher.subscribe<events::terrain::TerrainCreatedNotification>(
+            [this](const events::terrain::TerrainCreatedNotification&)
+            {
+                shoreFieldRebakeRequested = true;
+            });
+        terrainChangedSub = std::make_unique<events::SubscriptionToken>(terrainCreatedToken);
+
+        auto terrainLoadedToken = dispatcher.subscribe<events::terrain::TerrainLoadedNotification>(
+            [this](const events::terrain::TerrainLoadedNotification&)
+            {
+                shoreFieldRebakeRequested = true;
+            });
+        terrainLoadedSub = std::make_unique<events::SubscriptionToken>(terrainLoadedToken);
     }
 
     void OceanService::registerOceanCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -185,6 +206,22 @@ namespace services
                 comp.hexBandMask = cmd.settings.hexBandMask;
                 comp.hexCellScale = cmd.settings.hexCellScale;
                 comp.hexBlendContrast = cmd.settings.hexBlendContrast;
+                // VK-1605
+                comp.shoalingEnabled = cmd.settings.shoalingEnabled;
+                comp.shoalingStrength = cmd.settings.shoalingStrength;
+                comp.shoalingMinDepth = cmd.settings.shoalingMinDepth;
+                comp.shoalingWavelengthScale = cmd.settings.shoalingWavelengthScale;
+                comp.shoalingGamma = cmd.settings.shoalingGamma;
+                comp.shoreEdgeFadeStart = cmd.settings.shoreEdgeFadeStart;
+                comp.shoreWavesEnabled = cmd.settings.shoreWavesEnabled;
+                comp.shoreWaveAmplitude = cmd.settings.shoreWaveAmplitude;
+                comp.shoreWaveLength = cmd.settings.shoreWaveLength;
+                comp.shoreWaveSpeed = cmd.settings.shoreWaveSpeed;
+                comp.shoreWaveBreakDepth = cmd.settings.shoreWaveBreakDepth;
+                comp.shoreWaveBreakRange = cmd.settings.shoreWaveBreakRange;
+                comp.shoreWaveCrestFoam = cmd.settings.shoreWaveCrestFoam;
+                comp.shoreWaveCrestFoamThreshold = cmd.settings.shoreWaveCrestFoamThreshold;
+                comp.shoreWaveLean = cmd.settings.shoreWaveLean;
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -285,6 +322,19 @@ namespace services
             [this](const events::ocean::GetOceanHeightAtQuery& query)
             {
                 return getOceanHeightAt(query.worldXZ);
+            });
+
+        // VK-1605
+        dispatcher.registerQueryHandler<events::ocean::GetWaterDepthAtQuery>(
+            [this](const events::ocean::GetWaterDepthAtQuery& query)
+            {
+                return getWaterDepthAt(query.worldXZ);
+            });
+
+        dispatcher.registerQueryHandler<events::ocean::GetShoreDepthFieldStatusQuery>(
+            [this](const events::ocean::GetShoreDepthFieldStatusQuery&)
+            {
+                return getShoreDepthFieldStatus();
             });
 
         dispatcher.registerQueryHandler<events::ocean::IsPositionInOceanQuery>(
@@ -481,6 +531,22 @@ namespace services
         data.hexBandMask = comp.hexBandMask;
         data.hexCellScale = comp.hexCellScale;
         data.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        data.shoalingEnabled = comp.shoalingEnabled;
+        data.shoalingStrength = comp.shoalingStrength;
+        data.shoalingMinDepth = comp.shoalingMinDepth;
+        data.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        data.shoalingGamma = comp.shoalingGamma;
+        data.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        data.shoreWavesEnabled = comp.shoreWavesEnabled;
+        data.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        data.shoreWaveLength = comp.shoreWaveLength;
+        data.shoreWaveSpeed = comp.shoreWaveSpeed;
+        data.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        data.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        data.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        data.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        data.shoreWaveLean = comp.shoreWaveLean;
         data.weatherDriven = comp.weatherDriven;
         data.weatherResponse = comp.weatherResponse;
         data.currentBeaufort = comp.currentBeaufort;
@@ -525,6 +591,104 @@ namespace services
 
         float height = getOceanHeightAt(glm::vec2(worldPos.x, worldPos.z));
         return worldPos.y <= height;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // VK-1605: shore depth field
+    // ------------------------------------------------------------------------------------------
+
+    void OceanService::beginShoreFieldRebake(const glm::vec2& cameraXZ)
+    {
+        // One snapshot per rebake, never one query per sample: GetTerrainHeightAtQuery linearly
+        // scans every tile per call, so the 65 536 samples a bake needs would be O(samples x tiles).
+        // The snapshot is a full copy of the loaded height data, which is why it is released again
+        // as soon as the bake completes.
+        terrainSnapshot = {};
+        terrainGrid = {};
+
+        try
+        {
+            terrainSnapshot = ::events::EventDispatcher::instance().query(
+                ::events::terrain::GetTerrainHeightfieldQuery{});
+        }
+        catch (...)
+        {
+            // No terrain service registered (e.g. a runtime build without terrain) — bake a field
+            // of "no bottom", which makes every shoreline factor exactly 1.
+        }
+
+        if (terrainSnapshot.valid && !terrainSnapshot.heights.empty())
+        {
+            terrainGrid.worldOriginX = terrainSnapshot.worldOriginX;
+            terrainGrid.worldOriginZ = terrainSnapshot.worldOriginZ;
+            terrainGrid.tileWorldSize = terrainSnapshot.tileWorldSize;
+            terrainGrid.vertexSpacing = terrainSnapshot.vertexSpacing;
+            terrainGrid.gridCountX = terrainSnapshot.gridCountX;
+            terrainGrid.gridCountZ = terrainSnapshot.gridCountZ;
+            terrainGrid.verticesPerTile = terrainSnapshot.verticesPerTile;
+            terrainGrid.heights = terrainSnapshot.heights.data();
+            terrainGrid.heightCount = terrainSnapshot.heights.size();
+            terrainGrid.tileValid = terrainSnapshot.tileValid.empty()
+                                        ? nullptr : terrainSnapshot.tileValid.data();
+            terrainGrid.tileValidCount = terrainSnapshot.tileValid.size();
+        }
+        shoreFieldHadTerrain = terrainGrid.isValid();
+
+        const float waterHeight = getBaseWaterHeight();
+        shoreFieldWaterHeight = waterHeight;
+        const water::TerrainHeightGrid* grid = &terrainGrid;
+
+        shoreDepthField.beginRebake(cameraXZ, waterHeight,
+            [grid](float worldX, float worldZ, float& outHeight)
+            {
+                return grid->sample(worldX, worldZ, outHeight);
+            });
+
+        shoreFieldRebakeRequested = false;
+    }
+
+    void OceanService::updateShoreDepthField(const glm::vec2& cameraXZ)
+    {
+        if (!oceanEntity.isValid())
+            return;
+
+        // The field stores waterHeight - terrainHeight, so raising or lowering the ocean
+        // invalidates every texel just as surely as moving the window does.
+        const bool waterHeightChanged =
+            std::abs(getBaseWaterHeight() - shoreFieldWaterHeight) > 0.001f;
+
+        if (!shoreDepthField.isBaking() &&
+            (shoreFieldRebakeRequested || waterHeightChanged || shoreDepthField.needsRebake(cameraXZ)))
+        {
+            beginShoreFieldRebake(cameraXZ);
+        }
+
+        if (shoreDepthField.bakeRows(water::SHORE_FIELD_ROWS_PER_TICK))
+        {
+            // Bake committed — the snapshot has done its job and can go. It is the largest
+            // transient allocation in this path, so hold it no longer than necessary.
+            terrainGrid = {};
+            terrainSnapshot = {};
+        }
+    }
+
+    float OceanService::getWaterDepthAt(const glm::vec2& worldXZ) const
+    {
+        return shoreDepthField.sample(worldXZ);
+    }
+
+    ShoreDepthFieldStatus OceanService::getShoreDepthFieldStatus() const
+    {
+        ShoreDepthFieldStatus status;
+        status.hasTerrain = shoreFieldHadTerrain;
+        status.baked = shoreDepthField.hasBakedOnce();
+        status.baking = shoreDepthField.isBaking();
+        status.progress = shoreDepthField.bakeProgress();
+        status.version = shoreDepthField.version();
+        status.center = shoreDepthField.center();
+        status.windowSize = shoreDepthField.windowSize();
+        status.resolution = shoreDepthField.resolution();
+        return status;
     }
 
     float OceanService::getOceanHeightAt(const glm::vec2& worldXZ) const
@@ -607,6 +771,22 @@ namespace services
         settings.hexBandMask = comp.hexBandMask;
         settings.hexCellScale = comp.hexCellScale;
         settings.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        settings.shoalingEnabled = comp.shoalingEnabled;
+        settings.shoalingStrength = comp.shoalingStrength;
+        settings.shoalingMinDepth = comp.shoalingMinDepth;
+        settings.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        settings.shoalingGamma = comp.shoalingGamma;
+        settings.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        settings.shoreWavesEnabled = comp.shoreWavesEnabled;
+        settings.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        settings.shoreWaveLength = comp.shoreWaveLength;
+        settings.shoreWaveSpeed = comp.shoreWaveSpeed;
+        settings.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        settings.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        settings.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        settings.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        settings.shoreWaveLean = comp.shoreWaveLean;
 
         return settings;
     }
@@ -671,6 +851,22 @@ namespace services
         fileData.hexBandMask = comp.hexBandMask;
         fileData.hexCellScale = comp.hexCellScale;
         fileData.hexBlendContrast = comp.hexBlendContrast;
+        // VK-1605
+        fileData.shoalingEnabled = comp.shoalingEnabled;
+        fileData.shoalingStrength = comp.shoalingStrength;
+        fileData.shoalingMinDepth = comp.shoalingMinDepth;
+        fileData.shoalingWavelengthScale = comp.shoalingWavelengthScale;
+        fileData.shoalingGamma = comp.shoalingGamma;
+        fileData.shoreEdgeFadeStart = comp.shoreEdgeFadeStart;
+        fileData.shoreWavesEnabled = comp.shoreWavesEnabled;
+        fileData.shoreWaveAmplitude = comp.shoreWaveAmplitude;
+        fileData.shoreWaveLength = comp.shoreWaveLength;
+        fileData.shoreWaveSpeed = comp.shoreWaveSpeed;
+        fileData.shoreWaveBreakDepth = comp.shoreWaveBreakDepth;
+        fileData.shoreWaveBreakRange = comp.shoreWaveBreakRange;
+        fileData.shoreWaveCrestFoam = comp.shoreWaveCrestFoam;
+        fileData.shoreWaveCrestFoamThreshold = comp.shoreWaveCrestFoamThreshold;
+        fileData.shoreWaveLean = comp.shoreWaveLean;
 
         fileData.density = comp.density;
         fileData.drag = comp.drag;
@@ -779,6 +975,22 @@ namespace services
             comp.hexBandMask = fileData.hexBandMask;
             comp.hexCellScale = fileData.hexCellScale;
             comp.hexBlendContrast = fileData.hexBlendContrast;
+            // VK-1605
+            comp.shoalingEnabled = fileData.shoalingEnabled;
+            comp.shoalingStrength = fileData.shoalingStrength;
+            comp.shoalingMinDepth = fileData.shoalingMinDepth;
+            comp.shoalingWavelengthScale = fileData.shoalingWavelengthScale;
+            comp.shoalingGamma = fileData.shoalingGamma;
+            comp.shoreEdgeFadeStart = fileData.shoreEdgeFadeStart;
+            comp.shoreWavesEnabled = fileData.shoreWavesEnabled;
+            comp.shoreWaveAmplitude = fileData.shoreWaveAmplitude;
+            comp.shoreWaveLength = fileData.shoreWaveLength;
+            comp.shoreWaveSpeed = fileData.shoreWaveSpeed;
+            comp.shoreWaveBreakDepth = fileData.shoreWaveBreakDepth;
+            comp.shoreWaveBreakRange = fileData.shoreWaveBreakRange;
+            comp.shoreWaveCrestFoam = fileData.shoreWaveCrestFoam;
+            comp.shoreWaveCrestFoamThreshold = fileData.shoreWaveCrestFoamThreshold;
+            comp.shoreWaveLean = fileData.shoreWaveLean;
             comp.density = fileData.density;
             comp.drag = fileData.drag;
             comp.buoyancyStrength = fileData.buoyancyStrength;
@@ -1138,6 +1350,8 @@ namespace services
         seaStateTransitionActive = false;
         lastAppliedBeaufort = -1.0f;
         lastAppliedWindDirection = -10000.0f;
+        // VK-1605: a new scene means a new bathymetry.
+        shoreFieldRebakeRequested = true;
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto oceanView = registry.view<components::OceanComponent>();

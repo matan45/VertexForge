@@ -84,6 +84,13 @@ namespace render::water
         // VK-1604: set 9 binding 2 needs a valid buffer even on the dummy path.
         vk::Buffer refractionDummyParamsBuffer;
         core::VulkanAllocation refractionDummyParamsAllocation;
+        // VK-1605: the dummy set owns its own 1x1 image now. It used to borrow the ocean dummy's,
+        // which only exists when no ocean layout was supplied — so the dummy could not be built
+        // unconditionally, and on the normal path it was never built at all.
+        vk::Image refractionDummyImage;
+        core::VulkanAllocation refractionDummyImageAllocation;
+        vk::ImageView refractionDummyView;
+        vk::Sampler refractionDummySampler;
 
         // Ocean FFT texture support
         vk::DescriptorSetLayout oceanTextureLayout;       // Currently active layout (dummy or external)
@@ -109,6 +116,13 @@ namespace render::water
         void cleanup();
 
         void updateDescriptors(vk::Buffer tileSSBO, uint32_t tileCount);
+
+        // VK-1605: point the DUMMY set 9's binding 3 at the real shore-depth texture. RTT and
+        // reflection-probe views bind the dummy set (they must not sample the main view's scene
+        // colour/depth), but shoaling and the breaking deformer displace VERTICES — if a probe did
+        // not shoal, it would reflect a water surface that does not exist. The shore field is
+        // view-independent, so it is safe (and required) to hand it to the dummy path too.
+        void updateDummyShoreDepth(vk::ImageView shoreDepthView, vk::Sampler shoreDepthSampler);
 
         void render(vk::CommandBuffer cmd, const WaterRenderDescriptors& descriptors,
                     WaterMeshBuffer& meshBuffer, const WaterPushConstants& pushConstants);

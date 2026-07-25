@@ -64,6 +64,22 @@ namespace windows
             visualSettings.hexBandMask = dataOpt->hexBandMask;
             visualSettings.hexCellScale = dataOpt->hexCellScale;
             visualSettings.hexBlendContrast = dataOpt->hexBlendContrast;
+            // VK-1605
+            visualSettings.shoalingEnabled = dataOpt->shoalingEnabled;
+            visualSettings.shoalingStrength = dataOpt->shoalingStrength;
+            visualSettings.shoalingMinDepth = dataOpt->shoalingMinDepth;
+            visualSettings.shoalingWavelengthScale = dataOpt->shoalingWavelengthScale;
+            visualSettings.shoalingGamma = dataOpt->shoalingGamma;
+            visualSettings.shoreEdgeFadeStart = dataOpt->shoreEdgeFadeStart;
+            visualSettings.shoreWavesEnabled = dataOpt->shoreWavesEnabled;
+            visualSettings.shoreWaveAmplitude = dataOpt->shoreWaveAmplitude;
+            visualSettings.shoreWaveLength = dataOpt->shoreWaveLength;
+            visualSettings.shoreWaveSpeed = dataOpt->shoreWaveSpeed;
+            visualSettings.shoreWaveBreakDepth = dataOpt->shoreWaveBreakDepth;
+            visualSettings.shoreWaveBreakRange = dataOpt->shoreWaveBreakRange;
+            visualSettings.shoreWaveCrestFoam = dataOpt->shoreWaveCrestFoam;
+            visualSettings.shoreWaveCrestFoamThreshold = dataOpt->shoreWaveCrestFoamThreshold;
+            visualSettings.shoreWaveLean = dataOpt->shoreWaveLean;
             visualSettingsDirty = false;
 
             physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
@@ -257,6 +273,78 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Roughness", "##ShoreWetRoughness",
                 &visualSettings.shoreWetRoughness, 0.01f, 0.0f, 1.0f, "%.2f");
             ImGui::TextDisabled("Surface roughness at waterline");
+
+            // VK-1605 — depth-driven shoreline. Everything below needs the shore-depth field.
+            ImGui::Spacing();
+            ImGui::Separator();
+            drawShoreDepthFieldStatus();
+
+            ImGui::Spacing();
+            ImGui::Text("Shoaling");
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##ShoalingEnabled",
+                                                   &visualSettings.shoalingEnabled);
+            ImGui::TextDisabled("Waves feel the bottom: they rise, then the depth limit breaks them");
+
+            if (visualSettings.shoalingEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Strength", "##ShoalingStrength",
+                    &visualSettings.shoalingStrength, 0.01f, 0.0f, 1.0f, "%.2f");
+                ImGui::TextDisabled("0 = off, 1 = full effect");
+
+                visualSettingsDirty |= labeledDragFloat("Wavelength Scale", "##ShoalingWavelength",
+                    &visualSettings.shoalingWavelengthScale, 0.01f, 0.1f, 4.0f, "%.2f");
+                ImGui::TextDisabled("Scales each band's wavelength; higher = shoals further out");
+
+                visualSettingsDirty |= labeledDragFloat("Break Ratio", "##ShoalingGamma",
+                    &visualSettings.shoalingGamma, 0.01f, 0.2f, 1.5f, "%.2f");
+                ImGui::TextDisabled("Wave height / depth at which a wave breaks (0.78 = McCowan)");
+
+                visualSettingsDirty |= labeledDragFloat("Min Depth", "##ShoalingMinDepth",
+                    &visualSettings.shoalingMinDepth, 0.05f, 0.0f, 10.0f, "%.2f m");
+                ImGui::TextDisabled("Depth at which waves are already fully flattened");
+
+                visualSettingsDirty |= labeledDragFloat("Edge Fade", "##ShoreEdgeFade",
+                    &visualSettings.shoreEdgeFadeStart, 0.01f, 0.0f, 0.99f, "%.2f");
+                ImGui::TextDisabled("Where the depth-field window fades out; lower = smoother re-centre");
+            }
+
+            ImGui::Spacing();
+            ImGui::Text("Breaking Waves");
+            visualSettingsDirty |= ImGui::Checkbox("Enabled##ShoreWavesEnabled",
+                                                   &visualSettings.shoreWavesEnabled);
+            ImGui::TextDisabled("Travelling surf that follows the depth contours toward the beach");
+
+            if (visualSettings.shoreWavesEnabled)
+            {
+                visualSettingsDirty |= labeledDragFloat("Amplitude", "##ShoreWaveAmplitude",
+                    &visualSettings.shoreWaveAmplitude, 0.01f, 0.0f, 5.0f, "%.2f m");
+
+                visualSettingsDirty |= labeledDragFloat("Spacing", "##ShoreWaveLength",
+                    &visualSettings.shoreWaveLength, 0.1f, 0.5f, 60.0f, "%.1f m");
+                ImGui::TextDisabled("Depth between successive crests");
+
+                visualSettingsDirty |= labeledDragFloat("Speed", "##ShoreWaveSpeed",
+                    &visualSettings.shoreWaveSpeed, 0.01f, 0.0f, 3.0f, "%.2f");
+                ImGui::TextDisabled("Crests per second, travelling shoreward");
+
+                visualSettingsDirty |= labeledDragFloat("Break Depth", "##ShoreWaveBreakDepth",
+                    &visualSettings.shoreWaveBreakDepth, 0.05f, 0.1f, 20.0f, "%.2f m");
+                ImGui::TextDisabled("Offshore edge of the surf zone");
+
+                visualSettingsDirty |= labeledDragFloat("Break Range", "##ShoreWaveBreakRange",
+                    &visualSettings.shoreWaveBreakRange, 0.05f, 0.05f, 20.0f, "%.2f m");
+                ImGui::TextDisabled("Fade width at the waterline and at the deep edge");
+
+                visualSettingsDirty |= labeledDragFloat("Crest Foam", "##ShoreWaveCrestFoam",
+                    &visualSettings.shoreWaveCrestFoam, 0.01f, 0.0f, 2.0f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Foam Threshold", "##ShoreWaveCrestFoamThr",
+                    &visualSettings.shoreWaveCrestFoamThreshold, 0.01f, 0.0f, 0.99f, "%.2f");
+
+                visualSettingsDirty |= labeledDragFloat("Forward Lean", "##ShoreWaveLean",
+                    &visualSettings.shoreWaveLean, 0.01f, 0.0f, 3.0f, "%.2f");
+                ImGui::TextDisabled("Pushes crests along the depth gradient as they break");
+            }
             ImGui::Unindent();
         }
 
@@ -403,6 +491,39 @@ namespace windows
         ImGui::Spacing();
         if (ImGui::Button("Save Ocean", ImVec2(-1, 0)))
             saveOcean();
+    }
+
+    // VK-1605: without this line "the shoreline isn't doing anything" is ambiguous between
+    // no terrain in the scene, a bake still in flight, and a mis-tuned setting.
+    void OceanEditorWindow::drawShoreDepthFieldStatus()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        const auto status = dispatcher.query(events::ocean::GetShoreDepthFieldStatusQuery{});
+
+        ImGui::Text("Shore Depth Field");
+        if (!status.hasTerrain && !status.baked)
+        {
+            ImGui::TextDisabled("No terrain — water reads as bottomless, shoreline effects are inert");
+            return;
+        }
+
+        if (status.baking)
+        {
+            ImGui::TextDisabled("Baking %.0f%%  (v%u)", status.progress * 100.0f, status.version);
+        }
+        else if (status.baked)
+        {
+            ImGui::TextDisabled("Baked v%u  |  %u^2 over %.0f m  |  centre %.0f, %.0f",
+                                status.version, status.resolution, status.windowSize,
+                                status.center.x, status.center.y);
+        }
+        else
+        {
+            ImGui::TextDisabled("Waiting for the first bake");
+        }
+
+        if (!status.hasTerrain)
+            ImGui::TextDisabled("Terrain went away — the field will read bottomless after the next bake");
     }
 
     void OceanEditorWindow::drawOceanFFTSection()

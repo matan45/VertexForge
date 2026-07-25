@@ -208,6 +208,22 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     out.hexBandMask = 0x7u;
     out.hexCellScale = 2.5f;
     out.hexBlendContrast = 6.5f;
+    // VK-1605
+    out.shoalingEnabled = true;
+    out.shoalingStrength = 0.85f;
+    out.shoalingMinDepth = 0.45f;
+    out.shoalingWavelengthScale = 1.75f;
+    out.shoalingGamma = 0.66f;
+    out.shoreEdgeFadeStart = 0.72f;
+    out.shoreWavesEnabled = true;
+    out.shoreWaveAmplitude = 0.95f;
+    out.shoreWaveLength = 17.5f;
+    out.shoreWaveSpeed = 0.55f;
+    out.shoreWaveBreakDepth = 2.25f;
+    out.shoreWaveBreakRange = 1.75f;
+    out.shoreWaveCrestFoam = 0.85f;
+    out.shoreWaveCrestFoamThreshold = 0.35f;
+    out.shoreWaveLean = 1.15f;
 
     REQUIRE(ocean::OceanSerializer::save(tmp.string(), out));
 
@@ -251,6 +267,23 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     CHECK(in.hexBandMask == 0x7u);
     CHECK(in.hexCellScale == doctest::Approx(2.5f));
     CHECK(in.hexBlendContrast == doctest::Approx(6.5f));
+
+    // VK-1605
+    CHECK(in.shoalingEnabled == true);
+    CHECK(in.shoalingStrength == doctest::Approx(0.85f));
+    CHECK(in.shoalingMinDepth == doctest::Approx(0.45f));
+    CHECK(in.shoalingWavelengthScale == doctest::Approx(1.75f));
+    CHECK(in.shoalingGamma == doctest::Approx(0.66f));
+    CHECK(in.shoreEdgeFadeStart == doctest::Approx(0.72f));
+    CHECK(in.shoreWavesEnabled == true);
+    CHECK(in.shoreWaveAmplitude == doctest::Approx(0.95f));
+    CHECK(in.shoreWaveLength == doctest::Approx(17.5f));
+    CHECK(in.shoreWaveSpeed == doctest::Approx(0.55f));
+    CHECK(in.shoreWaveBreakDepth == doctest::Approx(2.25f));
+    CHECK(in.shoreWaveBreakRange == doctest::Approx(1.75f));
+    CHECK(in.shoreWaveCrestFoam == doctest::Approx(0.85f));
+    CHECK(in.shoreWaveCrestFoamThreshold == doctest::Approx(0.35f));
+    CHECK(in.shoreWaveLean == doctest::Approx(1.15f));
 
     fs::remove(tmp);
 }
@@ -296,6 +329,13 @@ TEST_CASE("OceanSerializer: a v1 file without the VK-1604 keys loads with defaul
     CHECK(in.hexBandMask == defaults.hexBandMask);
     CHECK(in.hexCellScale == doctest::Approx(defaults.hexCellScale));
     CHECK(in.hexBlendContrast == doctest::Approx(defaults.hexBlendContrast));
+    // VK-1605 — same mechanism, and defaulting to OFF is what keeps existing scenes unchanged.
+    CHECK(in.shoalingEnabled == defaults.shoalingEnabled);
+    CHECK(in.shoalingStrength == doctest::Approx(defaults.shoalingStrength));
+    CHECK(in.shoalingGamma == doctest::Approx(defaults.shoalingGamma));
+    CHECK(in.shoreWavesEnabled == defaults.shoreWavesEnabled);
+    CHECK(in.shoreWaveAmplitude == doctest::Approx(defaults.shoreWaveAmplitude));
+    CHECK(in.shoreWaveBreakDepth == doctest::Approx(defaults.shoreWaveBreakDepth));
 
     fs::remove(tmp);
 }

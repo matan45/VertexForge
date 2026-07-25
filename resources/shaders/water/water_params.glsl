@@ -4,13 +4,16 @@
 // VK-1604: extended water parameters, set 9 binding 2 (vertex | fragment).
 // MUST stay byte-for-byte in sync with render::water::WaterExtendedParams in
 // VFEngine/graphics/render/water/WaterGPUTypes.hpp — there is no codegen between them.
-// The C++ side is hand-padded into 16-byte rows and static_asserts sizeof() == 128.
+// The C++ side is hand-padded into 16-byte rows and static_asserts sizeof() == 192.
 
-#define WATER_FLAG_SSR        1u
-#define WATER_FLAG_ABSORPTION 2u
-#define WATER_FLAG_HEX        4u
-#define WATER_FLAG_SSR_DEBUG  8u
-// bits 4..15 reserved for VK-1605 (shoaling / shore waves) and VK-1606 (ripples)
+#define WATER_FLAG_SSR         1u
+#define WATER_FLAG_ABSORPTION  2u
+#define WATER_FLAG_HEX         4u
+#define WATER_FLAG_SSR_DEBUG   8u
+#define WATER_FLAG_SHOALING    16u
+#define WATER_FLAG_SHORE_WAVES 32u
+#define WATER_FLAG_SHORE_FIELD 64u
+// bits 7..15 reserved for VK-1606 (ripples)
 
 layout(std140, set = 9, binding = 2) uniform WaterExtendedParamsUBO {
     vec4 absorptionCoeff;       //   0  rgb = extinction 1/m
@@ -33,11 +36,16 @@ layout(std140, set = 9, binding = 2) uniform WaterExtendedParamsUBO {
     uint  hexPerBandMask;       //  92
 
     uint  flags;                //  96
-    float reservedShoreField;   // 100
-    float reservedShoaling;     // 104
-    float reservedShoreWaves;   // 108
+    float shoalingStrength;     // 100  VK-1605
+    float shoalingGamma;        // 104  VK-1605  McCowan H/d breaking limit
+    float shoreEdgeFadeStart;   // 108  VK-1605  window fade start, 0..1
 
-    vec4  reserved0;            // 112
-} ext;                          // 128
+    vec4  reserved0;            // 112  VK-1606 ripple patch window
+
+    vec4  shoreFieldOrigin;     // 128  xy = window min corner XZ, z = windowSize, w = 1/windowSize
+    vec4  bandWavelength;       // 144  xyz = per-band characteristic lambda (m), w = shoalingMinDepth
+    vec4  shoreWaveA;           // 160  x amplitude, y length, z speed, w breakDepth
+    vec4  shoreWaveB;           // 176  x breakRange, y crestFoam, z crestFoamThreshold, w shoreLean
+} ext;                          // 192
 
 #endif // WATER_PARAMS_GLSL
