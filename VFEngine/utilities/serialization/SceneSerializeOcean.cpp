@@ -39,6 +39,7 @@ namespace serialization
         j["ssrMaxDistance"] = ocean.ssrMaxDistance;
         j["ssrThickness"] = ocean.ssrThickness;
         j["ssrMaxSteps"] = ocean.ssrMaxSteps;
+        j["ssrDebugView"] = ocean.ssrDebugView;
         j["beerLambertEnabled"] = ocean.beerLambertEnabled;
         j["absorptionCoeff"] = json::array({ocean.absorptionCoeff.x, ocean.absorptionCoeff.y,
                                              ocean.absorptionCoeff.z});
@@ -143,6 +144,8 @@ namespace serialization
             ocean.ssrThickness = it->get<float>();
         if (auto it = j.find("ssrMaxSteps"); it != j.end() && it->is_number_unsigned())
             ocean.ssrMaxSteps = it->get<uint32_t>();
+        if (auto it = j.find("ssrDebugView"); it != j.end() && it->is_boolean())
+            ocean.ssrDebugView = it->get<bool>();
         if (auto it = j.find("beerLambertEnabled"); it != j.end() && it->is_boolean())
             ocean.beerLambertEnabled = it->get<bool>();
         if (auto it = j.find("absorptionCoeff"); it != j.end() && it->is_array() && it->size() >= 3)

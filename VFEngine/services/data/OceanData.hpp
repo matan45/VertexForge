@@ -58,6 +58,7 @@ namespace services
         float ssrMaxDistance = 60.0f;
         float ssrThickness = 0.35f;
         uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;
 
         bool beerLambertEnabled = false;
         glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};
@@ -118,6 +119,7 @@ namespace services
         float ssrMaxDistance = 60.0f;
         float ssrThickness = 0.35f;
         uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;
 
         bool beerLambertEnabled = false;
         glm::vec3 absorptionCoeff{0.45f, 0.08f, 0.02f};

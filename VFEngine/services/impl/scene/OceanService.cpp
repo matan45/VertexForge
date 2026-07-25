@@ -175,6 +175,7 @@ namespace services
                 comp.ssrMaxDistance = cmd.settings.ssrMaxDistance;
                 comp.ssrThickness = cmd.settings.ssrThickness;
                 comp.ssrMaxSteps = cmd.settings.ssrMaxSteps;
+                comp.ssrDebugView = cmd.settings.ssrDebugView;
                 comp.beerLambertEnabled = cmd.settings.beerLambertEnabled;
                 comp.absorptionCoeff = cmd.settings.absorptionCoeff;
                 comp.scatteringColor = cmd.settings.scatteringColor;
@@ -470,6 +471,7 @@ namespace services
         data.ssrMaxDistance = comp.ssrMaxDistance;
         data.ssrThickness = comp.ssrThickness;
         data.ssrMaxSteps = comp.ssrMaxSteps;
+        data.ssrDebugView = comp.ssrDebugView;
         data.beerLambertEnabled = comp.beerLambertEnabled;
         data.absorptionCoeff = comp.absorptionCoeff;
         data.scatteringColor = comp.scatteringColor;
@@ -595,6 +597,7 @@ namespace services
         settings.ssrMaxDistance = comp.ssrMaxDistance;
         settings.ssrThickness = comp.ssrThickness;
         settings.ssrMaxSteps = comp.ssrMaxSteps;
+        settings.ssrDebugView = comp.ssrDebugView;
         settings.beerLambertEnabled = comp.beerLambertEnabled;
         settings.absorptionCoeff = comp.absorptionCoeff;
         settings.scatteringColor = comp.scatteringColor;
@@ -658,6 +661,7 @@ namespace services
         fileData.ssrMaxDistance = comp.ssrMaxDistance;
         fileData.ssrThickness = comp.ssrThickness;
         fileData.ssrMaxSteps = comp.ssrMaxSteps;
+        fileData.ssrDebugView = comp.ssrDebugView;
         fileData.beerLambertEnabled = comp.beerLambertEnabled;
         fileData.absorptionCoeff = comp.absorptionCoeff;
         fileData.scatteringColor = comp.scatteringColor;
@@ -765,6 +769,7 @@ namespace services
             comp.ssrMaxDistance = fileData.ssrMaxDistance;
             comp.ssrThickness = fileData.ssrThickness;
             comp.ssrMaxSteps = fileData.ssrMaxSteps;
+            comp.ssrDebugView = fileData.ssrDebugView;
             comp.beerLambertEnabled = fileData.beerLambertEnabled;
             comp.absorptionCoeff = fileData.absorptionCoeff;
             comp.scatteringColor = fileData.scatteringColor;

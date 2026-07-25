@@ -245,6 +245,11 @@ namespace render::mesh
     private:
         void unloadAllMeshes();
 
+        // VK-1604: the two scene-depth layout transitions, extracted so the VFX and water
+        // read-only-depth scopes share one implementation instead of duplicating the barrier.
+        void transitionDepthToReadOnly(const vk::CommandBuffer& commandBuffer) const;
+        void transitionDepthToAttachment(const vk::CommandBuffer& commandBuffer) const;
+
         void loadShaders();
         void createDescriptorSetLayout();
         void createDescriptorPool();

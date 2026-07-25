@@ -175,6 +175,7 @@ namespace render::gpudriven
             if (visualSettings.ssrEnabled) flags |= render::water::WATER_FLAG_SSR;
             if (visualSettings.beerLambertEnabled) flags |= render::water::WATER_FLAG_ABSORPTION;
             if (visualSettings.hexTilingEnabled) flags |= render::water::WATER_FLAG_HEX;
+            if (visualSettings.ssrDebugView) flags |= render::water::WATER_FLAG_SSR_DEBUG;
             ext.flags = flags;
 
             water.cachedExtendedParams = ext;

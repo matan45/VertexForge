@@ -147,6 +147,7 @@ TEST_CASE("OceanFileData: VK-1604 visual features default to OFF") {
 
     // Every new feature must be opt-in so scenes authored before VK-1604 look unchanged.
     CHECK_FALSE(data.ssrEnabled);
+    CHECK_FALSE(data.ssrDebugView);
     CHECK_FALSE(data.beerLambertEnabled);
     CHECK_FALSE(data.hexTilingEnabled);
 
@@ -197,6 +198,7 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     out.ssrMaxDistance = 123.0f;
     out.ssrThickness = 0.85f;
     out.ssrMaxSteps = 47u;
+    out.ssrDebugView = true;
     out.beerLambertEnabled = true;
     out.absorptionCoeff = glm::vec3(0.11f, 0.22f, 0.33f);
     out.scatteringColor = glm::vec3(0.44f, 0.55f, 0.66f);
@@ -235,6 +237,7 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     CHECK(in.ssrMaxDistance == doctest::Approx(123.0f));
     CHECK(in.ssrThickness == doctest::Approx(0.85f));
     CHECK(in.ssrMaxSteps == 47u);
+    CHECK(in.ssrDebugView == true);
     CHECK(in.beerLambertEnabled == true);
     CHECK(in.absorptionCoeff.r == doctest::Approx(0.11f));
     CHECK(in.absorptionCoeff.g == doctest::Approx(0.22f));

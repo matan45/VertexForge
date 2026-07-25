@@ -54,6 +54,7 @@ namespace windows
             visualSettings.ssrMaxDistance = dataOpt->ssrMaxDistance;
             visualSettings.ssrThickness = dataOpt->ssrThickness;
             visualSettings.ssrMaxSteps = dataOpt->ssrMaxSteps;
+            visualSettings.ssrDebugView = dataOpt->ssrDebugView;
             visualSettings.beerLambertEnabled = dataOpt->beerLambertEnabled;
             visualSettings.absorptionCoeff = dataOpt->absorptionCoeff;
             visualSettings.scatteringColor = dataOpt->scatteringColor;
@@ -289,6 +290,17 @@ namespace windows
                 }
                 ImGui::PopItemWidth();
                 ImGui::TextDisabled("Higher = fewer missed reflections, more cost");
+
+                ImGui::Spacing();
+                visualSettingsDirty |= ImGui::Checkbox("Debug: show confidence", &visualSettings.ssrDebugView);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip(
+                        "Renders the raw SSR confidence as greyscale instead of shading the water.\n"
+                        "White = a confident hit, black = miss (IBL fallback). Use this to confirm\n"
+                        "reflections land on the correct side of an off-centre object before tuning\n"
+                        "anything else - a mirrored reflection still looks plausible on water.");
+                }
 
                 ImGui::TextDisabled("Not applied to render-texture or reflection-probe views");
             }

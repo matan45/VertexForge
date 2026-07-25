@@ -42,6 +42,7 @@ namespace ocean
         vis["ssrMaxDistance"] = data.ssrMaxDistance;
         vis["ssrThickness"] = data.ssrThickness;
         vis["ssrMaxSteps"] = data.ssrMaxSteps;
+        vis["ssrDebugView"] = data.ssrDebugView;
         vis["beerLambertEnabled"] = data.beerLambertEnabled;
         vis["absorptionCoeff"] = {data.absorptionCoeff.r, data.absorptionCoeff.g, data.absorptionCoeff.b};
         vis["scatteringColor"] = {data.scatteringColor.r, data.scatteringColor.g, data.scatteringColor.b};
@@ -152,6 +153,7 @@ namespace ocean
             outData.ssrMaxDistance = vis.value("ssrMaxDistance", outData.ssrMaxDistance);
             outData.ssrThickness = vis.value("ssrThickness", outData.ssrThickness);
             outData.ssrMaxSteps = vis.value("ssrMaxSteps", outData.ssrMaxSteps);
+            outData.ssrDebugView = vis.value("ssrDebugView", outData.ssrDebugView);
             outData.beerLambertEnabled = vis.value("beerLambertEnabled", outData.beerLambertEnabled);
             if (vis.contains("absorptionCoeff") && vis["absorptionCoeff"].is_array()
                 && vis["absorptionCoeff"].size() >= 3)

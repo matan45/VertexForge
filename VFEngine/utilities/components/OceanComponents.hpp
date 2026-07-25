@@ -58,6 +58,7 @@ namespace components
         float ssrMaxDistance = 60.0f;       // metres
         float ssrThickness = 0.35f;         // metres; range-scaled in the shader
         uint32_t ssrMaxSteps = 24;
+        bool ssrDebugView = false;          // renders SSR confidence as greyscale
 
         // VK-1604: Beer-Lambert absorption / in-scattering. OFF keeps the legacy height-based
         // deep/shallow tint byte-for-byte, so existing content is unaffected until opted in.
