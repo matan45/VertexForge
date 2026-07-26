@@ -90,6 +90,7 @@ TEST_SUITE("TextShaderCompile")
         // Files under common/ are pulled into another translation unit, so they must
         // carry a header guard and must not open a stage or declare #version.
         CHECK(source.find("#ifndef TEXT_SDF_GLSL") != std::string::npos);
+        CHECK(source.find("float medianRGB(") != std::string::npos);
         CHECK(source.find("float sdfCoverage(") != std::string::npos);
         CHECK(source.find("fwidth(") != std::string::npos);
         CHECK(source.find("#type ") == std::string::npos);
@@ -127,6 +128,27 @@ TEST_SUITE("TextShaderCompile")
                   != std::string::npos);
             CHECK(source.find("sdfCoverage(") != std::string::npos);
             CHECK(source.find("smoothstep(") == std::string::npos);
+        }
+    }
+
+    TEST_CASE("both text shaders reconstruct MTSDF and italicize every non-color mode")
+    {
+        for (const fs::path relative : {fs::path("ui") / "ui_text.glsl",
+                                        fs::path("text") / "text.glsl"})
+        {
+            const fs::path shader = shaderRoot() / relative;
+            std::ifstream in(shader);
+            REQUIRE_MESSAGE(in.is_open(), "missing " << shader.string());
+            const std::string source((std::istreambuf_iterator<char>(in)),
+                                     std::istreambuf_iterator<char>());
+
+            const std::string label = relative.generic_string();
+            CAPTURE(label);
+            CHECK(source.find("pc.glyphMode == 2u") != std::string::npos);
+            CHECK(source.find("medianRGB(fieldSample.rgb)") != std::string::npos);
+            CHECK(source.find("pc.glyphMode != 1u") != std::string::npos);
+            CHECK(source.find("pc.glyphMode == 0u") == std::string::npos);
+            CHECK(source.find(": fieldSample.r;") != std::string::npos);
         }
     }
 }

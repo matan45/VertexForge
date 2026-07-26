@@ -39,7 +39,7 @@ namespace
 
     constexpr uint32_t kGlyphCodepoint = 0x41; // 'A'
     constexpr uint32_t kAtlasDimension = 4;
-    constexpr uint32_t kAtlasBytes = kAtlasDimension * kAtlasDimension; // GRAYSCALE_8 => 1 bpp
+    constexpr uint32_t kAtlasBytes = kAtlasDimension * kAtlasDimension; // SDF_8 => 1 bpp
     constexpr unsigned char kAtlasFill = 0xFF;
 
     const std::string kFontName = "VK1627";
@@ -73,7 +73,7 @@ namespace
     }
 
     // Writes a minimal but fully valid .vfFont: 1 character range, 1 glyph, no
-    // kerning pairs, and a 4x4 GRAYSCALE_8 atlas whose declared size matches
+    // kerning pairs, and a 4x4 SDF_8 atlas whose declared size matches
     // width*height*bpp exactly (so the reader logs no size-mismatch warning).
     // When writeBody is false the file ends after the 21-byte header.
     void writeFontFile(const fs::path& path, const resource::VfFontHeader& header, bool writeBody = true)
@@ -105,7 +105,7 @@ namespace
         writeLE<float>(f, 4.0f);       // sdf spread
         writeLE<uint32_t>(f, 4u);      // sdf padding
         writeLE<float>(f, 0.5f);       // sdf edgeValue
-        writeLE<uint32_t>(f, 0u);      // sdf reserved
+        writeLE<float>(f, 0.0f);       // MTSDF pxRange (legacy reserved bits were zero)
 
         // --- Character ranges ---
         writeLE<uint32_t>(f, 1u);
@@ -133,7 +133,7 @@ namespace
         // --- Atlas ---
         writeLE<uint32_t>(f, kAtlasDimension);
         writeLE<uint32_t>(f, kAtlasDimension);
-        writeLE<uint32_t>(f, static_cast<uint32_t>(resource::FontAtlasFormat::GRAYSCALE_8));
+        writeLE<uint32_t>(f, static_cast<uint32_t>(resource::FontAtlasFormat::SDF_8));
         writeLE<uint32_t>(f, kAtlasBytes);
 
         const std::vector<unsigned char> pixels(kAtlasBytes, kAtlasFill);
@@ -158,7 +158,7 @@ namespace
         font.sdfParams.spread = 4.0f;
         font.sdfParams.padding = 4;
         font.sdfParams.edgeValue = 0.5f;
-        font.sdfParams.reserved = 0;
+        font.sdfParams.pxRange = 0.0f;
 
         resource::CharacterRange range;
         range.rangeStart = kGlyphCodepoint;
@@ -182,7 +182,7 @@ namespace
 
         font.atlas.width = kAtlasDimension;
         font.atlas.height = kAtlasDimension;
-        font.atlas.format = resource::FontAtlasFormat::GRAYSCALE_8;
+        font.atlas.format = resource::FontAtlasFormat::SDF_8;
         font.atlas.pixels.assign(kAtlasBytes, kAtlasFill);
 
         return font;
@@ -194,6 +194,7 @@ namespace
         CHECK(font.metadata.fontStyle == kFontStyle);
         CHECK(font.metadata.baseFontSize == 32u);
         CHECK(font.metadata.lineHeight == doctest::Approx(40.0f));
+        CHECK(font.sdfParams.pxRange == doctest::Approx(0.0f));
 
         REQUIRE(font.characterRanges.size() == 1);
         CHECK(font.characterRanges[0].rangeStart == kGlyphCodepoint);
@@ -343,7 +344,8 @@ TEST_SUITE("FontFormatVersion")
     {
         TempDir dir("vf_vk1627_roundtrip");
 
-        types::FontSerializer{}.saveToFile(dir.path.string(), "vk1627", makeMinimalFont());
+        REQUIRE(types::FontSerializer{}.saveToFile(
+            dir.path.string(), "vk1627", makeMinimalFont()));
 
         const fs::path file = dir.path / "vk1627.vfFont";
         REQUIRE(fs::exists(file));
@@ -357,6 +359,36 @@ TEST_SUITE("FontFormatVersion")
         CHECK(std::string(magic.data(), magic.size()) == "VFFT");
 
         checkLoaded(resource::FontResource::loadFont(file.string()));
+    }
+
+    TEST_CASE("MTSDF reuses the v2 wire layout and round-trips four-channel pixels")
+    {
+        TempDir dir("vf_vk1633_mtsdf_roundtrip");
+
+        resource::FontData font = makeMinimalFont();
+        font.formatFlags = font.formatFlags |
+            resource::FontFormatFlags::SDF_ENABLED |
+            resource::FontFormatFlags::MSDF_ENABLED;
+        font.sdfParams.spread = 4.0f;
+        font.sdfParams.padding = 0;
+        font.sdfParams.edgeValue = 0.5f;
+        font.sdfParams.pxRange = 4.0f;
+        font.atlas.format = resource::FontAtlasFormat::MTSDF_RGBA_32;
+        font.atlas.pixels.assign(
+            static_cast<size_t>(kAtlasDimension) * kAtlasDimension * 4, 0x80);
+
+        REQUIRE(types::FontSerializer{}.saveToFile(
+            dir.path.string(), "mtsdf", font));
+
+        const resource::FontData loaded =
+            resource::FontResource::loadFont((dir.path / "mtsdf.vfFont").string());
+        REQUIRE_FALSE(loaded.glyphs.empty());
+        CHECK(loaded.atlas.format == resource::FontAtlasFormat::MTSDF_RGBA_32);
+        CHECK(loaded.atlas.pixels == font.atlas.pixels);
+        CHECK(loaded.isSDF());
+        CHECK(loaded.isMSDF());
+        CHECK(loaded.sdfParams.pxRange == doctest::Approx(4.0f));
+        CHECK(loaded.version.major == 2u);
     }
 
     TEST_CASE("the .vfFont format constants have their expected values")

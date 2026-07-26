@@ -494,9 +494,9 @@ namespace render::ui
                 vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                     ? it->second : defaultDescriptorSet;
 
-                // Determine glyphMode from cached font data
+                // The cache validates the atlas format and stores its shader-facing mode.
                 const render::text::CachedFont* cached = fontCache.getFont(batch.fontPath);
-                uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+                uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
                 UITextPushConstants pushConstants{};
                 pushConstants.viewportSize = viewportSize;
@@ -621,9 +621,9 @@ namespace render::ui
                 vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                     ? it->second : defaultDescriptorSet;
 
-                // Determine glyphMode from cached font data
+                // The cache validates the atlas format and stores its shader-facing mode.
                 const render::text::CachedFont* cached = fontCache.getFont(batch.fontPath);
-                uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+                uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
                 UITextPushConstants pushConstants{};
                 pushConstants.viewportSize = viewportSize;

@@ -68,7 +68,7 @@ namespace render::ui
     struct UITextPushConstants
     {
         glm::vec2 viewportSize;
-        uint32_t glyphMode;    // 0 = SDF, 1 = color bitmap
+        uint32_t glyphMode;    // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
         float padding;
     };
 

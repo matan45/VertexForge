@@ -12,10 +12,20 @@ namespace types
     class FontAtlasGenerator
     {
     public:
+        bool generateGrayscaleAtlas(FT_Face face, uint32_t fontSize,
+                                    const std::vector<resource::CharacterRange>& ranges,
+                                    const FontImportConfig& config,
+                                    resource::FontData& fontData) const;
+
         bool generateSDFAtlas(FT_Face face, uint32_t fontSize,
                               const std::vector<resource::CharacterRange>& ranges,
                               const FontImportConfig& config,
                               resource::FontData& fontData) const;
+
+        bool generateMTSDFAtlas(FT_Face face, uint32_t fontSize,
+                                const std::vector<resource::CharacterRange>& ranges,
+                                const FontImportConfig& config,
+                                resource::FontData& fontData) const;
 
         bool generateColorAtlas(FT_Face face, uint32_t fontSize,
                                 const std::vector<resource::CharacterRange>& ranges,

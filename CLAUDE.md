@@ -339,6 +339,7 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 | meshoptimizer | Mesh/meshlet optimization and LOD generation (SharedLib) |
 | ispc_texcomp + bcdec | BC7/BC6H texture compression / decompression |
 | freetype | Font rasterization (requires CMake build) |
+| msdfgen | Core-only MTSDF glyph generation for imported font atlases |
 | NVIDIA Streamline | DLSS / DLSS-G frame generation / Reflex (`VF_STREAMLINE_ENABLED`, Graphics module; dev DLLs copied for Debug/Development, production DLLs for Release) |
 | LZ4 | Compression for `.vfpak` game archives |
 | nlohmann/json | JSON serialization for scenes/assets/config |

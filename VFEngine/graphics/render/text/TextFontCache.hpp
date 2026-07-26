@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include "../../core/VulkanMemoryManager.hpp"
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -28,7 +29,10 @@ namespace render::text
         vk::ImageView atlasImageView;
         vk::Sampler atlasSampler;
 
-        bool isColorFont = false;
+        // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF.
+        // Kept as the shader-facing integer so command recording does not need a
+        // second atlas-format switch and the push-constant ABI stays unchanged.
+        uint32_t glyphMode = 0;
     };
 
     class TextFontCache

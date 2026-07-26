@@ -7,7 +7,10 @@
 #include "math/MathHelper.hpp"
 #include "text/TextLayout.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <filesystem>
+#include <limits>
+#include <stdexcept>
 
 namespace windows
 {
@@ -259,7 +262,23 @@ namespace windows
         textureData.numbersOfChannels = 4;
         textureData.mipLevels = 1;
 
-        size_t pixelCount = static_cast<size_t>(atlas.width) * atlas.height;
+        const size_t bytesPerPixel = resource::fontAtlasBytesPerPixel(atlas.format);
+        const size_t width = static_cast<size_t>(atlas.width);
+        const size_t height = static_cast<size_t>(atlas.height);
+        if (bytesPerPixel == 0 || width == 0 || height == 0 ||
+            width > std::numeric_limits<size_t>::max() / height)
+        {
+            throw std::runtime_error("Invalid font atlas dimensions or format");
+        }
+
+        const size_t pixelCount = width * height;
+        if (pixelCount > std::numeric_limits<size_t>::max() / bytesPerPixel ||
+            atlas.pixels.size() != pixelCount * bytesPerPixel ||
+            pixelCount > std::numeric_limits<size_t>::max() / 4)
+        {
+            throw std::runtime_error("Invalid font atlas pixel payload");
+        }
+
         std::vector<unsigned char> rgbaData(pixelCount * 4);
 
         if (atlas.format == resource::FontAtlasFormat::SDF_8)
@@ -294,6 +313,33 @@ namespace windows
         else if (atlas.format == resource::FontAtlasFormat::RGBA_32)
         {
             rgbaData.assign(atlas.pixels.begin(), atlas.pixels.end());
+        }
+        else if (atlas.format == resource::FontAtlasFormat::MTSDF_RGBA_32)
+        {
+            // Preview the same reconstructed field used by the runtime shaders.
+            // MTSDF's alpha channel remains persisted in the atlas for future
+            // outline/shadow/glow effects; the base glyph uses median RGB.
+            const float edgeByte = fontData.sdfParams.edgeValue * 255.0f;
+            const float pxRange = fontData.sdfParams.pxRange;
+            const float smoothByte = pxRange > 0.0f
+                ? (0.5f / pxRange) * 255.0f
+                : 0.0f;
+
+            for (size_t i = 0; i < pixelCount; ++i)
+            {
+                const size_t source = i * 4;
+                const unsigned char r = atlas.pixels[source + 0];
+                const unsigned char g = atlas.pixels[source + 1];
+                const unsigned char b = atlas.pixels[source + 2];
+                const unsigned char median =
+                    (std::max)((std::min)(r, g), (std::min)((std::max)(r, g), b));
+
+                rgbaData[source + 0] = 255;
+                rgbaData[source + 1] = 255;
+                rgbaData[source + 2] = 255;
+                rgbaData[source + 3] =
+                    sdf::sdfToAlphaByte(median, edgeByte, smoothByte);
+            }
         }
 
         resource::MipLevelData mip;
@@ -343,6 +389,7 @@ namespace windows
             case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale"; break;
             case resource::FontAtlasFormat::SDF_8: formatStr = "SDF"; break;
             case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA"; break;
+            case resource::FontAtlasFormat::MTSDF_RGBA_32: formatStr = "MTSDF"; break;
             }
             ImGui::Text("Format: %s", formatStr);
             ImGui::Text("Glyphs: %zu", fontData.glyphs.size());
@@ -354,6 +401,8 @@ namespace windows
             ImGui::Text("Spread: %.2f", fontData.sdfParams.spread);
             ImGui::Text("Padding: %u", fontData.sdfParams.padding);
             ImGui::Text("Edge Value: %.2f", fontData.sdfParams.edgeValue);
+            if (fontData.isMSDF())
+                ImGui::Text("Px Range: %.2f", fontData.sdfParams.pxRange);
         }
         ImGui::Spacing();
 

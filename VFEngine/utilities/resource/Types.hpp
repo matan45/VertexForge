@@ -4,6 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <algorithm>
 #include <unordered_map>
@@ -293,10 +294,26 @@ namespace resource
 
     enum class FontAtlasFormat : uint32_t
     {
-        GRAYSCALE_8 = 0,
-        SDF_8       = 1,
-        RGBA_32     = 2,
+        GRAYSCALE_8   = 0,
+        SDF_8         = 1,
+        RGBA_32       = 2,
+        MTSDF_RGBA_32 = 3,
     };
+
+    [[nodiscard]] inline constexpr uint32_t fontAtlasBytesPerPixel(FontAtlasFormat format) noexcept
+    {
+        switch (format)
+        {
+            case FontAtlasFormat::GRAYSCALE_8:
+            case FontAtlasFormat::SDF_8:
+                return 1;
+            case FontAtlasFormat::RGBA_32:
+            case FontAtlasFormat::MTSDF_RGBA_32:
+                return 4;
+            default:
+                return 0;
+        }
+    }
 
     struct CharacterRange
     {
@@ -335,8 +352,14 @@ namespace resource
         float spread = 4.0f;
         uint32_t padding = 4;
         float edgeValue = 0.5f;
-        uint32_t reserved = 0;
+        float pxRange = 0.0f;
     };
+
+    static_assert(sizeof(SDFParameters) == 16, "SDFParameters on-disk layout must remain 16 bytes");
+    static_assert(offsetof(SDFParameters, spread) == 0);
+    static_assert(offsetof(SDFParameters, padding) == 4);
+    static_assert(offsetof(SDFParameters, edgeValue) == 8);
+    static_assert(offsetof(SDFParameters, pxRange) == 12);
 
     struct FontMetadata
     {
@@ -421,6 +444,11 @@ namespace resource
         {
             return hasFlag(formatFlags, FontFormatFlags::SDF_ENABLED);
         }
+
+        [[nodiscard]] bool isMSDF() const
+        {
+            return hasFlag(formatFlags, FontFormatFlags::MSDF_ENABLED);
+        }
     };
 
     // VK-1631: normalized-field-space half-width of the SDF anti-aliasing band. Handed to
@@ -433,6 +461,10 @@ namespace resource
         if (!font.isSDF())
         {
             return 0.0f;
+        }
+        if (font.isMSDF())
+        {
+            return font.sdfParams.pxRange > 0.0f ? 0.5f / font.sdfParams.pxRange : 0.1f;
         }
         return font.sdfParams.spread > 0.0f ? 0.5f / font.sdfParams.spread : 0.1f;
     }

@@ -149,8 +149,8 @@ TEST_SUITE("FontImportOptions")
 
         // Every knob of FontImportConfig is reachable.
         const std::vector<std::string> expected = {
-            "baseFontSize", "generateSDF", "includeKerning", "sdfSpread", "sdfPadding",
-            "sdfOnEdgeValue", "includeBasicLatin", "includeLatin1Supplement",
+            "baseFontSize", "fieldMode", "includeKerning", "sdfSpread", "sdfPadding",
+            "sdfOnEdgeValue", "mtsdfPxRange", "includeBasicLatin", "includeLatin1Supplement",
             "includeLatinExtendedA", "includeLatinExtendedB", "includeGreek", "includeCyrillic",
             "includeEmoji", "includeMiscSymbols", "includeDingbats", "atlasSize", "atlasPadding",
         };
@@ -226,11 +226,20 @@ TEST_SUITE("FontImportOptions")
         const auto descs = fontOptions();
 
         CHECK(intDefault(descs, "baseFontSize") == 32);
-        CHECK(boolDefault(descs, "generateSDF") == true);
+        CHECK(intDefault(descs, "fieldMode") == 1);
         CHECK(boolDefault(descs, "includeKerning") == true);
         CHECK(floatDefault(descs, "sdfSpread") == doctest::Approx(4.0f));
         CHECK(intDefault(descs, "sdfPadding") == 4);
         CHECK(intDefault(descs, "sdfOnEdgeValue") == 128);
+        CHECK(floatDefault(descs, "mtsdfPxRange") == doctest::Approx(4.0f));
+
+        const auto* fieldMode = findOption(descs, "fieldMode");
+        REQUIRE(fieldMode != nullptr);
+        CHECK(fieldMode->type == import::ImportOptionDesc::Type::Enum);
+        REQUIRE(fieldMode->enumNames.size() == 3);
+        CHECK(fieldMode->enumNames[0] == "Grayscale (raster)");
+        CHECK(fieldMode->enumNames[1] == "SDF (legacy)");
+        CHECK(fieldMode->enumNames[2] == "MTSDF");
 
         CHECK(boolDefault(descs, "includeBasicLatin") == true);
         CHECK(boolDefault(descs, "includeLatin1Supplement") == true);
@@ -283,10 +292,10 @@ TEST_SUITE("FontImportOptions")
         metadata.guid = asset::AssetGUID::generate();
         metadata.type = resource::AssetType::Font;
         metadata.importSourcePath = "C:/fonts/Sidecar.ttf";
-        metadata.importOptions["generateSDF"] = false;
+        metadata.importOptions["fieldMode"] = int32_t{2};
         metadata.importOptions["baseFontSize"] = int32_t{64};
         metadata.importOptions["sdfSpread"] = 6.5f;
-        metadata.importOptions["flavour"] = std::string("mtsdf");
+        metadata.importOptions["mtsdfPxRange"] = 4.0f;
 
         REQUIRE(asset::AssetMetadataSerializer::save(metadata, metaPath));
 
@@ -299,10 +308,10 @@ TEST_SUITE("FontImportOptions")
 
         // The JSON type carries the variant alternative back — a bool must not come
         // back as an integer, and a whole-valued float must not come back as one.
-        CHECK(std::get<bool>(loaded->importOptions.at("generateSDF")) == false);
+        CHECK(std::get<int32_t>(loaded->importOptions.at("fieldMode")) == 2);
         CHECK(std::get<int32_t>(loaded->importOptions.at("baseFontSize")) == 64);
         CHECK(std::get<float>(loaded->importOptions.at("sdfSpread")) == doctest::Approx(6.5f));
-        CHECK(std::get<std::string>(loaded->importOptions.at("flavour")) == "mtsdf");
+        CHECK(std::get<float>(loaded->importOptions.at("mtsdfPxRange")) == doctest::Approx(4.0f));
     }
 
     TEST_CASE("a whole-valued float option survives the JSON round-trip as a float")
@@ -550,7 +559,7 @@ TEST_SUITE("FontImportOptions")
 
         std::map<std::string, importConfig::ImportOptionValue> options;
         options["baseFontSize"] = std::string("huge"); // declared Int
-        options["generateSDF"] = int32_t{1};           // declared Bool
+        options["fieldMode"] = std::string("mtsdf");  // declared Enum (int32_t)
 
         const fs::path out = importRoboto(dir, "WrongType", options);
         REQUIRE_FALSE(out.empty());
@@ -559,5 +568,23 @@ TEST_SUITE("FontImportOptions")
         REQUIRE_FALSE(font.glyphs.empty());
         CHECK(font.metadata.baseFontSize == 32u); // the declared default
         CHECK(resource::hasFlag(font.formatFlags, resource::FontFormatFlags::SDF_ENABLED));
+    }
+
+    TEST_CASE("the removed generateSDF key is deliberately ignored")
+    {
+        REQUIRE_MESSAGE(fs::exists(robotoSource()), "missing fixture: " << robotoSource().string());
+
+        const fs::path dir = makeTempDir("legacykey");
+        std::map<std::string, importConfig::ImportOptionValue> options;
+        options["generateSDF"] = false;
+
+        const fs::path out = importRoboto(dir, "LegacyKey", options);
+        REQUIRE_FALSE(out.empty());
+
+        const resource::FontData font = resource::FontResource::loadFont(out.string());
+        REQUIRE_FALSE(font.glyphs.empty());
+        CHECK(font.atlas.format == resource::FontAtlasFormat::SDF_8);
+        CHECK(font.isSDF());
+        CHECK_FALSE(font.isMSDF());
     }
 }

@@ -24,11 +24,18 @@
 // flat across the 2x2 quad and fwidth collapses to zero.
 const float TEXT_SDF_MIN_AA_WIDTH = 1.0 / 255.0;
 
+// Reconstruct the signed-distance sample from an MSDF/MTSDF RGB triplet.
+// The MTSDF alpha channel is intentionally left available for future effects.
+float medianRGB(vec3 sampleValue)
+{
+    return max(min(sampleValue.r, sampleValue.g),
+               min(max(sampleValue.r, sampleValue.g), sampleValue.b));
+}
+
 // sdf         - sampled field value, 0..1
 // edge        - glyph outline iso-value (FontData::sdfParams.edgeValue, ~0.5)
-// smoothWidth - the per-instance sdfParams.y. Only its zero / non-zero state is read:
-//               0 marks a non-SDF (GRAYSCALE_8) atlas routed through this branch. That
-//               atlas holds coverage, not distance, so it keeps a hard threshold.
+// smoothWidth - the per-instance sdfParams.y. Callers use zero to identify a native
+//               coverage atlas and bypass this distance-field reconstruction.
 // boldBias    - threshold shift for synthetic bold (positive = thicker strokes)
 float sdfCoverage(float sdf, float edge, float smoothWidth, float boldBias)
 {
@@ -36,9 +43,7 @@ float sdfCoverage(float sdf, float edge, float smoothWidth, float boldBias)
     float w = max(0.5 * fwidth(sdf), TEXT_SDF_MIN_AA_WIDTH);
     float threshold = edge - boldBias;
 
-    return (smoothWidth > 0.0)
-        ? smoothstep(threshold - w, threshold + w, sdf)
-        : step(threshold, sdf);
+    return smoothstep(threshold - w, threshold + w, sdf);
 }
 
 #endif // TEXT_SDF_GLSL

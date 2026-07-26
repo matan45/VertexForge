@@ -27,7 +27,7 @@ layout(binding = 0) uniform CameraUBO {
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
-    uint glyphMode;   // 0 = SDF, 1 = color bitmap
+    uint glyphMode;   // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
     float padding2;
 } pc;
 
@@ -54,7 +54,7 @@ void main() {
         vec2 pixelPos = worldPos.xy + charOffset + localPos * charSize;
 
         // Italic synthesis: shear top of glyph quad right (tan(12 deg) = 0.2126).
-        if ((inStyleFlags & 2u) != 0u && pc.glyphMode == 0u) {
+        if ((inStyleFlags & 2u) != 0u && pc.glyphMode != 1u) {
             pixelPos.x += (1.0 - localPos.y) * charSize.y * 0.2126;
         }
 
@@ -81,7 +81,7 @@ void main() {
             + cameraUp * (-worldOffset.y - localPos.y * worldSize.y);
 
         // Italic synthesis: shear top of glyph quad along cameraRight.
-        if ((inStyleFlags & 2u) != 0u && pc.glyphMode == 0u) {
+        if ((inStyleFlags & 2u) != 0u && pc.glyphMode != 1u) {
             vertexPos += cameraRight * ((1.0 - localPos.y) * worldSize.y * 0.2126);
         }
 
@@ -106,7 +106,7 @@ layout(binding = 1) uniform sampler2D fontAtlas;
 
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
-    uint glyphMode;   // 0 = SDF, 1 = color bitmap
+    uint glyphMode;   // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
     float padding2;
 } pc;
 
@@ -119,12 +119,17 @@ void main() {
         }
         outColor = vec4(texColor.rgb, texColor.a * fragColor.a);
     } else {
-        // SDF mode: screen-space anti-aliasing (see common/text_sdf.glsl).
+        // Field mode: single-channel SDF/coverage or median-RGB MTSDF.
         // Bold synthesis: bias the threshold so more of the field passes -> thicker strokes.
-        float sdfValue = texture(fontAtlas, fragTexCoord).r;
+        vec4 fieldSample = texture(fontAtlas, fragTexCoord);
+        float sdfValue = (pc.glyphMode == 2u)
+            ? medianRGB(fieldSample.rgb)
+            : fieldSample.r;
 
         float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.15 : 0.0;
-        float alpha = sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias);
+        float alpha = (fragSdfParams.y > 0.0)
+            ? sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias)
+            : fieldSample.r;
 
         if (alpha < 0.01) {
             discard;

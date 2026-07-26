@@ -11,6 +11,7 @@
 #include "resource/PathResolver.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
+#include <limits>
 
 namespace render::text
 {
@@ -250,12 +251,41 @@ namespace render::text
             return false;
         }
 
+        const size_t bytesPerPixel = resource::fontAtlasBytesPerPixel(atlas.format);
+        if (bytesPerPixel == 0)
+        {
+            return false;
+        }
+
+        const size_t width = static_cast<size_t>(atlas.width);
+        const size_t height = static_cast<size_t>(atlas.height);
+        if (width > std::numeric_limits<size_t>::max() / height)
+        {
+            return false;
+        }
+        const size_t pixelCount = width * height;
+        if (pixelCount > std::numeric_limits<size_t>::max() / bytesPerPixel ||
+            atlas.pixels.size() != pixelCount * bytesPerPixel)
+        {
+            return false;
+        }
+
         CachedFont cached;
         cached.fontData = fontData;
-        cached.isColorFont = (atlas.format == resource::FontAtlasFormat::RGBA_32);
+        if (atlas.format == resource::FontAtlasFormat::RGBA_32)
+        {
+            cached.glyphMode = 1;
+        }
+        else if (atlas.format == resource::FontAtlasFormat::MTSDF_RGBA_32)
+        {
+            cached.glyphMode = 2;
+        }
 
-        // Select format based on atlas type
-        vk::Format atlasFormat = cached.isColorFont
+        // Color and MTSDF atlases are both four-channel linear data. In
+        // particular, MTSDF must never be uploaded as sRGB: median-RGB distance
+        // reconstruction operates on the authored normalized channel values.
+        const bool isFourChannel = bytesPerPixel == 4;
+        vk::Format atlasFormat = isFourChannel
             ? vk::Format::eR8G8B8A8Unorm
             : vk::Format::eR8Unorm;
 

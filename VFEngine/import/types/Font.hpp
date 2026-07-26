@@ -13,14 +13,22 @@ namespace types
 {
     using FontProgressCallback = std::function<void(float progress)>;
 
+    enum class FontFieldMode : uint32_t
+    {
+        Grayscale = 0,
+        SDF = 1,
+        MTSDF = 2,
+    };
+
     struct FontImportConfig
     {
         uint32_t baseFontSize = 32;
-        bool generateSDF = true;
+        FontFieldMode fieldMode = FontFieldMode::SDF;
         bool includeKerning = true;
         uint32_t sdfPadding = 4;
         float sdfSpread = 4.0f;
         uint8_t sdfOnEdgeValue = 128;
+        float mtsdfPxRange = 4.0f;
 
         bool includeBasicLatin = true;
         bool includeLatin1Supplement = true;

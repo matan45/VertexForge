@@ -18,11 +18,12 @@ namespace import::builtin
         // reads as documentation of the bake. Referenced by both options() and
         // configFromOptions() — never inline one of them.
         constexpr const char* kBaseFontSize = "baseFontSize";
-        constexpr const char* kGenerateSDF = "generateSDF";
+        constexpr const char* kFieldMode = "fieldMode";
         constexpr const char* kIncludeKerning = "includeKerning";
         constexpr const char* kSdfSpread = "sdfSpread";
         constexpr const char* kSdfPadding = "sdfPadding";
         constexpr const char* kSdfOnEdgeValue = "sdfOnEdgeValue";
+        constexpr const char* kMtsdfPxRange = "mtsdfPxRange";
         constexpr const char* kBasicLatin = "includeBasicLatin";
         constexpr const char* kLatin1 = "includeLatin1Supplement";
         constexpr const char* kLatinExtA = "includeLatinExtendedA";
@@ -44,6 +45,8 @@ namespace import::builtin
         constexpr int32_t maxSdfPadding = 16;
         constexpr float minSdfSpread = 1.0f;
         constexpr float maxSdfSpread = 16.0f;
+        constexpr float minMtsdfPxRange = 1.0f;
+        constexpr float maxMtsdfPxRange = 16.0f;
         constexpr int32_t minOnEdge = 0;
         constexpr int32_t maxOnEdge = 255;
         constexpr int32_t minAtlasPadding = 0;
@@ -131,7 +134,11 @@ namespace import::builtin
             cfg.baseFontSize = static_cast<uint32_t>(std::clamp(
                 optionInt(config, kBaseFontSize, static_cast<int32_t>(cfg.baseFontSize)),
                 minFontSize, maxFontSize));
-            cfg.generateSDF = optionBool(config, kGenerateSDF, cfg.generateSDF);
+            constexpr int32_t maxFieldMode =
+                static_cast<int32_t>(types::FontFieldMode::MTSDF);
+            cfg.fieldMode = static_cast<types::FontFieldMode>(std::clamp(
+                optionInt(config, kFieldMode, static_cast<int32_t>(cfg.fieldMode)),
+                0, maxFieldMode));
             cfg.includeKerning = optionBool(config, kIncludeKerning, cfg.includeKerning);
 
             cfg.sdfSpread = std::clamp(optionFloat(config, kSdfSpread, cfg.sdfSpread),
@@ -142,6 +149,9 @@ namespace import::builtin
             cfg.sdfOnEdgeValue = static_cast<uint8_t>(std::clamp(
                 optionInt(config, kSdfOnEdgeValue, static_cast<int32_t>(cfg.sdfOnEdgeValue)),
                 minOnEdge, maxOnEdge));
+            cfg.mtsdfPxRange = std::clamp(
+                optionFloat(config, kMtsdfPxRange, cfg.mtsdfPxRange),
+                minMtsdfPxRange, maxMtsdfPxRange);
 
             cfg.includeBasicLatin = optionBool(config, kBasicLatin, cfg.includeBasicLatin);
             cfg.includeLatin1Supplement = optionBool(config, kLatin1, cfg.includeLatin1Supplement);
@@ -225,26 +235,31 @@ namespace import::builtin
                       "larger size costs atlas space but stays sharper. Colour-emoji faces snap to "
                       "their nearest built-in strike instead.",
                       static_cast<int32_t>(defaults.baseFontSize), minFontSize, maxFontSize),
-            boolOption(kGenerateSDF, "Generate SDF",
-                       "Bake a signed distance field so text stays crisp at any scale. Off stores a "
-                       "plain alpha coverage atlas, which is cheaper but blurs when scaled up.",
-                       defaults.generateSDF),
+            enumOption(kFieldMode, "Field Mode",
+                       "Choose native grayscale coverage, a single-channel signed distance field, "
+                       "or a multi-channel signed distance field for sharper corners.",
+                       static_cast<int32_t>(defaults.fieldMode),
+                       {"Grayscale (raster)", "SDF (legacy)", "MTSDF"}),
             boolOption(kIncludeKerning, "Include Kerning",
                        "Extract kerning pairs from the face's legacy 'kern' table. Modern OpenType "
                        "fonts that only ship GPOS kerning yield an empty table.",
                        defaults.includeKerning),
             floatOption(kSdfSpread, "SDF Spread",
-                        "Distance in pixels the field ramps across the glyph edge. Larger values "
-                        "give smoother scaling and room for outlines, at the cost of precision.",
+                        "SDF-only: distance in pixels the field ramps across the glyph edge. "
+                        "Larger values give more effect range at the cost of precision.",
                         defaults.sdfSpread, minSdfSpread, maxSdfSpread),
             intOption(kSdfPadding, "SDF Padding",
-                      "Extra pixels rasterised around each glyph so the distance field is not "
-                      "clipped. Should be at least the spread.",
+                      "SDF-only: extra pixels rasterised around each glyph so the distance field "
+                      "is not clipped. Should be at least the spread.",
                       static_cast<int32_t>(defaults.sdfPadding), minSdfPadding, maxSdfPadding),
             intOption(kSdfOnEdgeValue, "SDF Edge Value",
-                      "The 0-255 value that represents the glyph outline itself; the shader treats "
-                      "this level as the cut-off. 128 centres the field.",
+                      "SDF-only: the 0-255 value representing the glyph outline; the shader treats "
+                      "this as the cut-off. 128 centres the field.",
                       static_cast<int32_t>(defaults.sdfOnEdgeValue), minOnEdge, maxOnEdge),
+            floatOption(kMtsdfPxRange, "MTSDF Pixel Range",
+                        "MTSDF-only: distance in atlas pixels represented by the field. Larger "
+                        "values provide more effect range at the cost of edge precision.",
+                        defaults.mtsdfPxRange, minMtsdfPxRange, maxMtsdfPxRange),
 
             boolOption(kBasicLatin, "Range: Basic Latin",
                        "U+0020-007E. ASCII: letters, digits, punctuation. Required for English text.",
