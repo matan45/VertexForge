@@ -1,5 +1,7 @@
 #include <doctest.h>
 
+#include "test_repo_scan_helpers.hpp"
+
 #include <export/ShaderCompiler.hpp>
 #include <resource/ShaderResource.hpp>
 #include <resource/Types.hpp>
@@ -28,14 +30,14 @@ namespace
 {
     namespace fs = std::filesystem;
 
-    // Tests.exe runs from bin/Tests/<Config>/x64/ and resources/ is NOT copied
-    // there, so the repo has to be reached from the source location.
+    // Tests.exe runs from bin/Tests/<Config>/x64/ and resources/ is NOT copied there,
+    // so the shader tree has to be reached in the repo. Reuses the same locator as the
+    // other source-reading suites (test_script_native_parity, test_script_listener_coverage).
     fs::path shaderRoot()
     {
-        return fs::path(__FILE__).parent_path() // VFEngine/tests
-            .parent_path()                      // VFEngine
-            .parent_path()                      // repo root
-            / "resources" / "shaders";
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+        return *root / "resources" / "shaders";
     }
 
     // Compiles every #type stage of one .glsl, with includes resolved relative to

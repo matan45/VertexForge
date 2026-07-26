@@ -10,11 +10,19 @@
 // transition to ~1 screen pixel at every text size, replacing the old CPU-side band that
 // was fixed in field space (a constant +/-1 atlas texel, i.e. 2 * fontSize / baseFontSize
 // screen pixels - too hard when minified, too soft when magnified).
+//
+// DEPENDS ON: the font atlas sampler being eLinear (TextFontCache.cpp). With eNearest the
+// sample is piecewise constant, fwidth(sdf) becomes a spike train and this falls apart.
+// CONTROL FLOW: fwidth() is only defined in uniform control flow. Callers reach the SDF
+// branch through pc.glyphMode, a push constant, so the branch is dynamically uniform.
 
-// Lower clamp on the AA half-band, in normalized field units. Only reached where the field
-// is saturated (deep inside or outside a glyph, so fwidth == 0); alpha is already 0 or 1
-// there, so this merely has to be non-zero - smoothstep(x, x, v) is undefined in GLSL.
-const float TEXT_SDF_MIN_AA_WIDTH = 1e-4;
+// Floor on the half-band, in normalized field units: one step of the atlas's R8
+// quantisation, since nothing narrower is representable in the field anyway. It does not
+// engage at any practical text size (at 200pt off a 32px bake the fwidth term is ~2.5x
+// this), so it is a numerical guard rather than a tuning knob: it keeps edge0 < edge1,
+// which smoothstep() requires - equal edges are undefined - where the field is saturated
+// flat across the 2x2 quad and fwidth collapses to zero.
+const float TEXT_SDF_MIN_AA_WIDTH = 1.0 / 255.0;
 
 // sdf         - sampled field value, 0..1
 // edge        - glyph outline iso-value (FontData::sdfParams.edgeValue, ~0.5)
