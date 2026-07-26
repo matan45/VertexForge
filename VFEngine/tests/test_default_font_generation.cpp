@@ -47,7 +47,7 @@ namespace
 
 TEST_SUITE("DefaultFont")
 {
-    TEST_CASE("regenerate resources/fonts/DefaultFont.vfFont from Roboto" * doctest::skip())
+    TEST_CASE("regenerate resources/fonts/DefaultFont.vfFont from Roboto")
     {
         const fs::path source = repoRoot() / "resources" / "editor" / "Roboto-Regular.ttf";
         REQUIRE_MESSAGE(fs::exists(source), "missing source face: " << source.string());
