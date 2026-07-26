@@ -2,9 +2,9 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UITooltipEvents.hpp"
-#include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "DrawerHelpers.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <cstring>
 
@@ -98,29 +98,7 @@ namespace windows::details
                     ImGui::SetTooltip("Left, right, top, bottom");
 
                 // Font selection
-                if (data.fontRef.isValid())
-                {
-                    std::string filename = data.fontRef.resolve();
-                    auto lastSlash = filename.find_last_of("/\\");
-                    if (lastSlash != std::string::npos)
-                        filename = filename.substr(lastSlash + 1);
-                    ImGui::Text("Font: %s", filename.c_str());
-                }
-                else
-                {
-                    ImGui::TextDisabled("No font selected (tooltip text needs one)");
-                }
-                if (ImGui::Button("Select Font##UITooltip"))
-                {
-                    nfd::FileDialog fileDialog;
-                    std::string path = fileDialog.openFileDialog(
-                        {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-                    if (!path.empty())
-                    {
-                        data.fontRef = asset::AssetRef::fromPath(path);
-                        changed = true;
-                    }
-                }
+                changed |= drawFontSlot(data.fontRef, "UITooltip");
             }
             else
             {

@@ -1,13 +1,11 @@
-#include "print/Log.hpp"
 #include "TextDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
-#include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <cstring>
-#include <fstream>
 
 namespace windows::details
 {
@@ -109,55 +107,7 @@ namespace windows::details
 
     bool TextDrawer::drawFontPath(services::TextData& data)
     {
-        bool changed = false;
-
-        if (data.fontRef.isValid())
-        {
-            std::string filename = data.fontRef.resolve();
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::Text("Font: %s", filename.c_str());
-        }
-        else
-        {
-            ImGui::TextDisabled("No font selected");
-        }
-
-        if (ImGui::Button("Select Font##Text"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    data.fontRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected font file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool wasEmpty = !data.fontRef.isValid();
-        if (wasEmpty) ImGui::BeginDisabled();
-        if (ImGui::Button("Clear##TextFont"))
-        {
-            data.fontRef = asset::AssetRef::invalid();
-            changed = true;
-        }
-        if (wasEmpty) ImGui::EndDisabled();
-
-        return changed;
+        return drawFontSlot(data.fontRef, "Text");
     }
 
     bool TextDrawer::drawTextInput(services::TextData& data)

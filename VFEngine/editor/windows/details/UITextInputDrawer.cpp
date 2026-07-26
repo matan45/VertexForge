@@ -2,11 +2,10 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIEvents.hpp"
-#include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "DrawerHelpers.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
-#include <fstream>
 
 namespace windows::details
 {
@@ -152,35 +151,7 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Font", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            if (data.fontRef.isValid())
-            {
-                std::string filename = data.fontRef.resolve();
-                auto lastSlash = filename.find_last_of("/\\");
-                if (lastSlash != std::string::npos)
-                    filename = filename.substr(lastSlash + 1);
-                ImGui::Text("Font: %s", filename.c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("No font selected");
-            }
-
-            if (ImGui::Button("Select Font##UITextInput"))
-            {
-                nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog(
-                    {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-                if (!path.empty())
-                {
-                    std::ifstream file(path);
-                    if (file.good())
-                    {
-                        file.close();
-                        data.fontRef = asset::AssetRef::fromPath(path);
-                        changed = true;
-                    }
-                }
-            }
+            changed |= drawFontSlot(data.fontRef, "UITextInput");
 
             if (ImGui::DragFloat("Font Size##UITextInput", &data.fontSize, 0.5f, 1.0f, 200.0f, "%.1f"))
             {

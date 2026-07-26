@@ -2,9 +2,9 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/ui/UIWindowEvents.hpp"
-#include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "DrawerHelpers.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <cstring>
 
@@ -68,29 +68,7 @@ namespace windows::details
             }
             changed |= ImGui::DragFloat("Title Font Size##UIWindow", &data.titleFontSize, 0.5f, 6.0f, 96.0f, "%.0f");
 
-            if (data.fontRef.isValid())
-            {
-                std::string filename = data.fontRef.resolve();
-                auto lastSlash = filename.find_last_of("/\\");
-                if (lastSlash != std::string::npos)
-                    filename = filename.substr(lastSlash + 1);
-                ImGui::Text("Font: %s", filename.c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("No font selected (title text needs one)");
-            }
-            if (ImGui::Button("Select Font##UIWindow"))
-            {
-                nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog(
-                    {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-                if (!path.empty())
-                {
-                    data.fontRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-            }
+            changed |= drawFontSlot(data.fontRef, "UIWindow");
 
             if (changed)
             {
