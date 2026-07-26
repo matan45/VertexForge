@@ -227,7 +227,7 @@ namespace windows
                 return result;
             }
 
-            result.atlasAsRGBA = convertAtlasToRGBA(result.fontData.atlas);
+            result.atlasAsRGBA = convertAtlasToRGBA(result.fontData);
 
             result.success = true;
         }
@@ -249,8 +249,10 @@ namespace windows
         return result;
     }
 
-    resource::TextureData FontPreviewWindow::convertAtlasToRGBA(const resource::FontAtlasData& atlas)
+    resource::TextureData FontPreviewWindow::convertAtlasToRGBA(const resource::FontData& fontData)
     {
+        const resource::FontAtlasData& atlas = fontData.atlas;
+
         resource::TextureData textureData;
         textureData.width = atlas.width;
         textureData.height = atlas.height;
@@ -262,12 +264,20 @@ namespace windows
 
         if (atlas.format == resource::FontAtlasFormat::SDF_8)
         {
+            // VK-1631: derive the bake from the font's own SDF parameters instead of the
+            // sdf:: defaults, which silently assumed spread 4 / onEdge 128. The 0.5f mirrors
+            // the shader's `w = 0.5 * fwidth(sdf)`, so at the atlas's native 1:1 scale this
+            // preview matches what the text pipelines render (and, at the default spread,
+            // reproduces the previous 128 / 16 exactly).
+            const float edgeByte = fontData.sdfParams.edgeValue * 255.0f;
+            const float smoothByte = 0.5f * resource::sdfSmoothWidth(fontData) * 255.0f;
+
             for (size_t i = 0; i < pixelCount; ++i)
             {
                 rgbaData[i * 4 + 0] = 255;
                 rgbaData[i * 4 + 1] = 255;
                 rgbaData[i * 4 + 2] = 255;
-                rgbaData[i * 4 + 3] = sdf::sdfToAlphaByte(atlas.pixels[i]);
+                rgbaData[i * 4 + 3] = sdf::sdfToAlphaByte(atlas.pixels[i], edgeByte, smoothByte);
             }
         }
         else if (atlas.format == resource::FontAtlasFormat::GRAYSCALE_8)

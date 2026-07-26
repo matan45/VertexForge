@@ -423,4 +423,18 @@ namespace resource
         }
     };
 
+    // VK-1631: normalized-field-space half-width of the SDF anti-aliasing band. Handed to
+    // both text pipelines as the instance attribute sdfParams.y. Since VK-1631 the shaders
+    // derive the real on-screen band from fwidth() (see resources/shaders/common/text_sdf.glsl),
+    // so this value now only signals SDF (> 0) vs non-SDF (== 0); it still drives the
+    // CPU-side font-preview bake in the editor.
+    [[nodiscard]] inline float sdfSmoothWidth(const FontData& font) noexcept
+    {
+        if (!font.isSDF())
+        {
+            return 0.0f;
+        }
+        return font.sdfParams.spread > 0.0f ? 0.5f / font.sdfParams.spread : 0.1f;
+    }
+
 }

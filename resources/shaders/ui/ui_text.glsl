@@ -51,6 +51,9 @@ void main() {
 
 #type FRAGMENT
 #version 460 core
+#extension GL_GOOGLE_include_directive : require
+
+#include "../common/text_sdf.glsl"
 
 layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec4 fragColor;
@@ -76,16 +79,12 @@ void main() {
         }
         outColor = vec4(texColor.rgb, texColor.a * fragColor.a);
     } else {
-        // SDF mode: smoothstep anti-aliasing.
+        // SDF mode: screen-space anti-aliasing (see common/text_sdf.glsl).
         // Bold synthesis: bias the threshold so more of the field passes -> thicker strokes.
         float sdfValue = texture(fontAtlas, fragTexCoord).r;
 
-        float edge = fragSdfParams.x;
-        float smoothWidth = fragSdfParams.y;
-
         float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.15 : 0.0;
-        float alpha = smoothstep(edge - smoothWidth - boldBias,
-                                 edge + smoothWidth - boldBias, sdfValue);
+        float alpha = sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias);
 
         if (alpha < 0.01) {
             discard;

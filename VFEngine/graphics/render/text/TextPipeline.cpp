@@ -127,11 +127,10 @@ namespace render::text
 
             const auto& fontData = *cached->fontData;
 
-            // Compute SDF parameters
+            // Compute SDF parameters. VK-1631: sdfSmooth is now only the SDF / non-SDF
+            // signal - the shader derives the on-screen AA band from fwidth().
             float sdfEdge = fontData.sdfParams.edgeValue;
-            float sdfSmooth = fontData.isSDF() ? (fontData.sdfParams.spread > 0.0f
-                ? 1.0f / fontData.sdfParams.spread * 0.5f
-                : 0.1f) : 0.0f;
+            float sdfSmooth = resource::sdfSmoothWidth(fontData);
 
             // Layout text using shared text layout engine
             auto layout = ::text::layoutText(
