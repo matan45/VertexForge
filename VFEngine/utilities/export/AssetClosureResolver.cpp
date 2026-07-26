@@ -61,6 +61,10 @@ namespace gameExport
 				"*.vftheme",
 				"*.ttf",
 				"*.otf",
+				// VK-1628: a font assigned in the editor is reachable through the
+				// closure, but one loaded by a script or used only as a fallback is
+				// not — and a stripped export would then render no text at all.
+				"*.vffont",
 			};
 			return patterns;
 		}

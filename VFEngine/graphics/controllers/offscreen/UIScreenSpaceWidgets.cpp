@@ -370,7 +370,9 @@ namespace controllers::offscreen::ui_screenspace
             return;
 
         const auto& tiComp = registry.get<components::UITextInputComponent>(focusedEntity);
-        if (tiComp.currentState != components::UITextInputState::Focused || !tiComp.fontRef.isValid())
+        // VK-1628: the caret is a plain quad positioned from a fontSize heuristic and
+        // never touches FontData, so a missing font must not suppress it.
+        if (tiComp.currentState != components::UITextInputState::Focused)
             return;
 
         size_t entryStart = drawList.size();

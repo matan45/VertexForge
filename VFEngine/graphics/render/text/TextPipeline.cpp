@@ -116,7 +116,10 @@ namespace render::text
 
         for (const auto& textEntity : textEntities)
         {
-            const CachedFont* cached = fontCache.getFont(textEntity.fontPath);
+            // VK-1628: falls back to the default font when this one is missing or
+            // still loading. Everything below keys off fontKey, never fontPath.
+            const std::string& fontKey = fontCache.resolveFontKey(textEntity.fontPath);
+            const CachedFont* cached = fontCache.getFont(fontKey);
             if (!cached || !cached->fontData)
             {
                 continue;
@@ -196,7 +199,7 @@ namespace render::text
                 }
             }
 
-            auto& instances = fontInstances[textEntity.fontPath];
+            auto& instances = fontInstances[fontKey];
 
             uint32_t styleFlags = 0;
             if (textEntity.fontStyle == components::FontStyle::Bold ||

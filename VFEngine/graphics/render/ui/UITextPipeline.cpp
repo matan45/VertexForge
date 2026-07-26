@@ -146,12 +146,17 @@ namespace render::ui
 
         for (const auto& label : labels)
         {
-            if (label.fontPath.empty() || label.text.empty())
+            // VK-1628: an empty fontPath is no longer a drop — resolveFontKey below
+            // maps it to the default font.
+            if (label.text.empty())
             {
                 continue;
             }
 
-            const render::text::CachedFont* cached = fontCache.getFont(label.fontPath);
+            // VK-1628: falls back to the default font when this one is missing or
+            // still loading. Everything below keys off fontKey, never fontPath.
+            const std::string& fontKey = fontCache.resolveFontKey(label.fontPath);
+            const render::text::CachedFont* cached = fontCache.getFont(fontKey);
             if (!cached || !cached->fontData)
             {
                 continue;
@@ -333,7 +338,7 @@ namespace render::ui
                         }
                     }
 
-                    scissorMap[scissorKey].push_back({label.fontPath, inst,
+                    scissorMap[scissorKey].push_back({fontKey, inst,
                         label.stencilOp, label.stencilRef});
                 }
             }

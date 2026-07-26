@@ -62,13 +62,22 @@ namespace render::text
         void processPendingLoads();
 
         bool isFontReady(const std::string& fontPath) const;
+
+        // Exact lookup — returns null when the path is not resident. Pass a key from
+        // resolveFontKey(), not a raw component path.
         const CachedFont* getFont(const std::string& fontPath) const;
+
+        // VK-1628: maps a font path to the cache key that actually backs it — the path
+        // itself when resident, otherwise the default-font sentinel. Group instances
+        // and key descriptor sets by this.
+        const std::string& resolveFontKey(const std::string& fontPath) const;
 
         vk::ImageView getDefaultImageView() const { return defaultImageView; }
         vk::Sampler getDefaultSampler() const { return defaultSampler; }
 
     private:
         void createDefaultTexture();
+        void loadDefaultFont();
         bool uploadFontAtlas(const std::string& fontPath, std::shared_ptr<resource::FontData> fontData);
     };
 }

@@ -11,6 +11,7 @@
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
+#include "resource/DefaultFont.hpp"
 #include "../../../services/providers/render/IDecalRenderProvider.hpp"
 #include "threading/JobSystem.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
@@ -88,10 +89,10 @@ namespace controllers::offscreen
             const auto& textComp = view.get<components::TextComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (!textComp.fontRef.isValid() || textComp.text.empty()) continue;
+            if (textComp.text.empty()) continue;
 
             render::text::TextRenderData renderData;
-            renderData.fontPath = textComp.fontRef.resolve();
+            renderData.fontPath = resource::fontPathOrDefault(textComp.fontRef);
             renderData.text = textComp.text;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.fontSize = textComp.fontSize;

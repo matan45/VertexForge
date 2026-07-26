@@ -6,6 +6,9 @@
 #include "../../core/VulkanMemoryManager.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/Types.hpp"
+#include "resource/DefaultFont.hpp"
+#include "resource/FontResource.hpp"
+#include "resource/PathResolver.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 
@@ -21,6 +24,30 @@ namespace render::text
     void TextFontCache::init()
     {
         createDefaultTexture();
+        loadDefaultFont();
+    }
+
+    // VK-1628: the engine-shipped fallback font, registered under a sentinel key so
+    // text with no (or an unresolvable) fontRef still renders. Loaded straight off
+    // disk via FontResource — deliberately NOT through ResourceManager/AssetRef,
+    // which would try to resolve an engine resource against the project's asset
+    // database. See resource/DefaultFont.hpp.
+    void TextFontCache::loadDefaultFont()
+    {
+        const std::string path =
+            resource::PathResolver::resolveEnginePath(resource::DEFAULT_FONT_ENGINE_PATH);
+
+        auto fontData = std::make_shared<resource::FontData>(resource::FontResource::loadFont(path));
+        if (uploadFontAtlas(resource::DEFAULT_FONT_SENTINEL, std::move(fontData)))
+        {
+            vfLogInfo("Default font loaded: {}", path);
+            return;
+        }
+
+        // Logged once at init, never retried — text without a font stays invisible,
+        // which is the pre-VK-1628 behavior rather than a per-frame load storm.
+        vfLogError("Failed to load default font from {}. Text with no font assigned "
+                   "will not render.", path);
     }
 
     void TextFontCache::cleanUp()
@@ -164,6 +191,14 @@ namespace render::text
     void TextFontCache::requestFont(const std::string& fontPath)
     {
         if (fontCache.contains(fontPath) || pendingLoads.contains(fontPath))
+        {
+            return;
+        }
+
+        // The sentinel is a cache key, not a path. It is populated once by
+        // loadDefaultFont(); if that failed there is nothing to retry, and feeding
+        // the literal to AssetRef::fromPath below would register it as an asset.
+        if (fontPath == resource::DEFAULT_FONT_SENTINEL)
         {
             return;
         }
@@ -344,5 +379,24 @@ namespace render::text
             return &it->second;
         }
         return nullptr;
+    }
+
+    // VK-1628: the single place that decides font substitution. A font that is still
+    // loading, failed to load, or failed to upload resolves to the default instead of
+    // dropping the text.
+    //
+    // Callers MUST group instances and key descriptor sets by the returned key, never
+    // by the raw path — otherwise a descriptor built while the real font was still
+    // loading gets cached against the default atlas and never heals. getFont() stays
+    // an exact lookup for that reason: no caller should get a default font back under
+    // a key that is not the sentinel.
+    const std::string& TextFontCache::resolveFontKey(const std::string& fontPath) const
+    {
+        static const std::string sentinel{resource::DEFAULT_FONT_SENTINEL};
+        if (!fontPath.empty() && fontCache.contains(fontPath))
+        {
+            return fontPath;
+        }
+        return sentinel;
     }
 }
