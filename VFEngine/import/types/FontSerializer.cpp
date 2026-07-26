@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "FontSerializer.hpp"
 #include "resource/EndianUtils.hpp"
+#include "resource/VfFontHeader.hpp"
 #include "config/Config.hpp"
 
 #include <fstream>
@@ -12,12 +13,12 @@ namespace types
     {
         void writeHeader(std::ofstream& outFile, const resource::FontData& fontData)
         {
-            using namespace resource::endian;
-            writeLE<uint8_t>(outFile, static_cast<uint8_t>(fontData.headerFileType));
-            writeLE<uint32_t>(outFile, Version::major);
-            writeLE<uint32_t>(outFile, Version::minor);
-            writeLE<uint32_t>(outFile, Version::patch);
-            writeLE<uint32_t>(outFile, static_cast<uint32_t>(fontData.formatFlags));
+            // Version fields come from the VfFontHeader defaults - the .vfFont format
+            // owns its version and is intentionally decoupled from the engine version.
+            resource::VfFontHeader header;
+            header.fileType = static_cast<uint8_t>(fontData.headerFileType);
+            header.formatFlags = static_cast<uint32_t>(fontData.formatFlags);
+            resource::writeVfFontHeader(outFile, header);
         }
 
         void writeMetadata(std::ofstream& outFile, const resource::FontData& fontData)

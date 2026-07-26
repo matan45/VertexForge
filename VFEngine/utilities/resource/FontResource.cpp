@@ -1,7 +1,7 @@
 #include "FontResource.hpp"
 #include "../print/Log.hpp"
-#include "../config/Config.hpp"
 #include "EndianUtils.hpp"
+#include "VfFontHeader.hpp"
 #include "VFSHelpers.hpp"
 
 #include <sstream>
@@ -39,8 +39,16 @@ namespace resource
 
         using namespace endian;
 
-        uint8_t headerFileType = readLE<uint8_t>(inFile);
-        fontData.headerFileType = static_cast<FileType>(headerFileType);
+        VfFontHeader header;
+        readVfFontHeader(inFile, header);
+
+        if (header.magic != FONT_MAGIC)
+        {
+            vfLogError("Invalid font file magic in {}: expected 'VFFT'. Re-import required.", path);
+            return {};
+        }
+
+        fontData.headerFileType = static_cast<FileType>(header.fileType);
 
         if (fontData.headerFileType != FileType::FONT)
         {
@@ -49,23 +57,21 @@ namespace resource
             return {};
         }
 
-        uint32_t majorVersion = readLE<uint32_t>(inFile);
-        uint32_t minorVersion = readLE<uint32_t>(inFile);
-        uint32_t patchVersion = readLE<uint32_t>(inFile);
+        fontData.version.major = header.versionMajor;
+        fontData.version.minor = header.versionMinor;
+        fontData.version.patch = header.versionPatch;
 
-        fontData.version.major = majorVersion;
-        fontData.version.minor = minorVersion;
-        fontData.version.patch = patchVersion;
-
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (header.versionMajor != FONT_FORMAT_VERSION_MAJOR ||
+            header.versionMinor != FONT_FORMAT_VERSION_MINOR ||
+            header.versionPatch != FONT_FORMAT_VERSION_PATCH)
         {
-            vfLogError("Incompatible font file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
-                       majorVersion, minorVersion, patchVersion,
-                       Version::major, Version::minor, Version::patch);
+            vfLogError("Incompatible font format version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+                       header.versionMajor, header.versionMinor, header.versionPatch,
+                       FONT_FORMAT_VERSION_MAJOR, FONT_FORMAT_VERSION_MINOR, FONT_FORMAT_VERSION_PATCH);
             return {};
         }
 
-        fontData.formatFlags = static_cast<FontFormatFlags>(readLE<uint32_t>(inFile));
+        fontData.formatFlags = static_cast<FontFormatFlags>(header.formatFlags);
 
         uint32_t nameLength = readLE<uint32_t>(inFile);
         if (nameLength > 0 && nameLength < 1024)
