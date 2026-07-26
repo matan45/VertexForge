@@ -1,9 +1,11 @@
 #pragma once
 #include "AssetGUID.hpp"
 #include "../resource/AssetTypes.hpp"
+#include "../config/Config.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
+#include <map>
 #include <tuple>
 #include <optional>
 
@@ -34,7 +36,11 @@ namespace asset
         // Version 3 adds the optional "pluginTypeId" string for plugin-
         // registered asset types (VK-1449). Absent on built-ins; ignored by
         // older readers, so older files load unchanged.
-        static constexpr uint32_t kCurrentFormatVersion = 3;
+        // Version 4 adds the optional "importOptions" object holding the
+        // importer-declared options the asset was baked with (VK-1629), so a
+        // reimport can replay them. Absent on assets imported before it and on
+        // in-editor-authored assets; version <= 3 files load unchanged.
+        static constexpr uint32_t kCurrentFormatVersion = 4;
 
         AssetGUID guid;
         resource::AssetType type = resource::AssetType::COUNT;
@@ -46,5 +52,10 @@ namespace asset
         // For type == PluginAsset: the registered plugin type id (e.g.
         // "gas.ability"). Empty for built-in types.
         std::string pluginTypeId;
+        // The importer-declared options (import::ImportOptionDesc::key ->
+        // chosen value) this asset was baked with, so the content browser can
+        // reimport it without asking again. Empty for assets whose importer
+        // declares no options, and for anything authored in the editor.
+        std::map<std::string, importConfig::ImportOptionValue> importOptions;
     };
 }

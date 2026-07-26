@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <optional>
 #include <thread>
 #include "../pipeline/stages/FileValidationStage.hpp"
 #include "../pipeline/stages/HeaderReadingStage.hpp"
@@ -55,17 +56,37 @@ namespace controllers
             return fileTypeToAssetType(ctx.fileType);
         }
 
+        // Writes the sidecar for a freshly imported asset, or refreshes an existing
+        // one in place (VK-1629: a reimport must update the source path, timestamp
+        // and chosen options while the GUID and everything scanned into the sidecar
+        // afterwards — dependencies, fracture data — survive untouched).
         void createVfMeta(const std::string& outputPath, const std::string& sourcePath,
-                          resource::AssetType assetType)
+                          resource::AssetType assetType, const importConfig::ImportConfig& config)
         {
             auto metaPath = asset::AssetMetadataSerializer::getMetaPath(outputPath);
-            if (std::filesystem::exists(metaPath))
-                return;
+            const bool metaExisted = std::filesystem::exists(metaPath);
 
-            asset::AssetMetadata metadata;
-            metadata.guid = asset::AssetGUID::generate();
+            std::optional<asset::AssetMetadata> existing;
+            if (metaExisted)
+            {
+                existing = asset::AssetMetadataSerializer::load(metaPath);
+                if (!existing)
+                {
+                    // Present but unreadable. Minting a fresh GUID here would break
+                    // every AssetRef pointing at this asset, so leave it alone and
+                    // let the user repair or delete it.
+                    vfLogWarning("Leaving unreadable meta file untouched: {}", metaPath.string());
+                    return;
+                }
+            }
+
+            asset::AssetMetadata metadata = existing.value_or(asset::AssetMetadata{});
+            if (!existing)
+                metadata.guid = asset::AssetGUID::generate();
             metadata.type = assetType;
             metadata.importSourcePath = sourcePath;
+            metadata.formatVersion = asset::AssetMetadata::kCurrentFormatVersion;
+            metadata.importOptions = config.customOptions;
 
             auto now = std::chrono::system_clock::now();
             auto time = std::chrono::system_clock::to_time_t(now);
@@ -109,13 +130,14 @@ namespace controllers
                 const resource::AssetType resolvedType =
                     (outputType != resource::AssetType::COUNT) ? outputType : assetType;
 
-                // Create .vfmeta sidecar with importSource and importTimestamp.
-                // Existence guard: config-dependent outputs (e.g. animation-only
-                // mesh import of a file without animations) may not be written.
+                // Create or refresh the .vfmeta sidecar (importSource, timestamp,
+                // import options). Existence guard: config-dependent outputs (e.g.
+                // animation-only mesh import of a file without animations) may not
+                // be written.
                 if (!outputPath.empty() && std::filesystem::exists(outputPath) &&
                     resolvedType != resource::AssetType::COUNT)
                 {
-                    createVfMeta(outputPath, ctx.file.path, resolvedType);
+                    createVfMeta(outputPath, ctx.file.path, resolvedType, ctx.file.config);
                 }
 
                 results.push_back(std::move(fileResult));

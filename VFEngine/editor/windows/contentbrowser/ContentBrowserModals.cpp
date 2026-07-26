@@ -7,6 +7,7 @@
 #include "events/project/FileOperationsEvents.hpp"
 #include "events/asset/AssetDatabaseEvents.hpp"
 #include "../scene/FolderStructureWindow.hpp"
+#include "../import/ImportOptionsWidgets.hpp"
 #include "../../fileops/AsyncFileOperations.hpp"
 #include <asset/AssetTypeRegistry.hpp>
 #include <algorithm>
@@ -49,6 +50,11 @@ namespace windows
     void ContentBrowserModals::setSelectionProvider(std::function<std::vector<std::string>()> provider)
     {
         selectionProvider = std::move(provider);
+    }
+
+    void ContentBrowserModals::setImportInFlightProvider(std::function<bool()> provider)
+    {
+        importInFlightProvider = std::move(provider);
     }
 
     void ContentBrowserModals::triggerSavePrefabModal(const services::EntityHandle& entity)
@@ -152,6 +158,10 @@ namespace windows
         if (showResultModal)
             ImGui::OpenPopup("Regenerate Metadata##RegenMetaResult");
         drawResultModal();
+
+        if (showReimportModal)
+            ImGui::OpenPopup("Reimport Asset");
+        drawReimportModal();
     }
 
     void ContentBrowserModals::drawContextMenu(const Asset* selectedAsset)
@@ -321,8 +331,110 @@ namespace windows
                         dependenciesAssetPath = selectedPath;
                     }
                 }
+
+                if (!selectedAsset->isDirectory)
+                {
+                    ImGui::Separator();
+                    drawReimportMenuItems(selectedFile);
+                }
             }
 
+            ImGui::EndPopup();
+        }
+    }
+
+    void ContentBrowserModals::drawReimportMenuItems(const fs::path& selectedFile)
+    {
+        // Evaluated while the popup is open, i.e. only on the frames the user has
+        // the menu up — one small JSON read plus a registry query.
+        const auto eligibility = reimport::evaluate(selectedFile);
+        const bool busy = importInFlightProvider && importInFlightProvider();
+        const bool enabled = eligibility.enabled && !busy;
+
+        if (ImGui::MenuItem("Reimport", nullptr, false, enabled))
+        {
+            startReimport(selectedFile, eligibility, false);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            if (busy)
+                ImGui::SetTooltip("An import is already running");
+            else if (!eligibility.enabled)
+                ImGui::SetTooltip("%s", eligibility.reason.c_str());
+            else
+                ImGui::SetTooltip("Rebuild this asset from %s using the stored import options",
+                                  fs::path(eligibility.sourcePath).filename().string().c_str());
+        }
+
+        // Only worth offering when the importer actually exposes something to tweak.
+        const bool withOptionsEnabled = enabled && !eligibility.descs.empty();
+        if (ImGui::MenuItem("Reimport With Options...", nullptr, false, withOptionsEnabled))
+        {
+            startReimport(selectedFile, eligibility, true);
+        }
+        if (withOptionsEnabled && ImGui::IsItemHovered())
+            ImGui::SetTooltip("Change the import settings and rebuild this asset");
+    }
+
+    void ContentBrowserModals::startReimport(const fs::path& selectedFile,
+                                             const reimport::Eligibility& eligibility, bool withOptions)
+    {
+        if (!eligibility.enabled)
+            return;
+
+        if (!withOptions)
+        {
+            reimport::run(eligibility.sourcePath, selectedFile.parent_path(), eligibility.storedOptions);
+            return;
+        }
+
+        reimportTarget = eligibility;
+        reimportDestDir = selectedFile.parent_path();
+        reimportAssetName = StringUtil::wstringToUtf8(selectedFile.filename().wstring());
+        // Seeded from the sidecar; drawImportOptions fills in declared defaults for
+        // any key it does not find, which is what happens for an asset imported
+        // before the options existed.
+        reimportValues = eligibility.storedOptions;
+        showReimportModal = true;
+    }
+
+    void ContentBrowserModals::drawReimportModal()
+    {
+        if (!showReimportModal)
+            return;
+
+        if (ImGui::BeginPopupModal("Reimport Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Reimporting: %s", reimportAssetName.c_str());
+            ImGui::BeginDisabled();
+            ImGui::TextWrapped("Source: %s", reimportTarget.sourcePath.c_str());
+            ImGui::EndDisabled();
+            ImGui::Separator();
+
+            importui::drawImportOptions(reimportTarget.descs, reimportValues);
+
+            if (reimportTarget.hasUnpersistedSettings)
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.9f, 0.75f, 0.3f, 1.0f),
+                                   "Texture compression, audio and mesh settings are not stored in\n"
+                                   "the .vfmeta and will fall back to their defaults.");
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::Button("Reimport", ImVec2(120, 0)))
+            {
+                reimport::run(reimportTarget.sourcePath, reimportDestDir, reimportValues);
+                ImGui::CloseCurrentPopup();
+                showReimportModal = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                ImGui::CloseCurrentPopup();
+                showReimportModal = false;
+            }
             ImGui::EndPopup();
         }
     }

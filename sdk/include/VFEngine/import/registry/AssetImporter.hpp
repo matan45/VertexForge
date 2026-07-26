@@ -1,7 +1,9 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <vector>
 #include <span>
+#include <variant>
 #include <cstdint>
 #include "../pipeline/Pipeline.hpp"
 #include "resource/AssetTypes.hpp"
@@ -75,6 +77,34 @@ namespace import
         // extensions; chosen values arrive in context.file.config.customOptions.
         virtual std::vector<ImportOptionDesc> options() const { return {}; }
     };
+
+    // Readers for the values an import dialog stored under ImportOptionDesc::key.
+    // A missing key, or a key holding a different variant alternative than the
+    // declared Type, yields `fallback` — so an importer's process() never has to
+    // distinguish "not chosen" from "chosen as the default".
+    inline bool optionBool(const importConfig::ImportConfig& config, std::string_view key, bool fallback)
+    {
+        const auto it = config.customOptions.find(std::string(key));
+        if (it == config.customOptions.end() || !std::holds_alternative<bool>(it->second))
+            return fallback;
+        return std::get<bool>(it->second);
+    }
+
+    inline int32_t optionInt(const importConfig::ImportConfig& config, std::string_view key, int32_t fallback)
+    {
+        const auto it = config.customOptions.find(std::string(key));
+        if (it == config.customOptions.end() || !std::holds_alternative<int32_t>(it->second))
+            return fallback;
+        return std::get<int32_t>(it->second);
+    }
+
+    inline float optionFloat(const importConfig::ImportConfig& config, std::string_view key, float fallback)
+    {
+        const auto it = config.customOptions.find(std::string(key));
+        if (it == config.customOptions.end() || !std::holds_alternative<float>(it->second))
+            return fallback;
+        return std::get<float>(it->second);
+    }
 
     // Adapts the per-file ImportProgressCallback to the single-float callbacks
     // the types::* processors take. The returned lambda captures context by

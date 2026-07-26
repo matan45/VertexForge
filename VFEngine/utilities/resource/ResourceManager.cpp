@@ -494,6 +494,12 @@ namespace resource
         terrainMaterialCache.erase(ref.getGUID());
     }
 
+    void ResourceManager::invalidateFontCache(const asset::AssetRef& ref)
+    {
+        std::scoped_lock lock(cacheMutex);
+        fontCache.erase(ref.getGUID());
+    }
+
     std::shared_ptr<animator::AnimatorData> ResourceManager::loadAnimator(const asset::AssetRef& ref)
     {
         return loadSyncCached<animator::AnimatorData>(ref, animatorCache, cacheMutex,

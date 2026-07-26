@@ -3,6 +3,7 @@
 #include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "math/MathHelper.hpp"
 #include "text/TextLayout.hpp"
 #include <imgui.h>
@@ -22,10 +23,39 @@ namespace windows
             "0123456789 !@#$%^&*()";
         std::strncpy(textInputBuffer, defaultText, sizeof(textInputBuffer) - 1);
         textInputBuffer[sizeof(textInputBuffer) - 1] = '\0';
+
+        // Pick up a reimport of the font currently on screen (VK-1629). Compared
+        // against the same path this window was opened with, normalised, because the
+        // importer reports its output path as it built it.
+        importCompletedToken = events::EventDispatcher::instance()
+            .subscribe<events::resource::ImportCompletedNotification>(
+                [this](const events::resource::ImportCompletedNotification& notification)
+                {
+                    std::error_code ec;
+                    const auto mine = std::filesystem::weakly_canonical(fontPath, ec);
+                    if (ec) return;
+
+                    for (const auto& result : notification.results)
+                    {
+                        if (!result.success || result.outputPath.empty()) continue;
+
+                        std::error_code compareEc;
+                        const auto theirs =
+                            std::filesystem::weakly_canonical(result.outputPath, compareEc);
+                        if (!compareEc && theirs == mine)
+                        {
+                            reloadRequested.store(true);
+                            return;
+                        }
+                    }
+                });
     }
 
     FontPreviewWindow::~FontPreviewWindow()
     {
+        if (importCompletedToken.isValid())
+            events::EventDispatcher::instance().unsubscribe(importCompletedToken);
+
         loadingCancelled.store(true);
 
         if (loadFuture.valid())
@@ -58,6 +88,9 @@ namespace windows
         if (!isOpen) return;
 
         if (needsInit) { startAsyncLoad(); needsInit = false; }
+        // Deliberately after the needsInit branch and before updateAsyncLoading, so a
+        // reload never races the initial load in flight.
+        if (reloadRequested.exchange(false) && !loadingInProgress.load()) { reloadFromDisk(); }
         updateAsyncLoading();
 
         if (initialSize.x <= 0.0f)
@@ -112,6 +145,28 @@ namespace windows
         {
             return loadFontBackground(fontPath);
         });
+    }
+
+    void FontPreviewWindow::reloadFromDisk()
+    {
+        // ResourceManager caches FontData by GUID and a reimport keeps the GUID, so
+        // without this the reload would hand back the pre-reimport atlas.
+        resource::ResourceManager::invalidateFontCache(asset::AssetRef::fromPath(fontPath));
+
+        if (atlasHandle.isValid())
+        {
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = atlasHandle.imguiDescriptorSet;
+            events::EventDispatcher::instance().execute(releaseCmd);
+            atlasHandle = services::EditorTextureHandle{};
+        }
+
+        fontData = resource::FontData{};
+        fontLoaded = false;
+        loadFailed = false;
+        errorMessage.clear();
+
+        startAsyncLoad();
     }
 
     void FontPreviewWindow::updateAsyncLoading()

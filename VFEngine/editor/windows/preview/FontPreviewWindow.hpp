@@ -3,6 +3,7 @@
 #include "PreviewWindowChrome.hpp"
 #include "resource/Types.hpp"
 #include "data/DTOs.hpp"
+#include "events/EventTypes.hpp"
 #include <imgui.h>
 #include <string>
 #include <future>
@@ -41,6 +42,13 @@ namespace windows
         bool loadFailed = false;
         std::string errorMessage;
 
+        // VK-1629: a reimport rewrites this .vfFont in place. The notification
+        // arrives on the import worker thread, so it only raises this flag; draw()
+        // does the actual reload on the UI thread (releasing the atlas descriptor
+        // and re-reading the file are both UI-thread-only operations).
+        events::SubscriptionToken importCompletedToken;
+        std::atomic<bool> reloadRequested{false};
+
         // Preview settings
         char textInputBuffer[1024] = {};
         float previewFontSize = 32.0f;
@@ -57,6 +65,7 @@ namespace windows
     private:
         void startAsyncLoad();
         void updateAsyncLoading();
+        void reloadFromDisk();
         FontLoadResult loadFontBackground(const std::string& path);
         static resource::TextureData convertAtlasToRGBA(const resource::FontAtlasData& atlas);
 

@@ -77,6 +77,7 @@ project "Editor"
 	  "VFEngine/core/bootstrap",          -- For EditorBootstrap
 	  "VFEngine/core/controllers",        -- For ImguiWindow base class
 	  "dependencies/IconFontCppHeaders",
+	  "VFEngine/import",                  -- For registry/AssetImporter.hpp (ImportOptionDesc)
 	  "VFEngine/import/controllers",
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
