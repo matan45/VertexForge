@@ -683,4 +683,49 @@ namespace text
             }
         }
     }
+
+    OverflowMode toOverflowMode(uint8_t value) noexcept
+    {
+        switch (value)
+        {
+        case 1: return OverflowMode::Clip;
+        case 2: return OverflowMode::Ellipsis;
+        default: return OverflowMode::None;
+        }
+    }
+
+    TextBoxPolicy resolveTextBox(const TextBoxRequest& request) noexcept
+    {
+        // NaN-safe: `!(x > 0)` is true for NaN, so a scripted NaN falls to the no-box
+        // branch. `x <= 0` would be false and let NaN through into the layout.
+        const bool hasWidth = request.maxWidth > 0.0f;
+        const bool hasHeight = request.rectHeight > 0.0f;
+        const OverflowMode overflow = toOverflowMode(request.overflow);
+
+        TextBoxPolicy policy;
+
+        // wordWrap gates wrapping only, never alignment: maxWidth stays the alignment box
+        // either way. This is the same split UITextPipeline makes for UILabelComponent.
+        policy.wrapWidth = request.wordWrap ? request.maxWidth : 0.0f;
+
+        // Ellipsis is per-line, so it covers both wordWrap states: it truncates each
+        // wrapped line, or the single un-wrapped one. It needs a width to truncate to.
+        policy.ellipsis = (overflow == OverflowMode::Ellipsis) && hasWidth;
+        policy.ellipsisWidth = request.maxWidth;
+
+        // Clip has no implementation without a scissor, so it degrades to None rather
+        // than being reinterpreted. The authored value is untouched and still round-trips.
+        policy.clip = (overflow == OverflowMode::Clip) && request.clipSupported;
+
+        policy.horizontal = toHAlign(request.horizontal);
+        policy.vertical = (request.requireHeightForVAlign && !hasHeight)
+                              ? VAlign::Top
+                              : toVAlign(request.vertical);
+
+        policy.alignToInkWidth = !hasWidth;
+        policy.alignWidth = request.maxWidth;
+        policy.alignHeight = request.rectHeight;
+
+        return policy;
+    }
 }

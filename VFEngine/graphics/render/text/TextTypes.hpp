@@ -179,18 +179,28 @@ namespace render::text
     {
         std::string fontPath;
         std::string text;
-        glm::vec3 worldPosition;
-        float fontSize;
-        glm::vec4 color;
-        uint32_t renderMode;   // 0 = ScreenSpace, 1 = WorldSpace
-        uint32_t entityId;
-        float lineSpacing;
-        float letterSpacing;
-        float maxWidth;
+        // VK-1637: these were previously uninitialized. Both producers happen to assign
+        // every one, so it was latent - but a third producer that missed one would read
+        // an indeterminate value with no diagnostic, and `overflow` on a garbage byte
+        // would truncate text at random. Cheaper to make it a property of the type.
+        glm::vec3 worldPosition{0.0f};
+        float fontSize = 0.0f;
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        uint32_t renderMode = 1;   // 0 = ScreenSpace, 1 = WorldSpace
+        uint32_t entityId = 0;
+        float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
+        float maxWidth = 0.0f;
         uint8_t horizontalAlignment = 0; // 0=Left, 1=Center, 2=Right
         uint8_t verticalAlignment = 0;   // 0=Top, 1=Middle, 2=Bottom
         float rectHeight = 0.0f;         // Bounding rect height for vertical alignment
         components::FontStyle fontStyle = components::FontStyle::Normal;
+        // VK-1637. Typed, matching fontStyle above - unlike the two alignment fields,
+        // which stay raw uint8_t because text::toHAlign / toVAlign own the out-of-range
+        // mapping. Clip has no implementation here (no scissor) and degrades to Overflow;
+        // see text::resolveTextBox.
+        components::TextOverflow overflow = components::TextOverflow::Overflow;
+        bool wordWrap = true;
         // VK-1635. Distances are layout pixels at this fontSize, so they scale with the
         // glyph as world-space text recedes.
         components::TextEffectSettings effects;

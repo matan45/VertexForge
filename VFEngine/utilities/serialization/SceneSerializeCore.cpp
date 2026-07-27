@@ -463,7 +463,15 @@ namespace serialization
         j["lineSpacing"] = text.lineSpacing;
         j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
+        j["rectHeight"] = text.rectHeight;
         j["fontStyle"] = fontStyleToString(text.fontStyle);
+        // VK-1637: written unconditionally, like serializeUILabel's equivalents. A scene
+        // saved before these existed re-saves with them at their defaults; the read side
+        // is additive, so the round trip is a fixed point either way.
+        j["horizontalAlignment"] = horizontalAlignmentToString(text.horizontalAlignment);
+        j["verticalAlignment"] = verticalAlignmentToString(text.verticalAlignment);
+        j["overflow"] = textOverflowToString(text.overflow);
+        j["wordWrap"] = text.wordWrap;
         if (json effects = serializeTextEffects(text.effects); !effects.is_null())
         {
             j["effects"] = std::move(effects);
@@ -486,7 +494,15 @@ namespace serialization
         text.lineSpacing = j.value("lineSpacing", 1.0f);
         text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
+        text.rectHeight = j.value("rectHeight", 0.0f);
         text.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
+        // VK-1637: additive. The defaults below are exactly the component's own, so a
+        // pre-VK-1637 scene loads to Left / Top / Overflow / wrapping - i.e. unchanged.
+        // All three string->enum converters are total; an unknown string falls back too.
+        text.horizontalAlignment = stringToHorizontalAlignment(j.value("horizontalAlignment", "left"));
+        text.verticalAlignment = stringToVerticalAlignment(j.value("verticalAlignment", "top"));
+        text.overflow = stringToTextOverflow(j.value("overflow", "overflow"));
+        text.wordWrap = j.value("wordWrap", true);
         if (j.contains("effects"))
         {
             deserializeTextEffects(j["effects"], text.effects);

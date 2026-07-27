@@ -614,6 +614,12 @@ namespace controllers::offscreen
             renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
             renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
             renderData.rectHeight = params.worldRectHeight;
+            // VK-1637: previously dropped on the floor - TextRenderData had nowhere to put
+            // them - so a world-space-canvas label always wrapped and never ellipsized,
+            // unlike its screen-space twin (UITextPipeline reads both). Clip stays the one
+            // mode that cannot cross: the 3D text pipeline issues no scissor.
+            renderData.overflow = labelComp.overflow;
+            renderData.wordWrap = labelComp.wordWrap;
             renderData.fontStyle = labelComp.fontStyle;
             // VK-1635: unlike per-span rich text (stripped above, screen-space only),
             // the label's own effects DO survive here - the 3D text pipeline reads the

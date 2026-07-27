@@ -142,30 +142,62 @@ namespace render::text
             float sdfEdge = fontData.sdfParams.edgeValue;
             float sdfSmooth = resource::sdfSmoothWidth(fontData);
 
+            // VK-1637: the box rules - which box, which wrap width, which gate - are pure,
+            // so they live in utilities/text where the CPU-only test suite can reach them;
+            // this TU is Vulkan-bound. clipSupported is false because this pipeline issues
+            // no vk::CommandBuffer::setScissor, so TextOverflow::Clip degrades to Overflow
+            // while still round-tripping losslessly through the scene file.
+            ::text::TextBoxRequest boxRequest;
+            boxRequest.maxWidth = textEntity.maxWidth;
+            boxRequest.rectHeight = textEntity.rectHeight;
+            boxRequest.wordWrap = textEntity.wordWrap;
+            boxRequest.overflow = static_cast<uint8_t>(textEntity.overflow);
+            boxRequest.horizontal = textEntity.horizontalAlignment;
+            boxRequest.vertical = textEntity.verticalAlignment;
+            boxRequest.clipSupported = false;
+            boxRequest.requireHeightForVAlign = true;
+            const ::text::TextBoxPolicy box = ::text::resolveTextBox(boxRequest);
+
             // Layout text using shared text layout engine
             auto layout = ::text::layoutText(
                 fontData,
                 textEntity.text,
                 textEntity.fontSize,
-                textEntity.maxWidth,
+                box.wrapWidth,
                 textEntity.lineSpacing,
                 textEntity.letterSpacing
             );
 
+            // VK-1637: per-line ellipsis, BEFORE alignment - the ordering UITextPipeline
+            // uses, pinned by tests/test_textlayout_alignment.cpp - so a truncated line
+            // centres on its truncated width rather than its original one. Being per-line,
+            // it covers both wrap states: every wrapped line, or the single un-wrapped one.
+            if (box.ellipsis)
+            {
+                // One face per entity here (this pipeline has no rich text), so the
+                // baselineShift UITextPipeline passes is identically 0 - omit it.
+                ::text::applyEllipsis(layout, fontData, textEntity.fontSize,
+                                      box.ellipsisWidth, textEntity.letterSpacing);
+                if (layout.glyphs.empty())
+                {
+                    // Before fontInstances[fontKey] below, so a fully truncated entity
+                    // never creates an empty batch bucket.
+                    continue;
+                }
+            }
+
             // VK-1632: alignment lives in utilities/text now, shared with UITextPipeline.
-            // The gating policy stays here: this pipeline falls back to the laid-out width
-            // when there is no explicit rect, and ignores vertical alignment without one.
             const auto lineMetrics = ::text::computeLineMetrics(
                 fontData, textEntity.fontSize, textEntity.lineSpacing);
 
             ::text::AlignParams alignParams;
-            alignParams.horizontal = ::text::toHAlign(textEntity.horizontalAlignment);
-            alignParams.vertical = textEntity.rectHeight > 0.0f
-                                       ? ::text::toVAlign(textEntity.verticalAlignment)
-                                       : ::text::VAlign::Top;
+            alignParams.horizontal = box.horizontal;
+            alignParams.vertical = box.vertical;
+            // boundingBox.x is only known after layout, which is why resolveTextBox hands
+            // back the flag rather than the width.
             alignParams.contentSize = glm::vec2(
-                textEntity.maxWidth > 0.0f ? textEntity.maxWidth : layout.boundingBox.x,
-                textEntity.rectHeight);
+                box.alignToInkWidth ? layout.boundingBox.x : box.alignWidth,
+                box.alignHeight);
             alignParams.lineHeight = lineMetrics.lineHeight;
             alignParams.singleLineHeight = lineMetrics.singleLineHeight;
 

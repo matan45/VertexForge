@@ -197,4 +197,63 @@ namespace text
     // computeAlignedLineOrigins + fold the offsets into each glyph's offset.
     // boundingBox is left untouched: it describes the un-aligned layout.
     void applyAlignment(LayoutResult& layout, const AlignParams& params);
+
+    // ------------------------------------------------------------------
+    // VK-1637: box policy. The rules for "which box, which wrap width, which
+    // gate" used to be inlined in TextPipeline and UITextPipeline, which are
+    // both Vulkan-bound TUs and therefore unreachable from the CPU-only test
+    // suite. The rules are pure, so they live here instead. Only the world path
+    // (TextPipeline) is wired for now - see the two capability flags below.
+    // ------------------------------------------------------------------
+
+    // Mirrors components::TextOverflow; None == components::TextOverflow::Overflow.
+    // Kept local for the same reason HAlign / VAlign are: this header must not pull in
+    // components/UIComponents.hpp, which drags entt and AssetRef into every consumer.
+    // The mapping is locked by static_asserts in tests/test_textbox_policy.cpp.
+    enum class OverflowMode : uint8_t { None = 0, Clip = 1, Ellipsis = 2 };
+
+    [[nodiscard]] OverflowMode toOverflowMode(uint8_t value) noexcept;
+
+    // The authored intent, straight off the component / render struct.
+    struct TextBoxRequest
+    {
+        float maxWidth = 0.0f;    // box width; 0 = no box
+        float rectHeight = 0.0f;  // box height; 0 = no box
+        bool wordWrap = true;
+        uint8_t overflow = 0;     // components::TextOverflow ordinal
+        uint8_t horizontal = 0;   // components::HorizontalAlignment ordinal
+        uint8_t vertical = 0;     // components::VerticalAlignment ordinal
+        // Can the calling pipeline actually issue a scissor? UITextPipeline can;
+        // TextPipeline cannot, so Clip degrades to None there rather than silently
+        // meaning something else.
+        bool clipSupported = false;
+        // TextPipeline forces VAlign::Top when there is no height; UITextPipeline does
+        // not gate at all, because a UIRect always has one. This flag RECORDS that
+        // disagreement rather than resolving it - converging the two changes behaviour
+        // for degenerate zero-height rects and belongs in its own ticket.
+        bool requireHeightForVAlign = true;
+    };
+
+    // The resolved decisions. Every field feeds exactly one call downstream.
+    struct TextBoxPolicy
+    {
+        float wrapWidth = 0.0f;        // -> layoutText / layoutTextStyled maxWidth
+        bool ellipsis = false;         // -> call applyEllipsis
+        float ellipsisWidth = 0.0f;    // -> applyEllipsis maxWidth
+        bool clip = false;             // -> caller sets a scissor; always false when
+                                       //    clipSupported is false
+        HAlign horizontal = HAlign::Left;
+        VAlign vertical = VAlign::Top;
+        // True when there is no box width to align against. The caller substitutes
+        // layout.boundingBox.x, which is only known after layout and therefore cannot be
+        // resolved here.
+        bool alignToInkWidth = false;
+        float alignWidth = 0.0f;
+        float alignHeight = 0.0f;
+    };
+
+    // Pure. Every gate is written !(x > 0.0f) rather than x <= 0.0f: both text paths take
+    // unvalidated script input, and NaN makes `x <= 0` false - it would sail straight into
+    // the box branch and poison the layout.
+    [[nodiscard]] TextBoxPolicy resolveTextBox(const TextBoxRequest& request) noexcept;
 }

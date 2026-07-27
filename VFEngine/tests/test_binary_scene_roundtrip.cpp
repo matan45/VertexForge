@@ -90,6 +90,18 @@ namespace
         scene::Entity marker("Marker");
         marker.getComponent<components::TransformComponent>().position = glm::vec3(0.0f, 100.0f, 0.0f);
         marker.addComponent<components::CameraComponent>();
+        // VK-1637: world text with every box field non-default. The blob path reuses the
+        // JSON serializers, so this buys JSON<->binary parity for the alignment / overflow
+        // / wrap keys for free - and would catch a serializer that wrote them only on the
+        // JSON path.
+        auto& label = marker.addOrReplaceComponent<components::TextComponent>();
+        label.text = "Marker";
+        label.maxWidth = 180.0f;
+        label.rectHeight = 90.0f;
+        label.horizontalAlignment = components::HorizontalAlignment::Center;
+        label.verticalAlignment = components::VerticalAlignment::Middle;
+        label.overflow = components::TextOverflow::Ellipsis;
+        label.wordWrap = false;
         graph.addChild(root, marker);
     }
 }

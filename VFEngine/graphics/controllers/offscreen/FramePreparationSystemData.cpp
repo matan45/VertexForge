@@ -102,6 +102,14 @@ namespace controllers::offscreen
             renderData.lineSpacing = textComp.lineSpacing;
             renderData.letterSpacing = textComp.letterSpacing;
             renderData.maxWidth = textComp.maxWidth;
+            // VK-1637: TextRenderData has carried these three since world text was written,
+            // but nothing ever set them, so world text was unconditionally Left/Top and
+            // TextPipeline's alignment ran as a guaranteed no-op.
+            renderData.horizontalAlignment = static_cast<uint8_t>(textComp.horizontalAlignment);
+            renderData.verticalAlignment = static_cast<uint8_t>(textComp.verticalAlignment);
+            renderData.rectHeight = textComp.rectHeight;
+            renderData.overflow = textComp.overflow;
+            renderData.wordWrap = textComp.wordWrap;
             renderData.fontStyle = textComp.fontStyle;
             renderData.effects = textComp.effects;
 
