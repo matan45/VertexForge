@@ -60,6 +60,14 @@ namespace controllers
         framePreparation->prepareText(ctx);
     }
 
+    void OffScreenController::setFontFallbackChain(std::span<const std::string> fontPaths)
+    {
+        if (auto* renderHandler = offScreen ? offScreen->getRenderPassHandler() : nullptr)
+        {
+            renderHandler->setFontFallbackChain(fontPaths);
+        }
+    }
+
     void OffScreenController::prepareSceneData()
     {
         offscreen::FrameContext ctx;

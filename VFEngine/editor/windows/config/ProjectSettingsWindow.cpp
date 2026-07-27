@@ -2,7 +2,10 @@
 #include "ProjectSettingsWindow.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ProjectEvents.hpp"
+#include "../details/FontSlotWidget.hpp"
 #include <imgui.h>
+#include <algorithm>
+#include <cstddef>
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -28,6 +31,11 @@ namespace windows
             workingDirectory = projectOpt->workingDirectory;
             startupScene = projectOpt->startupScene;
             exeIconPath = projectOpt->exeIconPath;
+            fontFallbackChain = projectOpt->fontFallbackChain;
+            if (fontFallbackChain.size() > config::ProjectConfig::maxFontFallbacks)
+            {
+                fontFallbackChain.resize(config::ProjectConfig::maxFontFallbacks);
+            }
             isDirty = false;
         }
         else
@@ -38,6 +46,7 @@ namespace windows
             workingDirectory.clear();
             startupScene.clear();
             exeIconPath.clear();
+            fontFallbackChain.clear();
             isDirty = false;
         }
     }
@@ -63,6 +72,15 @@ namespace windows
         updatedConfig.version = version;
         updatedConfig.startupScene = startupScene;
         updatedConfig.exeIconPath = exeIconPath;
+        updatedConfig.fontFallbackChain.clear();
+        for (const auto& path : fontFallbackChain)
+        {
+            if (!path.empty() &&
+                updatedConfig.fontFallbackChain.size() < config::ProjectConfig::maxFontFallbacks)
+            {
+                updatedConfig.fontFallbackChain.push_back(path);
+            }
+        }
 
         events::project::UpdateProjectConfigCommand updateCmd;
         updateCmd.config = updatedConfig;
@@ -113,7 +131,7 @@ namespace windows
             return;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(450, 350), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(500, 650), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Project Settings", &visible))
         {
             drawContent();
@@ -293,6 +311,84 @@ namespace windows
         {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Icon file not found");
         }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::Text("Font Fallbacks (optional)");
+        ImGui::TextWrapped(
+            "Fonts are tried in this order when the selected font lacks a glyph.");
+
+        for (size_t i = 0; i < fontFallbackChain.size();)
+        {
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::Text("Fallback %zu", i + 1);
+
+            details::FontSlotOptions options;
+            options.emptyLabel = "Select a project font";
+            options.emptyTooltip =
+                "Choose an imported .vfFont inside this project.";
+            options.clearButtonLabel = "Remove";
+            options.clearTooltip = "Remove this font from the fallback chain.";
+
+            if (details::drawProjectFontSlot(
+                    fontFallbackChain[i], workingDirectory, "ProjectFallback", options))
+            {
+                isDirty = true;
+            }
+
+            if (fontFallbackChain[i].empty())
+            {
+                fontFallbackChain.erase(fontFallbackChain.begin() + static_cast<std::ptrdiff_t>(i));
+                ImGui::PopID();
+                continue;
+            }
+
+            if (i == 0)
+            {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::Button("Move Up"))
+            {
+                std::swap(fontFallbackChain[i], fontFallbackChain[i - 1]);
+                isDirty = true;
+            }
+            if (i == 0)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+            const bool isLast = i + 1 == fontFallbackChain.size();
+            if (isLast)
+            {
+                ImGui::BeginDisabled();
+            }
+            if (ImGui::Button("Move Down"))
+            {
+                std::swap(fontFallbackChain[i], fontFallbackChain[i + 1]);
+                isDirty = true;
+            }
+            if (isLast)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::Separator();
+            ImGui::PopID();
+            ++i;
+        }
+
+        if (fontFallbackChain.size() < config::ProjectConfig::maxFontFallbacks)
+        {
+            if (ImGui::Button("Add Font Fallback"))
+            {
+                fontFallbackChain.emplace_back();
+                isDirty = true;
+            }
+        }
+        ImGui::TextDisabled("Built-in Default Font (implicit final fallback)");
 
         ImGui::Spacing();
         ImGui::Separator();

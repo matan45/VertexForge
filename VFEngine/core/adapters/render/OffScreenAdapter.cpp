@@ -149,6 +149,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::setFontFallbackChain(std::span<const std::string> fontPaths) {
+        if (offScreen) {
+            offScreen->setFontFallbackChain(fontPaths);
+        }
+    }
+
     void OffScreenAdapter::prepareSceneData() {
         if (offScreen) {
             offScreen->prepareSceneData();

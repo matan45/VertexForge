@@ -23,6 +23,8 @@
 #include <vulkan/vulkan.hpp>
 #include <memory>
 #include <optional>
+#include <span>
+#include <string>
 #include <vector>
 
 namespace core
@@ -82,6 +84,11 @@ namespace controllers
         // the new extent (waits idle, rebuilds descriptor sets).
         void setReferenceResolution(uint32_t refWidth, uint32_t refHeight);
 
+        // Project-global ordered font fallbacks. Retained so a controller that is
+        // configured before its lazy init applies the same chain once its private
+        // TextFontCache is created.
+        void setFontFallbackChain(std::span<const std::string> fontPaths);
+
         // Builds the scoped screen-space draw lists for the bound subtree at the reference
         // extent, records the UI image + text pipelines into the offscreen color image, and
         // returns the ImGui descriptor set for ImGui::Image() (or nullptr if not built).
@@ -122,6 +129,7 @@ namespace controllers
         // per the contract so the UITextPipeline holds a reference, not ownership).
         std::unique_ptr<render::text::TextFontCache> ownedFontCache;
         render::text::TextFontCache* fontCache = nullptr;
+        std::vector<std::string> fontFallbackChain;
 
         entt::entity rootEntity{entt::null};
         vk::Extent2D refExtent{1920, 1080};

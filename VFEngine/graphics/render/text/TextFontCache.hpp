@@ -3,13 +3,16 @@
 #include <vulkan/vulkan.hpp>
 #include "../../core/VulkanMemoryManager.hpp"
 #include <chrono>
+#include <array>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include <future>
+#include "text/FontFallback.hpp"
 
 namespace core
 {
@@ -99,6 +102,13 @@ namespace render::text
         // const std::string* into it stays valid until cleanUp().
         std::unordered_set<std::string> styledPathPool;
 
+        // VK-1638: project-wide regular-face fallbacks. The configured keys point
+        // into fallbackPathPool; unordered_set nodes are stable across rehash, so
+        // render code can retain a key pointer for the rest of the frame.
+        std::unordered_set<std::string> fallbackPathPool;
+        std::array<const std::string*, ::text::MAX_FALLBACK_FACES> fallbackChain{};
+        uint8_t fallbackChainCount = 0;
+
         // How long a slot that has not yet found its exact face waits before looking
         // again. Importing the Bold face with the editor open should take effect
         // without a restart; re-probing forever would put a handful of
@@ -147,6 +157,22 @@ namespace render::text
         // Not const: the first call for a (basePath, styleBits) pair probes the disk,
         // memoises the answer and may kick off an async load of the styled atlas.
         StyledFontResolution resolveStyledFont(const std::string& basePath, uint32_t styleBits);
+
+        struct FallbackFaces
+        {
+            std::array<const std::string*, ::text::MAX_FALLBACK_FACES> keys{};
+            std::array<const resource::FontData*, ::text::MAX_FALLBACK_FACES> faces{};
+            uint8_t count = 0;
+        };
+
+        // Installs up to three authored regular faces plus the mandatory built-in
+        // default tail. Invalid VFS paths are ignored before requestFont() can
+        // create metadata for them.
+        void setFallbackChain(std::span<const std::string> fontPaths);
+
+        // Allocation-free, by-value snapshot of the currently resident chain.
+        // Residency is checked on every call so async uploads heal automatically.
+        [[nodiscard]] FallbackFaces resolveFallbackFaces(const std::string& primaryKey) const noexcept;
 
         vk::ImageView getDefaultImageView() const { return defaultImageView; }
         vk::Sampler getDefaultSampler() const { return defaultSampler; }

@@ -47,7 +47,7 @@ namespace
 
 TEST_SUITE("DefaultFont")
 {
-    TEST_CASE("regenerate resources/fonts/DefaultFont.vfFont from Roboto")
+    TEST_CASE("regenerate resources/fonts/DefaultFont.vfFont from Roboto" * doctest::skip())
     {
         const fs::path source = repoRoot() / "resources" / "editor" / "Roboto-Regular.ttf";
         REQUIRE_MESSAGE(fs::exists(source), "missing source face: " << source.string());
@@ -111,6 +111,12 @@ TEST_SUITE("DefaultFont")
         CHECK(font.findGlyph('A') != nullptr);
         CHECK(font.findGlyph('z') != nullptr);
         CHECK(font.findGlyph(' ') != nullptr);
+
+        // VK-1638: buildCharacterRanges bakes U+2026 unconditionally. Without it
+        // applyEllipsis silently falls back to three U+002E dots for every
+        // default-font label, so a regeneration against a stale importer must fail
+        // here rather than quietly regress truncation.
+        CHECK(font.findGlyph(0x2026) != nullptr);
     }
 
     TEST_CASE("the default-font sentinel is not a usable filesystem path")

@@ -49,6 +49,12 @@ namespace events::project {
         std::string_view getName() const override { return "ProjectLoaded"; }
     };
 
+    struct ProjectConfigUpdatedNotification : INotification {
+        config::ProjectConfig project;
+
+        std::string_view getName() const override { return "ProjectConfigUpdated"; }
+    };
+
     struct ProjectSavedNotification : INotification {
         std::string filePath;
 

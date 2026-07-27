@@ -21,6 +21,7 @@
 #include <vector>
 #include <utility>
 #include <optional>
+#include <span>
 #include <entt/entt.hpp>
 
 namespace events
@@ -143,6 +144,7 @@ namespace controllers
         void prepareFrameMeshes();
         void prepareFrameBillboards();
         void prepareFrameText();
+        void setFontFallbackChain(std::span<const std::string> fontPaths);
         void prepareSceneData();
         void prepareFrameCameraFrustums();
         void prepareFrameAudioSpheres();

@@ -9,18 +9,37 @@
 #include "resource/DefaultFont.hpp"
 #include "resource/FontResource.hpp"
 #include "resource/PathResolver.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
 // VK-1636. Note the leading "::" on every use below: inside namespace render::text
 // an unqualified `text::` binds to this namespace, not the utilities one.
 #include "text/FontStyleFace.hpp"
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <limits>
 #include <span>
+#include <string_view>
 
 namespace render::text
 {
+    namespace
+    {
+        [[nodiscard]] bool fallbackPathEqual(std::string_view lhs,
+                                             std::string_view rhs) noexcept
+        {
+            if (lhs.size() != rhs.size()) return false;
+            for (size_t i = 0; i < lhs.size(); ++i)
+            {
+                const char l = lhs[i] == '\\' ? '/' : lhs[i];
+                const char r = rhs[i] == '\\' ? '/' : rhs[i];
+                if (l != r) return false;
+            }
+            return true;
+        }
+    }
+
     TextFontCache::TextFontCache(core::Device& device)
         : device{device}
     {
@@ -32,6 +51,10 @@ namespace render::text
     {
         createDefaultTexture();
         loadDefaultFont();
+        if (fallbackChainCount == 0)
+        {
+            setFallbackChain(std::span<const std::string>{});
+        }
     }
 
     // VK-1628: the engine-shipped fallback font, registered under a sentinel key so
@@ -114,6 +137,9 @@ namespace render::text
         // together so nothing outlives the atlases they described.
         styledFamilies.clear();
         styledPathPool.clear();
+        fallbackChain.fill(nullptr);
+        fallbackChainCount = 0;
+        fallbackPathPool.clear();
 
         if (defaultSampler)
         {
@@ -250,7 +276,22 @@ namespace render::text
         }
 
         PendingLoad pending;
-        pending.future = resource::ResourceManager::loadFontAsync(asset::AssetRef::fromPath(fontPath));
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        {
+            // Packaged builds do not populate the editor AssetDatabase. FontResource
+            // already reads through VFS, so load archive-relative fallback keys
+            // directly rather than manufacturing an invalid AssetRef.
+            pending.future = std::async(std::launch::async, [fontPath]
+            {
+                return std::make_shared<resource::FontData>(
+                    resource::FontResource::loadFont(fontPath));
+            });
+        }
+        else
+        {
+            pending.future =
+                resource::ResourceManager::loadFontAsync(asset::AssetRef::fromPath(fontPath));
+        }
         pendingLoads.emplace(fontPath, std::move(pending));
     }
 
@@ -477,6 +518,79 @@ namespace render::text
             return fontPath;
         }
         return sentinel;
+    }
+
+    void TextFontCache::setFallbackChain(std::span<const std::string> fontPaths)
+    {
+        fallbackChain.fill(nullptr);
+        fallbackChainCount = 0;
+        fallbackPathPool.clear();
+
+        auto trimAndNormalize = [](std::string_view value)
+        {
+            constexpr std::string_view whitespace{" \t\n\r\f\v"};
+            const size_t first = value.find_first_not_of(whitespace);
+            if (first == std::string_view::npos) return std::string{};
+            const size_t last = value.find_last_not_of(whitespace);
+            std::string result{value.substr(first, last - first + 1)};
+            std::replace(result.begin(), result.end(), '\\', '/');
+            return result;
+        };
+
+        // Validate before normalization/capping: a stale first entry must not crowd
+        // out a later valid authored fallback. This is not a frame path, so owning
+        // temporary strings here is preferable to weakening the policy helper.
+        std::vector<std::string> validPaths;
+        validPaths.reserve(fontPaths.size());
+        for (const std::string& authored : fontPaths)
+        {
+            std::string normalized = trimAndNormalize(authored);
+            if (normalized.empty()) continue;
+            if (resource::isDefaultFontSentinel(normalized))
+            {
+                continue; // normalizeFallbackChain appends it exactly once
+            }
+            if (!resource::VirtualFileSystem::instance().exists(normalized))
+            {
+                vfLogWarning("Ignoring missing font fallback: {}", normalized);
+                continue;
+            }
+            validPaths.push_back(std::move(normalized));
+        }
+
+        const ::text::NormalizedFallbackChain normalized =
+            ::text::normalizeFallbackChain(validPaths);
+        for (uint8_t i = 0; i < normalized.count; ++i)
+        {
+            auto [it, inserted] =
+                fallbackPathPool.emplace(normalized.paths[i]);
+            if (!inserted) continue;
+
+            fallbackChain[fallbackChainCount++] = &*it;
+            if (!resource::isDefaultFontSentinel(*it))
+            {
+                requestFont(*it);
+            }
+        }
+    }
+
+    TextFontCache::FallbackFaces TextFontCache::resolveFallbackFaces(
+        const std::string& primaryKey) const noexcept
+    {
+        FallbackFaces result;
+        for (uint8_t i = 0; i < fallbackChainCount; ++i)
+        {
+            const std::string* key = fallbackChain[i];
+            if (!key || fallbackPathEqual(*key, primaryKey)) continue;
+
+            const auto it = fontCache.find(*key);
+            if (it == fontCache.end() || !it->second.fontData) continue;
+
+            result.keys[result.count] = key;
+            result.faces[result.count] = it->second.fontData.get();
+            ++result.count;
+        }
+        return result;
     }
 
     // VK-1636 ------------------------------------------------------------------

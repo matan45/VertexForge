@@ -1006,6 +1006,7 @@ namespace gameExport
 		projConfig.version = config.gameVersion;
 		projConfig.workingDirectory = "Assets";
 		projConfig.startupScene = config.startupScene;
+		projConfig.fontFallbackChain = config.fontFallbackChain;
 		projConfig.exeIconPath = config.iconPath;
 		if (config.expectedPluginApiVersion != 0)
 		{

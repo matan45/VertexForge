@@ -33,6 +33,26 @@
 // flat across the 2x2 quad and fwidth collapses to zero.
 const float TEXT_SDF_MIN_AA_WIDTH = 1.0 / 255.0;
 
+// VK-1638: procedural missing-glyph tofu. This bit mirrors
+// text::STYLE_TOFU and is deliberately separate from bold/italic.
+const uint TEXT_STYLE_TOFU = 0x4u;
+
+// Draw a hollow box in quad-local coordinates without sampling the atlas.
+// localWidth is computed before the caller's per-instance tofu branch so the
+// derivatives remain in uniform control flow.
+vec4 textTofuBox(vec2 local, vec4 color, vec2 localWidth)
+{
+    float aaWidth = max(max(localWidth.x, localWidth.y), 1e-4);
+    float stroke = max(0.08, aaWidth * 1.5);
+    float edgeDistance =
+        min(min(local.x, 1.0 - local.x), min(local.y, 1.0 - local.y));
+    float ring = 1.0 - smoothstep(
+        stroke - aaWidth,
+        stroke + aaWidth,
+        edgeDistance);
+    return vec4(color.rgb, color.a * ring);
+}
+
 // Reconstruct the signed-distance sample from an MSDF/MTSDF RGB triplet.
 // The MTSDF alpha channel is intentionally left available for future effects.
 float medianRGB(vec3 sampleValue)

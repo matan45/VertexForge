@@ -21,6 +21,7 @@
 #include <memory>
 #include <string_view>
 #include <vector>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -457,6 +458,7 @@ namespace render
         bool isTextPipelineInitialized() const { return textPipelineInitialized; }
         void setTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
+        void setFontFallbackChain(std::span<const std::string> fontPaths);
 
         void registerExternalTexture(const std::string& key, uint32_t imageIndex,
                                      vk::ImageView imageView, vk::Sampler sampler);

@@ -31,16 +31,17 @@ namespace render::ui
         struct StyleSlots
         {
             ::text::FaceSet faceSet;
-            const resource::FontData* faces[4] = {};
-            const std::string* keys[4] = {};
+            const resource::FontData* faces[8] = {};
+            const std::string* keys[8] = {};
             // The style axes this slot's face does NOT provide - straight into
             // UITextCharInstance::styleFlags, so the shader fakes only what is missing.
-            uint32_t synthesizedBits[4] = {};
-            float sdfEdge[4] = {};
-            float sdfSmooth[4] = {};
-            float effectScale[4] = {};
-            ::text::TextEffectInstance baseEffect[4] = {};
+            uint32_t synthesizedBits[8] = {};
+            float sdfEdge[8] = {};
+            float sdfSmooth[8] = {};
+            float effectScale[8] = {};
+            ::text::TextEffectInstance baseEffect[8] = {};
             uint8_t count = 0;
+            uint8_t fallbackCount = 0;
             int8_t slotForBits[4] = {-1, -1, -1, -1};
         };
 
@@ -85,6 +86,52 @@ namespace render::ui
 
             slots.slotForBits[bits] = static_cast<int8_t>(index);
             return index;
+        }
+
+        void acquireFallbackSlots(StyleSlots& slots,
+                                  render::text::TextFontCache& fontCache,
+                                  const UITextRenderData& label)
+        {
+            // Self-skip is against the label's regular primary, not a styled
+            // sibling key. Otherwise a configured copy of the same regular face
+            // could re-enter the chain for bold/italic labels.
+            const std::string& regularPrimary = fontCache.resolveFontKey(label.fontPath);
+            const auto fallbacks = fontCache.resolveFallbackFaces(regularPrimary);
+            slots.fallbackCount = fallbacks.count;
+            for (uint8_t i = 0; i < fallbacks.count; ++i)
+            {
+                const uint8_t slot = static_cast<uint8_t>(4 + i);
+                const resource::FontData* face = fallbacks.faces[i];
+                slots.keys[slot] = fallbacks.keys[i];
+                slots.faces[slot] = face;
+                slots.faceSet.fallback[i] = face;
+
+                slots.sdfEdge[slot] = face->sdfParams.edgeValue;
+                slots.sdfSmooth[slot] = resource::sdfSmoothWidth(*face);
+                slots.effectScale[slot] =
+                    static_cast<float>(face->metadata.baseFontSize) > 0.0f
+                        ? label.fontSize / static_cast<float>(face->metadata.baseFontSize)
+                        : 0.0f;
+                slots.baseEffect[slot] = ::text::buildTextEffectInstance(
+                    label.effects, slots.effectScale[slot], slots.sdfSmooth[slot] > 0.0f);
+            }
+        }
+
+        // A fallback slot is one layout actually populated. Every caller must test
+        // the same range as resolveGlyphSlot below, or a glyph can be batched under
+        // the base face while still being styled as a fallback.
+        bool isFallbackSlot(const StyleSlots& slots, uint8_t faceIndex) noexcept
+        {
+            return faceIndex >= 4 &&
+                   faceIndex < static_cast<uint8_t>(4 + slots.fallbackCount);
+        }
+
+        uint8_t resolveGlyphSlot(const StyleSlots& slots, uint8_t faceIndex,
+                                 uint8_t baseSlot) noexcept
+        {
+            if (faceIndex < slots.count) return faceIndex;
+            if (isFallbackSlot(slots, faceIndex)) return faceIndex;
+            return baseSlot;
         }
     }
 
@@ -243,6 +290,7 @@ namespace render::ui
             {
                 continue;
             }
+            acquireFallbackSlots(slots, fontCache, label);
 
             const auto& fontData = *slots.faces[baseSlot];
 
@@ -342,7 +390,8 @@ namespace render::ui
                 // belong to the face this glyph actually came from. layoutTextStyled
                 // may have demoted a glyph to slot 0 (a codepoint the styled face
                 // lacks), so read the slot off the glyph rather than recomputing it.
-                const uint8_t slot = (glyph.faceIndex < slots.count) ? glyph.faceIndex : baseSlot;
+                const bool tofu = glyph.faceIndex == ::text::TOFU_FACE_INDEX;
+                const uint8_t slot = resolveGlyphSlot(slots, glyph.faceIndex, baseSlot);
                 const float sdfEdge = slots.sdfEdge[slot];
                 const float sdfSmooth = slots.sdfSmooth[slot];
                 const float effectScale = slots.effectScale[slot];
@@ -360,14 +409,22 @@ namespace render::ui
                 );
                 inst.uvRect = glyph.uvRect;
                 inst.color = label.color;
-                inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
+                inst.sdfParams = tofu ? glm::vec2(0.0f) : glm::vec2(sdfEdge, sdfSmooth);
                 // VK-1636: the span's own [b]/[i] bits are already folded into this
                 // slot's face request, so they must NOT be OR-ed back in below - that
                 // would re-synthesize the very axis the real face just provided.
-                inst.styleFlags = slots.synthesizedBits[slot];
-                inst.effectParams = baseEffect.params;
-                inst.effectColors = baseEffect.colors;
-                inst.effectMargin = baseEffect.marginPx;
+                uint32_t requestedBits = componentBits;
+                if (label.richText && glyph.charIndex < richText.perCodepoint.size())
+                {
+                    requestedBits |= richText.perCodepoint[glyph.charIndex].styleFlags;
+                }
+                const bool fallback = isFallbackSlot(slots, glyph.faceIndex);
+                inst.styleFlags = tofu ? ::text::STYLE_TOFU
+                    : (fallback ? (requestedBits & ::text::STYLE_MASK)
+                                : slots.synthesizedBits[slot]);
+                inst.effectParams = tofu ? glm::vec4(0.0f) : baseEffect.params;
+                inst.effectColors = tofu ? glm::uvec4(0u) : baseEffect.colors;
+                inst.effectMargin = tofu ? 0.0f : baseEffect.marginPx;
 
                 // Rich text span overrides. Synthesized glyphs (ellipsis,
                 // charIndex == UINT32_MAX) fail the bound check and keep
@@ -384,7 +441,7 @@ namespace render::ui
                     // VK-1635: a span that names an effect re-derives the whole packed
                     // instance, because the quad margin depends on every distance at once.
                     // Only glyphs the tag actually covers pay for the rebuild.
-                    if (span.overridesEffects())
+                    if (!tofu && span.overridesEffects())
                     {
                         const ::text::TextEffectInstance spanEffect =
                             ::text::buildTextEffectInstance(span.applyTo(label.effects),

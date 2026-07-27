@@ -95,4 +95,37 @@ TEST_SUITE("ProjectService")
 
         std::filesystem::remove_all(directory);
     }
+
+    TEST_CASE("successful project config updates publish the updated project")
+    {
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_ConfigUpdated");
+
+        services::ProjectServiceImpl service;
+        auto projectConfig = makeValidProjectConfig(directory);
+
+        int notificationCount = 0;
+        config::ProjectConfig notifiedProject;
+        auto token = events::EventDispatcher::instance().subscribe<
+            events::project::ProjectConfigUpdatedNotification>(
+            [&](const events::project::ProjectConfigUpdatedNotification& notification)
+            {
+                ++notificationCount;
+                notifiedProject = notification.project;
+            });
+
+        auto invalid = projectConfig;
+        invalid.projectName.clear();
+        CHECK_FALSE(service.updateProjectConfig(invalid));
+        CHECK(notificationCount == 0);
+
+        projectConfig.fontFallbackChain = {"Assets/Fonts/Primary.vfFont",
+                                           "Assets/Fonts/Emoji.vfFont"};
+        REQUIRE(service.updateProjectConfig(projectConfig));
+        CHECK(notificationCount == 1);
+        CHECK(notifiedProject.fontFallbackChain == projectConfig.fontFallbackChain);
+
+        events::EventDispatcher::instance().unsubscribe(token);
+        std::filesystem::remove_all(directory);
+    }
 }

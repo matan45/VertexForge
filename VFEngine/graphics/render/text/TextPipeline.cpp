@@ -13,6 +13,38 @@
 
 namespace render::text
 {
+    namespace
+    {
+        struct WorldFaceSlots
+        {
+            ::text::FaceSet faceSet;
+            const resource::FontData* faces[8] = {};
+            const std::string* keys[8] = {};
+            uint32_t synthesizedBits[8] = {};
+            float sdfEdge[8] = {};
+            float sdfSmooth[8] = {};
+            ::text::TextEffectInstance effect[8] = {};
+            uint8_t fallbackCount = 0;
+        };
+
+        // A fallback slot is one layout actually populated. Every caller must test
+        // the same range as resolveWorldGlyphSlot below, or a glyph can be batched
+        // under the primary while still being styled as a fallback.
+        bool isFallbackSlot(const WorldFaceSlots& slots, uint8_t faceIndex) noexcept
+        {
+            return faceIndex >= 4 &&
+                   faceIndex < static_cast<uint8_t>(4 + slots.fallbackCount);
+        }
+
+        uint8_t resolveWorldGlyphSlot(const WorldFaceSlots& slots,
+                                      uint8_t faceIndex) noexcept
+        {
+            if (faceIndex == 0) return 0;
+            if (isFallbackSlot(slots, faceIndex)) return faceIndex;
+            return 0;
+        }
+    }
+
     TextPipeline::TextPipeline(core::Device& device, core::SwapChain& swapChain,
                                core::OffscreenResources& offscreenResources)
         : device{device}
@@ -113,7 +145,8 @@ namespace render::text
             }
         }
 
-        // Group text entities by font, lay out text, and build instances
+        // Group glyphs by their resolved atlas. A single entity may span its
+        // primary, multiple fallback atlases, and procedural tofu.
         std::unordered_map<std::string, std::vector<TextCharInstance>> fontInstances;
 
         for (const auto& textEntity : textEntities)
@@ -136,11 +169,40 @@ namespace render::text
             }
 
             const auto& fontData = *cached->fontData;
+            WorldFaceSlots slots;
+            slots.faceSet.faces[0] = &fontData;
+            slots.faces[0] = &fontData;
+            slots.keys[0] = styled.key;
+            slots.synthesizedBits[0] = styled.synthesizedBits;
 
-            // Compute SDF parameters. VK-1631: sdfSmooth is now only the SDF / non-SDF
-            // signal - the shader derives the on-screen AA band from fwidth().
-            float sdfEdge = fontData.sdfParams.edgeValue;
-            float sdfSmooth = resource::sdfSmoothWidth(fontData);
+            const std::string& regularPrimary =
+                fontCache.resolveFontKey(textEntity.fontPath);
+            const auto fallbacks = fontCache.resolveFallbackFaces(regularPrimary);
+            slots.fallbackCount = fallbacks.count;
+            for (uint8_t i = 0; i < fallbacks.count; ++i)
+            {
+                const uint8_t slot = static_cast<uint8_t>(4 + i);
+                slots.faceSet.fallback[i] = fallbacks.faces[i];
+                slots.faces[slot] = fallbacks.faces[i];
+                slots.keys[slot] = fallbacks.keys[i];
+                slots.synthesizedBits[slot] = requestedStyleBits;
+            }
+
+            for (uint8_t slot = 0; slot < 8; ++slot)
+            {
+                const resource::FontData* face = slots.faces[slot];
+                if (!face) continue;
+
+                slots.sdfEdge[slot] = face->sdfParams.edgeValue;
+                slots.sdfSmooth[slot] = resource::sdfSmoothWidth(*face);
+                const float effectScale =
+                    static_cast<float>(face->metadata.baseFontSize) > 0.0f
+                        ? textEntity.fontSize /
+                            static_cast<float>(face->metadata.baseFontSize)
+                        : 0.0f;
+                slots.effect[slot] = ::text::buildTextEffectInstance(
+                    textEntity.effects, effectScale, slots.sdfSmooth[slot] > 0.0f);
+            }
 
             // VK-1637: the box rules - which box, which wrap width, which gate - are pure,
             // so they live in utilities/text where the CPU-only test suite can reach them;
@@ -159,9 +221,10 @@ namespace render::text
             const ::text::TextBoxPolicy box = ::text::resolveTextBox(boxRequest);
 
             // Layout text using shared text layout engine
-            auto layout = ::text::layoutText(
-                fontData,
+            auto layout = ::text::layoutTextStyled(
+                slots.faceSet,
                 textEntity.text,
+                {},
                 textEntity.fontSize,
                 box.wrapWidth,
                 textEntity.lineSpacing,
@@ -174,10 +237,10 @@ namespace render::text
             // it covers both wrap states: every wrapped line, or the single un-wrapped one.
             if (box.ellipsis)
             {
-                // One face per entity here (this pipeline has no rich text), so the
-                // baselineShift UITextPipeline passes is identically 0 - omit it.
                 ::text::applyEllipsis(layout, fontData, textEntity.fontSize,
-                                      box.ellipsisWidth, textEntity.letterSpacing);
+                                      box.ellipsisWidth, textEntity.letterSpacing,
+                                      ::text::baselineShiftForFaceSet(
+                                          slots.faceSet, textEntity.fontSize));
                 if (layout.glyphs.empty())
                 {
                     // Before fontInstances[fontKey] below, so a fully truncated entity
@@ -188,7 +251,7 @@ namespace render::text
 
             // VK-1632: alignment lives in utilities/text now, shared with UITextPipeline.
             const auto lineMetrics = ::text::computeLineMetrics(
-                fontData, textEntity.fontSize, textEntity.lineSpacing);
+                slots.faceSet, textEntity.fontSize, textEntity.lineSpacing);
 
             ::text::AlignParams alignParams;
             alignParams.horizontal = box.horizontal;
@@ -203,26 +266,19 @@ namespace render::text
 
             ::text::applyAlignment(layout, alignParams);
 
-            auto& instances = fontInstances[fontKey];
-
-            // VK-1636: only the axes the resolved face does NOT provide are still
-            // faked. A family with a real Bold gets 0 here and the shader's threshold
-            // bias never runs; one without gets exactly what it got before.
-            const uint32_t styleFlags = styled.synthesizedBits;
-
-            // VK-1635: authored distances are layout pixels; the instance wants atlas
-            // texels, and layout pixels per texel is exactly the `scale` TextLayout uses.
-            // Because they are relative to fontSize rather than to the screen, a world-space
-            // outline keeps its proportion to the glyph as the text recedes.
-            const float effectScale =
-                static_cast<float>(fontData.metadata.baseFontSize) > 0.0f
-                    ? textEntity.fontSize / static_cast<float>(fontData.metadata.baseFontSize)
-                    : 0.0f;
-            const ::text::TextEffectInstance effect = ::text::buildTextEffectInstance(
-                textEntity.effects, effectScale, sdfSmooth > 0.0f);
+            // The batch key is fully determined by the resolved slot, so resolve each
+            // bucket once per entity instead of hashing a path string per glyph.
+            // unordered_map never invalidates element pointers on rehash, so these
+            // stay valid as later glyphs insert new keys.
+            std::vector<TextCharInstance>* slotBuckets[8] = {};
 
             for (const auto& glyph : layout.glyphs)
             {
+                const bool tofu = glyph.faceIndex == ::text::TOFU_FACE_INDEX;
+                const uint8_t slot = resolveWorldGlyphSlot(slots, glyph.faceIndex);
+                const bool fallback = isFallbackSlot(slots, glyph.faceIndex);
+                const ::text::TextEffectInstance& effect = slots.effect[slot];
+
                 TextCharInstance inst{};
                 inst.worldPosition = textEntity.worldPosition;
                 inst.fontSize = textEntity.fontSize;
@@ -232,13 +288,24 @@ namespace render::text
                 inst.color = textEntity.color;
                 inst.renderMode = textEntity.renderMode;
                 inst.entityId = textEntity.entityId;
-                inst.sdfEdge = sdfEdge;
-                inst.sdfSmooth = sdfSmooth;
-                inst.styleFlags = styleFlags;
-                inst.effectParams = effect.params;
-                inst.effectColors = effect.colors;
-                inst.effectMargin = effect.marginPx;
-                instances.push_back(inst);
+                inst.sdfEdge = tofu ? 0.0f : slots.sdfEdge[slot];
+                inst.sdfSmooth = tofu ? 0.0f : slots.sdfSmooth[slot];
+                inst.styleFlags = tofu ? ::text::STYLE_TOFU
+                    : (fallback ? requestedStyleBits : slots.synthesizedBits[slot]);
+                inst.effectParams = tofu ? glm::vec4(0.0f) : effect.params;
+                inst.effectColors = tofu ? glm::uvec4(0u) : effect.colors;
+                inst.effectMargin = tofu ? 0.0f : effect.marginPx;
+
+                // Tofu has no atlas. resolveWorldGlyphSlot maps it to slot 0, whose key
+                // IS fontKey, so it batches under the primary and the existing
+                // descriptor/draw structure stays intact; the shader returns before
+                // sampling that descriptor.
+                std::vector<TextCharInstance>*& bucket = slotBuckets[slot];
+                if (!bucket)
+                {
+                    bucket = &fontInstances[*slots.keys[slot]];
+                }
+                bucket->push_back(inst);
             }
         }
 

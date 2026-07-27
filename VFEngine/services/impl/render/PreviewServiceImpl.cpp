@@ -4,7 +4,10 @@
 #include "../../providers/animation/IAnimationPreviewProvider.hpp"
 #include "../../providers/vfx/IVFXPreviewProvider.hpp"
 #include "../../providers/render/IPrefabRigPreviewProvider.hpp"
+#include "../../providers/render/IUILayerPreviewProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../events/project/ProjectEvents.hpp"
+#include "FontFallbackChainResolver.hpp"
 #include <cassert>
 
 namespace services
@@ -20,7 +23,22 @@ namespace services
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
     }
 
-    PreviewServiceImpl::~PreviewServiceImpl() = default;
+    PreviewServiceImpl::~PreviewServiceImpl()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        if (projectLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectLoadedToken);
+        }
+        if (projectConfigUpdatedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectConfigUpdatedToken);
+        }
+        if (projectClosedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectClosedToken);
+        }
+    }
 
     void PreviewServiceImpl::registerEventHandlers()
     {
@@ -32,6 +50,30 @@ namespace services
         registerVFXPreviewHandlers(dispatcher);
         registerPrefabRigPreviewHandlers(dispatcher);
         registerUILayerPreviewHandlers(dispatcher);
+
+        if (uiLayerProvider)
+        {
+            projectLoadedToken = dispatcher.subscribe<::events::project::ProjectLoadedNotification>(
+                [this](const ::events::project::ProjectLoadedNotification& notification)
+                {
+                    uiLayerProvider->setFontFallbackChain(
+                        font_fallback::resolve(notification.project));
+                });
+
+            projectConfigUpdatedToken =
+                dispatcher.subscribe<::events::project::ProjectConfigUpdatedNotification>(
+                    [this](const ::events::project::ProjectConfigUpdatedNotification& notification)
+                    {
+                        uiLayerProvider->setFontFallbackChain(
+                            font_fallback::resolve(notification.project));
+                    });
+
+            projectClosedToken = dispatcher.subscribe<::events::project::ProjectClosedNotification>(
+                [this](const ::events::project::ProjectClosedNotification&)
+                {
+                    uiLayerProvider->setFontFallbackChain({});
+                });
+        }
     }
 
     void PreviewServiceImpl::registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher)

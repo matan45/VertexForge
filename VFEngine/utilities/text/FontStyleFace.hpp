@@ -21,6 +21,9 @@ namespace text
     // ui_text.glsl / text.glsl test (flags & 1u) for bold and (flags & 2u) for italic.
     inline constexpr uint32_t STYLE_BOLD = 0x1u;
     inline constexpr uint32_t STYLE_ITALIC = 0x2u;
+    // Procedural missing-glyph box. Deliberately outside STYLE_MASK: it is a
+    // renderer output flag, never a requested font style.
+    inline constexpr uint32_t STYLE_TOFU = 0x4u;
     inline constexpr uint32_t STYLE_MASK = STYLE_BOLD | STYLE_ITALIC;
 
     // Takes the raw underlying value of components::FontStyle rather than the enum

@@ -70,6 +70,7 @@ namespace handlers
 		config.outputDirectory = cmd.outputDirectory;
 		config.workingDirectory = projectOpt->workingDirectory;
 		config.startupScene = projectOpt->startupScene;
+		config.fontFallbackChain = projectOpt->fontFallbackChain;
 		config.iconPath = projectOpt->exeIconPath;
 		config.cleanBuild = cmd.cleanBuild;
 		config.verifyIntegrity = cmd.verifyIntegrity;

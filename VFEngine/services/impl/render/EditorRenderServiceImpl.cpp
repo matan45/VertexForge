@@ -3,10 +3,12 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/project/ProjectEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "FontFallbackChainResolver.hpp"
 #include <exception>
 #include <filesystem>
 
@@ -43,6 +45,21 @@ namespace services
         if (navmeshBakeCompleteToken.isValid())
         {
             dispatcher.unsubscribe(navmeshBakeCompleteToken);
+        }
+
+        if (projectLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectLoadedToken);
+        }
+
+        if (projectConfigUpdatedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectConfigUpdatedToken);
+        }
+
+        if (projectClosedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectClosedToken);
         }
     }
 
@@ -328,6 +345,36 @@ namespace services
                 if (!debugMesh.vertices.empty() && !debugMesh.indices.empty())
                 {
                     offScreenProvider->updateNavmeshDebugMesh(debugMesh.vertices, debugMesh.indices);
+                }
+            });
+
+        projectLoadedToken = dispatcher.subscribe<events::project::ProjectLoadedNotification>(
+            [this](const events::project::ProjectLoadedNotification& notification)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setFontFallbackChain(
+                        font_fallback::resolve(notification.project));
+                }
+            });
+
+        projectConfigUpdatedToken =
+            dispatcher.subscribe<events::project::ProjectConfigUpdatedNotification>(
+                [this](const events::project::ProjectConfigUpdatedNotification& notification)
+                {
+                    if (offScreenProvider)
+                    {
+                        offScreenProvider->setFontFallbackChain(
+                            font_fallback::resolve(notification.project));
+                    }
+                });
+
+        projectClosedToken = dispatcher.subscribe<events::project::ProjectClosedNotification>(
+            [this](const events::project::ProjectClosedNotification&)
+            {
+                if (offScreenProvider)
+                {
+                    offScreenProvider->setFontFallbackChain({});
                 }
             });
     }

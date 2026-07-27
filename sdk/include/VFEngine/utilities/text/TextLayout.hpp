@@ -1,4 +1,5 @@
 #pragma once
+#include "FontFallback.hpp"
 #include <glm/glm.hpp>
 #include <span>
 #include <string>
@@ -68,6 +69,9 @@ namespace text
     struct FaceSet
     {
         const resource::FontData* faces[4] = {nullptr, nullptr, nullptr, nullptr};
+        // Regular fallback faces in search order. These never define block or
+        // line metrics; emitted indices are 4..7.
+        const resource::FontData* fallback[MAX_FALLBACK_FACES] = {};
     };
 
     // Deliberately no public resolveIndex() helper: a slot can be non-null yet
@@ -80,7 +84,8 @@ namespace text
     // RichTextResult::perCodepoint). Entries past the end - and an empty span -
     // mean face 0, so passing {} degrades to plain single-font layout.
     //
-    // All faces share one baseline and one line height (the max across the set);
+    // Style faces share one baseline and one line height (the max across faces[]);
+    // fallbacks align to that baseline but never alter those metrics.
     // stepping the baseline per face would visibly jog the text across a [b]
     // boundary. Kerning is suppressed across a face change, and a codepoint the
     // chosen face lacks is drawn from face 0 rather than dropped - a Bold face

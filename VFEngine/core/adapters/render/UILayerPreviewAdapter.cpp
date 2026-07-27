@@ -23,6 +23,7 @@ namespace core
             controller = std::make_unique<::controllers::UILayerPreviewController>();
         }
         controller->init();
+        controller->setFontFallbackChain(fontFallbackChain);
     }
 
     bool UILayerPreviewAdapter::buildUILayerPreview(services::PreviewInstanceId instanceId,
@@ -60,6 +61,18 @@ namespace core
         if (controller)
         {
             controller->setReferenceResolution(refWidth, refHeight);
+        }
+    }
+
+    void UILayerPreviewAdapter::setFontFallbackChain(std::span<const std::string> fontPaths)
+    {
+        fontFallbackChain.assign(fontPaths.begin(), fontPaths.end());
+        for (auto& [_, controller] : controllers)
+        {
+            if (controller)
+            {
+                controller->setFontFallbackChain(fontFallbackChain);
+            }
         }
     }
 

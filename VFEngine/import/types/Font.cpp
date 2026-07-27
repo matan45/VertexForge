@@ -311,6 +311,10 @@ namespace types
         if (config.includeCyrillic)
             ranges.push_back({0x0400, 0x04FF});
 
+        // Text truncation uses the single-character ellipsis even when only the
+        // default Basic Latin range is selected.
+        ranges.push_back({0x2026, 0x2026});
+
         if (config.includeEmoji)
         {
             ranges.push_back({0x1F600, 0x1F64F});

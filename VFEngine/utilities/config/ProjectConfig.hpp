@@ -1,7 +1,9 @@
 #pragma once
+#include <cstddef>
 #include <string>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace config
 {
@@ -45,10 +47,15 @@ namespace config
 
     struct ProjectConfig
     {
+        static constexpr size_t maxFontFallbacks = 3;
+
         std::string projectName;
         std::string version;
         std::string workingDirectory;
         std::string startupScene;
+        // Project-relative .vfFont paths, tried in authored order before the
+        // engine's implicit built-in default font.
+        std::vector<std::string> fontFallbackChain;
 
         std::string exeIconPath;
         std::optional<std::string> inputMapping;

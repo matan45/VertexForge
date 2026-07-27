@@ -269,6 +269,14 @@ namespace render
         }
     }
 
+    void RenderPassHandler::setFontFallbackChain(std::span<const std::string> fontPaths)
+    {
+        if (textPipeline)
+        {
+            textPipeline->getFontCache().setFallbackChain(fontPaths);
+        }
+    }
+
     void RenderPassHandler::initUIRenderPipeline()
     {
         if (uiPipelineInitialized)

@@ -21,6 +21,8 @@
 
 #include <glm/glm.hpp>
 #include <optional>
+#include <span>
+#include <string>
 #include "../PreviewInstanceId.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp" // UIResolvedRectData
@@ -44,6 +46,7 @@ namespace services
         // Change the WYSIWYG reference resolution (recreates the offscreen target).
         virtual void setUILayerReferenceResolution(PreviewInstanceId instanceId,
                                                    uint32_t refWidth, uint32_t refHeight) = 0;
+        virtual void setFontFallbackChain(std::span<const std::string> fontPaths) = 0;
 
         // Renders the bound canvas subtree to its offscreen image; returns the ImGui
         // descriptor set for ImGui::Image() (or nullptr if not built).

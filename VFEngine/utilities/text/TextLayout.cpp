@@ -122,6 +122,9 @@ namespace text
         struct BlockContext
         {
             FaceContext faces[4];
+            // Fallbacks use the style block's baseline but never participate in
+            // its ascender or line-height maxima.
+            FaceContext fallback[MAX_FALLBACK_FACES];
             float lineHeight = 0.0f;
             float ascenderPx = 0.0f;
         };
@@ -168,7 +171,39 @@ namespace text
                     block.ascenderPx - ctx.face->metadata.ascender * ctx.scale;
             }
 
+            for (uint8_t i = 0; i < MAX_FALLBACK_FACES; ++i)
+            {
+                const resource::FontData* face = faceSet.fallback[i];
+                if (!faceUsable(face)) continue;
+
+                FaceContext& ctx = block.fallback[i];
+                ctx.face = face;
+                ctx.scale = fontSize / static_cast<float>(face->metadata.baseFontSize);
+                ctx.atlasW = static_cast<float>(face->atlas.width);
+                ctx.atlasH = static_cast<float>(face->atlas.height);
+                ctx.baselineShift =
+                    block.ascenderPx - face->metadata.ascender * ctx.scale;
+            }
+
             return block;
+        }
+
+        [[nodiscard]] const FaceContext* contextFor(
+            const BlockContext& block,
+            uint8_t faceIndex) noexcept
+        {
+            if (faceIndex < 4)
+            {
+                return &block.faces[faceIndex];
+            }
+
+            const uint8_t fallbackIndex = static_cast<uint8_t>(faceIndex - 4);
+            if (fallbackIndex < MAX_FALLBACK_FACES)
+            {
+                return &block.fallback[fallbackIndex];
+            }
+
+            return nullptr;
         }
     }
 
@@ -264,25 +299,71 @@ namespace text
                 glyph = block.faces[0].face->findGlyph(codepoint);
                 if (glyph) faceIndex = 0;
             }
+
             if (!glyph)
             {
+                for (uint8_t fallbackIndex = 0;
+                     fallbackIndex < MAX_FALLBACK_FACES;
+                     ++fallbackIndex)
+                {
+                    const FaceContext& fallbackCtx = block.fallback[fallbackIndex];
+                    if (!fallbackCtx.face) continue;
+
+                    glyph = fallbackCtx.face->findGlyph(codepoint);
+                    if (glyph)
+                    {
+                        faceIndex = static_cast<uint8_t>(4 + fallbackIndex);
+                        break;
+                    }
+                }
+            }
+
+            bool emitTofu = false;
+            if (!glyph)
+            {
+                const MissingClass classification = missingClass(codepoint);
+                if (classification == MissingClass::ZeroWidth)
+                {
+                    prevCodepoint = codepoint;
+                    prevFaceIndex = faceIndex;
+                    continue;
+                }
+                if (classification == MissingClass::SpaceLike)
+                {
+                    cursorX += fontSize * 0.5f;
+                    prevCodepoint = codepoint;
+                    prevFaceIndex = faceIndex;
+                    continue;
+                }
+
+                emitTofu = true;
+                faceIndex = TOFU_FACE_INDEX;
+            }
+
+            const FaceContext* faceCtx = contextFor(block, faceIndex);
+            if (!emitTofu && (faceCtx == nullptr || faceCtx->face == nullptr))
+            {
+                // Resolution above only selects usable contexts. Keep this total
+                // in case a future face-index producer violates that contract.
                 cursorX += fontSize * 0.5f;
                 prevCodepoint = codepoint;
                 prevFaceIndex = faceIndex;
                 continue;
             }
 
-            const FaceContext& faceCtx = block.faces[faceIndex];
-            const float scale = faceCtx.scale;
+            const float scale = emitTofu ? 0.0f : faceCtx->scale;
 
             // Kerning pairs are per face; a pair that spans a [b] boundary describes
-            // two glyphs that were never designed together, so drop it.
-            if (prevCodepoint != 0 && prevFaceIndex == faceIndex)
+            // two glyphs that were never designed together, so drop it. Tofu has
+            // no face and therefore never participates in a pair.
+            if (!emitTofu && prevCodepoint != 0 && prevFaceIndex == faceIndex)
             {
-                cursorX += faceCtx.face->getKerning(prevCodepoint, codepoint) * scale;
+                cursorX += faceCtx->face->getKerning(prevCodepoint, codepoint) * scale;
             }
 
-            float glyphAdvance = glyph->advanceX * scale + letterSpacing;
+            const float glyphAdvance = emitTofu
+                ? fontSize * TOFU_ADVANCE_EM + letterSpacing
+                : glyph->advanceX * scale + letterSpacing;
 
             // Word wrap check
             if (maxWidth > 0.0f && cursorX + glyphAdvance > maxWidth && cursorX > 0.0f)
@@ -320,27 +401,40 @@ namespace text
                 prevCodepoint = 0;
             }
 
-            float x = cursorX + glyph->bearingX * scale;
-            // Every face shares the block baseline. baselineShift is exactly 0.0f for
-            // the face that defines it - and so for every single-face layout - which
-            // keeps this expression bit-identical to the pre-VK-1636 one.
-            float y = cursorY + (faceCtx.face->metadata.ascender - glyph->bearingY) * scale +
-                      faceCtx.baselineShift;
-            float w = glyph->atlasWidth * scale;
-            float h = glyph->atlasHeight * scale;
-
-            float atlasW = faceCtx.atlasW;
-            float atlasH = faceCtx.atlasH;
-
-            float u0 = static_cast<float>(glyph->atlasX) / atlasW;
-            float v0 = static_cast<float>(glyph->atlasY) / atlasH;
-            float u1 = static_cast<float>(glyph->atlasX + glyph->atlasWidth) / atlasW;
-            float v1 = static_cast<float>(glyph->atlasY + glyph->atlasHeight) / atlasH;
-
             LayoutGlyph lg;
-            lg.offset = glm::vec2(x, y);
-            lg.size = glm::vec2(w, h);
-            lg.uvRect = glm::vec4(u0, v0, u1, v1);
+            if (emitTofu)
+            {
+                const float advance = fontSize * TOFU_ADVANCE_EM;
+                const float boxWidth = advance * TOFU_BOX_WIDTH_RATIO;
+                const float boxHeight = block.ascenderPx * TOFU_BOX_HEIGHT_RATIO;
+                lg.offset = glm::vec2(
+                    cursorX + (advance - boxWidth) * 0.5f,
+                    cursorY + block.ascenderPx - boxHeight);
+                lg.size = glm::vec2(boxWidth, boxHeight);
+                // The procedural shader interprets this as quad-local [0,1].
+                lg.uvRect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+            }
+            else
+            {
+                const float x = cursorX + glyph->bearingX * scale;
+                // Fallbacks align to the style block's baseline without defining it.
+                const float y =
+                    cursorY + (faceCtx->face->metadata.ascender - glyph->bearingY) * scale +
+                    faceCtx->baselineShift;
+                const float w = glyph->atlasWidth * scale;
+                const float h = glyph->atlasHeight * scale;
+
+                const float u0 = static_cast<float>(glyph->atlasX) / faceCtx->atlasW;
+                const float v0 = static_cast<float>(glyph->atlasY) / faceCtx->atlasH;
+                const float u1 =
+                    static_cast<float>(glyph->atlasX + glyph->atlasWidth) / faceCtx->atlasW;
+                const float v1 =
+                    static_cast<float>(glyph->atlasY + glyph->atlasHeight) / faceCtx->atlasH;
+
+                lg.offset = glm::vec2(x, y);
+                lg.size = glm::vec2(w, h);
+                lg.uvRect = glm::vec4(u0, v0, u1, v1);
+            }
             lg.codepoint = codepoint;
             lg.lineY = cursorY;
             lg.charIndex = charIndex;

@@ -188,6 +188,11 @@ namespace services
         }
 
         currentProject = config;
+
+        events::project::ProjectConfigUpdatedNotification notification;
+        notification.project = config;
+        events::EventDispatcher::instance().publish(notification);
+
         return true;
     }
 }

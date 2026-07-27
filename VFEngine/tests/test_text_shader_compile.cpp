@@ -283,4 +283,37 @@ TEST_SUITE("TextShaderCompile")
             CHECK(countOccurrences(source, "float pxRange;") == 2);
         }
     }
+
+    TEST_CASE("VK-1638: tofu is procedural, derivative-safe, and bypasses every atlas mode")
+    {
+        const std::string include = readShaderSource(shaderRoot() / "common" / "text_sdf.glsl");
+        CHECK(include.find("TEXT_STYLE_TOFU = 0x4u") != std::string::npos);
+        CHECK(include.find("vec4 textTofuBox(") != std::string::npos);
+        CHECK(include.find("texture(") == std::string::npos);
+        CHECK(include.find("textureLod(") == std::string::npos);
+        CHECK(include.find("fwidth(local)") == std::string::npos);
+
+        for (const fs::path relative : {fs::path("ui") / "ui_text.glsl",
+                                        fs::path("text") / "text.glsl"})
+        {
+            const std::string source = readShaderSource(shaderRoot() / relative);
+            const std::string label = relative.generic_string();
+            CAPTURE(label);
+
+            const size_t derivative = source.find("fwidth(fragTexCoord)");
+            const size_t tofuGate = source.find("(vStyleFlags & TEXT_STYLE_TOFU)");
+            const size_t tofuCall = source.find("textTofuBox(fragTexCoord");
+            const size_t colorGate = source.find("if (pc.glyphMode == 1u)");
+            const size_t firstAtlasSample = source.find("texture(fontAtlas");
+
+            REQUIRE(derivative != std::string::npos);
+            REQUIRE(tofuGate != std::string::npos);
+            REQUIRE(tofuCall != std::string::npos);
+            REQUIRE(colorGate != std::string::npos);
+            REQUIRE(firstAtlasSample != std::string::npos);
+            CHECK(derivative < tofuGate);
+            CHECK(tofuGate < colorGate);
+            CHECK(tofuCall < firstAtlasSample);
+        }
+    }
 }

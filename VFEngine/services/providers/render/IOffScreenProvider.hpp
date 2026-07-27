@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <functional>
+#include <span>
 #include "types/CameraTypes.hpp"
 #include "types/RenderSettings.hpp"
 #include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
@@ -241,6 +242,7 @@ namespace services {
 
         virtual void prepareFrameBillboards() = 0;
         virtual void prepareFrameText() = 0;
+        virtual void setFontFallbackChain(std::span<const std::string> fontPaths) = 0;
         virtual void prepareSceneData() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;

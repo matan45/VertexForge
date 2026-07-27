@@ -414,6 +414,7 @@ TEST_SUITE("FontImportOptions")
         CHECK(font.metadata.baseFontSize == 32u);
         CHECK(font.findGlyph('A') != nullptr);
         CHECK(font.findGlyph(0x00E9) != nullptr); // Latin-1 e-acute, on by default
+        CHECK(font.findGlyph(0x2026) != nullptr); // ellipsis is always available for truncation
         CHECK(font.findGlyph(0x03B1) == nullptr); // Greek off by default
 
         // Nothing was chosen, so nothing is recorded — a reimport then falls back to

@@ -561,6 +561,25 @@ namespace windows
             float x = startPos.x + glyph.offset.x;
             float y = startPos.y + glyph.offset.y;
 
+            // VK-1638: a tofu carries no atlas cell - its uvRect is the quad-local
+            // (0,0,1,1) the shader reinterprets, so feeding it to AddImage would blit
+            // the WHOLE atlas into the glyph box. Stroke the same hollow box the
+            // shader draws instead, so the preview reports missing coverage the way
+            // the engine renders it.
+            if (glyph.faceIndex == text::TOFU_FACE_INDEX)
+            {
+                const float thickness = std::max(1.0f, glyph.size.y * 0.08f);
+                drawList->AddRect(
+                    ImVec2(x, y),
+                    ImVec2(x + glyph.size.x, y + glyph.size.y),
+                    IM_COL32(255, 255, 255, 255),
+                    0.0f,
+                    ImDrawFlags_None,
+                    thickness
+                );
+                continue;
+            }
+
             drawList->AddImage(
                 atlasHandle.imguiDescriptorSet,
                 ImVec2(x, y),

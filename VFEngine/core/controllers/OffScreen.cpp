@@ -145,6 +145,11 @@ namespace controllers {
 		offScreenController->prepareFrameText();
 	}
 
+	void OffScreen::setFontFallbackChain(std::span<const std::string> fontPaths)
+	{
+		offScreenController->setFontFallbackChain(fontPaths);
+	}
+
 	void OffScreen::prepareSceneData()
 	{
 		offScreenController->prepareSceneData();

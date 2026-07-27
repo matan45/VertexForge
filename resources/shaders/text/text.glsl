@@ -136,6 +136,18 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 void main() {
+    // Derivatives must be evaluated before the per-instance tofu gate. A
+    // derivative quad never spans instances, but hoisting makes the requirement
+    // explicit and keeps textTofuBox derivative-free.
+    vec2 tofuLocalWidth = fwidth(fragTexCoord);
+    if ((vStyleFlags & TEXT_STYLE_TOFU) != 0u) {
+        outColor = textTofuBox(fragTexCoord, fragColor, tofuLocalWidth);
+        if (outColor.a < 0.01) {
+            discard;
+        }
+        return;
+    }
+
     if (pc.glyphMode == 1u) {
         // Color bitmap mode: sample RGBA directly from atlas
         vec4 texColor = texture(fontAtlas, fragTexCoord);
