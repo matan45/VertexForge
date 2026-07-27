@@ -34,6 +34,11 @@ namespace controllers::offscreen
             float worldMaxWidth;
             float worldLetterSpacing;
             float worldRectHeight;
+            // VK-1635: layout pixels here per layout pixel at the label's authored
+            // fontSize. Text effects are authored in the same space as letterSpacing, so
+            // they need the same conversion or a world-space canvas would render an
+            // outline at a completely different weight from the screen-space one.
+            float worldEffectScale;
         };
 
         WorldLabelParams computeWorldLabelParams(
@@ -70,8 +75,14 @@ namespace controllers::offscreen
             float worldLetterSpacing = (labelComp.fontSize > 0.0f)
                 ? labelComp.letterSpacing * worldFontSize / labelComp.fontSize : 0.0f;
             float worldRectHeight = (h / canvas.pixelsPerUnit) * 32.0f / worldFontSize;
+            // Deliberately a separate expression from worldLetterSpacing rather than a
+            // shared factor: a * (b / c) and (a * b) / c do not round identically, and
+            // letterSpacing's existing value must not drift.
+            float worldEffectScale = (labelComp.fontSize > 0.0f)
+                ? worldFontSize / labelComp.fontSize : 0.0f;
 
-            return {glm::vec3(worldPos), worldFontSize, worldMaxWidth, worldLetterSpacing, worldRectHeight};
+            return {glm::vec3(worldPos), worldFontSize, worldMaxWidth, worldLetterSpacing,
+                    worldRectHeight, worldEffectScale};
         }
 
         // --- Screen-space labels: emit UILabel entities ---
@@ -604,6 +615,10 @@ namespace controllers::offscreen
             renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
             renderData.rectHeight = params.worldRectHeight;
             renderData.fontStyle = labelComp.fontStyle;
+            // VK-1635: unlike per-span rich text (stripped above, screen-space only),
+            // the label's own effects DO survive here - the 3D text pipeline reads the
+            // same per-instance effect block, so a world-space canvas keeps its outline.
+            renderData.effects = labelComp.effects.scaledBy(params.worldEffectScale);
             drawList.push_back(std::move(renderData));
         }
 
