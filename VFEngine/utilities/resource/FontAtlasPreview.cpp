@@ -1,6 +1,6 @@
 #include "FontAtlasPreview.hpp"
 
-#include "math/MathHelper.hpp"
+#include "../math/MathHelper.hpp"
 
 #include <algorithm>
 #include <limits>
