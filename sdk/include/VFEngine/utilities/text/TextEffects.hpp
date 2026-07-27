@@ -55,13 +55,30 @@ namespace text
         const components::TextEffectSettings& settings, float scale, bool hasDistanceField)
     {
         TextEffectInstance out{};
-        if (!hasDistanceField || scale <= 0.0f)
+        // Written as !(scale > 0) rather than scale <= 0 because NaN fails EVERY
+        // comparison: `scale <= 0.0f` is false for NaN and would let it through, and
+        // 1.0f / NaN then poisons every distance below. fontSize reaches here from
+        // scripts and from scene JSON, neither of which validates it.
+        if (!hasDistanceField || !(scale > 0.0f))
         {
             return out;
         }
 
         const float pxToTexels = 1.0f / scale;
         uint32_t flags = 0u;
+
+        // Authored pixels -> atlas texels, with the same NaN-safe ordering. The upper
+        // bound is far past anything useful (the field itself only represents a couple of
+        // texels) but keeps a scripted 1e9 offset from inflating the glyph quad to the
+        // point of swallowing the frame in overdraw.
+        constexpr float maxReachTexels = 256.0f;
+        auto toTexels = [pxToTexels](float px) -> float
+        {
+            const float t = px * pxToTexels;
+            if (!(t > -maxReachTexels)) return (t < 0.0f) ? -maxReachTexels : 0.0f;
+            if (!(t < maxReachTexels)) return maxReachTexels;
+            return t;
+        };
 
         // How far, in texels, the drawn ink can now reach past the glyph's own atlas cell.
         // Drives the quad inflation below.
@@ -70,7 +87,7 @@ namespace text
 
         if (settings.hasOutline())
         {
-            outlineTexels = settings.outlineWidth * pxToTexels;
+            outlineTexels = toTexels(settings.outlineWidth);
             out.params.x = outlineTexels;
             out.colors.x = math::packRGBA8(settings.outlineColor.r, settings.outlineColor.g,
                                            settings.outlineColor.b, settings.outlineColor.a);
@@ -80,8 +97,8 @@ namespace text
 
         if (settings.hasShadow())
         {
-            out.params.y = settings.shadowOffset.x * pxToTexels;
-            out.params.z = settings.shadowOffset.y * pxToTexels;
+            out.params.y = toTexels(settings.shadowOffset.x);
+            out.params.z = toTexels(settings.shadowOffset.y);
             out.colors.y = math::packRGBA8(settings.shadowColor.r, settings.shadowColor.g,
                                            settings.shadowColor.b, settings.shadowColor.a);
             flags |= TEXT_EFFECT_SHADOW;
@@ -96,7 +113,7 @@ namespace text
 
         if (settings.hasGlow())
         {
-            out.params.w = settings.glowRange * pxToTexels;
+            out.params.w = toTexels(settings.glowRange);
             out.colors.z = math::packRGBA8(settings.glowColor.r, settings.glowColor.g,
                                            settings.glowColor.b, settings.glowColor.a);
             flags |= TEXT_EFFECT_GLOW;

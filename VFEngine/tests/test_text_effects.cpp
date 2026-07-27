@@ -2,6 +2,8 @@
 #include <text/TextEffects.hpp>
 #include <text/RichTextParser.hpp>
 #include <math/MathHelper.hpp>
+#include <cmath>
+#include <limits>
 
 // VK-1635 outline / drop shadow / glow, CPU side.
 //
@@ -201,6 +203,70 @@ TEST_SUITE("TextEffects")
 
         CHECK(text::buildTextEffectInstance(farShadow, 1.0f, true).marginPx >
               text::buildTextEffectInstance(nearShadow, 1.0f, true).marginPx);
+    }
+
+    // Scripts and scene JSON both reach these paths without validating anything, so a
+    // non-finite value is a real input, not a hypothetical. Every one of these would be
+    // silent: NaN fails every comparison, so it slips through ordinary `<= 0` guards and
+    // then poisons the instance all the way to the vertex shader.
+    TEST_CASE("non-finite input never reaches the GPU")
+    {
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+        const float inf = std::numeric_limits<float>::infinity();
+
+        SUBCASE("packRGBA8 must not invoke UB on NaN")
+        {
+            // clamp() would return NaN here (std::min/std::max propagate it) and the
+            // float->uint32 cast of a NaN is undefined behaviour.
+            CHECK(math::packRGBA8(nan, nan, nan, nan) == 0u);
+            CHECK(math::packRGBA8(nan, 1.0f, nan, 1.0f) == 0xFF00FF00u);
+            // Infinities saturate rather than wrapping.
+            CHECK(math::packRGBA8(inf, -inf, inf, -inf) == 0x00FF00FFu);
+        }
+
+        SUBCASE("a NaN scale is rejected, not divided by")
+        {
+            // `scale <= 0.0f` is FALSE for NaN - the guard has to be !(scale > 0).
+            const auto inst = text::buildTextEffectInstance(outlineOnly(2.0f), nan, true);
+            CHECK(inst.colors.w == 0u);
+            CHECK(inst.marginPx == 0.0f);
+        }
+
+        SUBCASE("a NaN shadow offset is the one distance the enable rule lets through")
+        {
+            // hasOutline()/hasGlow() test `distance > 0`, which NaN fails - those switch
+            // off on their own. hasShadow() tests `offset != 0`, which NaN PASSES, so the
+            // conversion itself has to be the backstop.
+            components::TextEffectSettings s;
+            s.shadowColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            s.shadowOffset = glm::vec2(nan, 2.0f);
+            CHECK(s.hasShadow());
+
+            const auto inst = text::buildTextEffectInstance(s, 1.0f, true);
+            CHECK(inst.params.y == 0.0f);
+            CHECK(inst.params.z == doctest::Approx(2.0f));
+            CHECK(std::isfinite(inst.marginPx));
+        }
+
+        SUBCASE("absurd distances are bounded instead of exploding the quad")
+        {
+            components::TextEffectSettings s;
+            s.shadowColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+            s.shadowOffset = glm::vec2(1.0e9f, -1.0e9f);
+
+            const auto inst = text::buildTextEffectInstance(s, 1.0f, true);
+            CHECK(inst.params.y == doctest::Approx(256.0f));
+            CHECK(inst.params.z == doctest::Approx(-256.0f));
+            // The margin drives the vertex shader's quad inflation; unbounded here means
+            // a single glyph covering the whole framebuffer.
+            CHECK(std::isfinite(inst.marginPx));
+            CHECK(inst.marginPx <= 600.0f);
+
+            s.shadowOffset = glm::vec2(inf, 0.0f);
+            const auto infInst = text::buildTextEffectInstance(s, 1.0f, true);
+            CHECK(infInst.params.y == doctest::Approx(256.0f));
+            CHECK(std::isfinite(infInst.marginPx));
+        }
     }
 
     TEST_CASE("scaledBy scales distances but never colours")

@@ -43,9 +43,15 @@ namespace math
     {
         auto channel = [](float v) -> uint32_t
         {
+            // NOT clamp(): std::min/std::max both PROPAGATE NaN (each returns its first
+            // argument when the comparison is false), so clamp(NaN, 0, 1) is NaN and
+            // static_cast<uint32_t>(NaN) is undefined behaviour. A script computing a
+            // colour channel as 0.0/0.0 reaches here. Written as ordered comparisons
+            // instead, NaN fails `v > 0` and lands on 0, and +/-inf saturate correctly.
+            const float unit = (v > 0.0f) ? ((v < 1.0f) ? v : 1.0f) : 0.0f;
             // +0.5 then truncate: round-to-nearest, so 1.0 lands exactly on 255 and the
             // unpack round-trip is exact for every byte value.
-            return static_cast<uint32_t>(clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+            return static_cast<uint32_t>(unit * 255.0f + 0.5f);
         };
 
         return channel(r) | (channel(g) << 8) | (channel(b) << 16) | (channel(a) << 24);
