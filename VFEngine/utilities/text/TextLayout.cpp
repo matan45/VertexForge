@@ -177,8 +177,16 @@ namespace text
                     {
                         result.glyphs[g].offset.x -= wrapOffset;
                         result.glyphs[g].offset.y += lineHeight;
+                        // VK-1632: the moved glyphs now sit on the next line, so their
+                        // line origin has to move with them. Without this, partitionLines
+                        // (and therefore applyEllipsis and alignment) groups the wrapped
+                        // word with the line it was pushed off.
+                        result.glyphs[g].lineY += lineHeight;
                     }
-                    if (cursorX - wrapOffset > maxX) maxX = wrapOffset;
+                    // VK-1632: wrapOffset IS the completed line's width (cursorX at the
+                    // word boundary). The old test compared the *new* line's width so far
+                    // and could both miss a wider completed line and clobber maxX downward.
+                    if (wrapOffset > maxX) maxX = wrapOffset;
                     cursorX -= wrapOffset;
                     cursorY += lineHeight;
                 }
@@ -225,54 +233,39 @@ namespace text
         return result;
     }
 
-    namespace
+    std::vector<LineSpan> partitionLines(const std::vector<LayoutGlyph>& glyphs)
     {
-        struct LineSpan
+        std::vector<LineSpan> lines;
+        if (glyphs.empty()) return lines;
+
+        LineSpan current;
+        current.start = 0;
+        current.count = 1;
+        current.minX = glyphs[0].offset.x;
+        current.maxX = glyphs[0].offset.x + glyphs[0].size.x;
+        current.lineY = glyphs[0].lineY;
+
+        for (size_t i = 1; i < glyphs.size(); ++i)
         {
-            size_t start = 0;
-            size_t count = 0;
-            float minX = 0.0f;
-            float maxX = 0.0f;
-            float lineY = 0.0f;  // cursorY of this line's origin
-        };
-
-        // Group glyphs by their lineY (the line origin recorded at layout time).
-        // Critically NOT by offset.y, which varies per glyph based on bearingY
-        // and would split a single visual line into one fake "line" per bearingY.
-        std::vector<LineSpan> partitionLines(const std::vector<LayoutGlyph>& glyphs)
-        {
-            std::vector<LineSpan> lines;
-            if (glyphs.empty()) return lines;
-
-            LineSpan current;
-            current.start = 0;
-            current.count = 1;
-            current.minX = glyphs[0].offset.x;
-            current.maxX = glyphs[0].offset.x + glyphs[0].size.x;
-            current.lineY = glyphs[0].lineY;
-
-            for (size_t i = 1; i < glyphs.size(); ++i)
+            const auto& g = glyphs[i];
+            if (std::abs(g.lineY - current.lineY) > 0.1f)
             {
-                const auto& g = glyphs[i];
-                if (std::abs(g.lineY - current.lineY) > 0.1f)
-                {
-                    lines.push_back(current);
-                    current.start = i;
-                    current.count = 1;
-                    current.minX = g.offset.x;
-                    current.maxX = g.offset.x + g.size.x;
-                    current.lineY = g.lineY;
-                }
-                else
-                {
-                    current.count++;
-                    current.minX = std::min(current.minX, g.offset.x);
-                    current.maxX = std::max(current.maxX, g.offset.x + g.size.x);
-                }
+                lines.push_back(current);
+                current.start = i;
+                current.count = 1;
+                current.minX = g.offset.x;
+                current.maxX = g.offset.x + g.size.x;
+                current.lineY = g.lineY;
             }
-            lines.push_back(current);
-            return lines;
+            else
+            {
+                current.count++;
+                current.minX = std::min(current.minX, g.offset.x);
+                current.maxX = std::max(current.maxX, g.offset.x + g.size.x);
+            }
         }
+        lines.push_back(current);
+        return lines;
     }
 
     void applyEllipsis(
@@ -420,5 +413,108 @@ namespace text
 
         layout.glyphs = std::move(rebuilt);
         layout.boundingBox.x = newMaxX;
+    }
+
+    HAlign toHAlign(uint8_t value) noexcept
+    {
+        switch (value)
+        {
+        case 1: return HAlign::Center;
+        case 2: return HAlign::Right;
+        default: return HAlign::Left;
+        }
+    }
+
+    VAlign toVAlign(uint8_t value) noexcept
+    {
+        switch (value)
+        {
+        case 1: return VAlign::Middle;
+        case 2: return VAlign::Bottom;
+        default: return VAlign::Top;
+        }
+    }
+
+    LineMetrics computeLineMetrics(const resource::FontData& fontData,
+                                   float fontSize,
+                                   float lineSpacing)
+    {
+        LineMetrics metrics;
+        if (fontData.metadata.baseFontSize == 0)
+        {
+            return metrics;
+        }
+
+        const float scale = fontSize / static_cast<float>(fontData.metadata.baseFontSize);
+        metrics.lineHeight = fontData.metadata.lineHeight * scale * lineSpacing;
+
+        // descender is negative (FreeType), so this is the ascent + descent em box.
+        // Fall back to the full line height if the metadata is degenerate.
+        const float emHeight = fontData.metadata.ascender - fontData.metadata.descender;
+        metrics.singleLineHeight = (emHeight > 0.0f ? emHeight : fontData.metadata.lineHeight) * scale;
+
+        return metrics;
+    }
+
+    AlignmentOffsets computeAlignedLineOrigins(const LayoutResult& layout,
+                                               const AlignParams& params)
+    {
+        AlignmentOffsets result;
+        if (layout.glyphs.empty())
+        {
+            return result;
+        }
+
+        result.lines = partitionLines(layout.glyphs);
+        result.lineOffsetX.assign(result.lines.size(), 0.0f);
+
+        if (params.horizontal != HAlign::Left)
+        {
+            for (size_t i = 0; i < result.lines.size(); ++i)
+            {
+                const float lineWidth = result.lines[i].maxX - result.lines[i].minX;
+                result.lineOffsetX[i] = (params.horizontal == HAlign::Center)
+                                            ? (params.contentSize.x - lineWidth) * 0.5f
+                                            : params.contentSize.x - lineWidth;
+            }
+        }
+
+        if (params.vertical != VAlign::Top)
+        {
+            // VK-1632: boundingBox.y is the advance box - it counts a full (spaced)
+            // lineHeight for the trailing line. For alignment the block ends at the
+            // last line's em box instead, otherwise the leftover leading is dumped
+            // below the text and Middle/Bottom sit high. The difference is zero for a
+            // gapless font at lineSpacing 1, and half a line at lineSpacing 2.
+            const float blockHeight = std::max(
+                params.singleLineHeight,
+                layout.boundingBox.y - params.lineHeight + params.singleLineHeight);
+
+            result.offsetY = (params.vertical == VAlign::Middle)
+                                 ? (params.contentSize.y - blockHeight) * 0.5f
+                                 : params.contentSize.y - blockHeight;
+        }
+
+        return result;
+    }
+
+    void applyAlignment(LayoutResult& layout, const AlignParams& params)
+    {
+        if (params.horizontal == HAlign::Left && params.vertical == VAlign::Top)
+        {
+            return;
+        }
+
+        const AlignmentOffsets offsets = computeAlignedLineOrigins(layout, params);
+
+        for (size_t i = 0; i < offsets.lines.size(); ++i)
+        {
+            const LineSpan& line = offsets.lines[i];
+            for (size_t g = line.start; g < line.start + line.count; ++g)
+            {
+                layout.glyphs[g].offset.x += offsets.lineOffsetX[i];
+                layout.glyphs[g].offset.y += offsets.offsetY;
+            }
+        }
     }
 }

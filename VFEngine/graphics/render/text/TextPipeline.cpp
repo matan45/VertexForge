@@ -142,61 +142,24 @@ namespace render::text
                 textEntity.letterSpacing
             );
 
-            // Apply alignment offsets if needed
-            bool hasHAlign = textEntity.horizontalAlignment != 0;
-            bool hasVAlign = textEntity.verticalAlignment != 0 && textEntity.rectHeight > 0.0f;
+            // VK-1632: alignment lives in utilities/text now, shared with UITextPipeline.
+            // The gating policy stays here: this pipeline falls back to the laid-out width
+            // when there is no explicit rect, and ignores vertical alignment without one.
+            const auto lineMetrics = ::text::computeLineMetrics(
+                fontData, textEntity.fontSize, textEntity.lineSpacing);
 
-            std::vector<float> lineOffsetX;
-            float verticalOffset = 0.0f;
+            ::text::AlignParams alignParams;
+            alignParams.horizontal = ::text::toHAlign(textEntity.horizontalAlignment);
+            alignParams.vertical = textEntity.rectHeight > 0.0f
+                                       ? ::text::toVAlign(textEntity.verticalAlignment)
+                                       : ::text::VAlign::Top;
+            alignParams.contentSize = glm::vec2(
+                textEntity.maxWidth > 0.0f ? textEntity.maxWidth : layout.boundingBox.x,
+                textEntity.rectHeight);
+            alignParams.lineHeight = lineMetrics.lineHeight;
+            alignParams.singleLineHeight = lineMetrics.singleLineHeight;
 
-            if ((hasHAlign || hasVAlign) && !layout.glyphs.empty())
-            {
-                // Group glyphs by line
-                struct LineInfo { size_t startIdx = 0; size_t count = 0; float minX = 0.0f; float maxX = 0.0f; };
-                std::vector<LineInfo> lines;
-                float currentLineY = layout.glyphs[0].offset.y;
-                LineInfo currentLine{0, 0, layout.glyphs[0].offset.x, layout.glyphs[0].offset.x + layout.glyphs[0].size.x};
-
-                for (size_t gi = 0; gi < layout.glyphs.size(); ++gi)
-                {
-                    const auto& g = layout.glyphs[gi];
-                    if (std::abs(g.offset.y - currentLineY) > 0.1f)
-                    {
-                        lines.push_back(currentLine);
-                        currentLineY = g.offset.y;
-                        currentLine = {gi, 0, g.offset.x, g.offset.x + g.size.x};
-                    }
-                    currentLine.count++;
-                    currentLine.minX = std::min(currentLine.minX, g.offset.x);
-                    currentLine.maxX = std::max(currentLine.maxX, g.offset.x + g.size.x);
-                }
-                lines.push_back(currentLine);
-
-                // Horizontal alignment per line — use maxWidth (rect width in layout units) if available
-                float contentWidth = textEntity.maxWidth > 0.0f ? textEntity.maxWidth : layout.boundingBox.x;
-                lineOffsetX.resize(lines.size(), 0.0f);
-                if (hasHAlign)
-                {
-                    for (size_t li = 0; li < lines.size(); ++li)
-                    {
-                        float lineWidth = lines[li].maxX - lines[li].minX;
-                        if (textEntity.horizontalAlignment == 1)
-                            lineOffsetX[li] = (contentWidth - lineWidth) * 0.5f;
-                        else if (textEntity.horizontalAlignment == 2)
-                            lineOffsetX[li] = contentWidth - lineWidth;
-                    }
-                }
-
-                // Vertical alignment
-                if (hasVAlign)
-                {
-                    float totalHeight = layout.boundingBox.y;
-                    if (textEntity.verticalAlignment == 1)
-                        verticalOffset = (textEntity.rectHeight - totalHeight) * 0.5f;
-                    else if (textEntity.verticalAlignment == 2)
-                        verticalOffset = textEntity.rectHeight - totalHeight;
-                }
-            }
+            ::text::applyAlignment(layout, alignParams);
 
             auto& instances = fontInstances[fontKey];
 
@@ -206,57 +169,21 @@ namespace render::text
             if (textEntity.fontStyle == components::FontStyle::Italic ||
                 textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
 
-            if (!lineOffsetX.empty() || verticalOffset != 0.0f)
+            for (const auto& glyph : layout.glyphs)
             {
-                size_t lineIdx = 0;
-                float prevY = layout.glyphs.empty() ? 0.0f : layout.glyphs[0].offset.y;
-
-                for (size_t gi = 0; gi < layout.glyphs.size(); ++gi)
-                {
-                    const auto& glyph = layout.glyphs[gi];
-
-                    if (gi > 0 && std::abs(glyph.offset.y - prevY) > 0.1f)
-                    {
-                        lineIdx++;
-                        prevY = glyph.offset.y;
-                    }
-
-                    TextCharInstance inst{};
-                    inst.worldPosition = textEntity.worldPosition;
-                    inst.fontSize = textEntity.fontSize;
-                    inst.charOffset = glyph.offset;
-                    if (lineIdx < lineOffsetX.size())
-                        inst.charOffset.x += lineOffsetX[lineIdx];
-                    inst.charOffset.y += verticalOffset;
-                    inst.charSize = glyph.size;
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = textEntity.color;
-                    inst.renderMode = textEntity.renderMode;
-                    inst.entityId = textEntity.entityId;
-                    inst.sdfEdge = sdfEdge;
-                    inst.sdfSmooth = sdfSmooth;
-                    inst.styleFlags = styleFlags;
-                    instances.push_back(inst);
-                }
-            }
-            else
-            {
-                for (const auto& glyph : layout.glyphs)
-                {
-                    TextCharInstance inst{};
-                    inst.worldPosition = textEntity.worldPosition;
-                    inst.fontSize = textEntity.fontSize;
-                    inst.charOffset = glyph.offset;
-                    inst.charSize = glyph.size;
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = textEntity.color;
-                    inst.renderMode = textEntity.renderMode;
-                    inst.entityId = textEntity.entityId;
-                    inst.sdfEdge = sdfEdge;
-                    inst.sdfSmooth = sdfSmooth;
-                    inst.styleFlags = styleFlags;
-                    instances.push_back(inst);
-                }
+                TextCharInstance inst{};
+                inst.worldPosition = textEntity.worldPosition;
+                inst.fontSize = textEntity.fontSize;
+                inst.charOffset = glyph.offset;
+                inst.charSize = glyph.size;
+                inst.uvRect = glyph.uvRect;
+                inst.color = textEntity.color;
+                inst.renderMode = textEntity.renderMode;
+                inst.entityId = textEntity.entityId;
+                inst.sdfEdge = sdfEdge;
+                inst.sdfSmooth = sdfSmooth;
+                inst.styleFlags = styleFlags;
+                instances.push_back(inst);
             }
         }
 

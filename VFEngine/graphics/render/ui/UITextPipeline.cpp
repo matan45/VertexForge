@@ -212,77 +212,21 @@ namespace render::ui
                 }
             }
 
-            // Apply horizontal alignment per line
-            struct LineInfo
-            {
-                size_t startIdx = 0;
-                size_t count = 0;
-                float minX = 0.0f;
-                float maxX = 0.0f;
-            };
-            std::vector<LineInfo> lines;
+            // VK-1632: alignment lives in utilities/text now, shared with TextPipeline.
+            // Lines are grouped by LayoutGlyph::lineY, so a line no longer splits per
+            // bearingY; the block height no longer counts a full spaced lineHeight for
+            // the trailing line.
+            const auto lineMetrics = ::text::computeLineMetrics(
+                fontData, label.fontSize, label.lineSpacing);
 
-            float currentLineY = layout.glyphs[0].offset.y;
-            LineInfo currentLine;
-            currentLine.startIdx = 0;
-            currentLine.count = 0;
-            currentLine.minX = layout.glyphs[0].offset.x;
-            currentLine.maxX = layout.glyphs[0].offset.x + layout.glyphs[0].size.x;
+            ::text::AlignParams alignParams;
+            alignParams.horizontal = ::text::toHAlign(label.horizontalAlignment);
+            alignParams.vertical = ::text::toVAlign(label.verticalAlignment);
+            alignParams.contentSize = label.size;
+            alignParams.lineHeight = lineMetrics.lineHeight;
+            alignParams.singleLineHeight = lineMetrics.singleLineHeight;
 
-            for (size_t i = 0; i < layout.glyphs.size(); ++i)
-            {
-                const auto& glyph = layout.glyphs[i];
-
-                if (std::abs(glyph.offset.y - currentLineY) > 0.1f)
-                {
-                    lines.push_back(currentLine);
-                    currentLineY = glyph.offset.y;
-                    currentLine.startIdx = i;
-                    currentLine.count = 0;
-                    currentLine.minX = glyph.offset.x;
-                    currentLine.maxX = glyph.offset.x + glyph.size.x;
-                }
-
-                currentLine.count++;
-                currentLine.minX = std::min(currentLine.minX, glyph.offset.x);
-                currentLine.maxX = std::max(currentLine.maxX, glyph.offset.x + glyph.size.x);
-            }
-            lines.push_back(currentLine);
-
-            // Compute per-line horizontal offset
-            std::vector<float> lineOffsetX(lines.size(), 0.0f);
-            for (size_t li = 0; li < lines.size(); ++li)
-            {
-                float lineWidth = lines[li].maxX - lines[li].minX;
-                switch (label.horizontalAlignment)
-                {
-                case 1: // Center
-                    lineOffsetX[li] = (label.size.x - lineWidth) * 0.5f;
-                    break;
-                case 2: // Right
-                    lineOffsetX[li] = label.size.x - lineWidth;
-                    break;
-                default: // Left (0)
-                    lineOffsetX[li] = 0.0f;
-                    break;
-                }
-            }
-
-            // Compute vertical alignment offset
-            float totalHeight = layout.boundingBox.y;
-            float verticalOffset = 0.0f;
-            switch (label.verticalAlignment)
-            {
-            case 1: // Middle
-                verticalOffset = (label.size.y - totalHeight) * 0.5f;
-                break;
-            case 2: // Bottom
-                verticalOffset = label.size.y - totalHeight;
-                break;
-            default: // Top (0)
-                verticalOffset = 0.0f;
-                break;
-            }
+            ::text::applyAlignment(layout, alignParams);
 
             // Build glyph instances
             ScissorKey scissorKey{
@@ -299,47 +243,37 @@ namespace render::ui
             if (label.fontStyle == components::FontStyle::Italic ||
                 label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
 
-            size_t glyphIdx = 0;
-            for (size_t li = 0; li < lines.size(); ++li)
+            for (const auto& glyph : layout.glyphs)
             {
-                for (size_t gi = 0; gi < lines[li].count; ++gi, ++glyphIdx)
+                UITextCharInstance inst{};
+                inst.posAndSize = glm::vec4(
+                    label.position.x + glyph.offset.x,
+                    label.position.y + glyph.offset.y,
+                    glyph.size.x,
+                    glyph.size.y
+                );
+                inst.uvRect = glyph.uvRect;
+                inst.color = label.color;
+                inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
+                inst.styleFlags = styleFlags;
+
+                // Rich text span overrides. Synthesized glyphs (ellipsis,
+                // charIndex == UINT32_MAX) fail the bound check and keep
+                // the base label style. Span colors inherit label alpha
+                // so fade animations still apply.
+                if (label.richText && glyph.charIndex < richText.perCodepoint.size())
                 {
-                    const auto& glyph = layout.glyphs[glyphIdx];
-
-                    glm::vec2 alignedOffset = glyph.offset;
-                    alignedOffset.x += lineOffsetX[li];
-                    alignedOffset.y += verticalOffset;
-
-                    UITextCharInstance inst{};
-                    inst.posAndSize = glm::vec4(
-                        label.position.x + alignedOffset.x,
-                        label.position.y + alignedOffset.y,
-                        glyph.size.x,
-                        glyph.size.y
-                    );
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = label.color;
-                    inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
-                    inst.styleFlags = styleFlags;
-
-                    // Rich text span overrides. Synthesized glyphs (ellipsis,
-                    // charIndex == UINT32_MAX) fail the bound check and keep
-                    // the base label style. Span colors inherit label alpha
-                    // so fade animations still apply.
-                    if (label.richText && glyph.charIndex < richText.perCodepoint.size())
+                    const auto& span = richText.perCodepoint[glyph.charIndex];
+                    inst.styleFlags |= span.styleFlags;
+                    if (span.hasColor)
                     {
-                        const auto& span = richText.perCodepoint[glyph.charIndex];
-                        inst.styleFlags |= span.styleFlags;
-                        if (span.hasColor)
-                        {
-                            inst.color = glm::vec4(span.color.r, span.color.g,
-                                                   span.color.b, span.color.a * label.color.a);
-                        }
+                        inst.color = glm::vec4(span.color.r, span.color.g,
+                                               span.color.b, span.color.a * label.color.a);
                     }
-
-                    scissorMap[scissorKey].push_back({fontKey, inst,
-                        label.stencilOp, label.stencilRef});
                 }
+
+                scissorMap[scissorKey].push_back({fontKey, inst,
+                    label.stencilOp, label.stencilRef});
             }
         }
 
