@@ -10,6 +10,7 @@
 #include <resource/AssetTypes.hpp>
 #include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
+#include <components/TextEffects.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -483,6 +484,10 @@ namespace services
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
         uint8_t fontStyle = 0;  // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
+        // VK-1635. Carried by value rather than mirrored into a services:: struct: it is a
+        // plain POD of floats and vectors with no enums to flatten, so a mirror would only
+        // add a fourth place to forget a field.
+        components::TextEffectSettings effects;
     };
 
     struct DirectionalLightData
@@ -609,6 +614,8 @@ namespace services
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         bool richText = false;
+        // VK-1635: outline / drop shadow / glow. See the note on TextData::effects.
+        components::TextEffectSettings effects;
     };
 
     struct UITooltipData

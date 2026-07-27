@@ -120,6 +120,8 @@ namespace components
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
         FontStyle fontStyle = FontStyle::Normal;
+        // VK-1635: outline / drop shadow / glow. Off by default; see TextEffects.hpp.
+        TextEffectSettings effects;
     };
 
 }

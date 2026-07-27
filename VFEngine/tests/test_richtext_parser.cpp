@@ -125,6 +125,100 @@ TEST_CASE("[icon=...] is consumed without output") {
     CHECK(result.perCodepoint.size() == 2);
 }
 
+// ---- VK-1635 effect tags ----
+
+TEST_CASE("[outline] carries a colour and an optional width") {
+    auto result = text::parseRichText("a[outline=#FF0000,2.5]b[/outline]c");
+    CHECK(result.strippedText == "abc");
+    REQUIRE(result.perCodepoint.size() == 3);
+
+    CHECK_FALSE(result.perCodepoint[0].hasOutline);
+    CHECK(result.perCodepoint[1].hasOutline);
+    CHECK(result.perCodepoint[1].outlineColor.r == doctest::Approx(1.0f));
+    CHECK(result.perCodepoint[1].outlineColor.g == doctest::Approx(0.0f));
+    CHECK(result.perCodepoint[1].outlineColor.a == doctest::Approx(1.0f));
+    CHECK(result.perCodepoint[1].outlineWidth == doctest::Approx(2.5f));
+    CHECK_FALSE(result.perCodepoint[2].hasOutline);
+
+    // Width omitted: left at 0 so applyTo() can inherit the label's own width.
+    auto noWidth = text::parseRichText("[outline=#00FF0080]x[/outline]");
+    REQUIRE(noWidth.perCodepoint.size() == 1);
+    CHECK(noWidth.perCodepoint[0].hasOutline);
+    CHECK(noWidth.perCodepoint[0].outlineWidth == doctest::Approx(0.0f));
+    CHECK(noWidth.perCodepoint[0].outlineColor.a == doctest::Approx(128.0f / 255.0f));
+}
+
+TEST_CASE("[shadow] works bare and with a colour plus offset") {
+    auto bare = text::parseRichText("a[shadow]b[/shadow]");
+    CHECK(bare.strippedText == "ab");
+    REQUIRE(bare.perCodepoint.size() == 2);
+    CHECK_FALSE(bare.perCodepoint[0].hasShadow);
+    CHECK(bare.perCodepoint[1].hasShadow);
+    // Nothing given, so applyTo() resolves both colour and offset later.
+    CHECK(bare.perCodepoint[1].shadowOffset.x == doctest::Approx(0.0f));
+    CHECK(bare.perCodepoint[1].shadowOffset.y == doctest::Approx(0.0f));
+
+    auto full = text::parseRichText("[shadow=#000000FF,2,-3]x[/shadow]");
+    REQUIRE(full.perCodepoint.size() == 1);
+    CHECK(full.perCodepoint[0].hasShadow);
+    CHECK(full.perCodepoint[0].shadowColor.a == doctest::Approx(1.0f));
+    CHECK(full.perCodepoint[0].shadowOffset.x == doctest::Approx(2.0f));
+    CHECK(full.perCodepoint[0].shadowOffset.y == doctest::Approx(-3.0f));
+}
+
+TEST_CASE("[glow] carries a colour and an optional range") {
+    auto result = text::parseRichText("[glow=#FFFF00,4]x[/glow]y");
+    CHECK(result.strippedText == "xy");
+    REQUIRE(result.perCodepoint.size() == 2);
+    CHECK(result.perCodepoint[0].hasGlow);
+    CHECK(result.perCodepoint[0].glowColor.r == doctest::Approx(1.0f));
+    CHECK(result.perCodepoint[0].glowColor.b == doctest::Approx(0.0f));
+    CHECK(result.perCodepoint[0].glowRange == doctest::Approx(4.0f));
+    CHECK_FALSE(result.perCodepoint[1].hasGlow);
+}
+
+TEST_CASE("effect tags nest independently of each other and of [b]/[color]") {
+    auto result = text::parseRichText("[outline=#FF0000,1][b]a[shadow]b[/shadow]c[/b][/outline]d");
+    CHECK(result.strippedText == "abcd");
+    REQUIRE(result.perCodepoint.size() == 4);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        CAPTURE(i);
+        CHECK(result.perCodepoint[i].hasOutline);
+        CHECK(result.perCodepoint[i].styleFlags == 0x1);
+    }
+    CHECK_FALSE(result.perCodepoint[0].hasShadow);
+    CHECK(result.perCodepoint[1].hasShadow);
+    CHECK_FALSE(result.perCodepoint[2].hasShadow);
+    CHECK_FALSE(result.perCodepoint[3].hasOutline);
+    CHECK(result.perCodepoint[3].styleFlags == 0);
+
+    // Inner outline wins while it is open, then the outer one comes back.
+    auto nested = text::parseRichText("[outline=#FF0000,1]a[outline=#0000FF,3]b[/outline]c[/outline]");
+    REQUIRE(nested.perCodepoint.size() == 3);
+    CHECK(nested.perCodepoint[0].outlineWidth == doctest::Approx(1.0f));
+    CHECK(nested.perCodepoint[1].outlineWidth == doctest::Approx(3.0f));
+    CHECK(nested.perCodepoint[1].outlineColor.b == doctest::Approx(1.0f));
+    CHECK(nested.perCodepoint[2].outlineWidth == doctest::Approx(1.0f));
+}
+
+TEST_CASE("malformed effect tags render literally") {
+    // A number that only partly parses must be rejected outright rather than read as 2 -
+    // silently dropping the "px" would give an outline the author never asked for.
+    CHECK(text::parseRichText("[outline=#FF0000,2px]x").strippedText == "[outline=#FF0000,2px]x");
+    CHECK(text::parseRichText("[outline=red,2]x").strippedText == "[outline=red,2]x");
+    CHECK(text::parseRichText("[outline=#FF0000,]x").strippedText == "[outline=#FF0000,]x");
+    // One number too many for the tag.
+    CHECK(text::parseRichText("[outline=#FF0000,1,2]x").strippedText == "[outline=#FF0000,1,2]x");
+    CHECK(text::parseRichText("[glow=#FF0000,1,2]x").strippedText == "[glow=#FF0000,1,2]x");
+    CHECK(text::parseRichText("[shadow=#FF0000,1,2,3]x").strippedText == "[shadow=#FF0000,1,2,3]x");
+    // Unmatched closers behave like [/b] does.
+    CHECK(text::parseRichText("a[/outline]b").strippedText == "a[/outline]b");
+    CHECK(text::parseRichText("a[/shadow]b").strippedText == "a[/shadow]b");
+    CHECK(text::parseRichText("a[/glow]b").strippedText == "a[/glow]b");
+}
+
 TEST_CASE("multibyte UTF-8 counts one style entry per codepoint") {
     // U+00E9 (e-acute) is 2 bytes; U+2026 is 3 bytes
     std::string markup = "[b]\xC3\xA9\xE2\x80\xA6[/b]x";

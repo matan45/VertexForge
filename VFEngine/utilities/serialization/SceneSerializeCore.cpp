@@ -464,6 +464,10 @@ namespace serialization
         j["letterSpacing"] = text.letterSpacing;
         j["maxWidth"] = text.maxWidth;
         j["fontStyle"] = fontStyleToString(text.fontStyle);
+        if (json effects = serializeTextEffects(text.effects); !effects.is_null())
+        {
+            j["effects"] = std::move(effects);
+        }
         return j;
     }
 
@@ -483,5 +487,9 @@ namespace serialization
         text.letterSpacing = j.value("letterSpacing", 0.0f);
         text.maxWidth = j.value("maxWidth", 0.0f);
         text.fontStyle = stringToFontStyle(j.value("fontStyle", "normal"));
+        if (j.contains("effects"))
+        {
+            deserializeTextEffects(j["effects"], text.effects);
+        }
     }
 }

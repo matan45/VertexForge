@@ -57,6 +57,12 @@ namespace render::text
         float sdfSmooth;
         uint32_t styleFlags;    // bit0 = bold, bit1 = italic
 
+        // VK-1635 text effects. Built by text::buildTextEffectInstance(); all-zero means
+        // no effect and the shader then takes exactly the pre-VK-1635 path.
+        glm::vec4 effectParams;   // (outlineWidth, shadowX, shadowY, glowRange) in atlas TEXELS
+        glm::uvec4 effectColors;  // (outlineRGBA8, shadowRGBA8, glowRGBA8, flags)
+        float effectMargin;       // quad inflation in layout pixels; 0 when no effect
+
         static vk::VertexInputBindingDescription getBindingDescription()
         {
             vk::VertexInputBindingDescription bindingDescription{};
@@ -66,9 +72,9 @@ namespace render::text
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 7> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 10> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 7> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 10> attributes{};
 
             // location 2: worldPosition (vec3) + fontSize (float) packed as vec4
             attributes[0].binding = 1;
@@ -112,9 +118,38 @@ namespace render::text
             attributes[6].format = vk::Format::eR32Uint;
             attributes[6].offset = offsetof(TextCharInstance, styleFlags);
 
+            // location 9: effectParams (vec4)
+            attributes[7].binding = 1;
+            attributes[7].location = 9;
+            attributes[7].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[7].offset = offsetof(TextCharInstance, effectParams);
+
+            // location 10: effectColors (uvec4)
+            attributes[8].binding = 1;
+            attributes[8].location = 10;
+            attributes[8].format = vk::Format::eR32G32B32A32Uint;
+            attributes[8].offset = offsetof(TextCharInstance, effectColors);
+
+            // location 11: effectMargin (float)
+            attributes[9].binding = 1;
+            attributes[9].location = 11;
+            attributes[9].format = vk::Format::eR32Sfloat;
+            attributes[9].offset = offsetof(TextCharInstance, effectMargin);
+
             return attributes;
         }
     };
+
+    // glm is packed here (GLM_FORCE_DEFAULT_ALIGNED_GENTYPES is not defined anywhere in
+    // this build), so vec3 is 12 bytes with no tail padding and every member sits on its
+    // natural 4-byte boundary. Pinned because the vertex-input offsets above are computed
+    // from offsetof: a silent layout change would feed the shader the wrong bytes without
+    // tripping a single validation error.
+    static_assert(sizeof(TextCharInstance) == 120,
+                  "TextCharInstance layout is mirrored by text.glsl's instance attributes");
+    static_assert(offsetof(TextCharInstance, effectParams) == 84);
+    static_assert(offsetof(TextCharInstance, effectColors) == 100);
+    static_assert(offsetof(TextCharInstance, effectMargin) == 116);
 
     using TextCameraUBO = render::common::CameraUBO;
 
@@ -156,5 +191,8 @@ namespace render::text
         uint8_t verticalAlignment = 0;   // 0=Top, 1=Middle, 2=Bottom
         float rectHeight = 0.0f;         // Bounding rect height for vertical alignment
         components::FontStyle fontStyle = components::FontStyle::Normal;
+        // VK-1635. Distances are layout pixels at this fontSize, so they scale with the
+        // glyph as world-space text recedes.
+        components::TextEffectSettings effects;
     };
 }

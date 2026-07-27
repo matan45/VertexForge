@@ -29,6 +29,37 @@ namespace math
     {
         return a + static_cast<T>((b - a) * t);
     }
+
+    // VK-1635: pack a linear RGBA colour into one uint32_t, 8 bits per channel.
+    //
+    // Byte order matches GLSL's unpackUnorm4x8(): red occupies the LEAST significant
+    // byte, alpha the most. Getting this backwards is silent - the colour simply comes
+    // out wrong in the shader - so the pair below is round-trip tested.
+    //
+    // Deliberately takes loose floats rather than a glm::vec4: this header is included
+    // almost everywhere and pulling glm in here would be a large compile-time tax for
+    // two functions. Callers with a vec4 pass .r/.g/.b/.a.
+    inline uint32_t packRGBA8(float r, float g, float b, float a)
+    {
+        auto channel = [](float v) -> uint32_t
+        {
+            // +0.5 then truncate: round-to-nearest, so 1.0 lands exactly on 255 and the
+            // unpack round-trip is exact for every byte value.
+            return static_cast<uint32_t>(clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+        };
+
+        return channel(r) | (channel(g) << 8) | (channel(b) << 16) | (channel(a) << 24);
+    }
+
+    // Inverse of packRGBA8. Writes into four loose floats for the same reason.
+    inline void unpackRGBA8(uint32_t packed, float& r, float& g, float& b, float& a)
+    {
+        constexpr float inv255 = 1.0f / 255.0f;
+        r = static_cast<float>(packed & 0xFFu) * inv255;
+        g = static_cast<float>((packed >> 8) & 0xFFu) * inv255;
+        b = static_cast<float>((packed >> 16) & 0xFFu) * inv255;
+        a = static_cast<float>((packed >> 24) & 0xFFu) * inv255;
+    }
 }
 
 namespace sdf

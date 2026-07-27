@@ -486,6 +486,12 @@ namespace serialization
         static std::string fontStyleToString(components::FontStyle style);
         static components::FontStyle stringToFontStyle(const std::string& str);
 
+        // VK-1635. Shared by UILabelComponent and TextComponent. The write side returns a
+        // null json when nothing is enabled and its caller omits the key entirely, so a
+        // scene authored before text effects existed round-trips byte-identically.
+        static json serializeTextEffects(const components::TextEffectSettings& effects);
+        static void deserializeTextEffects(const json& j, components::TextEffectSettings& effects);
+
         static PluginSerializeFn pluginSerializeHook;
         static PluginDeserializeFn pluginDeserializeHook;
     };

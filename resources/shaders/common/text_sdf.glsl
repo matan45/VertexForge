@@ -123,4 +123,176 @@ float sdfCoverageRange(float sdf, float edge, float boldBias, float screenRange)
     return smoothstep(threshold - w, threshold + w, sdf);
 }
 
+// ---------------------------------------------------------------------------------------
+// VK-1635 - outline, drop shadow and glow.
+//
+// Everything below evaluates distance BANDS off the same field the base glyph already
+// samples: one extra texture fetch (the shadow), no extra descriptors, no extra draw calls.
+//
+// The whole effect path is analytic. It never differentiates the field, for two reasons
+// beyond the ones screenPxRange() already lists: the effect branch is gated on a
+// PER-INSTANCE flag word, so it is not dynamically uniform and derivatives taken inside it
+// are undefined; and the interesting fragments for a shadow are the ones OUTSIDE the glyph,
+// exactly where the field is saturated flat and fwidth() collapses to zero.
+//
+// Bit positions mirror text::TEXT_EFFECT_* in VFEngine/utilities/text/TextEffects.hpp.
+const uint TEXT_EFFECT_OUTLINE = 0x1u;
+const uint TEXT_EFFECT_SHADOW = 0x2u;
+const uint TEXT_EFFECT_GLOW = 0x4u;
+
+// How many atlas TEXELS one unit of the sampled field spans - the quantity screenPxRange()
+// wants as its pxRange argument, generalised to both encodings.
+//
+//   glyphMode 2 (MTSDF): v = 0.5 + d / pxRange, so one unit of v IS pxRange texels.
+//   glyphMode 0 (SDF_8): the importer writes v = edge * (1 + d / spread)
+//                        (SDFGenerator.cpp: value = d * onEdge / spread + onEdge), so
+//                        dv/dtexel = edge / spread and one unit of v is spread / edge
+//                        texels. sdfParams.y is resource::sdfSmoothWidth() = 0.5 / spread,
+//                        which is how spread gets recovered here without a new vertex
+//                        attribute.
+//
+// Returns 0 for a coverage atlas (sdfParams.y == 0, i.e. bitmap or colour emoji). Callers
+// never reach that: the CPU strips the effect flags for those fonts. The guard is here so
+// this stays a total function rather than a division by zero waiting for a caller to
+// forget.
+//
+// sdfParams - the per-instance (edge, smoothWidth) pair, unchanged since VK-1631.
+float textTexelsPerFieldUnit(uint glyphMode, float pxRange, vec2 sdfParams)
+{
+    if (glyphMode == 2u)
+    {
+        return pxRange;
+    }
+    if (sdfParams.y <= 0.0 || sdfParams.x <= 0.0)
+    {
+        return 0.0;
+    }
+    return (0.5 / sdfParams.y) / sdfParams.x;
+}
+
+// Coverage of a band whose edge sits `expand` field units OUTSIDE the glyph outline.
+// expand == 0 reproduces the base glyph exactly (the same smoothstep sdfCoverageRange()
+// runs), which is what lets the composite below reuse one function for fill, outline and
+// shadow rather than keeping three subtly different ramps in sync.
+//
+// halfBand - 0.5 / screenRange, i.e. a one-screen-pixel ramp, matching every other text path.
+float textEffectBand(float sdf, float threshold, float expand, float halfBand)
+{
+    float d = sdf - threshold + expand;
+    return smoothstep(-halfBand, halfBand, d);
+}
+
+// Largest `expand` the field can actually represent, in field units.
+//
+// The field bottoms out at 0, i.e. at `threshold` units outside the outline. Push past that
+// and every texel in the saturated region passes the band test at once, so the "outline"
+// stops being a ring and becomes the whole quad filled with outline colour - a much worse
+// failure than a slightly thin outline. Clamping here degrades instead.
+float textEffectMaxExpand(float threshold, float halfBand)
+{
+    return max(threshold - halfBand, 0.0);
+}
+
+// Soft outward falloff for the glow, in field units. 1 at the outline and inside it, fading
+// to 0 at `range` units out. Squared rather than linear so the tail dies off smoothly
+// instead of ending on a visible band edge.
+float textEffectGlow(float sdf, float threshold, float range)
+{
+    if (range <= 0.0)
+    {
+        return 0.0;
+    }
+    float t = clamp(1.0 + (sdf - threshold) / range, 0.0, 1.0);
+    return t * t;
+}
+
+// Tuck one layer UNDERNEATH what has accumulated so far.
+//
+// Both arguments are PREMULTIPLIED. This is "dst over src", so callers walk the stack FRONT
+// TO BACK: the fill goes in first and stays on top, and each later layer only shows where
+// the ones above it left room. Premultiplied is not optional here - straight alpha would
+// need a divide per layer and would wash the colour out wherever a layer's alpha is small.
+vec4 textEffectUnder(vec4 dst, vec4 src)
+{
+    return dst + src * (1.0 - dst.a);
+}
+
+// Flatten a premultiplied accumulator back to the straight-alpha vec4 the text pipelines'
+// blend state expects (srcAlpha / oneMinusSrcAlpha, NOT premultiplied).
+vec4 textEffectResolve(vec4 premultiplied)
+{
+    if (premultiplied.a <= 0.0)
+    {
+        return vec4(0.0);
+    }
+    return vec4(premultiplied.rgb / premultiplied.a, premultiplied.a);
+}
+
+// The whole effect stack for one fragment.
+//
+// sdf         - field value at this fragment (median RGB for MTSDF, .r otherwise)
+// shadowSdf   - field value at this fragment DISPLACED by the shadow offset. Sampled by the
+//               caller because the include must not name the atlas sampler: text.glsl binds
+//               it at 1 and ui_text.glsl at 0.
+// threshold   - edge - boldBias, the same value the base path uses
+// screenRange - screenPxRange(), screen pixels per field unit
+// texelsPerUnit - textTexelsPerFieldUnit(); converts the instance's texel distances to
+//               field units. Guaranteed > 0 by the caller's flag check.
+// params      - (outlineWidth, shadowX, shadowY, glowRange) in atlas texels
+// colors      - (outlineRGBA8, shadowRGBA8, glowRGBA8, flags)
+// baseColor   - the glyph's own straight-alpha colour; its alpha scales the whole result so
+//               a label fade takes the effects with it.
+vec4 textEffectComposite(float sdf, float shadowSdf, float threshold, float screenRange,
+                         float texelsPerUnit, vec4 params, uvec4 colors, vec4 baseColor)
+{
+    float halfBand = max(0.5 / screenRange, TEXT_SDF_MIN_AA_WIDTH);
+    float maxExpand = textEffectMaxExpand(threshold, halfBand);
+    // Guarded rather than a bare reciprocal: a font baked with an on-edge value of 0 makes
+    // textTexelsPerFieldUnit() return 0, and 0 * (1/0) is a NaN that max()/min() do NOT
+    // clamp - GLSL propagates it - so it would ride all the way out to outColor, where
+    // alpha < 0.01 is false for NaN and the fragment never even discards. Zero here just
+    // collapses every band onto the glyph edge, which is a visible-but-sane degradation.
+    float invUnit = texelsPerUnit > 0.0 ? 1.0 / texelsPerUnit : 0.0;
+
+    float outlineField = 0.0;
+    if ((colors.w & TEXT_EFFECT_OUTLINE) != 0u)
+    {
+        outlineField = min(params.x * invUnit, maxExpand);
+    }
+
+    // Front to back - the glyph face first, then whatever shows around it. Depth order is
+    // face, outline, glow, shadow: the shadow is the thing cast furthest onto the
+    // background, and the glow sits between it and the outline that rims the glyph.
+    float fill = textEffectBand(sdf, threshold, 0.0, halfBand);
+    vec4 acc = vec4(baseColor.rgb * fill, fill);
+
+    if ((colors.w & TEXT_EFFECT_OUTLINE) != 0u)
+    {
+        vec4 outlineColor = unpackUnorm4x8(colors.x);
+        float coverage = textEffectBand(sdf, threshold, outlineField, halfBand) * outlineColor.a;
+        acc = textEffectUnder(acc, vec4(outlineColor.rgb * coverage, coverage));
+    }
+
+    if ((colors.w & TEXT_EFFECT_GLOW) != 0u)
+    {
+        vec4 glowColor = unpackUnorm4x8(colors.z);
+        float glowRange = min(params.w * invUnit, maxExpand);
+        float coverage = textEffectGlow(sdf, threshold, glowRange) * glowColor.a;
+        acc = textEffectUnder(acc, vec4(glowColor.rgb * coverage, coverage));
+    }
+
+    if ((colors.w & TEXT_EFFECT_SHADOW) != 0u)
+    {
+        vec4 shadowColor = unpackUnorm4x8(colors.y);
+        // Cast by the OUTLINED silhouette, not the bare glyph, so a thick outline never
+        // overhangs its own shadow. buildTextEffectInstance() budgets the quad margin the
+        // same way.
+        float coverage = textEffectBand(shadowSdf, threshold, outlineField, halfBand) * shadowColor.a;
+        acc = textEffectUnder(acc, vec4(shadowColor.rgb * coverage, coverage));
+    }
+
+    vec4 resolved = textEffectResolve(acc);
+    return vec4(resolved.rgb, resolved.a * baseColor.a);
+}
+
 #endif // TEXT_SDF_GLSL

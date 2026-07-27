@@ -158,6 +158,10 @@ namespace controllers::offscreen
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;
                 renderData.richText = labelComp.richText;
+                // VK-1635: effect distances travel with fontSize through the UI layout
+                // scale, or an outline authored at 2 px would stay 2 px on a 2x display
+                // while the glyph it hugs doubled.
+                renderData.effects = labelComp.effects.scaledBy(scale);
                 renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
                 renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
                 renderData.overflow = labelComp.overflow;

@@ -77,6 +77,7 @@ namespace services {
         data.letterSpacing = comp.letterSpacing;
         data.maxWidth = comp.maxWidth;
         data.fontStyle = static_cast<uint8_t>(comp.fontStyle);
+        data.effects = comp.effects;
         return data;
     }
 
@@ -100,6 +101,7 @@ namespace services {
         comp.letterSpacing = textData.letterSpacing;
         comp.maxWidth = textData.maxWidth;
         comp.fontStyle = static_cast<components::FontStyle>(textData.fontStyle);
+        comp.effects = textData.effects;
         return true;
     }
 

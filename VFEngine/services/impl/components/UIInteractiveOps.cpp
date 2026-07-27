@@ -87,6 +87,7 @@ namespace services {
         data.lineSpacing = comp.lineSpacing;
         data.letterSpacing = comp.letterSpacing;
         data.richText = comp.richText;
+        data.effects = comp.effects;
         return data;
     }
 
@@ -114,6 +115,7 @@ namespace services {
         comp.lineSpacing = labelData.lineSpacing;
         comp.letterSpacing = labelData.letterSpacing;
         comp.richText = labelData.richText;
+        comp.effects = labelData.effects;
         return true;
     }
 

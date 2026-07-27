@@ -5,6 +5,50 @@
 
 namespace serialization {
 
+    // ---- Text effects (VK-1635, shared by UILabel and TextComponent) ----
+
+    json SceneSerialization::serializeTextEffects(const components::TextEffectSettings& effects)
+    {
+        // A default-constructed settings block writes nothing at all. Callers test the
+        // result with is_null() and skip the key, so every scene saved before text effects
+        // existed re-saves byte-identically.
+        if (!effects.any())
+        {
+            return json{};
+        }
+
+        json j;
+        if (effects.hasOutline())
+        {
+            j["outlineWidth"] = effects.outlineWidth;
+            j["outlineColor"] = writeVec4(effects.outlineColor);
+        }
+        if (effects.hasShadow())
+        {
+            j["shadowOffset"] = writeVec2(effects.shadowOffset);
+            j["shadowColor"] = writeVec4(effects.shadowColor);
+        }
+        if (effects.hasGlow())
+        {
+            j["glowRange"] = effects.glowRange;
+            j["glowColor"] = writeVec4(effects.glowColor);
+        }
+        return j;
+    }
+
+    void SceneSerialization::deserializeTextEffects(const json& j,
+                                                    components::TextEffectSettings& effects)
+    {
+        // readVec2/readVec4 leave the target untouched when the key is absent, so an
+        // effect that was written width-only keeps the struct's default colour.
+        effects.outlineWidth = j.value("outlineWidth", 0.0f);
+        readVec4(j, "outlineColor", effects.outlineColor);
+        readVec2(j, "shadowOffset", effects.shadowOffset);
+        readVec4(j, "shadowColor", effects.shadowColor);
+        effects.glowRange = j.value("glowRange", 0.0f);
+        readVec4(j, "glowColor", effects.glowColor);
+    }
+
     // ---- Label ----
 
     json SceneSerialization::serializeUILabel(const components::UILabelComponent& label)
@@ -28,6 +72,10 @@ namespace serialization {
         j["lineSpacing"] = label.lineSpacing;
         j["letterSpacing"] = label.letterSpacing;
         j["richText"] = label.richText;
+        if (json effects = serializeTextEffects(label.effects); !effects.is_null())
+        {
+            j["effects"] = std::move(effects);
+        }
         return j;
     }
 
@@ -45,6 +93,10 @@ namespace serialization {
         label.lineSpacing = j.value("lineSpacing", 1.0f);
         label.letterSpacing = j.value("letterSpacing", 0.0f);
         label.richText = j.value("richText", false);
+        if (j.contains("effects"))
+        {
+            deserializeTextEffects(j["effects"], label.effects);
+        }
     }
 
     // ---- Tooltip ----

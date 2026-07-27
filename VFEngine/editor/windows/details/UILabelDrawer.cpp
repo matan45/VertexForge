@@ -61,6 +61,8 @@ namespace windows::details
             changed |= drawOverflow(data);
             ImGui::Spacing();
             changed |= drawSpacing(data);
+            ImGui::Spacing();
+            changed |= drawTextEffects(data.effects, "UILabel");
 
             if (changed)
             {

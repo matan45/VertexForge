@@ -9,6 +9,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "text/RichTextParser.hpp"
+#include "text/TextEffects.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 #include <string_view>
@@ -243,6 +244,18 @@ namespace render::ui
             if (label.fontStyle == components::FontStyle::Italic ||
                 label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
 
+            // VK-1635: authored distances are layout pixels; the instance wants atlas
+            // texels, and layout pixels per texel is exactly the `scale` TextLayout uses.
+            // sdfSmooth is zero for bitmap and colour-emoji atlases, which carry no
+            // distance field - buildTextEffectInstance drops the effects for those.
+            const float effectScale =
+                static_cast<float>(fontData.metadata.baseFontSize) > 0.0f
+                    ? label.fontSize / static_cast<float>(fontData.metadata.baseFontSize)
+                    : 0.0f;
+            const bool hasDistanceField = sdfSmooth > 0.0f;
+            const ::text::TextEffectInstance baseEffect =
+                ::text::buildTextEffectInstance(label.effects, effectScale, hasDistanceField);
+
             for (const auto& glyph : layout.glyphs)
             {
                 UITextCharInstance inst{};
@@ -256,6 +269,9 @@ namespace render::ui
                 inst.color = label.color;
                 inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
                 inst.styleFlags = styleFlags;
+                inst.effectParams = baseEffect.params;
+                inst.effectColors = baseEffect.colors;
+                inst.effectMargin = baseEffect.marginPx;
 
                 // Rich text span overrides. Synthesized glyphs (ellipsis,
                 // charIndex == UINT32_MAX) fail the bound check and keep
@@ -269,6 +285,18 @@ namespace render::ui
                     {
                         inst.color = glm::vec4(span.color.r, span.color.g,
                                                span.color.b, span.color.a * label.color.a);
+                    }
+                    // VK-1635: a span that names an effect re-derives the whole packed
+                    // instance, because the quad margin depends on every distance at once.
+                    // Only glyphs the tag actually covers pay for the rebuild.
+                    if (span.overridesEffects())
+                    {
+                        const ::text::TextEffectInstance spanEffect =
+                            ::text::buildTextEffectInstance(span.applyTo(label.effects),
+                                                            effectScale, hasDistanceField);
+                        inst.effectParams = spanEffect.params;
+                        inst.effectColors = spanEffect.colors;
+                        inst.effectMargin = spanEffect.marginPx;
                     }
                 }
 

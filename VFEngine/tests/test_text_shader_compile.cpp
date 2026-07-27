@@ -220,4 +220,67 @@ TEST_SUITE("TextShaderCompile")
         // The include is shared, so it must stay sampler-agnostic.
         CHECK(include.find("fontAtlas") == std::string::npos);
     }
+
+    // VK-1635: outline / drop shadow / glow. Three things can break silently here and none
+    // of them produce a validation error, so they are pinned in text rather than left to a
+    // GPU eyeball: the effect ramps living in the shared include (the top-level shaders may
+    // not grow their own smoothstep - already pinned above), the quad inflation being fed
+    // by the per-instance margin, and the sample coordinate being clamped to the glyph's
+    // own uv rect. Drop that clamp and an inflated quad samples the NEXT GLYPH in the
+    // atlas, which reads as random ghost strokes around effect-bearing text.
+    TEST_CASE("VK-1635: the effect stack lives in the shared include and clamps its samples")
+    {
+        const std::string include = readShaderSource(shaderRoot() / "common" / "text_sdf.glsl");
+
+        CHECK(include.find("float textTexelsPerFieldUnit(") != std::string::npos);
+        CHECK(include.find("float textEffectBand(") != std::string::npos);
+        CHECK(include.find("float textEffectGlow(") != std::string::npos);
+        CHECK(include.find("vec4 textEffectComposite(") != std::string::npos);
+        // Colours ride in packed as RGBA8, so the unpack has to match math::packRGBA8's
+        // byte order. unpackUnorm4x8 puts red in the low byte; packRGBA8 does the same.
+        CHECK(include.find("unpackUnorm4x8(") != std::string::npos);
+        // Flag bits are duplicated in VFEngine/utilities/text/TextEffects.hpp.
+        CHECK(include.find("TEXT_EFFECT_OUTLINE = 0x1u") != std::string::npos);
+        CHECK(include.find("TEXT_EFFECT_SHADOW = 0x2u") != std::string::npos);
+        CHECK(include.find("TEXT_EFFECT_GLOW = 0x4u") != std::string::npos);
+        // Still sampler-agnostic: the shadow's second fetch is the CALLER's job precisely
+        // because the two shaders bind the atlas at different bindings.
+        CHECK(include.find("fontAtlas") == std::string::npos);
+
+        for (const fs::path relative : {fs::path("ui") / "ui_text.glsl",
+                                        fs::path("text") / "text.glsl"})
+        {
+            const std::string source = readShaderSource(shaderRoot() / relative);
+            const std::string label = relative.generic_string();
+            CAPTURE(label);
+
+            // Vertex side: the margin is per-instance and inflates the quad. Without the
+            // inflation an outline or shadow is clipped at the glyph's atlas cell.
+            CHECK(source.find("inEffectMargin") != std::string::npos);
+            CHECK(source.find("vec2 expand = margin / max(charSize, vec2(1e-3));")
+                  != std::string::npos);
+
+            // Fragment side: clamp the sample, but hand screenPxRange the UNCLAMPED
+            // varying - clamping first would flatten the derivative and blow the band up.
+            CHECK(source.find("clamp(fragTexCoord, fragUvRect.xy, fragUvRect.zw)")
+                  != std::string::npos);
+            CHECK(source.find("screenPxRange(fragTexCoord") != std::string::npos);
+
+            // The shadow's extra fetch must be explicit-LOD: it sits inside the
+            // per-instance effect branch, where implicit derivatives are undefined.
+            CHECK(source.find("textureLod(fontAtlas, shadowUv, 0.0)") != std::string::npos);
+            CHECK(source.find("textEffectComposite(") != std::string::npos);
+
+            // Both stages carry the three new instance attributes and the three new
+            // varyings; a mismatch between the stages fails to link, but a mismatch with
+            // the C++ attribute descriptions would not.
+            CHECK(countOccurrences(source, "inEffectParams") == 2);
+            CHECK(countOccurrences(source, "inEffectColors") == 2);
+            CHECK(countOccurrences(source, "fragUvRect") >= 2);
+
+            // The push-constant block is untouched by VK-1635 - the effect data is
+            // per-instance because it varies per label, not per batch.
+            CHECK(countOccurrences(source, "float pxRange;") == 2);
+        }
+    }
 }

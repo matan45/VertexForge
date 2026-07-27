@@ -6,6 +6,7 @@
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
+#include "text/TextEffects.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 
@@ -169,6 +170,17 @@ namespace render::text
             if (textEntity.fontStyle == components::FontStyle::Italic ||
                 textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
 
+            // VK-1635: authored distances are layout pixels; the instance wants atlas
+            // texels, and layout pixels per texel is exactly the `scale` TextLayout uses.
+            // Because they are relative to fontSize rather than to the screen, a world-space
+            // outline keeps its proportion to the glyph as the text recedes.
+            const float effectScale =
+                static_cast<float>(fontData.metadata.baseFontSize) > 0.0f
+                    ? textEntity.fontSize / static_cast<float>(fontData.metadata.baseFontSize)
+                    : 0.0f;
+            const ::text::TextEffectInstance effect = ::text::buildTextEffectInstance(
+                textEntity.effects, effectScale, sdfSmooth > 0.0f);
+
             for (const auto& glyph : layout.glyphs)
             {
                 TextCharInstance inst{};
@@ -183,6 +195,9 @@ namespace render::text
                 inst.sdfEdge = sdfEdge;
                 inst.sdfSmooth = sdfSmooth;
                 inst.styleFlags = styleFlags;
+                inst.effectParams = effect.params;
+                inst.effectColors = effect.colors;
+                inst.effectMargin = effect.marginPx;
                 instances.push_back(inst);
             }
         }

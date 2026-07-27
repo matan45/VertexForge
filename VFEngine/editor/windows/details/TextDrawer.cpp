@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
 #include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <cstring>
@@ -61,6 +62,8 @@ namespace windows::details
             changed |= drawLetterSpacing(data);
             ImGui::Spacing();
             changed |= drawMaxWidth(data);
+            ImGui::Spacing();
+            changed |= drawTextEffects(data.effects, "Text");
 
             if (changed)
             {
