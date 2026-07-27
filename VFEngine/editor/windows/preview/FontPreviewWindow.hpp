@@ -69,6 +69,9 @@ namespace windows
         FontLoadResult loadFontBackground(const std::string& path);
 
         void drawInfoPanel();
+        // VK-1636: which of the three styled sibling faces exist next to this font,
+        // i.e. which of Bold / Italic / BoldItalic are real rather than synthesized.
+        void drawStyleFamilyPanel();
         void drawPreviewPanel();
         void drawTextPreview();
         void drawCharacterGrid();

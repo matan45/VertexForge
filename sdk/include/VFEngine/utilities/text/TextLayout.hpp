@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <span>
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -26,6 +27,11 @@ namespace text
         // whitespace and glyphless codepoints). UINT32_MAX for synthesized
         // glyphs (e.g. the ellipsis), which render with the base style.
         uint32_t charIndex = 0;
+        // VK-1636: which FaceSet slot this glyph's atlas came from. Always 0 for
+        // the single-font entry points. The caller must key the glyph's draw batch
+        // (and therefore its descriptor set) by THIS face's cache key, not the
+        // label's - a real Bold face lives in a different atlas.
+        uint8_t faceIndex = 0;
     };
 
     struct LayoutResult
@@ -45,16 +51,67 @@ namespace text
         float letterSpacing = 0.0f
     );
 
+    // ------------------------------------------------------------------
+    // VK-1636: multi-face layout, for real Bold / Italic sibling faces.
+    // ------------------------------------------------------------------
+
+    // Up to four faces of one family, indexed by the style bits from
+    // text/FontStyleFace.hpp: 0 = regular, 1 = bold, 2 = italic, 3 = bold-italic.
+    // faces[0] is mandatory; a null slot silently falls back to it.
+    //
+    // IMPORTANT: populate ONLY the slots this string actually uses. The block
+    // metrics below are a max over every non-null slot, so parking a Bold face in
+    // a set whose text contains no bold would silently give the whole label the
+    // Bold face's taller line height. computeLineMetrics(FaceSet) takes the same
+    // max and MUST be handed the same set, or vertical alignment drifts against
+    // the layout it is aligning.
+    struct FaceSet
+    {
+        const resource::FontData* faces[4] = {nullptr, nullptr, nullptr, nullptr};
+    };
+
+    // Deliberately no public resolveIndex() helper: a slot can be non-null yet
+    // unusable (zero baseFontSize, empty atlas), and a helper that only tested for
+    // null would hand callers an index layout never emits. Read the authoritative
+    // answer off LayoutGlyph::faceIndex instead.
+
+    // Lays `text` out across `faceSet`, choosing each glyph's face from
+    // perCodepointFace (parallel to the decoded codepoint sequence, exactly like
+    // RichTextResult::perCodepoint). Entries past the end - and an empty span -
+    // mean face 0, so passing {} degrades to plain single-font layout.
+    //
+    // All faces share one baseline and one line height (the max across the set);
+    // stepping the baseline per face would visibly jog the text across a [b]
+    // boundary. Kerning is suppressed across a face change, and a codepoint the
+    // chosen face lacks is drawn from face 0 rather than dropped - a Bold face
+    // imported with narrower character ranges leaves holes otherwise.
+    LayoutResult layoutTextStyled(
+        const FaceSet& faceSet,
+        const std::string& text,
+        std::span<const uint8_t> perCodepointFace,
+        float fontSize,
+        float maxWidth = 0.0f,
+        float lineSpacing = 1.0f,
+        float letterSpacing = 0.0f
+    );
+
     // Per-line ellipsis truncation. For each line whose width exceeds maxWidth,
     // drop trailing glyphs and append U+2026 (or "..." fallback if U+2026 is not
     // in the atlas). If the rect is too narrow for even the ellipsis, drops all
     // glyphs on that line. Operates in place; updates boundingBox.x accordingly.
+    //
+    // The ellipsis is always taken from `fontData` (face 0) and keeps faceIndex 0,
+    // matching the existing rule that a synthesized glyph renders with the base
+    // style. baselineShift is how far layoutTextStyled pushed the shared baseline
+    // past this face's own ascender - 0 for every single-font caller, so the
+    // arithmetic is unchanged for them.
     void applyEllipsis(
         LayoutResult& layout,
         const resource::FontData& fontData,
         float fontSize,
         float maxWidth,
-        float letterSpacing
+        float letterSpacing,
+        float baselineShift = 0.0f
     );
 
     // ------------------------------------------------------------------
@@ -101,6 +158,18 @@ namespace text
     [[nodiscard]] LineMetrics computeLineMetrics(const resource::FontData& fontData,
                                                  float fontSize,
                                                  float lineSpacing);
+
+    // VK-1636: the max of the single-face metrics over every populated slot, which
+    // is what layoutTextStyled lays the block out with. Hand it the SAME FaceSet.
+    [[nodiscard]] LineMetrics computeLineMetrics(const FaceSet& faceSet,
+                                                 float fontSize,
+                                                 float lineSpacing);
+
+    // VK-1636: how far layoutTextStyled's shared baseline sits below faces[0]'s own
+    // ascender, in pixels. Exactly 0.0f when faces[0] has the tallest ascender in
+    // the set (and therefore for every single-face set), which is what keeps the
+    // legacy arithmetic bit-identical. Feed this to applyEllipsis.
+    [[nodiscard]] float baselineShiftForFaceSet(const FaceSet& faceSet, float fontSize);
 
     struct AlignParams
     {

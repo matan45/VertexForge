@@ -7,6 +7,7 @@
 #include "events/project/ResourceEvents.hpp"
 #include "math/MathHelper.hpp"
 #include "text/TextLayout.hpp"
+#include "text/FontStyleFace.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <filesystem>
@@ -253,6 +254,66 @@ namespace windows
         return result;
     }
 
+    // VK-1636. Bold and italic are synthesized unless the family ships a real face
+    // next to this one, and nothing in the editor used to say which you were looking
+    // at - a "bold" label that quietly stayed a thickened Regular looked like a bug in
+    // the renderer. This panel answers it with the same naming convention the renderer
+    // resolves through, so the two can never disagree.
+    void FontPreviewWindow::drawStyleFamilyPanel()
+    {
+        if (!ImGui::CollapsingHeader("Style Family", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            return;
+        }
+
+        struct StyleRow
+        {
+            const char* label;
+            uint32_t bits;
+        };
+        static constexpr StyleRow rows[] = {
+            {"Bold", ::text::STYLE_BOLD},
+            {"Italic", ::text::STYLE_ITALIC},
+            {"Bold Italic", ::text::STYLE_BOLD | ::text::STYLE_ITALIC},
+        };
+
+        for (const StyleRow& row : rows)
+        {
+            std::string found;
+            for (const std::string& candidate : ::text::styledPathCandidates(fontPath, row.bits))
+            {
+                std::error_code ec;
+                if (std::filesystem::exists(candidate, ec))
+                {
+                    found = candidate;
+                    break;
+                }
+            }
+
+            if (found.empty())
+            {
+                ImGui::TextDisabled("%s: synthesized", row.label);
+                if (ImGui::IsItemHovered())
+                {
+                    // Name the file the renderer will pick up, so importing the real
+                    // face is a matter of matching this name.
+                    const auto candidates = ::text::styledPathCandidates(fontPath, row.bits);
+                    if (!candidates.empty())
+                    {
+                        ImGui::SetTooltip("No sibling face. Import one named:\n%s",
+                                          std::filesystem::path(candidates.front())
+                                              .filename().string().c_str());
+                    }
+                }
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "%s: %s", row.label,
+                                   std::filesystem::path(found).filename().string().c_str());
+            }
+        }
+    }
+
     void FontPreviewWindow::drawInfoPanel()
     {
         ImGui::Text("Font Info");
@@ -273,6 +334,9 @@ namespace windows
             if (resource::hasFlag(fontData.formatFlags, resource::FontFormatFlags::COLOR_EMOJI))
                 ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Color Emoji Font");
         }
+        ImGui::Spacing();
+
+        drawStyleFamilyPanel();
         ImGui::Spacing();
 
         if (ImGui::CollapsingHeader("Metrics", ImGuiTreeNodeFlags_DefaultOpen)) {

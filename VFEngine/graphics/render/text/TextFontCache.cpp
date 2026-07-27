@@ -11,7 +11,13 @@
 #include "resource/PathResolver.hpp"
 #include "asset/AssetRef.hpp"
 #include "print/Log.hpp"
+// VK-1636. Note the leading "::" on every use below: inside namespace render::text
+// an unqualified `text::` binds to this namespace, not the utilities one.
+#include "text/FontStyleFace.hpp"
+#include <array>
+#include <filesystem>
 #include <limits>
+#include <span>
 
 namespace render::text
 {
@@ -33,22 +39,54 @@ namespace render::text
     // disk via FontResource — deliberately NOT through ResourceManager/AssetRef,
     // which would try to resolve an engine resource against the project's asset
     // database. See resource/DefaultFont.hpp.
-    void TextFontCache::loadDefaultFont()
+    bool TextFontCache::loadEngineFont(const char* enginePath, const char* cacheKey, bool required)
     {
-        const std::string path =
-            resource::PathResolver::resolveEnginePath(resource::DEFAULT_FONT_ENGINE_PATH);
+        const std::string path = resource::PathResolver::resolveEnginePath(enginePath);
 
-        auto fontData = std::make_shared<resource::FontData>(resource::FontResource::loadFont(path));
-        if (uploadFontAtlas(resource::DEFAULT_FONT_SENTINEL, std::move(fontData)))
+        // VK-1636: an absent styled face is the normal state, not an error, so check
+        // before loading rather than letting FontResource log a failure every time.
+        std::error_code ec;
+        if (!required && !std::filesystem::exists(path, ec))
         {
-            vfLogInfo("Default font loaded: {}", path);
-            return;
+            return false;
         }
 
-        // Logged once at init, never retried — text without a font stays invisible,
-        // which is the pre-VK-1628 behavior rather than a per-frame load storm.
-        vfLogError("Failed to load default font from {}. Text with no font assigned "
-                   "will not render.", path);
+        auto fontData = std::make_shared<resource::FontData>(resource::FontResource::loadFont(path));
+        if (uploadFontAtlas(cacheKey, std::move(fontData)))
+        {
+            vfLogInfo("Engine font loaded: {} ({})", path, cacheKey);
+            return true;
+        }
+
+        if (required)
+        {
+            // Logged once at init, never retried — text without a font stays invisible,
+            // which is the pre-VK-1628 behavior rather than a per-frame load storm.
+            vfLogError("Failed to load default font from {}. Text with no font assigned "
+                       "will not render.", path);
+        }
+        else
+        {
+            vfLogWarning("Styled default font {} exists but failed to load; bold/italic "
+                         "will stay synthesized.", path);
+        }
+        return false;
+    }
+
+    void TextFontCache::loadDefaultFont()
+    {
+        loadEngineFont(resource::DEFAULT_FONT_ENGINE_PATH, resource::DEFAULT_FONT_SENTINEL, true);
+
+        // VK-1636: the styled siblings of the shipped font. None of them ships today,
+        // so this is three existence checks at init and nothing more. They are loaded
+        // here rather than lazily because the sentinel keys have no path for
+        // requestFont to resolve, and because init is the only place that may block.
+        for (const uint32_t styleBits : {1u, 2u, 3u})
+        {
+            const char* enginePath = resource::defaultFontEnginePathForStyle(styleBits);
+            const char* sentinel = resource::defaultFontSentinelForStyle(styleBits);
+            loadEngineFont(enginePath, sentinel, false);
+        }
     }
 
     void TextFontCache::cleanUp()
@@ -70,6 +108,12 @@ namespace render::text
         }
         fontCache.clear();
         pendingLoads.clear();
+
+        // VK-1636: the memo caches "which sibling exists", which survives a device
+        // loss, but its interned strings are handed out as string_views — drop both
+        // together so nothing outlives the atlases they described.
+        styledFamilies.clear();
+        styledPathPool.clear();
 
         if (defaultSampler)
         {
@@ -196,10 +240,11 @@ namespace render::text
             return;
         }
 
-        // The sentinel is a cache key, not a path. It is populated once by
+        // The sentinels are cache keys, not paths. They are populated once by
         // loadDefaultFont(); if that failed there is nothing to retry, and feeding
         // the literal to AssetRef::fromPath below would register it as an asset.
-        if (fontPath == resource::DEFAULT_FONT_SENTINEL)
+        // VK-1636 added three styled ones — all four must bail out here.
+        if (resource::isDefaultFontSentinel(fontPath))
         {
             return;
         }
@@ -432,5 +477,122 @@ namespace render::text
             return fontPath;
         }
         return sentinel;
+    }
+
+    // VK-1636 ------------------------------------------------------------------
+
+    void TextFontCache::probeStyledSlot(const std::string& basePath, uint32_t styleBits,
+                                        StyledSlot& slot)
+    {
+        slot.candidates.clear();
+        slot.probed = true;
+        slot.lastProbe = std::chrono::steady_clock::now();
+
+        const bool isDefaultFamily = basePath.empty() || basePath == resource::DEFAULT_FONT_SENTINEL;
+
+        for (const uint32_t candidateBits : ::text::styleDowngradeOrder(styleBits))
+        {
+            if (isDefaultFamily)
+            {
+                // The engine font has no path, so its "siblings" are the styled
+                // sentinels loadDefaultFont() already tried. Presence in the cache IS
+                // existence; nothing can appear later, so this probe is final.
+                const std::string sentinel{resource::defaultFontSentinelForStyle(candidateBits)};
+                if (fontCache.contains(sentinel))
+                {
+                    const std::string* interned = &*styledPathPool.insert(sentinel).first;
+                    slot.candidates.push_back({interned, candidateBits});
+                }
+                continue;
+            }
+
+            for (const std::string& candidate : ::text::styledPathCandidates(basePath, candidateBits))
+            {
+                std::error_code ec;
+                if (!std::filesystem::exists(candidate, ec)) continue;
+
+                const std::string* interned = &*styledPathPool.insert(candidate).first;
+                slot.candidates.push_back({interned, candidateBits});
+                // One file per style rung is enough; the rest of the spellings for
+                // this rung would be the same face under a different name.
+                break;
+            }
+        }
+    }
+
+    TextFontCache::StyledFontResolution TextFontCache::resolveStyledFont(const std::string& basePath,
+                                                                        uint32_t styleBits)
+    {
+        StyledFontResolution resolution;
+        resolution.synthesizedBits = styleBits & ::text::STYLE_MASK;
+
+        // The unstyled case must cost exactly what it cost before this ticket: no
+        // probe, no memo lookup, no allocation.
+        if (resolution.synthesizedBits == 0)
+        {
+            resolution.key = &resolveFontKey(basePath);
+            return resolution;
+        }
+
+        const bool isDefaultFamily = basePath.empty() || basePath == resource::DEFAULT_FONT_SENTINEL;
+        const std::string& familyKey =
+            isDefaultFamily ? resolveFontKey(basePath) : basePath;
+
+        StyledFamily& family = styledFamilies[familyKey];
+        StyledSlot& slot = family.slots[resolution.synthesizedBits];
+
+        // Re-probe until the exact face turns up. That covers both "the family has no
+        // styled faces" and "we settled for Bold while BoldItalic was still missing",
+        // so importing the missing face with the editor open takes effect on its own.
+        // Once candidates[0] covers the whole request there is nothing better to find.
+        const bool satisfied =
+            !slot.candidates.empty() && slot.candidates.front().satisfiedBits == resolution.synthesizedBits;
+        if (!slot.probed ||
+            (!satisfied && !isDefaultFamily &&
+             std::chrono::steady_clock::now() - slot.lastProbe >= STYLE_REPROBE_INTERVAL))
+        {
+            probeStyledSlot(basePath, resolution.synthesizedBits, slot);
+
+            // Only the best candidate is worth an atlas. A lower rung is still used
+            // below if some other label already made it resident, but paying VRAM for
+            // a Bold we are about to replace with a BoldItalic is waste.
+            if (!slot.candidates.empty() && !isDefaultFamily)
+            {
+                requestFont(*slot.candidates.front().path);
+            }
+        }
+
+        // Residency is re-evaluated every frame: the atlas may still be uploading.
+        // Stack storage, not a vector — this runs per styled label per frame and a
+        // heap allocation here would be a real regression. styleDowngradeOrder yields
+        // at most three rungs and probeStyledSlot keeps one file per rung, so three
+        // entries is the hard ceiling.
+        std::array<::text::StyleFaceProbe, 3> probes{};
+        size_t probeCount = 0;
+        for (const StyledCandidate& candidate : slot.candidates)
+        {
+            if (probeCount >= probes.size()) break;
+            probes[probeCount++] = {candidate.satisfiedBits, true,
+                                    fontCache.contains(*candidate.path)};
+        }
+
+        const ::text::StyleChoice choice = ::text::chooseStyleFace(
+            resolution.synthesizedBits, std::span{probes.data(), probeCount});
+
+        if (choice.index < 0)
+        {
+            // No real face, or the one we want has not finished loading. Fall back to
+            // the base face and keep synthesizing the FULL request so the glyphs do
+            // not pop from Regular to Bold when the upload lands.
+            resolution.key = &resolveFontKey(basePath);
+            return resolution;
+        }
+
+        // Safe to hand out: chooseStyleFace only picks a resident candidate, which is
+        // what resolveFontKey's "never key a descriptor by a non-resident path" rule
+        // demands. Interned, so the pointer outlives the candidate vector.
+        resolution.key = slot.candidates[static_cast<size_t>(choice.index)].path;
+        resolution.synthesizedBits = choice.synthesizedBits;
+        return resolution;
     }
 }

@@ -91,6 +91,87 @@ namespace text
         return 0xFFFD;
     }
 
+    namespace
+    {
+        // VK-1636. A FaceSet slot is only usable if it could actually produce
+        // glyphs; the single-font entry point's guard is exactly this test on
+        // face 0, so reusing it keeps the two paths agreeing about empty output.
+        bool faceUsable(const resource::FontData* face)
+        {
+            return face != nullptr && face->metadata.baseFontSize != 0 &&
+                   face->atlas.width != 0 && face->atlas.height != 0;
+        }
+
+        // Everything layoutTextStyled needs per slot, hoisted out of the glyph loop
+        // the same way the single-font version hoisted `scale` and `lineHeight`.
+        struct FaceContext
+        {
+            const resource::FontData* face = nullptr;
+            float scale = 0.0f;
+            float atlasW = 0.0f;
+            float atlasH = 0.0f;
+            // blockAscenderPx - (ascender * scale). Exactly 0.0f for whichever face
+            // defines the block baseline, which is why the single-face path stays
+            // bit-identical: `y + 0.0f` is exact in IEEE754.
+            float baselineShift = 0.0f;
+        };
+
+        // Populated slots only; index i of the returned array mirrors faceSet.faces[i].
+        // Also yields the block-wide line height and ascender, both a max over the
+        // populated slots so every face shares one baseline and one line pitch.
+        struct BlockContext
+        {
+            FaceContext faces[4];
+            float lineHeight = 0.0f;
+            float ascenderPx = 0.0f;
+        };
+
+        BlockContext buildBlockContext(const FaceSet& faceSet, float fontSize, float lineSpacing)
+        {
+            BlockContext block;
+
+            bool any = false;
+            for (int i = 0; i < 4; ++i)
+            {
+                const resource::FontData* face = faceSet.faces[i];
+                if (!faceUsable(face)) continue;
+
+                FaceContext& ctx = block.faces[i];
+                ctx.face = face;
+                ctx.scale = fontSize / static_cast<float>(face->metadata.baseFontSize);
+                ctx.atlasW = static_cast<float>(face->atlas.width);
+                ctx.atlasH = static_cast<float>(face->atlas.height);
+
+                // Spelled exactly as the single-font path spells it, so a one-face
+                // set reproduces the legacy value bit for bit.
+                const float faceLineHeight = face->metadata.lineHeight * ctx.scale * lineSpacing;
+                const float faceAscenderPx = face->metadata.ascender * ctx.scale;
+
+                if (!any)
+                {
+                    block.lineHeight = faceLineHeight;
+                    block.ascenderPx = faceAscenderPx;
+                    any = true;
+                }
+                else
+                {
+                    block.lineHeight = std::max(block.lineHeight, faceLineHeight);
+                    block.ascenderPx = std::max(block.ascenderPx, faceAscenderPx);
+                }
+            }
+
+            for (int i = 0; i < 4; ++i)
+            {
+                FaceContext& ctx = block.faces[i];
+                if (!ctx.face) continue;
+                ctx.baselineShift =
+                    block.ascenderPx - ctx.face->metadata.ascender * ctx.scale;
+            }
+
+            return block;
+        }
+    }
+
     LayoutResult layoutText(
         const resource::FontData& fontData,
         const std::string& text,
@@ -99,22 +180,36 @@ namespace text
         float lineSpacing,
         float letterSpacing)
     {
+        FaceSet faceSet;
+        faceSet.faces[0] = &fontData;
+        return layoutTextStyled(faceSet, text, {}, fontSize, maxWidth, lineSpacing, letterSpacing);
+    }
+
+    LayoutResult layoutTextStyled(
+        const FaceSet& faceSet,
+        const std::string& text,
+        std::span<const uint8_t> perCodepointFace,
+        float fontSize,
+        float maxWidth,
+        float lineSpacing,
+        float letterSpacing)
+    {
         LayoutResult result;
 
-        if (text.empty() || fontData.metadata.baseFontSize == 0 ||
-            fontData.atlas.width == 0 || fontData.atlas.height == 0)
+        if (text.empty() || !faceUsable(faceSet.faces[0]))
         {
             return result;
         }
 
-        float scale = fontSize / static_cast<float>(fontData.metadata.baseFontSize);
-        float lineHeight = fontData.metadata.lineHeight * scale * lineSpacing;
+        const BlockContext block = buildBlockContext(faceSet, fontSize, lineSpacing);
+        const float lineHeight = block.lineHeight;
 
         float cursorX = 0.0f;
         float cursorY = 0.0f;
         float maxX = 0.0f;
 
         uint32_t prevCodepoint = 0;
+        uint8_t prevFaceIndex = 0;
         size_t i = 0;
         uint32_t charCounter = 0;
 
@@ -150,17 +245,41 @@ namespace text
                 wordStartCursorX = cursorX;
             }
 
-            const resource::GlyphData* glyph = fontData.findGlyph(codepoint);
+            // VK-1636: which face draws this codepoint. Out-of-range and unpopulated
+            // slots collapse to 0, so an empty perCodepointFace is plain single-font
+            // layout.
+            const uint8_t wantFace =
+                (charIndex < perCodepointFace.size()) ? perCodepointFace[charIndex] : uint8_t{0};
+            // Resolve against the BLOCK, not the FaceSet: a slot can be non-null yet
+            // unusable, and block.faces[i].face is null in that case.
+            uint8_t faceIndex =
+                (wantFace < 4 && block.faces[wantFace].face != nullptr) ? wantFace : uint8_t{0};
+
+            const resource::GlyphData* glyph = block.faces[faceIndex].face->findGlyph(codepoint);
+            if (!glyph && faceIndex != 0)
+            {
+                // A styled face imported with narrower character ranges would leave
+                // holes in otherwise-fine text. Borrow the glyph from the base face
+                // instead - it renders unstyled, which beats rendering nothing.
+                glyph = block.faces[0].face->findGlyph(codepoint);
+                if (glyph) faceIndex = 0;
+            }
             if (!glyph)
             {
                 cursorX += fontSize * 0.5f;
                 prevCodepoint = codepoint;
+                prevFaceIndex = faceIndex;
                 continue;
             }
 
-            if (prevCodepoint != 0)
+            const FaceContext& faceCtx = block.faces[faceIndex];
+            const float scale = faceCtx.scale;
+
+            // Kerning pairs are per face; a pair that spans a [b] boundary describes
+            // two glyphs that were never designed together, so drop it.
+            if (prevCodepoint != 0 && prevFaceIndex == faceIndex)
             {
-                cursorX += fontData.getKerning(prevCodepoint, codepoint) * scale;
+                cursorX += faceCtx.face->getKerning(prevCodepoint, codepoint) * scale;
             }
 
             float glyphAdvance = glyph->advanceX * scale + letterSpacing;
@@ -202,12 +321,16 @@ namespace text
             }
 
             float x = cursorX + glyph->bearingX * scale;
-            float y = cursorY + (fontData.metadata.ascender - glyph->bearingY) * scale;
+            // Every face shares the block baseline. baselineShift is exactly 0.0f for
+            // the face that defines it - and so for every single-face layout - which
+            // keeps this expression bit-identical to the pre-VK-1636 one.
+            float y = cursorY + (faceCtx.face->metadata.ascender - glyph->bearingY) * scale +
+                      faceCtx.baselineShift;
             float w = glyph->atlasWidth * scale;
             float h = glyph->atlasHeight * scale;
 
-            float atlasW = static_cast<float>(fontData.atlas.width);
-            float atlasH = static_cast<float>(fontData.atlas.height);
+            float atlasW = faceCtx.atlasW;
+            float atlasH = faceCtx.atlasH;
 
             float u0 = static_cast<float>(glyph->atlasX) / atlasW;
             float v0 = static_cast<float>(glyph->atlasY) / atlasH;
@@ -221,10 +344,12 @@ namespace text
             lg.codepoint = codepoint;
             lg.lineY = cursorY;
             lg.charIndex = charIndex;
+            lg.faceIndex = faceIndex;
             result.glyphs.push_back(lg);
 
             cursorX += glyphAdvance;
             prevCodepoint = codepoint;
+            prevFaceIndex = faceIndex;
         }
 
         if (cursorX > maxX) maxX = cursorX;
@@ -273,7 +398,8 @@ namespace text
         const resource::FontData& fontData,
         float fontSize,
         float maxWidth,
-        float letterSpacing)
+        float letterSpacing,
+        float baselineShift)
     {
         if (layout.glyphs.empty() || maxWidth <= 0.0f ||
             fontData.metadata.baseFontSize == 0 ||
@@ -388,7 +514,8 @@ namespace text
                 }
 
                 float x = cursorX + eg->bearingX * scale;
-                float y = line.lineY + (fontData.metadata.ascender - eg->bearingY) * scale;
+                float y = line.lineY + (fontData.metadata.ascender - eg->bearingY) * scale +
+                          baselineShift;
                 float w = eg->atlasWidth * scale;
                 float h = eg->atlasHeight * scale;
 
@@ -454,6 +581,45 @@ namespace text
         metrics.singleLineHeight = (emHeight > 0.0f ? emHeight : fontData.metadata.lineHeight) * scale;
 
         return metrics;
+    }
+
+    LineMetrics computeLineMetrics(const FaceSet& faceSet, float fontSize, float lineSpacing)
+    {
+        // Per-slot metrics come from the single-face function, so a one-face set
+        // returns exactly what the legacy call returned - alignment has to agree
+        // with layoutTextStyled to the last bit or the block drifts inside its rect.
+        LineMetrics metrics;
+        bool any = false;
+
+        for (const resource::FontData* face : faceSet.faces)
+        {
+            if (!faceUsable(face)) continue;
+
+            const LineMetrics faceMetrics = computeLineMetrics(*face, fontSize, lineSpacing);
+            if (!any)
+            {
+                metrics = faceMetrics;
+                any = true;
+            }
+            else
+            {
+                metrics.lineHeight = std::max(metrics.lineHeight, faceMetrics.lineHeight);
+                metrics.singleLineHeight =
+                    std::max(metrics.singleLineHeight, faceMetrics.singleLineHeight);
+            }
+        }
+
+        return metrics;
+    }
+
+    float baselineShiftForFaceSet(const FaceSet& faceSet, float fontSize)
+    {
+        if (!faceUsable(faceSet.faces[0])) return 0.0f;
+
+        // buildBlockContext is the single source of truth for the shared baseline;
+        // lineSpacing does not affect the ascender, so any value works here.
+        const BlockContext block = buildBlockContext(faceSet, fontSize, 1.0f);
+        return block.faces[0].baselineShift;
     }
 
     AlignmentOffsets computeAlignedLineOrigins(const LayoutResult& layout,

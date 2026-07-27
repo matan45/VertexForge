@@ -7,6 +7,7 @@
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "text/TextEffects.hpp"
+#include "text/FontStyleFace.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 
@@ -119,7 +120,15 @@ namespace render::text
         {
             // VK-1628: falls back to the default font when this one is missing or
             // still loading. Everything below keys off fontKey, never fontPath.
-            const std::string& fontKey = fontCache.resolveFontKey(textEntity.fontPath);
+            // VK-1636: and to a real Bold / Italic sibling face when the family ships
+            // one, in which case the shader stops synthesizing that axis. The world
+            // text pipeline has no rich text, so one face per entity is enough.
+            const uint32_t requestedStyleBits =
+                ::text::styleBitsFromFontStyle(static_cast<uint8_t>(textEntity.fontStyle));
+            const TextFontCache::StyledFontResolution styled =
+                fontCache.resolveStyledFont(textEntity.fontPath, requestedStyleBits);
+
+            const std::string& fontKey = *styled.key;
             const CachedFont* cached = fontCache.getFont(fontKey);
             if (!cached || !cached->fontData)
             {
@@ -164,11 +173,10 @@ namespace render::text
 
             auto& instances = fontInstances[fontKey];
 
-            uint32_t styleFlags = 0;
-            if (textEntity.fontStyle == components::FontStyle::Bold ||
-                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x1u;
-            if (textEntity.fontStyle == components::FontStyle::Italic ||
-                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
+            // VK-1636: only the axes the resolved face does NOT provide are still
+            // faked. A family with a real Bold gets 0 here and the shader's threshold
+            // bias never runs; one without gets exactly what it got before.
+            const uint32_t styleFlags = styled.synthesizedBits;
 
             // VK-1635: authored distances are layout pixels; the instance wants atlas
             // texels, and layout pixels per texel is exactly the `scale` TextLayout uses.
