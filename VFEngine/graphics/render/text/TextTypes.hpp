@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include "../common/CameraTypes.hpp"
@@ -121,8 +122,23 @@ namespace render::text
     {
         glm::vec2 viewportSize;
         uint32_t glyphMode;  // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
-        float padding2;
+        // VK-1634: SDFParameters::pxRange for glyphMode 2, zero otherwise. The fragment
+        // stage turns it into the screen-space anti-aliasing band. Zero degrades to a
+        // one-pixel band rather than misbehaving, so a missed push site is soft, not fatal.
+        // Occupies what used to be dead padding, so the block is still 16 bytes and the
+        // pipeline layout (TextPipelineSetup.cpp: pushConstantSize = sizeof(...)) is
+        // unchanged.
+        float pxRange;
     };
+
+    // Mirrors the push_constant block in resources/shaders/text/text.glsl, which declares it
+    // identically in both stages. Nothing else cross-checks the two - these fire at compile
+    // time; the GLSL side is pinned by tests/test_text_shader_compile.cpp.
+    static_assert(sizeof(TextPushConstants) == 16,
+                  "text.glsl push_constant block is 16 bytes; keep C++ and GLSL in lockstep");
+    static_assert(offsetof(TextPushConstants, viewportSize) == 0);
+    static_assert(offsetof(TextPushConstants, glyphMode) == 8);
+    static_assert(offsetof(TextPushConstants, pxRange) == 12);
 
     struct TextRenderData
     {

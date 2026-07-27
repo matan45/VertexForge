@@ -33,6 +33,12 @@ namespace render::text
         // Kept as the shader-facing integer so command recording does not need a
         // second atlas-format switch and the push-constant ABI stays unchanged.
         uint32_t glyphMode = 0;
+
+        // VK-1634: SDFParameters::pxRange, mirrored here for the same reason as
+        // glyphMode - the record loops push it per batch without dereferencing
+        // fontData. Meaningful only for glyphMode 2; the importer leaves it zero for
+        // every other atlas format.
+        float pxRange = 0.0f;
     };
 
     class TextFontCache

@@ -57,4 +57,28 @@ namespace sdf
         float alpha = sdfToAlpha(static_cast<float>(sdfValue), edgeCenter, smoothWidth);
         return static_cast<uint8_t>(alpha * 255.0f);
     }
+
+    // VK-1634: screen-space size, in pixels, of one full unit of an MTSDF field.
+    //
+    // Mirrors screenPxRange() in resources/shaders/common/text_sdf.glsl - keep the two in
+    // step. An MTSDF atlas stores v = 0.5 + d / pxRange with d the signed distance in atlas
+    // TEXELS, so one unit of v spans pxRange texels; scaling by the on-screen magnification
+    // converts that to screen pixels. The shader recovers the magnification from the uv
+    // derivatives; callers here pass it directly.
+    //
+    // Never below 1: under that the field can no longer carry an anti-aliased edge and the
+    // band has to stay a full pixel wide. Also makes a zero pxRange degrade softly instead
+    // of dividing by zero in mtsdfHalfBand().
+    inline float mtsdfScreenPxRange(float pxRange, float screenPixelsPerAtlasTexel)
+    {
+        return (std::max)(pxRange * screenPixelsPerAtlasTexel, 1.0f);
+    }
+
+    // VK-1634: half-width of the MTSDF anti-aliasing band, in normalized field units.
+    // A smoothstep over [edge - w, edge + w] ramps across 2*w field units, i.e.
+    // 2*w*screenPxRange screen pixels; w = 0.5 / screenPxRange makes that exactly one pixel.
+    inline float mtsdfHalfBand(float screenPxRange)
+    {
+        return 0.5f / (std::max)(screenPxRange, 1.0f);
+    }
 }

@@ -281,6 +281,10 @@ namespace render::text
             cached.glyphMode = 2;
         }
 
+        // Only glyphMode 2 reads this. Both .vfFont validators pin it to [1, 16] for
+        // MTSDF; every other format leaves the field at its zero default.
+        cached.pxRange = fontData->sdfParams.pxRange;
+
         // Color and MTSDF atlases are both four-channel linear data. In
         // particular, MTSDF must never be uploaded as sRGB: median-RGB distance
         // reconstruction operates on the authored normalized channel values.

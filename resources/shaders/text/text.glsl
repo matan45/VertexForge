@@ -28,7 +28,7 @@ layout(binding = 0) uniform CameraUBO {
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
     uint glyphMode;   // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
-    float padding2;
+    float pxRange;    // VK-1634: SDFParameters::pxRange for glyphMode 2, else 0
 } pc;
 
 void main() {
@@ -107,7 +107,7 @@ layout(binding = 1) uniform sampler2D fontAtlas;
 layout(push_constant) uniform PushConstants {
     vec2 viewportSize;
     uint glyphMode;   // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
-    float padding2;
+    float pxRange;    // VK-1634: SDFParameters::pxRange for glyphMode 2, else 0
 } pc;
 
 void main() {
@@ -127,9 +127,24 @@ void main() {
             : fieldSample.r;
 
         float boldBias = ((vStyleFlags & 1u) != 0u) ? 0.15 : 0.0;
-        float alpha = (fragSdfParams.y > 0.0)
-            ? sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias)
-            : fieldSample.r;
+
+        float alpha;
+        if (pc.glyphMode == 2u) {
+            // VK-1634: MTSDF ships a real pxRange, so the band is analytic instead of a
+            // derivative of the field. glyphMode is a push constant and therefore
+            // dynamically uniform, which is what makes the derivatives inside
+            // screenPxRange() legal here - fragSdfParams.y is a varying and must not gate
+            // them. Both .vfFont validators pin pxRange to [1, 16] for any loadable MTSDF
+            // font, so the sdfParams.y > 0 guard would be dead weight in this branch.
+            float screenRange = screenPxRange(fragTexCoord,
+                                              vec2(textureSize(fontAtlas, 0)),
+                                              pc.pxRange);
+            alpha = sdfCoverageRange(sdfValue, fragSdfParams.x, boldBias, screenRange);
+        } else {
+            alpha = (fragSdfParams.y > 0.0)
+                ? sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias)
+                : fieldSample.r;
+        }
 
         if (alpha < 0.01) {
             discard;

@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -69,8 +70,23 @@ namespace render::ui
     {
         glm::vec2 viewportSize;
         uint32_t glyphMode;    // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
-        float padding;
+        // VK-1634: SDFParameters::pxRange for glyphMode 2, zero otherwise. The fragment
+        // stage turns it into the screen-space anti-aliasing band. Zero degrades to a
+        // one-pixel band rather than misbehaving, so a missed push site is soft, not fatal.
+        // Occupies what used to be dead padding, so the block is still 16 bytes and the
+        // pipeline layout (UITextPipelineSetup.cpp: pushConstantSize = sizeof(...)) is
+        // unchanged - including the stencil pipeline, which shares that layout.
+        float pxRange;
     };
+
+    // Mirrors the push_constant block in resources/shaders/ui/ui_text.glsl, which declares it
+    // identically in both stages. Nothing else cross-checks the two - these fire at compile
+    // time; the GLSL side is pinned by tests/test_text_shader_compile.cpp.
+    static_assert(sizeof(UITextPushConstants) == 16,
+                  "ui_text.glsl push_constant block is 16 bytes; keep C++ and GLSL in lockstep");
+    static_assert(offsetof(UITextPushConstants, viewportSize) == 0);
+    static_assert(offsetof(UITextPushConstants, glyphMode) == 8);
+    static_assert(offsetof(UITextPushConstants, pxRange) == 12);
 
     struct UITextRenderData
     {

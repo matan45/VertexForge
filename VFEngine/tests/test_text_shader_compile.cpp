@@ -73,6 +73,25 @@ namespace
         CHECK(sawVertex);
         CHECK(sawFragment);
     }
+
+    std::string readShaderSource(const fs::path& path)
+    {
+        std::ifstream in(path);
+        REQUIRE_MESSAGE(in.is_open(), "missing " << path.string());
+        return std::string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    }
+
+    size_t countOccurrences(const std::string& haystack, const std::string& needle)
+    {
+        size_t count = 0;
+        for (size_t at = haystack.find(needle); at != std::string::npos;
+             at = haystack.find(needle, at + needle.size()))
+        {
+            ++count;
+        }
+        return count;
+    }
 }
 
 TEST_SUITE("TextShaderCompile")
@@ -150,5 +169,55 @@ TEST_SUITE("TextShaderCompile")
             CHECK(source.find("pc.glyphMode == 0u") == std::string::npos);
             CHECK(source.find(": fieldSample.r;") != std::string::npos);
         }
+    }
+
+    // VK-1634: the MTSDF band is analytic - derived from the bake-time pxRange and the uv
+    // varying - rather than from fwidth() of the sampled median. Taking a derivative of the
+    // median is exactly what softens the sharp corners the encoding exists to produce, so
+    // this case pins the plumbing end to end: the push-constant member that carries pxRange,
+    // the two helpers in the shared include, and the call sites in both shaders.
+    TEST_CASE("VK-1634: the MTSDF band comes from pxRange, not from a field derivative")
+    {
+        const std::string include = readShaderSource(shaderRoot() / "common" / "text_sdf.glsl");
+
+        CHECK(include.find("float screenPxRange(") != std::string::npos);
+        CHECK(include.find("float sdfCoverageRange(") != std::string::npos);
+        // The analytic band differences the uv varying. fwidth() of the uv would be an L1
+        // approximation, which italic shear and world-space camera roll would expose, so the
+        // L2 dFdx/dFdy pair is load-bearing rather than stylistic.
+        CHECK(include.find("dFdx(") != std::string::npos);
+        CHECK(include.find("dFdy(") != std::string::npos);
+        // ...and the legacy fwidth() band must survive untouched beside it. Note
+        // "sdfCoverageRange(" does NOT contain "sdfCoverage(", so this still pins the
+        // original function rather than matching the new one by accident.
+        CHECK(include.find("float sdfCoverage(") != std::string::npos);
+        CHECK(include.find("fwidth(") != std::string::npos);
+
+        for (const fs::path relative : {fs::path("ui") / "ui_text.glsl",
+                                        fs::path("text") / "text.glsl"})
+        {
+            const std::string source = readShaderSource(shaderRoot() / relative);
+            const std::string label = relative.generic_string();
+            CAPTURE(label);
+
+            // pxRange occupies what used to be dead padding at offset 12. Both stages share
+            // one push-constant range, so both blocks must declare it or the layouts diverge
+            // - and that divergence is silent, since nothing else cross-checks them.
+            CHECK(countOccurrences(source, "float pxRange;") == 2);
+            CHECK(source.find("float padding") == std::string::npos);
+            CHECK(source.find("pc.pxRange") != std::string::npos);
+
+            // Derivatives on the uv varying, and the atlas size straight from the sampler -
+            // the shared include must never name fontAtlas itself, because text.glsl binds
+            // it at 1 and ui_text.glsl at 0.
+            CHECK(source.find("screenPxRange(fragTexCoord") != std::string::npos);
+            CHECK(source.find("textureSize(fontAtlas, 0)") != std::string::npos);
+            CHECK(source.find("sdfCoverageRange(") != std::string::npos);
+            // The legacy call must still be there for glyphMode 0.
+            CHECK(source.find("sdfCoverage(sdfValue") != std::string::npos);
+        }
+
+        // The include is shared, so it must stay sampler-agnostic.
+        CHECK(include.find("fontAtlas") == std::string::npos);
     }
 }

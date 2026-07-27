@@ -451,11 +451,13 @@ namespace resource
         }
     };
 
-    // VK-1631: normalized-field-space half-width of the SDF anti-aliasing band. Handed to
-    // both text pipelines as the instance attribute sdfParams.y. Since VK-1631 the shaders
-    // derive the real on-screen band from fwidth() (see resources/shaders/common/text_sdf.glsl),
-    // so this value now only signals SDF (> 0) vs non-SDF (== 0); it still drives the
-    // CPU-side font-preview bake in the editor.
+    // VK-1631/VK-1634: normalized-field-space half-width of the SDF anti-aliasing band,
+    // handed to both text pipelines as the instance attribute sdfParams.y. The shaders no
+    // longer use the magnitude (see resources/shaders/common/text_sdf.glsl): for the legacy
+    // single-channel atlas (glyphMode 0) they derive the band from fwidth(), and for MTSDF
+    // (glyphMode 2) from the pxRange pushed as a push constant. The value now only signals
+    // SDF (> 0) vs non-SDF (== 0) - and it still drives the CPU-side font-preview bake for
+    // the legacy atlas (utilities/resource/FontAtlasPreview.cpp).
     [[nodiscard]] inline float sdfSmoothWidth(const FontData& font) noexcept
     {
         if (!font.isSDF())

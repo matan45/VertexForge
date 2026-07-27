@@ -2,6 +2,7 @@
 
 #include <config/Config.hpp>
 #include <controllers/Import.hpp>
+#include <math/MathHelper.hpp>
 #include <registry/builtin/BuiltinImporters.hpp>
 #include <resource/FontResource.hpp>
 #include <resource/Types.hpp>
@@ -170,6 +171,15 @@ TEST_SUITE("FontMTSDF")
         CHECK(mtsdf.sdfParams.edgeValue == doctest::Approx(0.5f));
         CHECK(mtsdf.sdfParams.padding == 0u);
 
+        // VK-1634: sdfParams.y reaches the shader as the SDF / non-SDF gate, and its false
+        // branch falls back to fieldSample.r - which on an MTSDF atlas is one raw
+        // pseudo-distance channel, i.e. visible garbage. An MTSDF font must therefore never
+        // produce zero here. The validators pin pxRange >= 1, so this cannot regress
+        // silently, but the gate is far enough from the value to be worth pinning.
+        CHECK(resource::sdfSmoothWidth(mtsdf) > 0.0f);
+        CHECK(resource::sdfSmoothWidth(mtsdf) ==
+              doctest::Approx(0.5f / mtsdf.sdfParams.pxRange));
+
         const auto* a = mtsdf.findGlyph('A');
         REQUIRE(a != nullptr);
         REQUIRE(a->atlasWidth > 0u);
@@ -244,5 +254,55 @@ TEST_SUITE("FontMTSDF")
         CHECK(readBytes(sdfPath) == committedDefault);
 
         CHECK(readBytes(mtsdfPath) == readBytes(repeatPath));
+    }
+
+    // VK-1634: CPU mirror of screenPxRange() / the half-band in
+    // resources/shaders/common/text_sdf.glsl. These same helpers bake the editor's MTSDF
+    // atlas preview (utilities/resource/FontAtlasPreview.cpp), so this guards shipping
+    // behaviour and not just a copy of the formula.
+    TEST_CASE("MTSDF screen-space band mirrors the shader derivation")
+    {
+        // The importer bakes with a SYMMETRIC msdfgen::Range(pxRange / pxPerEm), so the
+        // atlas stores v = 0.5 + d / pxRange with d in atlas TEXELS: one unit of field spans
+        // exactly pxRange texels, scaled by however many screen pixels a texel covers.
+        SUBCASE("one unit of field spans pxRange texels times the magnification")
+        {
+            CHECK(sdf::mtsdfScreenPxRange(4.0f, 1.0f) == doctest::Approx(4.0f));
+            // 256pt drawn from a 32px bake.
+            CHECK(sdf::mtsdfScreenPxRange(4.0f, 8.0f) == doctest::Approx(32.0f));
+            // msdfgen's own worked example: pxRange 2 in a 32x32 field drawn as a 72x72
+            // quad must give 4.5 (dependencies/msdfgen/README.md).
+            CHECK(sdf::mtsdfScreenPxRange(2.0f, 72.0f / 32.0f) == doctest::Approx(4.5f));
+        }
+
+        SUBCASE("the band never collapses below one screen pixel under minification")
+        {
+            // 8pt off a 32px bake with pxRange 2: 2 * 0.25 = 0.5, clamped up to 1.
+            CHECK(sdf::mtsdfScreenPxRange(2.0f, 0.25f) == doctest::Approx(1.0f));
+            CHECK(sdf::mtsdfHalfBand(sdf::mtsdfScreenPxRange(2.0f, 0.25f)) ==
+                  doctest::Approx(0.5f));
+        }
+
+        SUBCASE("the smoothstep ramps over exactly one screen pixel")
+        {
+            for (const float pxRange : {1.0f, 4.0f, 16.0f})
+            {
+                for (const float magnification : {1.0f, 2.5f, 8.0f})
+                {
+                    CAPTURE(pxRange);
+                    CAPTURE(magnification);
+                    const float range = sdf::mtsdfScreenPxRange(pxRange, magnification);
+                    const float w = sdf::mtsdfHalfBand(range);
+                    // 2*w field units * range screen pixels per field unit == 1 screen pixel.
+                    CHECK(2.0f * w * range == doctest::Approx(1.0f));
+                }
+            }
+        }
+
+        SUBCASE("a degenerate pxRange degrades softly instead of dividing by zero")
+        {
+            CHECK(sdf::mtsdfScreenPxRange(0.0f, 4.0f) == doctest::Approx(1.0f));
+            CHECK(sdf::mtsdfHalfBand(0.0f) == doctest::Approx(0.5f));
+        }
     }
 }

@@ -67,7 +67,6 @@ namespace windows
         void updateAsyncLoading();
         void reloadFromDisk();
         FontLoadResult loadFontBackground(const std::string& path);
-        static resource::TextureData convertAtlasToRGBA(const resource::FontData& fontData);
 
         void drawInfoPanel();
         void drawPreviewPanel();

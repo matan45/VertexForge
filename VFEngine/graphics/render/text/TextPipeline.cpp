@@ -264,6 +264,7 @@ namespace render::text
             TextPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
             pushConstants.glyphMode = glyphMode;
+            pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
             commandBuffer.pushConstants(pipelineLayout,
                                          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -328,6 +329,7 @@ namespace render::text
             TextPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
             pushConstants.glyphMode = glyphMode;
+            pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
             commandBuffer.pushConstants(pipelineLayout,
                                          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
