@@ -20,6 +20,8 @@ namespace text
         {
             glm::vec4 color;
             glm::vec2 offset;
+            // False for the bare [shadow] form, whose `color` is only a placeholder.
+            bool colorGiven;
         };
 
         struct GlowSpan
@@ -56,6 +58,7 @@ namespace text
                 if (!shadowStack.empty())
                 {
                     style.hasShadow = true;
+                    style.hasShadowColor = shadowStack.back().colorGiven;
                     style.shadowColor = shadowStack.back().color;
                     style.shadowOffset = shadowStack.back().offset;
                 }
@@ -270,7 +273,8 @@ namespace text
                 // the RICH_TEXT_DEFAULT_* constants when the label has no shadow at all.
                 // Resolved in RichTextSpanStyle::applyTo(), which is the only place that
                 // can see the label's own settings.
-                state.shadowStack.push_back({glm::vec4(0.0f, 0.0f, 0.0f, 0.5f), glm::vec2(0.0f)});
+                state.shadowStack.push_back(
+                    {glm::vec4(0.0f, 0.0f, 0.0f, 0.5f), glm::vec2(0.0f), /*colorGiven=*/false});
             }
             else if (tag.rfind("shadow=", 0) == 0)
             {
@@ -278,7 +282,8 @@ namespace text
                 float numbers[2] = {0.0f, 0.0f};
                 if (parseEffectTagValue(tag.substr(7), 2, color, numbers))
                 {
-                    state.shadowStack.push_back({color, glm::vec2(numbers[0], numbers[1])});
+                    state.shadowStack.push_back(
+                        {color, glm::vec2(numbers[0], numbers[1]), /*colorGiven=*/true});
                 }
                 else
                 {

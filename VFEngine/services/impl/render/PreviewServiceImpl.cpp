@@ -7,6 +7,7 @@
 #include "../../providers/render/IUILayerPreviewProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
 #include "FontFallbackChainResolver.hpp"
 #include <cassert>
 
@@ -37,6 +38,10 @@ namespace services
         if (projectClosedToken.isValid())
         {
             dispatcher.unsubscribe(projectClosedToken);
+        }
+        if (importCompletedToken.isValid())
+        {
+            dispatcher.unsubscribe(importCompletedToken);
         }
     }
 
@@ -73,6 +78,27 @@ namespace services
                 {
                     uiLayerProvider->setFontFallbackChain({});
                 });
+
+            // VK-1638: the UI layer preview owns its own font cache, so a reimport has to
+            // reach it separately from the viewport's. Fires on the importer's detached
+            // worker thread — invalidateFont only queues, so that is safe; see the same
+            // subscription in EditorRenderServiceImpl.
+            importCompletedToken =
+                dispatcher.subscribe<::events::resource::ImportCompletedNotification>(
+                    [this](const ::events::resource::ImportCompletedNotification& notification)
+                    {
+                        for (const auto& result : notification.results)
+                        {
+                            if (!result.success || result.outputPath.empty())
+                            {
+                                continue;
+                            }
+                            if (font_asset::isFontOutput(result.outputPath))
+                            {
+                                uiLayerProvider->invalidateFont(result.outputPath);
+                            }
+                        }
+                    });
         }
     }
 

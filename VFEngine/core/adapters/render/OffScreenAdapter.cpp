@@ -155,6 +155,12 @@ namespace core {
         }
     }
 
+    void OffScreenAdapter::invalidateFont(const std::string& fontPath) {
+        if (offScreen) {
+            offScreen->invalidateFont(fontPath);
+        }
+    }
+
     void OffScreenAdapter::prepareSceneData() {
         if (offScreen) {
             offScreen->prepareSceneData();

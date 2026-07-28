@@ -18,6 +18,15 @@ namespace windows::reimport
         std::vector<import::ImportOptionDesc> descs;                          // importer-declared options
         std::map<std::string, importConfig::ImportOptionValue> storedOptions;  // as baked, from the sidecar
         bool hasUnpersistedSettings = false; // type also has non-customOptions settings (see .cpp)
+        // Sidecar predates AssetMetadata v4, so storedOptions is empty because nothing
+        // was ever recorded — NOT because the importer has no options. A plain reimport
+        // therefore rebakes with importer defaults, which the UI has to say out loud.
+        bool optionsUnavailable = false;
+        // The asset itself is no longer loadable by this engine (a .vfFont written before
+        // the format-2.0.0 header, say). Independent of `enabled`: it says the asset NEEDS
+        // reimporting, not that it can be. Worth surfacing because the renderer silently
+        // substitutes the default font rather than failing visibly (VK-1628).
+        bool staleFormat = false;
     };
 
     // Reads the sidecar next to `assetPath` and decides whether Reimport applies.

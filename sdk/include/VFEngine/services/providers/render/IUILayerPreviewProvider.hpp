@@ -47,6 +47,9 @@ namespace services
         virtual void setUILayerReferenceResolution(PreviewInstanceId instanceId,
                                                    uint32_t refWidth, uint32_t refHeight) = 0;
         virtual void setFontFallbackChain(std::span<const std::string> fontPaths) = 0;
+        // VK-1638: see IOffScreenProvider::invalidateFont. The UI layer preview owns its
+        // own font cache, so it needs the call independently.
+        virtual void invalidateFont(const std::string& fontPath) = 0;
 
         // Renders the bound canvas subtree to its offscreen image; returns the ImGui
         // descriptor set for ImGui::Image() (or nullptr if not built).

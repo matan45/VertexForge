@@ -88,6 +88,7 @@ namespace controllers
         // configured before its lazy init applies the same chain once its private
         // TextFontCache is created.
         void setFontFallbackChain(std::span<const std::string> fontPaths);
+        void invalidateFont(const std::string& fontPath);
 
         // Builds the scoped screen-space draw lists for the bound subtree at the reference
         // extent, records the UI image + text pipelines into the offscreen color image, and

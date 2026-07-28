@@ -46,6 +46,8 @@ namespace render::text
 
         // Per-font descriptor sets
         std::unordered_map<std::string, vk::DescriptorSet> fontDescriptorSets;
+        // TextFontCache::atlasGeneration() as of the last refresh of the map above.
+        uint64_t lastAtlasGeneration = 0;
         vk::DescriptorSet defaultDescriptorSet;
         static constexpr uint32_t MAX_FONT_DESCRIPTORS = 32;
 
@@ -85,5 +87,9 @@ namespace render::text
 
         void updateDescriptorSet(vk::DescriptorSet dstSet, vk::ImageView imageView, vk::Sampler sampler);
         vk::DescriptorSet getOrCreateFontDescriptorSet(const std::string& fontPath);
+        // VK-1638: a reimport keeps the font PATH but replaces the atlas behind it, so
+        // the sets cached above point at a destroyed image view. Re-point rather than
+        // free: the sets stay allocated, which keeps the descriptor budget honest.
+        void refreshFontDescriptorSetsIfStale();
     };
 }

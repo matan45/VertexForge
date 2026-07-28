@@ -5,8 +5,10 @@
 #include "VFSHelpers.hpp"
 
 #include <cmath>
+#include <exception>
 #include <limits>
 #include <sstream>
+#include <string>
 
 namespace resource
 {
@@ -71,6 +73,35 @@ namespace resource
         }
     }
 
+    FontHeaderStatus FontResource::probeHeader(std::string_view path)
+    {
+        if (path.empty())
+        {
+            return FontHeaderStatus::Unreadable;
+        }
+
+        const auto data = resource::readFileBytes(std::string(path));
+        if (data.size() < FONT_HEADER_SIZE)
+        {
+            return FontHeaderStatus::Unreadable;
+        }
+
+        try
+        {
+            std::string headerBytes(data.begin(), data.begin() + FONT_HEADER_SIZE);
+            std::istringstream in(headerBytes, std::ios::binary);
+            in.exceptions(std::ios::badbit | std::ios::failbit);
+
+            VfFontHeader header;
+            readVfFontHeader(in, header);
+            return classifyVfFontHeader(header, data.size());
+        }
+        catch (const std::exception&)
+        {
+            return FontHeaderStatus::Unreadable;
+        }
+    }
+
     FontData FontResource::loadFont(std::string_view path)
     {
         if (path.empty())
@@ -104,32 +135,36 @@ namespace resource
             VfFontHeader header;
             readVfFontHeader(inFile, header);
 
-            if (header.magic != FONT_MAGIC)
-            {
-                vfLogError("Invalid font file magic in {}: expected 'VFFT'. Re-import required.", path);
-                return {};
-            }
-
             fontData.headerFileType = static_cast<FileType>(header.fileType);
-            if (fontData.headerFileType != FileType::FONT)
-            {
-                vfLogError("Invalid font file type: expected FONT ({}), got {}",
-                           static_cast<int>(FileType::FONT),
-                           static_cast<int>(fontData.headerFileType));
-                return {};
-            }
-
             fontData.version.major = header.versionMajor;
             fontData.version.minor = header.versionMinor;
             fontData.version.patch = header.versionPatch;
-            if (header.versionMajor != FONT_FORMAT_VERSION_MAJOR ||
-                header.versionMinor != FONT_FORMAT_VERSION_MINOR ||
-                header.versionPatch != FONT_FORMAT_VERSION_PATCH)
+
+            // Same classifier the editor's staleness check uses, so "loadable here" and
+            // "flagged as needing a reimport there" can never disagree.
+            switch (classifyVfFontHeader(header, data.size()))
             {
-                vfLogError("Incompatible font format version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
+            case FontHeaderStatus::Ok:
+                break;
+            case FontHeaderStatus::NotAFont:
+                // Every .vfFont written before format 2.0.0 lands here: that layout had
+                // no magic word at all. Nothing is recoverable from it.
+                vfLogError("Not a readable .vfFont (bad magic or file type): {}. "
+                           "Re-import the source font — text using it will render in the "
+                           "built-in default typeface until you do.",
+                           path);
+                return {};
+            case FontHeaderStatus::StaleVersion:
+                vfLogError("Incompatible font format version in {}: {}.{}.{}, expected {}.{}.{}. "
+                           "Re-import the source font — text using it will render in the "
+                           "built-in default typeface until you do.",
+                           path,
                            header.versionMajor, header.versionMinor, header.versionPatch,
                            FONT_FORMAT_VERSION_MAJOR, FONT_FORMAT_VERSION_MINOR,
                            FONT_FORMAT_VERSION_PATCH);
+                return {};
+            case FontHeaderStatus::Unreadable:
+                vfLogError("Truncated font file: {}", path);
                 return {};
             }
 

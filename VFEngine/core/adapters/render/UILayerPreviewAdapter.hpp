@@ -38,6 +38,7 @@ namespace core
         void setUILayerReferenceResolution(services::PreviewInstanceId instanceId,
                                            uint32_t refWidth, uint32_t refHeight) override;
         void setFontFallbackChain(std::span<const std::string> fontPaths) override;
+        void invalidateFont(const std::string& fontPath) override;
 
         void* renderUILayerPreview(services::PreviewInstanceId instanceId) override;
 

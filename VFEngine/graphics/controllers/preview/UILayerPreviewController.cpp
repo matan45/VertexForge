@@ -383,6 +383,17 @@ namespace controllers
         }
     }
 
+    void UILayerPreviewController::invalidateFont(const std::string& fontPath)
+    {
+        // Only queues; the owned pipeline drains it on its next draw-list build, which is
+        // the render thread. Nothing to do before the cache exists - it will load the
+        // reimported file from disk the first time it is asked for.
+        if (ownedFontCache)
+        {
+            ownedFontCache->requestInvalidate(fontPath);
+        }
+    }
+
     void* UILayerPreviewController::render()
     {
         if (!initialized || !built)

@@ -77,6 +77,18 @@ float sdfCoverage(float sdf, float edge, float smoothWidth, float boldBias)
     return smoothstep(threshold - w, threshold + w, sdf);
 }
 
+// Synthetic bold for a NATIVE COVERAGE atlas (grayscale raster, sdfParams == 0). There is
+// no distance field to shift a threshold in, so thicken by lifting the coverage curve:
+// a monotone gamma that pins 0 -> 0 and 1 -> 1 and pushes every midtone up, which widens
+// the antialiased edge ramp the way a heavier face does.
+//
+// Deliberately derivative-free: callers reach this through a branch on the VARYING
+// sdfParams.y, and a derivative under a non-uniform branch is undefined.
+float coverageBold(float coverage, float boldBias)
+{
+    return (boldBias > 0.0) ? pow(coverage, 1.0 - boldBias) : coverage;
+}
+
 // VK-1634: floor on the squared per-axis uv gradient. A zero-area quad makes both
 // derivatives exactly zero; without this the reciprocal below is +inf, and when pxRange is
 // also zero 0 * inf yields a NaN that max() does NOT clamp - GLSL max(NaN, x) returns NaN -

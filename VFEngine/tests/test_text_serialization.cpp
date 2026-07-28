@@ -199,4 +199,110 @@ TEST_SUITE("TextSerialization")
         CHECK(text.wordWrap == true);
         CHECK(text.maxWidth == doctest::Approx(200.0f));
     }
+
+    // ---- VK-1638: text effects persist what was AUTHORED, not what is rendering ----
+    //
+    // serializeTextEffects used to gate each group on hasOutline()/hasShadow()/hasGlow(),
+    // which are alpha-gated. Dragging a colour's alpha to 0 to compare "with / without"
+    // therefore deleted the authored distance on the next save.
+
+    TEST_CASE("an outline width authored with a transparent colour survives a save")
+    {
+        resetTextTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& text = source.GetRoot().addOrReplaceComponent<components::TextComponent>();
+        text.text = "Effects";
+        text.effects.outlineWidth = 3.0f;
+        text.effects.outlineColor = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+        REQUIRE_FALSE(text.effects.hasOutline()); // inert right now, but authored
+
+        fs::path scenePath = textTestRoot() / "OutlineAlphaZero.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        scene::SceneGraphSystem loaded;
+        const auto& reloaded = loadText(loaded, scenePath);
+        CHECK(reloaded.effects.outlineWidth == doctest::Approx(3.0f));
+        CHECK(reloaded.effects.outlineColor.a == doctest::Approx(0.0f));
+    }
+
+    TEST_CASE("a shadow offset authored with a transparent colour survives a save")
+    {
+        resetTextTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& text = source.GetRoot().addOrReplaceComponent<components::TextComponent>();
+        text.text = "Effects";
+        text.effects.shadowOffset = glm::vec2(2.0f, -3.0f);
+        text.effects.shadowColor = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+        REQUIRE_FALSE(text.effects.hasShadow());
+
+        fs::path scenePath = textTestRoot() / "ShadowAlphaZero.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        scene::SceneGraphSystem loaded;
+        const auto& reloaded = loadText(loaded, scenePath);
+        CHECK(reloaded.effects.shadowOffset.x == doctest::Approx(2.0f));
+        CHECK(reloaded.effects.shadowOffset.y == doctest::Approx(-3.0f));
+        CHECK(reloaded.effects.shadowColor.r == doctest::Approx(1.0f));
+    }
+
+    TEST_CASE("a glow range authored with a transparent colour survives a save")
+    {
+        resetTextTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& text = source.GetRoot().addOrReplaceComponent<components::TextComponent>();
+        text.text = "Effects";
+        text.effects.glowRange = 4.0f;
+        text.effects.glowColor = glm::vec4(0.2f, 0.4f, 0.6f, 0.0f);
+        REQUIRE_FALSE(text.effects.hasGlow());
+
+        fs::path scenePath = textTestRoot() / "GlowAlphaZero.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        scene::SceneGraphSystem loaded;
+        const auto& reloaded = loadText(loaded, scenePath);
+        CHECK(reloaded.effects.glowRange == doctest::Approx(4.0f));
+        CHECK(reloaded.effects.glowColor.b == doctest::Approx(0.6f));
+    }
+
+    TEST_CASE("a text component with no authored effects still writes no effects key")
+    {
+        resetTextTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& text = source.GetRoot().addOrReplaceComponent<components::TextComponent>();
+        text.text = "No effects";
+
+        fs::path scenePath = textTestRoot() / "NoEffects.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        std::ifstream file(scenePath);
+        REQUIRE(file.is_open());
+        json saved;
+        file >> saved;
+        CHECK_FALSE(saved["root"]["components"]["text"].contains("effects"));
+    }
+
+    TEST_CASE("an active effect still round-trips unchanged")
+    {
+        resetTextTestRoot();
+
+        scene::SceneGraphSystem source;
+        auto& text = source.GetRoot().addOrReplaceComponent<components::TextComponent>();
+        text.text = "Effects";
+        text.effects.outlineWidth = 2.0f;
+        text.effects.outlineColor = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
+        REQUIRE(text.effects.hasOutline());
+
+        fs::path scenePath = textTestRoot() / "ActiveOutline.vfScene";
+        REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+        scene::SceneGraphSystem loaded;
+        const auto& reloaded = loadText(loaded, scenePath);
+        CHECK(reloaded.effects.outlineWidth == doctest::Approx(2.0f));
+        CHECK(reloaded.effects.outlineColor.g == doctest::Approx(0.5f));
+        CHECK(reloaded.effects.outlineColor.a == doctest::Approx(1.0f));
+    }
 }

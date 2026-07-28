@@ -76,6 +76,19 @@ namespace core
         }
     }
 
+    void UILayerPreviewAdapter::invalidateFont(const std::string& fontPath)
+    {
+        // Nothing to replay for controllers created later: they build a fresh cache and
+        // load the reimported file from disk on their first frame.
+        for (auto& [_, controller] : controllers)
+        {
+            if (controller)
+            {
+                controller->invalidateFont(fontPath);
+            }
+        }
+    }
+
     void* UILayerPreviewAdapter::renderUILayerPreview(services::PreviewInstanceId instanceId)
     {
         auto* controller = getController(instanceId);

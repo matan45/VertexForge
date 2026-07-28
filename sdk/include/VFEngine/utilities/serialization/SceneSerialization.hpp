@@ -487,8 +487,11 @@ namespace serialization
         static components::FontStyle stringToFontStyle(const std::string& str);
 
         // VK-1635. Shared by UILabelComponent and TextComponent. The write side returns a
-        // null json when nothing is enabled and its caller omits the key entirely, so a
-        // scene authored before text effects existed round-trips byte-identically.
+        // null json when nothing was AUTHORED (every field still at its default) and its
+        // caller omits the key entirely, so a scene written before text effects existed
+        // round-trips byte-identically. Note "authored", not "enabled": an effect whose
+        // colour alpha is currently 0 renders nothing but must still persist its
+        // distances, or previewing "without the outline" would destroy them (VK-1638).
         static json serializeTextEffects(const components::TextEffectSettings& effects);
         static void deserializeTextEffects(const json& j, components::TextEffectSettings& effects);
 

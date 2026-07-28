@@ -33,6 +33,7 @@ namespace services
         ::events::SubscriptionToken projectLoadedToken;
         ::events::SubscriptionToken projectConfigUpdatedToken;
         ::events::SubscriptionToken projectClosedToken;
+        ::events::SubscriptionToken importCompletedToken;
 
     public:
         explicit PreviewServiceImpl(IMaterialPreviewProvider* materialProvider, IMeshPreviewProvider* meshProvider,

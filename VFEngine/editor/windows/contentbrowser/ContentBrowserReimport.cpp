@@ -1,6 +1,7 @@
 #include "ContentBrowserReimport.hpp"
 #include "Import.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
+#include "resource/FontResource.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "print/Log.hpp"
@@ -16,6 +17,10 @@ namespace windows::reimport
 {
     namespace
     {
+        // AssetMetadata::kCurrentFormatVersion when "importOptions" was added (VK-1629).
+        // A sidecar older than this never recorded options, whatever the importer offers.
+        constexpr uint32_t kImportOptionsFormatVersion = 4;
+
         std::string lowerExtensionNoDot(const fs::path& path)
         {
             std::string ext = path.extension().string();
@@ -52,6 +57,16 @@ namespace windows::reimport
 
         if (assetPath.empty() || !fs::is_regular_file(assetPath))
             return result;
+
+        // Independent of every eligibility test below — a stale asset needs reimporting
+        // whether or not one is currently possible, and nothing else in the editor says
+        // so out loud.
+        if (StringUtil::toLower(assetPath.extension().string()) == ".vffont")
+        {
+            result.staleFormat =
+                resource::FontResource::probeHeader(assetPath.string()) !=
+                resource::FontHeaderStatus::Ok;
+        }
 
         const auto metadata =
             asset::AssetMetadataSerializer::load(asset::AssetMetadataSerializer::getMetaPath(assetPath));
@@ -124,6 +139,13 @@ namespace windows::reimport
         result.storedOptions = metadata->importOptions;
         result.descs = controllers::Import::optionsForExtension(sourceExt);
         result.hasUnpersistedSettings = typeHasUnpersistedSettings(metadata->type);
+
+        // An empty storedOptions map is ambiguous: either the importer declares no
+        // options, or the sidecar predates the version that started recording them
+        // (AssetMetadata v4, VK-1629). Only the second case silently swaps the settings
+        // the asset was actually baked with for importer defaults, so flag it.
+        result.optionsUnavailable =
+            metadata->formatVersion < kImportOptionsFormatVersion && !result.descs.empty();
         return result;
     }
 

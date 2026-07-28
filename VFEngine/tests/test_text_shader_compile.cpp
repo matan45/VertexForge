@@ -167,8 +167,44 @@ TEST_SUITE("TextShaderCompile")
             CHECK(source.find("medianRGB(fieldSample.rgb)") != std::string::npos);
             CHECK(source.find("pc.glyphMode != 1u") != std::string::npos);
             CHECK(source.find("pc.glyphMode == 0u") == std::string::npos);
-            CHECK(source.find(": fieldSample.r;") != std::string::npos);
+
+            // VK-1638: the native-coverage arm applies synthetic bold as well. It used to
+            // return the raw texel, which made fontStyle = Bold a silent no-op for every
+            // grayscale-baked font while italic still sheared.
+            //
+            // Scoped to the alpha ternary on purpose. ": fieldSample.r;" ALSO appears a
+            // few lines above as the non-MTSDF arm of the sdfValue reconstruction, where
+            // it is correct and must stay - a whole-file search for it fails on the
+            // wrong occurrence.
+            const size_t alphaBranch = source.find("alpha = (fragSdfParams.y > 0.0)");
+            REQUIRE(alphaBranch != std::string::npos);
+            const size_t alphaEnd = source.find(';', alphaBranch);
+            REQUIRE(alphaEnd != std::string::npos);
+            const std::string alphaExpr = source.substr(alphaBranch, alphaEnd - alphaBranch);
+
+            CHECK(alphaExpr.find("coverageBold(fieldSample.r, boldBias)") != std::string::npos);
+            CHECK(alphaExpr.find(": fieldSample.r") == std::string::npos);
         }
+    }
+
+    TEST_CASE("VK-1638: synthetic bold on a coverage atlas is shared and derivative-free")
+    {
+        const std::string include = readShaderSource(shaderRoot() / "common" / "text_sdf.glsl");
+
+        const size_t begin = include.find("float coverageBold(");
+        REQUIRE(begin != std::string::npos);
+        const size_t end = include.find("\n}", begin);
+        REQUIRE(end != std::string::npos);
+        const std::string body = include.substr(begin, end - begin);
+
+        // Callers reach this through a branch on the VARYING sdfParams.y, so a derivative
+        // inside it would be undefined - which is precisely why the band cannot simply be
+        // reconstructed here the way sdfCoverage does it.
+        CHECK(body.find("fwidth") == std::string::npos);
+        CHECK(body.find("dFdx") == std::string::npos);
+        CHECK(body.find("dFdy") == std::string::npos);
+        // Monotone gamma lift: pins 0 -> 0 and 1 -> 1, pushes midtones up.
+        CHECK(body.find("pow(") != std::string::npos);
     }
 
     // VK-1634: the MTSDF band is analytic - derived from the bake-time pxRange and the uv

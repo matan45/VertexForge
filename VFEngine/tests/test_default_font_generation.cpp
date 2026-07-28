@@ -15,15 +15,21 @@
 // VK-1628: the engine ships one default font so text with no fontRef still
 // renders (see resource/DefaultFont.hpp).
 //
-// resources/fonts/DefaultFont.vfFont is a COMMITTED binary. The generator below
-// is how it is produced, and it is skipped by default because it writes into the
-// source tree:
+// resources/fonts/DefaultFont.vfFont is a COMMITTED binary and the generator below
+// is how it is produced. It runs on every plain Tests.exe invocation, so a test run
+// REWRITES that artifact in the source tree. Measured: the .vfFont itself comes back
+// byte-identical, but createVfMeta stamps a fresh importTimestamp, so the .vfmeta
+// sidecar differs every run and `git status` is dirty afterwards. Discard it —
 //
-//     Tests.exe --test-case="regenerate*" --no-skip
+//     git checkout -- resources/fonts/DefaultFont.vfFont.vfmeta
 //
-// Everything else here runs normally and guards the committed artifact: if a
-// future format bump (e.g. MTSDF) invalidates it without a regeneration, the
-// load-back case fails loudly instead of the engine silently rendering no text.
+// — unless the font genuinely changed. Note also that this case sets
+// Import::setLocation, a PROCESS-WIDE static, to resources/fonts, which every later
+// import test in the same run inherits.
+//
+// The remaining cases guard the committed artifact: if a future format bump
+// (e.g. MTSDF) invalidates it without a regeneration, the load-back case fails
+// loudly instead of the engine silently rendering no text.
 // ============================================================
 
 namespace
@@ -47,6 +53,8 @@ namespace
 
 TEST_SUITE("DefaultFont")
 {
+    // Deliberately NOT decorated with doctest::skip() — see the note at the top of the
+    // file for what a plain run therefore writes into the source tree.
     TEST_CASE("regenerate resources/fonts/DefaultFont.vfFont from Roboto")
     {
         const fs::path source = repoRoot() / "resources" / "editor" / "Roboto-Regular.ttf";

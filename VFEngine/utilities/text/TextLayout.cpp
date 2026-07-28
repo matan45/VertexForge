@@ -539,7 +539,15 @@ namespace text
         std::vector<LayoutGlyph> rebuilt;
         rebuilt.reserve(layout.glyphs.size() + ellipsisGlyphs.size() * lines.size());
 
+        // layoutText sets boundingBox.y = lastLineY + lineHeight, so the trailing line's
+        // height falls straight out of the layout we were handed. Needed because dropping
+        // a line below has to shrink the box, and a dropped line can be INTERIOR (short
+        // lines survive while long ones vanish), so the count alone is not enough.
+        const float lineHeight = layout.boundingBox.y - lines.back().lineY;
+
         float newMaxX = 0.0f;
+        float lastKeptLineY = 0.0f;
+        bool anyKept = false;
 
         for (const auto& line : lines)
         {
@@ -552,6 +560,8 @@ namespace text
                     rebuilt.push_back(layout.glyphs[line.start + i]);
                 }
                 newMaxX = std::max(newMaxX, line.maxX);
+                lastKeptLineY = line.lineY;
+                anyKept = true;
                 continue;
             }
 
@@ -630,10 +640,15 @@ namespace text
             }
 
             newMaxX = std::max(newMaxX, cursorX);
+            lastKeptLineY = line.lineY;
+            anyKept = true;
         }
 
         layout.glyphs = std::move(rebuilt);
-        layout.boundingBox.x = newMaxX;
+        // Both axes, or vertical alignment keeps sizing the block for lines that the
+        // drop above deleted and the text sits off-centre inside its rect.
+        layout.boundingBox = anyKept ? glm::vec2(newMaxX, lastKeptLineY + lineHeight)
+                                     : glm::vec2(0.0f);
     }
 
     HAlign toHAlign(uint8_t value) noexcept

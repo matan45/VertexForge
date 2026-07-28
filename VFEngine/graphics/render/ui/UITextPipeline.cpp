@@ -36,6 +36,10 @@ namespace render::ui
             // The style axes this slot's face does NOT provide - straight into
             // UITextCharInstance::styleFlags, so the shader fakes only what is missing.
             uint32_t synthesizedBits[8] = {};
+            // The axes this slot was ACQUIRED for. requestBits & ~synthesizedBits is
+            // therefore what the slot's face really provides, which is the only way to
+            // tell what a glyph lost when layout demoted it to another slot.
+            uint32_t requestBits[8] = {};
             float sdfEdge[8] = {};
             float sdfSmooth[8] = {};
             float effectScale[8] = {};
@@ -65,6 +69,7 @@ namespace render::ui
 
             slots.keys[index] = styled.key;
             slots.synthesizedBits[index] = styled.synthesizedBits;
+            slots.requestBits[index] = bits;
             slots.faces[index] = face;
             slots.faceSet.faces[index] = face;
 
@@ -186,6 +191,7 @@ namespace render::ui
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         fontDescriptorSets.clear();
+        lastAtlasGeneration = fontCache.atlasGeneration();
         scissorGroups.clear();
         totalInstanceCount = 0;
 
@@ -212,14 +218,16 @@ namespace render::ui
         scissorGroups.clear();
         totalInstanceCount = 0;
 
+        // Ahead of the empty check: this also drains reimport invalidations, which must
+        // happen whether or not there is UI text on screen this frame.
+        fontCache.processPendingLoads();
+        refreshFontDescriptorSetsIfStale();
+
         if (labels.empty())
         {
             bufferManager.updateInstanceBuffer({});
             return;
         }
-
-        // Process pending font loads
-        fontCache.processPendingLoads();
 
         // Request any fonts that aren't loaded yet
         for (const auto& label : labels)
@@ -419,9 +427,15 @@ namespace render::ui
                     requestedBits |= richText.perCodepoint[glyph.charIndex].styleFlags;
                 }
                 const bool fallback = isFallbackSlot(slots, glyph.faceIndex);
+                // Not simply synthesizedBits[slot]: layout may have demoted this glyph
+                // to a different slot than the one its span asked for, and that slot's
+                // face provides only what IT was requested for. residualStyleBits is
+                // identical to synthesizedBits[slot] whenever no demotion happened.
                 inst.styleFlags = tofu ? ::text::STYLE_TOFU
                     : (fallback ? (requestedBits & ::text::STYLE_MASK)
-                                : slots.synthesizedBits[slot]);
+                                : ::text::residualStyleBits(requestedBits,
+                                                            slots.requestBits[slot],
+                                                            slots.synthesizedBits[slot]));
                 inst.effectParams = tofu ? glm::vec4(0.0f) : baseEffect.params;
                 inst.effectColors = tofu ? glm::uvec4(0u) : baseEffect.colors;
                 inst.effectMargin = tofu ? 0.0f : baseEffect.marginPx;

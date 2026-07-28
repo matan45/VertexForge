@@ -59,6 +59,43 @@ namespace resource
         uint32_t formatFlags = 0;
     };
 
+    // Why a .vfFont could not be accepted. Distinguishing these matters because the
+    // remedy differs: NotAFont / StaleVersion both mean "re-import it", and that has to
+    // be said out loud - VK-1628's default-font substitution otherwise turns a rejected
+    // font into text that renders in the WRONG typeface rather than not at all.
+    enum class FontHeaderStatus : uint8_t
+    {
+        Ok,
+        Unreadable,   // missing, unreadable, or shorter than the header
+        NotAFont,     // wrong magic or fileType - includes every pre-2.0.0 file, which had no magic
+        StaleVersion, // 'VFFT' but a format version this engine does not read
+    };
+
+    // Pure classification of an already-read header. `byteCount` is how much of the file
+    // was actually available, so a truncated file is reported as Unreadable rather than
+    // as a garbage version. The reader and the editor's staleness check both go through
+    // here so they cannot disagree about what "loadable" means.
+    [[nodiscard]] inline FontHeaderStatus classifyVfFontHeader(const VfFontHeader& header,
+                                                               std::size_t byteCount) noexcept
+    {
+        if (byteCount < FONT_HEADER_SIZE)
+        {
+            return FontHeaderStatus::Unreadable;
+        }
+        if (header.magic != FONT_MAGIC ||
+            header.fileType != static_cast<uint8_t>(FileType::FONT))
+        {
+            return FontHeaderStatus::NotAFont;
+        }
+        if (header.versionMajor != FONT_FORMAT_VERSION_MAJOR ||
+            header.versionMinor != FONT_FORMAT_VERSION_MINOR ||
+            header.versionPatch != FONT_FORMAT_VERSION_PATCH)
+        {
+            return FontHeaderStatus::StaleVersion;
+        }
+        return FontHeaderStatus::Ok;
+    }
+
     // Writes the header in exactly the layout above. Does NOT write the metadata block.
     inline void writeVfFontHeader(std::ostream& out, const VfFontHeader& header)
     {

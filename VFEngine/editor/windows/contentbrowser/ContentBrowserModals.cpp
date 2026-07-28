@@ -351,16 +351,40 @@ namespace windows
         const bool busy = importInFlightProvider && importInFlightProvider();
         const bool enabled = eligibility.enabled && !busy;
 
-        if (ImGui::MenuItem("Reimport", nullptr, false, enabled))
+        // A stale asset is one the engine can no longer load, and the renderer hides that
+        // by substituting the default font — so the menu is the one place it can be said.
+        const char* reimportLabel =
+            eligibility.staleFormat ? "Reimport (format out of date)" : "Reimport";
+        if (ImGui::MenuItem(reimportLabel, nullptr, false, enabled))
         {
             startReimport(selectedFile, eligibility, false);
         }
-        if (ImGui::IsItemHovered())
+        // AllowWhenDisabled or the greyed-out cases never report a hover and the whole
+        // point of eligibility.reason - telling the user WHY Reimport is unavailable -
+        // is unreachable.
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         {
             if (busy)
                 ImGui::SetTooltip("An import is already running");
+            else if (!eligibility.enabled && eligibility.staleFormat)
+                ImGui::SetTooltip(
+                    "This asset was written by an older engine and can no longer be loaded — "
+                    "text using it renders in the built-in default font.\n"
+                    "Reimport is unavailable: %s",
+                    eligibility.reason.c_str());
             else if (!eligibility.enabled)
                 ImGui::SetTooltip("%s", eligibility.reason.c_str());
+            else if (eligibility.staleFormat)
+                ImGui::SetTooltip(
+                    "This asset was written by an older engine and can no longer be loaded — "
+                    "text using it renders in the built-in default font.\n"
+                    "Rebuild it from %s to fix that.",
+                    fs::path(eligibility.sourcePath).filename().string().c_str());
+            else if (eligibility.optionsUnavailable)
+                ImGui::SetTooltip(
+                    "Rebuild this asset from %s using the importer defaults — it was "
+                    "imported before import options were recorded, so none were stored",
+                    fs::path(eligibility.sourcePath).filename().string().c_str());
             else
                 ImGui::SetTooltip("Rebuild this asset from %s using the stored import options",
                                   fs::path(eligibility.sourcePath).filename().string().c_str());
@@ -372,8 +396,17 @@ namespace windows
         {
             startReimport(selectedFile, eligibility, true);
         }
-        if (withOptionsEnabled && ImGui::IsItemHovered())
-            ImGui::SetTooltip("Change the import settings and rebuild this asset");
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            if (withOptionsEnabled)
+                ImGui::SetTooltip("Change the import settings and rebuild this asset");
+            else if (enabled)
+                ImGui::SetTooltip("This importer exposes no options to change");
+            else if (busy)
+                ImGui::SetTooltip("An import is already running");
+            else
+                ImGui::SetTooltip("%s", eligibility.reason.c_str());
+        }
     }
 
     void ContentBrowserModals::startReimport(const fs::path& selectedFile,
@@ -419,6 +452,15 @@ namespace windows
                 ImGui::TextColored(ImVec4(0.9f, 0.75f, 0.3f, 1.0f),
                                    "Texture compression, audio and mesh settings are not stored in\n"
                                    "the .vfmeta and will fall back to their defaults.");
+            }
+
+            if (reimportTarget.optionsUnavailable)
+            {
+                ImGui::Separator();
+                ImGui::TextColored(ImVec4(0.9f, 0.75f, 0.3f, 1.0f),
+                                   "This asset was imported before import options were recorded,\n"
+                                   "so the values above start from the importer defaults rather\n"
+                                   "than from what it was originally baked with.");
             }
 
             ImGui::Separator();

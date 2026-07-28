@@ -94,6 +94,7 @@ namespace render::text
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         fontDescriptorSets.clear();
+        lastAtlasGeneration = fontCache.atlasGeneration();
         fontBatches.clear();
         totalInstanceCount = 0;
 
@@ -127,14 +128,16 @@ namespace render::text
         fontBatches.clear();
         totalInstanceCount = 0;
 
+        // Ahead of the empty check: this also drains reimport invalidations, which must
+        // happen whether or not there is world text on screen this frame.
+        fontCache.processPendingLoads();
+        refreshFontDescriptorSetsIfStale();
+
         if (textEntities.empty())
         {
             bufferManager.updateInstanceBuffer({});
             return;
         }
-
-        // Process pending font loads
-        fontCache.processPendingLoads();
 
         // Request any fonts that aren't loaded yet
         for (const auto& textEntity : textEntities)

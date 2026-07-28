@@ -88,4 +88,23 @@ namespace text
     // TextFontCache's rule that a descriptor is never keyed by a non-resident path.
     [[nodiscard]] StyleChoice chooseStyleFace(uint32_t requestedBits,
                                               std::span<const StyleFaceProbe> probes) noexcept;
+
+    // What the shader must still synthesize for a glyph that ended up drawn by the
+    // slot acquired for `slotRequestBits`, when the caller asked for `requestedBits`.
+    //
+    // layoutTextStyled demotes a glyph to another slot when the styled face lacks that
+    // codepoint ("borrow the glyph from the base face"). The landed face then provides
+    // only slotRequestBits & ~slotSynthesizedBits, and every other requested axis still
+    // has to be faked - otherwise a [b] span silently loses its weight for one glyph in
+    // the middle of an otherwise-bold word.
+    //
+    // When the glyph was NOT demoted, slotRequestBits == requestedBits and this reduces
+    // exactly to slotSynthesizedBits, so unstyled and matched text is untouched.
+    [[nodiscard]] constexpr uint32_t residualStyleBits(uint32_t requestedBits,
+                                                       uint32_t slotRequestBits,
+                                                       uint32_t slotSynthesizedBits) noexcept
+    {
+        const uint32_t nativeBits = slotRequestBits & ~slotSynthesizedBits;
+        return (requestedBits & STYLE_MASK) & ~nativeBits;
+    }
 }

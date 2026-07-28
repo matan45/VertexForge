@@ -68,6 +68,16 @@ namespace controllers
         }
     }
 
+    void OffScreenController::invalidateFont(const std::string& fontPath)
+    {
+        // Dropping this when the handler is not up yet is correct: nothing has been
+        // cached, so there is nothing stale to invalidate.
+        if (auto* renderHandler = offScreen ? offScreen->getRenderPassHandler() : nullptr)
+        {
+            renderHandler->invalidateFont(fontPath);
+        }
+    }
+
     void OffScreenController::prepareSceneData()
     {
         offscreen::FrameContext ctx;

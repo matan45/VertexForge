@@ -212,7 +212,7 @@ void main() {
         } else {
             alpha = (fragSdfParams.y > 0.0)
                 ? sdfCoverage(sdfValue, fragSdfParams.x, fragSdfParams.y, boldBias)
-                : fieldSample.r;
+                : coverageBold(fieldSample.r, boldBias);
         }
 
         if (alpha < 0.01) {

@@ -89,6 +89,7 @@ namespace controllers
         void prepareFrameBillboards();
         void prepareFrameText();
         void setFontFallbackChain(std::span<const std::string> fontPaths);
+        void invalidateFont(const std::string& fontPath);
         void prepareSceneData();
         void setShowBillboardIcons(bool show);
         bool getShowBillboardIcons() const;

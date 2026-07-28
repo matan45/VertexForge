@@ -131,6 +131,13 @@ namespace render::text
         }
         fontCache.clear();
         pendingLoads.clear();
+        failedLoads.clear();
+        loggedSubstitutions.clear();
+        invalidatedPaths.clear();
+        {
+            std::lock_guard lock(invalidateMutex);
+            pendingInvalidations.clear();
+        }
 
         // VK-1636: the memo caches "which sibling exists", which survives a device
         // loss, but its interned strings are handed out as string_views — drop both
@@ -259,9 +266,24 @@ namespace render::text
         }
     }
 
+    bool TextFontCache::isInFailureBackoff(const std::string& fontPath) const noexcept
+    {
+        const auto it = failedLoads.find(fontPath);
+        return it != failedLoads.end() &&
+               std::chrono::steady_clock::now() - it->second < FONT_RETRY_INTERVAL;
+    }
+
     void TextFontCache::requestFont(const std::string& fontPath)
     {
         if (fontCache.contains(fontPath) || pendingLoads.contains(fontPath))
+        {
+            return;
+        }
+
+        // Callers re-request every frame while a font is not resident (resolveStyledFont
+        // does exactly that so a fixed-and-reimported face heals on its own), so a path
+        // that cannot load has to stop costing an async load each frame.
+        if (isInFailureBackoff(fontPath))
         {
             return;
         }
@@ -297,6 +319,10 @@ namespace render::text
 
     void TextFontCache::processPendingLoads()
     {
+        // Before the loads, so a font invalidated this frame is dropped first and the
+        // reload below re-populates it rather than being thrown away again.
+        drainPendingInvalidations();
+
         std::vector<std::string> completed;
 
         for (auto& [path, pending] : pendingLoads)
@@ -304,10 +330,12 @@ namespace render::text
             if (pending.future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
             {
                 auto fontData = pending.future.get();
+                bool ok = false;
                 if (fontData)
                 {
                     if (uploadFontAtlas(path, fontData))
                     {
+                        ok = true;
                         vfLogInfo("Text font loaded: {}", path);
                     }
                     else
@@ -319,6 +347,28 @@ namespace render::text
                 {
                     vfLogError("Failed to load font: {}", path);
                 }
+
+                if (ok)
+                {
+                    failedLoads.erase(path);
+                    // Only a path that was invalidated can have a descriptor set already
+                    // pointing at the atlas this call just replaced; a first-time load
+                    // has none, and bumping for those would refresh on every startup.
+                    if (invalidatedPaths.erase(path) > 0)
+                    {
+                        ++atlasGen;
+                    }
+                }
+                else
+                {
+                    failedLoads[path] = std::chrono::steady_clock::now();
+                    if (loggedSubstitutions.insert(path).second)
+                    {
+                        vfLogWarning("Text using {} will render in the built-in DEFAULT font - "
+                                     "wrong typeface and wrong metrics - until the asset is "
+                                     "re-imported.", path);
+                    }
+                }
                 completed.push_back(path);
             }
         }
@@ -326,6 +376,82 @@ namespace render::text
         for (const auto& path : completed)
         {
             pendingLoads.erase(path);
+        }
+    }
+
+    void TextFontCache::requestInvalidate(std::string fontPath)
+    {
+        if (fontPath.empty())
+        {
+            return;
+        }
+        std::lock_guard lock(invalidateMutex);
+        pendingInvalidations.push_back(std::move(fontPath));
+    }
+
+    void TextFontCache::drainPendingInvalidations()
+    {
+        std::vector<std::string> paths;
+        {
+            std::lock_guard lock(invalidateMutex);
+            if (pendingInvalidations.empty())
+            {
+                return;
+            }
+            paths.swap(pendingInvalidations);
+        }
+
+        auto& dev = device.getLogicalDevice();
+
+        // A reimport is a rare, user-initiated action, so the simplest correct barrier is
+        // the right one: the atlas being destroyed can still be referenced by a frame in
+        // flight, and every other controller in this engine that swaps a live GPU
+        // resource takes the same waitIdle.
+        bool destroyedAny = false;
+
+        for (const auto& path : paths)
+        {
+            // Any load in flight was started against the OLD file, so its result must be
+            // discarded. Note this erase BLOCKS: ~future on a std::async task joins it.
+            // That is the acceptable cost of a rare, user-initiated reimport, and it is
+            // also what guarantees no worker is still writing when the atlas goes away.
+            pendingLoads.erase(path);
+            failedLoads.erase(path);
+            // Re-arm the substitution warning: the file just changed, so if the new one
+            // is broken too the user should hear about it again.
+            loggedSubstitutions.erase(path);
+
+            const auto it = fontCache.find(path);
+            if (it == fontCache.end())
+            {
+                continue;
+            }
+
+            if (!destroyedAny)
+            {
+                dev.waitIdle();
+                destroyedAny = true;
+            }
+
+            CachedFont& cached = it->second;
+            if (cached.atlasSampler) dev.destroySampler(cached.atlasSampler);
+            if (cached.atlasImageView) dev.destroyImageView(cached.atlasImageView);
+            if (cached.atlasImage)
+            {
+                dev.destroyImage(cached.atlasImage);
+                device.getMemoryManager().free(cached.atlasImageAllocation);
+            }
+            fontCache.erase(it);
+            invalidatedPaths.insert(path);
+        }
+
+        if (destroyedAny)
+        {
+            // The style memo records which sibling FILES exist and whether they were
+            // resident; both answers just changed. styledPathPool is deliberately left
+            // alone - callers hold const std::string* into it for the rest of the frame.
+            styledFamilies.clear();
+            ++atlasGen;
         }
     }
 
@@ -666,14 +792,23 @@ namespace render::text
              std::chrono::steady_clock::now() - slot.lastProbe >= STYLE_REPROBE_INTERVAL))
         {
             probeStyledSlot(basePath, resolution.synthesizedBits, slot);
+        }
 
-            // Only the best candidate is worth an atlas. A lower rung is still used
-            // below if some other label already made it resident, but paying VRAM for
-            // a Bold we are about to replace with a BoldItalic is waste.
-            if (!slot.candidates.empty() && !isDefaultFamily)
-            {
-                requestFont(*slot.candidates.front().path);
-            }
+        // Only the best candidate is worth an atlas. A lower rung is still used below if
+        // some other label already made it resident, but paying VRAM for a Bold we are
+        // about to replace with a BoldItalic is waste.
+        //
+        // Deliberately OUTSIDE the probe gate: `satisfied` above answers "does the right
+        // FILE exist", not "did its atlas upload". Requesting only when the probe fires
+        // meant a failed upload was never retried - the slot stayed probed and satisfied
+        // forever, so the label kept synthesizing the style for the rest of the session
+        // even after the face was fixed and reimported. requestFont early-returns for a
+        // resident, pending or recently-failed path, so running this per styled label
+        // per frame costs one hash lookup.
+        if (!slot.candidates.empty() && !isDefaultFamily &&
+            !fontCache.contains(*slot.candidates.front().path))
+        {
+            requestFont(*slot.candidates.front().path);
         }
 
         // Residency is re-evaluated every frame: the atlas may still be uploading.

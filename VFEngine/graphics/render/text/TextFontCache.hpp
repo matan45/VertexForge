@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -67,6 +68,34 @@ namespace render::text
         };
         std::unordered_map<std::string, PendingLoad> pendingLoads;
 
+        // Paths whose last load attempt failed, and when. processPendingLoads drops a
+        // pending entry whether it succeeded or not, so without this a caller that
+        // re-requests every frame (see resolveStyledFont's residency retry) would spawn
+        // a fresh std::async for a broken file on every single frame.
+        std::unordered_map<std::string, std::chrono::steady_clock::time_point> failedLoads;
+
+        // Paths already warned about. VK-1628 substitutes the built-in default font for a
+        // font that will not load, so the text still renders - in the wrong typeface and
+        // at the wrong metrics - and the raw load error reads as harmless. The
+        // consequence is worth saying, but exactly once per path per session.
+        std::unordered_set<std::string> loggedSubstitutions;
+
+        // VK-1638: reimport invalidation. requestInvalidate() may be called from the
+        // importer's detached worker thread, so it only parks the path here; every
+        // Vulkan touch happens on the render thread when processPendingLoads() drains it.
+        std::mutex invalidateMutex;
+        std::vector<std::string> pendingInvalidations;
+
+        // Paths dropped by an invalidation and not yet re-uploaded. Only these can have
+        // a stale descriptor set pointing at them - a first-time load has no set yet -
+        // so only these bump the generation when their new atlas lands.
+        std::unordered_set<std::string> invalidatedPaths;
+
+        // Bumped whenever a resident atlas is dropped or replaced. Pipelines key their
+        // descriptor sets by font PATH, and a reimport keeps the path while replacing
+        // the image view behind it, so they re-point their sets when this changes.
+        uint64_t atlasGen = 0;
+
         // ----------------------------------------------------------------
         // VK-1636: sibling style faces.
         // ----------------------------------------------------------------
@@ -115,6 +144,11 @@ namespace render::text
         // std::filesystem::exists calls on the frame path, so cap the rate.
         static constexpr std::chrono::milliseconds STYLE_REPROBE_INTERVAL{2000};
 
+        // How long a path that failed to load or upload is left alone before another
+        // attempt. Long enough that a permanently broken font costs nothing per frame,
+        // short enough that fixing and reimporting it heals without a restart.
+        static constexpr std::chrono::milliseconds FONT_RETRY_INTERVAL{5000};
+
     public:
         explicit TextFontCache(core::Device& device);
         ~TextFontCache();
@@ -124,6 +158,19 @@ namespace render::text
 
         void requestFont(const std::string& fontPath);
         void processPendingLoads();
+
+        // VK-1638: drop the cached atlas for `fontPath` so the next frame reloads it.
+        // Call after a reimport, or the editor keeps drawing the pre-reimport glyphs
+        // until it is restarted (requestFont early-returns for any resident key).
+        //
+        // THREAD-SAFE, and deliberately does no work of its own: the import that
+        // triggers it finishes on a detached worker thread. The teardown happens in
+        // processPendingLoads() on the render thread.
+        void requestInvalidate(std::string fontPath);
+
+        // Changes whenever a resident atlas is dropped or replaced. Pipelines compare
+        // it against the value they last refreshed their font descriptor sets at.
+        [[nodiscard]] uint64_t atlasGeneration() const noexcept { return atlasGen; }
 
         bool isFontReady(const std::string& fontPath) const;
 
@@ -188,5 +235,12 @@ namespace render::text
 
         // VK-1636. Fills `slot` with the styled siblings of `basePath` that exist.
         void probeStyledSlot(const std::string& basePath, uint32_t styleBits, StyledSlot& slot);
+
+        // Render thread only — destroys Vulkan objects. Drained from processPendingLoads.
+        void drainPendingInvalidations();
+
+        // True when `fontPath` failed recently enough that another attempt would just
+        // burn a thread and fail again.
+        [[nodiscard]] bool isInFailureBackoff(const std::string& fontPath) const noexcept;
     };
 }

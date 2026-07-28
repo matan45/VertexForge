@@ -4,6 +4,7 @@
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
@@ -60,6 +61,11 @@ namespace services
         if (projectClosedToken.isValid())
         {
             dispatcher.unsubscribe(projectClosedToken);
+        }
+
+        if (importCompletedToken.isValid())
+        {
+            dispatcher.unsubscribe(importCompletedToken);
         }
     }
 
@@ -375,6 +381,34 @@ namespace services
                 if (offScreenProvider)
                 {
                     offScreenProvider->setFontFallbackChain({});
+                }
+            });
+
+        // VK-1638: a reimported .vfFont keeps its path, and the render-side cache is
+        // keyed by path and never re-reads a resident key — so without this the viewport
+        // draws the pre-reimport atlas until the editor restarts.
+        //
+        // NOTE: this fires on the importer's DETACHED WORKER THREAD (see
+        // ContentBrowserReimport::run). invalidateFont is safe there by construction: it
+        // only queues the path under a mutex, and the atlas teardown happens on the
+        // render thread when TextFontCache drains the queue. Do not add render work here.
+        importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
+            [this](const events::resource::ImportCompletedNotification& notification)
+            {
+                if (!offScreenProvider)
+                {
+                    return;
+                }
+                for (const auto& result : notification.results)
+                {
+                    if (!result.success || result.outputPath.empty())
+                    {
+                        continue;
+                    }
+                    if (font_asset::isFontOutput(result.outputPath))
+                    {
+                        offScreenProvider->invalidateFont(result.outputPath);
+                    }
                 }
             });
     }

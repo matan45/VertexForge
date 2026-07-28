@@ -8,6 +8,7 @@
 #include <string>
 #include <future>
 #include <atomic>
+#include <memory>
 
 namespace windows
 {
@@ -47,7 +48,14 @@ namespace windows
         // does the actual reload on the UI thread (releasing the atlas descriptor
         // and re-reading the file are both UI-thread-only operations).
         events::SubscriptionToken importCompletedToken;
-        std::atomic<bool> reloadRequested{false};
+        // Shared with the import-notification handler, which runs on the importer's
+        // detached worker thread. EventDispatcher::publish invokes handlers AFTER
+        // releasing its lock, so unsubscribe() in the destructor cannot stop a handler
+        // that is already in flight - it must therefore never touch `this`. Owning the
+        // flag through a shared_ptr the handler also holds keeps it alive for exactly
+        // as long as either side needs it.
+        std::shared_ptr<std::atomic<bool>> reloadRequested =
+            std::make_shared<std::atomic<bool>>(false);
 
         // Preview settings
         char textInputBuffer[1024] = {};

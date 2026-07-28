@@ -9,26 +9,40 @@ namespace serialization {
 
     json SceneSerialization::serializeTextEffects(const components::TextEffectSettings& effects)
     {
-        // A default-constructed settings block writes nothing at all. Callers test the
-        // result with is_null() and skip the key, so every scene saved before text effects
-        // existed re-saves byte-identically.
-        if (!effects.any())
+        // Persist what was AUTHORED, not what is currently rendering. Gating on
+        // hasOutline()/hasShadow()/hasGlow() drops an authored width the moment its colour
+        // alpha reaches 0 - which is exactly what dragging the alpha down to compare
+        // "with / without the outline" does, so the width would be lost on the next save.
+        //
+        // A default-constructed settings block still writes nothing at all. Callers test
+        // the result with is_null() and skip the key, so every scene saved before text
+        // effects existed re-saves byte-identically.
+        const components::TextEffectSettings defaults{};
+
+        const bool outline = effects.outlineWidth != defaults.outlineWidth ||
+                             effects.outlineColor != defaults.outlineColor;
+        const bool shadow = effects.shadowOffset != defaults.shadowOffset ||
+                            effects.shadowColor != defaults.shadowColor;
+        const bool glow = effects.glowRange != defaults.glowRange ||
+                          effects.glowColor != defaults.glowColor;
+
+        if (!outline && !shadow && !glow)
         {
             return json{};
         }
 
         json j;
-        if (effects.hasOutline())
+        if (outline)
         {
             j["outlineWidth"] = effects.outlineWidth;
             j["outlineColor"] = writeVec4(effects.outlineColor);
         }
-        if (effects.hasShadow())
+        if (shadow)
         {
             j["shadowOffset"] = writeVec2(effects.shadowOffset);
             j["shadowColor"] = writeVec4(effects.shadowColor);
         }
-        if (effects.hasGlow())
+        if (glow)
         {
             j["glowRange"] = effects.glowRange;
             j["glowColor"] = writeVec4(effects.glowColor);

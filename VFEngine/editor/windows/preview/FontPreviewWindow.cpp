@@ -32,12 +32,19 @@ namespace windows
         // Pick up a reimport of the font currently on screen (VK-1629). Compared
         // against the same path this window was opened with, normalised, because the
         // importer reports its output path as it built it.
+        //
+        // The handler runs on the importer's detached worker thread and deliberately
+        // captures NO `this`: publish() dispatches outside its lock, so the destructor's
+        // unsubscribe cannot stop a call that is already under way. Everything it needs
+        // is copied in - the flag by shared_ptr, the path by value (it is immutable
+        // after construction anyway).
         importCompletedToken = events::EventDispatcher::instance()
             .subscribe<events::resource::ImportCompletedNotification>(
-                [this](const events::resource::ImportCompletedNotification& notification)
+                [reloadFlag = reloadRequested, watchedPath = fontPath](
+                    const events::resource::ImportCompletedNotification& notification)
                 {
                     std::error_code ec;
-                    const auto mine = std::filesystem::weakly_canonical(fontPath, ec);
+                    const auto mine = std::filesystem::weakly_canonical(watchedPath, ec);
                     if (ec) return;
 
                     for (const auto& result : notification.results)
@@ -49,7 +56,7 @@ namespace windows
                             std::filesystem::weakly_canonical(result.outputPath, compareEc);
                         if (!compareEc && theirs == mine)
                         {
-                            reloadRequested.store(true);
+                            reloadFlag->store(true);
                             return;
                         }
                     }
@@ -95,7 +102,7 @@ namespace windows
         if (needsInit) { startAsyncLoad(); needsInit = false; }
         // Deliberately after the needsInit branch and before updateAsyncLoading, so a
         // reload never races the initial load in flight.
-        if (reloadRequested.exchange(false) && !loadingInProgress.load()) { reloadFromDisk(); }
+        if (reloadRequested->exchange(false) && !loadingInProgress.load()) { reloadFromDisk(); }
         updateAsyncLoading();
 
         if (initialSize.x <= 0.0f)

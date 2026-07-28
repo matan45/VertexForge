@@ -336,25 +336,34 @@ namespace windows
                     fontFallbackChain[i], workingDirectory, "ProjectFallback", options))
             {
                 isDirty = true;
+
+                // Only an ACTIVE clear removes the row - drawProjectFontSlot returns
+                // true and empties the string when Remove is pressed. A row that
+                // "Add Font Fallback" just appended is also empty, but unchanged, and
+                // has to survive until the user picks a font into it. applyChanges
+                // drops any still-empty entry, so an unfilled row is never saved.
+                if (fontFallbackChain[i].empty())
+                {
+                    fontFallbackChain.erase(
+                        fontFallbackChain.begin() + static_cast<std::ptrdiff_t>(i));
+                    ImGui::PopID();
+                    continue;
+                }
             }
 
-            if (fontFallbackChain[i].empty())
-            {
-                fontFallbackChain.erase(fontFallbackChain.begin() + static_cast<std::ptrdiff_t>(i));
-                ImGui::PopID();
-                continue;
-            }
-
-            if (i == 0)
+            const bool isFirst = i == 0;
+            if (isFirst)
             {
                 ImGui::BeginDisabled();
             }
-            if (ImGui::Button("Move Up"))
+            // The i > 0 test is what makes the swap safe; BeginDisabled only hides
+            // the button, and an unsigned i - 1 would wrap.
+            if (ImGui::Button("Move Up") && i > 0)
             {
                 std::swap(fontFallbackChain[i], fontFallbackChain[i - 1]);
                 isDirty = true;
             }
-            if (i == 0)
+            if (isFirst)
             {
                 ImGui::EndDisabled();
             }
@@ -365,7 +374,7 @@ namespace windows
             {
                 ImGui::BeginDisabled();
             }
-            if (ImGui::Button("Move Down"))
+            if (ImGui::Button("Move Down") && !isLast)
             {
                 std::swap(fontFallbackChain[i], fontFallbackChain[i + 1]);
                 isDirty = true;

@@ -30,6 +30,11 @@ namespace text
         float outlineWidth = 0.0f;   // 0 = not given in the tag; resolved by applyTo()
 
         bool hasShadow = false;
+        // Whether the tag NAMED a colour. [shadow] is the one effect tag with a bare
+        // form, and a bare one inherits the label's colour; [outline=..]/[glow=..] only
+        // exist in the "=" form, which parseEffectTagValue rejects without a colour, so
+        // they need no such flag.
+        bool hasShadowColor = false;
         glm::vec4 shadowColor{0.0f, 0.0f, 0.0f, 0.5f};
         glm::vec2 shadowOffset{0.0f, 0.0f};  // (0,0) = not given; resolved by applyTo()
 
@@ -59,7 +64,14 @@ namespace text
             }
             if (hasShadow)
             {
-                out.shadowColor = shadowColor;
+                // A bare [shadow] inherits the label's colour rather than stamping the
+                // parser's placeholder over it. The struct default here is the same
+                // (0,0,0,0.5) the bare tag used to hard-code, so a label that never set
+                // a shadow colour renders exactly as before.
+                if (hasShadowColor)
+                {
+                    out.shadowColor = shadowColor;
+                }
                 const bool given = shadowOffset.x != 0.0f || shadowOffset.y != 0.0f;
                 if (given)
                 {

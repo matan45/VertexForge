@@ -460,6 +460,12 @@ namespace render
         void appendTextDrawList(std::vector<text::TextRenderData>&& textEntities);
         void setFontFallbackChain(std::span<const std::string> fontPaths);
 
+        // VK-1638: drop the cached atlas for a reimported .vfFont. Thread-safe — the
+        // import that triggers it completes on a detached worker thread; the teardown
+        // happens on the render thread. Both text pipelines share one font cache, so
+        // one call covers world text and UI text alike.
+        void invalidateFont(const std::string& fontPath);
+
         void registerExternalTexture(const std::string& key, uint32_t imageIndex,
                                      vk::ImageView imageView, vk::Sampler sampler);
 
