@@ -16,6 +16,7 @@ namespace gameExport
 		std::filesystem::path projectFile;
 		std::filesystem::path workingDirectory;
 		std::string startupScene;
+		std::vector<std::string> fontFallbackChain;
 		std::string iconPath;    // .ico file path for exe icon embedding
 		bool cleanBuild = false;
 		bool verifyIntegrity = true;

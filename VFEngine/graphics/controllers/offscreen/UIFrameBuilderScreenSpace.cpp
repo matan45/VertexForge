@@ -10,6 +10,7 @@
 #include "../../render/ui/UISliceHelper.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "resource/DefaultFont.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <cmath>
@@ -690,11 +691,11 @@ namespace controllers::offscreen
             bg.overlay = true;
             outImages.push_back(std::move(bg));
 
-            // Bubble text (mirrors the runtime overlay text) — requires a valid font, same as runtime.
-            if (tip.fontRef.isValid())
+            // Bubble text (mirrors the runtime overlay text) — falls back to the
+            // engine default font when unset, same as runtime (VK-1628).
             {
                 render::ui::UITextRenderData tipText;
-                tipText.fontPath = tip.fontRef.resolve();
+                tipText.fontPath = resource::fontPathOrDefault(tip.fontRef);
                 tipText.text = tip.text;
                 tipText.fontSize = tip.fontSize * scale;
                 tipText.letterSpacing = tip.letterSpacing * scale;

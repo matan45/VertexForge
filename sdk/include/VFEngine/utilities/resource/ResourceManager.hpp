@@ -90,6 +90,11 @@ namespace resource {
 		static void invalidateMaterialCache(const asset::AssetRef& ref);
 		static void invalidateMaterialInstanceCache(const asset::AssetRef& ref);
 		static void invalidateTerrainMaterialCache(const asset::AssetRef& ref);
+		// VK-1629: reimporting a .vfFont rewrites the file under an unchanged GUID,
+		// so the cached FontData has to be dropped or every reader keeps the old
+		// atlas. Only drops this manager's entry — a graphics-side TextFontCache
+		// entry already handed out is unaffected.
+		static void invalidateFontCache(const asset::AssetRef& ref);
 
 		static void init();
 		static void cleanUp();

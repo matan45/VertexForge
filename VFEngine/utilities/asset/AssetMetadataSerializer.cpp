@@ -4,6 +4,8 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <fstream>
+#include <limits>
+#include <variant>
 
 namespace asset
 {
@@ -26,6 +28,22 @@ namespace asset
             if (!metadata.pluginTypeId.empty())
             {
                 j["pluginTypeId"] = metadata.pluginTypeId;
+            }
+
+            // VK-1629: the options the asset was imported with, so a reimport can
+            // replay them. Written only when non-empty, like the fields above.
+            // Each value keeps its variant alternative's natural JSON type, which
+            // is what load() discriminates on.
+            if (!metadata.importOptions.empty())
+            {
+                json optionsJson = json::object();
+                for (const auto& entry : metadata.importOptions)
+                {
+                    const std::string key = entry.first;
+                    std::visit([&optionsJson, key](const auto& v) { optionsJson[key] = v; },
+                               entry.second);
+                }
+                j["importOptions"] = optionsJson;
             }
 
             if (!metadata.dependencies.empty())
@@ -117,6 +135,49 @@ namespace asset
             {
                 vfLogWarning("Invalid GUID in meta file: {}", metaPath.string());
                 return std::nullopt;
+            }
+
+            // VK-1629. The JSON type carries the variant alternative: a bool stays
+            // a bool, an integral number an int32_t, a real number a float. An
+            // out-of-int32 integer or a nested object/array is dropped rather than
+            // silently truncated — the importer then falls back to its default.
+            if (j.contains("importOptions") && j["importOptions"].is_object())
+            {
+                const auto& optionsJson = j["importOptions"];
+                for (auto it = optionsJson.begin(); it != optionsJson.end(); ++it)
+                {
+                    const std::string& key = it.key();
+                    const auto& value = it.value();
+
+                    if (value.is_boolean())
+                    {
+                        metadata.importOptions[key] = value.get<bool>();
+                    }
+                    else if (value.is_number_integer())
+                    {
+                        const auto raw = value.get<int64_t>();
+                        if (raw < std::numeric_limits<int32_t>::min() ||
+                            raw > std::numeric_limits<int32_t>::max())
+                        {
+                            vfLogWarning("Import option '{}' out of int32 range in {}", key,
+                                         metaPath.string());
+                            continue;
+                        }
+                        metadata.importOptions[key] = static_cast<int32_t>(raw);
+                    }
+                    else if (value.is_number_float())
+                    {
+                        metadata.importOptions[key] = value.get<float>();
+                    }
+                    else if (value.is_string())
+                    {
+                        metadata.importOptions[key] = value.get<std::string>();
+                    }
+                    else
+                    {
+                        vfLogWarning("Unsupported import option '{}' in {}", key, metaPath.string());
+                    }
+                }
             }
 
             if (j.contains("dependencies") && j["dependencies"].is_array())

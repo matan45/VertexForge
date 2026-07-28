@@ -77,6 +77,7 @@ project "Editor"
 	  "VFEngine/core/bootstrap",          -- For EditorBootstrap
 	  "VFEngine/core/controllers",        -- For ImguiWindow base class
 	  "dependencies/IconFontCppHeaders",
+	  "VFEngine/import",                  -- For registry/AssetImporter.hpp (ImportOptionDesc)
 	  "VFEngine/import/controllers",
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
@@ -242,15 +243,22 @@ project "Import"
 	  "dependencies/freetype/include",   -- FreeType headers
 	  "dependencies/ispc_texcomp",       -- ISPCTextureCompressor (BC7/BC6H)
 	  "dependencies/bcdec",              -- BC7/BC6H block decompression
+	  "dependencies/msdfgen",            -- MTSDF glyph generation (core-only)
 	  "dependencies/tinyexr/deps/basisu", -- Basis Universal transcoder (KTX2 decode, VK-1642)
 	  "dependencies/libogg/include",       -- Ogg container format (for Vorbis encoding)
 	  "dependencies/libogg/build/include", -- Ogg generated config headers
 	  "dependencies/libvorbis/include"   -- Vorbis audio compression (encoding at import)
    }
 
-   defines { "_CRT_SECURE_NO_WARNINGS", "VF_IMPORT_BUILD_DLL", "MESHOPTIMIZER_API=__declspec(dllimport)" }
+   defines {
+      "_CRT_SECURE_NO_WARNINGS",
+      "VF_IMPORT_BUILD_DLL",
+      "MESHOPTIMIZER_API=__declspec(dllimport)",
+      "MSDFGEN_PUBLIC=",
+      "MSDFGEN_USE_CPP11"
+   }
 
-   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "basisu", "AssetDB", "Threading", "CpuMemory" }
+   links { "Utilities", "Destruction", "meshoptimizer", "ispc_texcomp", "basisu", "msdfgen", "AssetDB", "Threading", "CpuMemory" }
 
    -- Copy DLLs to Editor output directory (Import is Editor-only)
    postbuildcommands {
@@ -1651,6 +1659,31 @@ project "basisu"
    -- engine-global /utf-8 flag flags. Harmless (comment text); silence for this
    -- third-party TU only.
    disablewarnings { "4828" }
+
+   vfStandardConfigs()
+
+
+-- Project: msdfgen core (multi-channel SDF glyph generation, VK-1633)
+-- Core only: ext/ is deliberately excluded because Import already owns the
+-- FreeType face and the extension library also pulls tinyxml2/libpng.
+project "msdfgen"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++17"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files {
+      "dependencies/msdfgen/msdfgen.h",
+      "dependencies/msdfgen/core/**.h",
+      "dependencies/msdfgen/core/**.hpp",
+      "dependencies/msdfgen/core/**.cpp"
+   }
+
+   includedirs { "dependencies/msdfgen" }
+
+   -- MSDFGEN_PUBLIC prevents core/base.h from including the CMake-generated
+   -- msdfgen-config.h, which this direct Premake build does not generate.
+   defines { "_CRT_SECURE_NO_WARNINGS", "MSDFGEN_PUBLIC=", "MSDFGEN_USE_CPP11" }
 
    vfStandardConfigs()
 

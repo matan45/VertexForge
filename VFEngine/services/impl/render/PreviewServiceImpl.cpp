@@ -4,7 +4,11 @@
 #include "../../providers/animation/IAnimationPreviewProvider.hpp"
 #include "../../providers/vfx/IVFXPreviewProvider.hpp"
 #include "../../providers/render/IPrefabRigPreviewProvider.hpp"
+#include "../../providers/render/IUILayerPreviewProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../events/project/ProjectEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
+#include "FontFallbackChainResolver.hpp"
 #include <cassert>
 
 namespace services
@@ -20,7 +24,26 @@ namespace services
         assert(meshProvider != nullptr && "PreviewServiceImpl requires a valid IMeshPreviewProvider");
     }
 
-    PreviewServiceImpl::~PreviewServiceImpl() = default;
+    PreviewServiceImpl::~PreviewServiceImpl()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        if (projectLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectLoadedToken);
+        }
+        if (projectConfigUpdatedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectConfigUpdatedToken);
+        }
+        if (projectClosedToken.isValid())
+        {
+            dispatcher.unsubscribe(projectClosedToken);
+        }
+        if (importCompletedToken.isValid())
+        {
+            dispatcher.unsubscribe(importCompletedToken);
+        }
+    }
 
     void PreviewServiceImpl::registerEventHandlers()
     {
@@ -32,6 +55,51 @@ namespace services
         registerVFXPreviewHandlers(dispatcher);
         registerPrefabRigPreviewHandlers(dispatcher);
         registerUILayerPreviewHandlers(dispatcher);
+
+        if (uiLayerProvider)
+        {
+            projectLoadedToken = dispatcher.subscribe<::events::project::ProjectLoadedNotification>(
+                [this](const ::events::project::ProjectLoadedNotification& notification)
+                {
+                    uiLayerProvider->setFontFallbackChain(
+                        font_fallback::resolve(notification.project));
+                });
+
+            projectConfigUpdatedToken =
+                dispatcher.subscribe<::events::project::ProjectConfigUpdatedNotification>(
+                    [this](const ::events::project::ProjectConfigUpdatedNotification& notification)
+                    {
+                        uiLayerProvider->setFontFallbackChain(
+                            font_fallback::resolve(notification.project));
+                    });
+
+            projectClosedToken = dispatcher.subscribe<::events::project::ProjectClosedNotification>(
+                [this](const ::events::project::ProjectClosedNotification&)
+                {
+                    uiLayerProvider->setFontFallbackChain({});
+                });
+
+            // VK-1638: the UI layer preview owns its own font cache, so a reimport has to
+            // reach it separately from the viewport's. Fires on the importer's detached
+            // worker thread — invalidateFont only queues, so that is safe; see the same
+            // subscription in EditorRenderServiceImpl.
+            importCompletedToken =
+                dispatcher.subscribe<::events::resource::ImportCompletedNotification>(
+                    [this](const ::events::resource::ImportCompletedNotification& notification)
+                    {
+                        for (const auto& result : notification.results)
+                        {
+                            if (!result.success || result.outputPath.empty())
+                            {
+                                continue;
+                            }
+                            if (font_asset::isFontOutput(result.outputPath))
+                            {
+                                uiLayerProvider->invalidateFont(result.outputPath);
+                            }
+                        }
+                    });
+        }
     }
 
     void PreviewServiceImpl::registerMaterialPreviewHandlers(::events::EventDispatcher& dispatcher)

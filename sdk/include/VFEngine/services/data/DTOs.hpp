@@ -10,6 +10,7 @@
 #include <resource/AssetTypes.hpp>
 #include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
+#include <components/TextEffects.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -482,7 +483,19 @@ namespace services
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         float maxWidth = 0.0f;
-        uint8_t fontStyle = 0;  // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
+        // VK-1637: the vertical half of the layout box; drives vertical alignment only.
+        float rectHeight = 0.0f;
+        uint8_t fontStyle = 0;              // 0=Normal, 1=Bold, 2=Italic, 3=BoldItalic
+        uint8_t horizontalAlignment = 0;    // 0=Left, 1=Center, 2=Right
+        uint8_t verticalAlignment = 0;      // 0=Top, 1=Middle, 2=Bottom
+        // 0=Overflow, 1=Clip, 2=Ellipsis. VK-1637: world text has no scissor, so Clip
+        // renders as Overflow; the value is still kept so it round-trips with UILabel.
+        uint8_t overflow = 0;
+        bool wordWrap = true;
+        // VK-1635. Carried by value rather than mirrored into a services:: struct: it is a
+        // plain POD of floats and vectors with no enums to flatten, so a mirror would only
+        // add a fourth place to forget a field.
+        components::TextEffectSettings effects;
     };
 
     struct DirectionalLightData
@@ -609,6 +622,8 @@ namespace services
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         bool richText = false;
+        // VK-1635: outline / drop shadow / glow. See the note on TextData::effects.
+        components::TextEffectSettings effects;
     };
 
     struct UITooltipData

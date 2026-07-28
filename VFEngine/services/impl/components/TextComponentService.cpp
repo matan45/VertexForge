@@ -76,7 +76,13 @@ namespace services {
         data.lineSpacing = comp.lineSpacing;
         data.letterSpacing = comp.letterSpacing;
         data.maxWidth = comp.maxWidth;
+        data.rectHeight = comp.rectHeight;
         data.fontStyle = static_cast<uint8_t>(comp.fontStyle);
+        data.horizontalAlignment = static_cast<uint8_t>(comp.horizontalAlignment);
+        data.verticalAlignment = static_cast<uint8_t>(comp.verticalAlignment);
+        data.overflow = static_cast<uint8_t>(comp.overflow);
+        data.wordWrap = comp.wordWrap;
+        data.effects = comp.effects;
         return data;
     }
 
@@ -99,7 +105,13 @@ namespace services {
         comp.lineSpacing = textData.lineSpacing;
         comp.letterSpacing = textData.letterSpacing;
         comp.maxWidth = textData.maxWidth;
+        comp.rectHeight = textData.rectHeight;
         comp.fontStyle = static_cast<components::FontStyle>(textData.fontStyle);
+        comp.horizontalAlignment = static_cast<components::HorizontalAlignment>(textData.horizontalAlignment);
+        comp.verticalAlignment = static_cast<components::VerticalAlignment>(textData.verticalAlignment);
+        comp.overflow = static_cast<components::TextOverflow>(textData.overflow);
+        comp.wordWrap = textData.wordWrap;
+        comp.effects = textData.effects;
         return true;
     }
 

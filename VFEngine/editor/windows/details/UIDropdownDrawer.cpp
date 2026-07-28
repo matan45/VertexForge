@@ -5,6 +5,7 @@
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
 #include "DrawerHelpers.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <fstream>
 
@@ -374,35 +375,15 @@ namespace windows::details
 
         if (ImGui::TreeNodeEx("Font##UIDropdown"))
         {
-            if (data.fontRef.isValid())
-            {
-                std::string filename = data.fontRef.resolve();
-                auto lastSlash = filename.find_last_of("/\\");
-                if (lastSlash != std::string::npos)
-                    filename = filename.substr(lastSlash + 1);
-                ImGui::Text("Font: %s", filename.c_str());
-            }
-            else
-            {
-                ImGui::TextDisabled("No font selected");
-            }
-
-            if (ImGui::Button("Select Font##UIDropdown"))
-            {
-                nfd::FileDialog fileDialog;
-                std::string path = fileDialog.openFileDialog(
-                    {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-                if (!path.empty())
-                {
-                    std::ifstream file(path);
-                    if (file.good())
-                    {
-                        file.close();
-                        data.fontRef = asset::AssetRef::fromPath(path);
-                        changed = true;
-                    }
-                }
-            }
+            // Unlike every other font slot, an empty dropdown font is not simply
+            // the engine default: UIFrameBuilder::findDropdownFont inherits from
+            // this entity's UI Label, then the first child UI Label, and only
+            // then falls back. Say so rather than claiming "(Default)".
+            changed |= drawFontSlot(data.fontRef, "UIDropdown",
+                {.emptyLabel = "(Inherited / Default)",
+                 .emptyTooltip = "No font on the dropdown itself. It inherits from this entity's "
+                                 "UI Label, then from the first child UI Label, then falls back "
+                                 "to the built-in default font."});
 
             if (ImGui::DragFloat("Font Size##UIDropdown", &data.fontSize, 0.5f, 1.0f, 200.0f, "%.1f"))
             {

@@ -129,6 +129,35 @@ namespace render::text
         return newSet;
     }
 
+    void TextPipeline::refreshFontDescriptorSetsIfStale()
+    {
+        const uint64_t generation = fontCache.atlasGeneration();
+        if (generation == lastAtlasGeneration)
+        {
+            return;
+        }
+        lastAtlasGeneration = generation;
+
+        if (fontDescriptorSets.empty())
+        {
+            return;
+        }
+
+        // These sets can still be bound by a frame in flight; this is the same barrier
+        // the cache takes to destroy the atlases, and both only run on reimport.
+        device.getLogicalDevice().waitIdle();
+
+        for (auto& [path, set] : fontDescriptorSets)
+        {
+            const CachedFont* cached = fontCache.getFont(path);
+            // A font whose atlas was just dropped points at the 1x1 default until its
+            // reload lands - which bumps the generation again and brings it back here.
+            updateDescriptorSet(set,
+                                cached ? cached->atlasImageView : fontCache.getDefaultImageView(),
+                                cached ? cached->atlasSampler : fontCache.getDefaultSampler());
+        }
+    }
+
     void TextPipeline::createPipeline()
     {
         auto vertexBinding = TextVertex::getBindingDescription();

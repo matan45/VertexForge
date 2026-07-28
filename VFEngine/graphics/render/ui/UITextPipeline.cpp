@@ -9,13 +9,137 @@
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
 #include "text/RichTextParser.hpp"
+#include "text/TextEffects.hpp"
+#include "text/FontStyleFace.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 #include <string_view>
+#include <vector>
 #include <cmath>
 
 namespace render::ui
 {
+    namespace
+    {
+        // VK-1636. Everything that used to be one-per-label and is now one-per-face:
+        // a real Bold sibling lives in its own atlas, with its own SDF parameters and
+        // its own bake size, so sdfParams and the effect scale travel with the slot.
+        //
+        // Slots are handles, not style bits. Slot 0 is whatever the label's own
+        // fontStyle resolved to, which is what keeps a label with no [b]/[i] spans on
+        // a single slot and an empty perCodepointFace.
+        struct StyleSlots
+        {
+            ::text::FaceSet faceSet;
+            const resource::FontData* faces[8] = {};
+            const std::string* keys[8] = {};
+            // The style axes this slot's face does NOT provide - straight into
+            // UITextCharInstance::styleFlags, so the shader fakes only what is missing.
+            uint32_t synthesizedBits[8] = {};
+            // The axes this slot was ACQUIRED for. requestBits & ~synthesizedBits is
+            // therefore what the slot's face really provides, which is the only way to
+            // tell what a glyph lost when layout demoted it to another slot.
+            uint32_t requestBits[8] = {};
+            float sdfEdge[8] = {};
+            float sdfSmooth[8] = {};
+            float effectScale[8] = {};
+            ::text::TextEffectInstance baseEffect[8] = {};
+            uint8_t count = 0;
+            uint8_t fallbackCount = 0;
+            int8_t slotForBits[4] = {-1, -1, -1, -1};
+        };
+
+        uint8_t acquireStyleSlot(StyleSlots& slots, render::text::TextFontCache& fontCache,
+                                 const UITextRenderData& label, uint32_t bits)
+        {
+            bits &= ::text::STYLE_MASK;
+            if (slots.slotForBits[bits] >= 0)
+            {
+                return static_cast<uint8_t>(slots.slotForBits[bits]);
+            }
+            // Unreachable while STYLE_MASK is two bits (four distinct values, four
+            // slots), but a widened mask must degrade rather than overrun.
+            if (slots.count >= 4) return 0;
+
+            const uint8_t index = slots.count++;
+            const auto styled = fontCache.resolveStyledFont(label.fontPath, bits);
+            const render::text::CachedFont* cached = fontCache.getFont(*styled.key);
+            const resource::FontData* face =
+                (cached && cached->fontData) ? cached->fontData.get() : nullptr;
+
+            slots.keys[index] = styled.key;
+            slots.synthesizedBits[index] = styled.synthesizedBits;
+            slots.requestBits[index] = bits;
+            slots.faces[index] = face;
+            slots.faceSet.faces[index] = face;
+
+            if (face)
+            {
+                // VK-1631: sdfSmooth is only the SDF / non-SDF signal - the shader
+                // derives the on-screen AA band from the field itself.
+                slots.sdfEdge[index] = face->sdfParams.edgeValue;
+                slots.sdfSmooth[index] = resource::sdfSmoothWidth(*face);
+                // VK-1635: authored effect distances are layout pixels; the instance
+                // wants atlas texels, and layout pixels per texel is the layout scale.
+                slots.effectScale[index] =
+                    static_cast<float>(face->metadata.baseFontSize) > 0.0f
+                        ? label.fontSize / static_cast<float>(face->metadata.baseFontSize)
+                        : 0.0f;
+                slots.baseEffect[index] = ::text::buildTextEffectInstance(
+                    label.effects, slots.effectScale[index], slots.sdfSmooth[index] > 0.0f);
+            }
+
+            slots.slotForBits[bits] = static_cast<int8_t>(index);
+            return index;
+        }
+
+        void acquireFallbackSlots(StyleSlots& slots,
+                                  render::text::TextFontCache& fontCache,
+                                  const UITextRenderData& label)
+        {
+            // Self-skip is against the label's regular primary, not a styled
+            // sibling key. Otherwise a configured copy of the same regular face
+            // could re-enter the chain for bold/italic labels.
+            const std::string& regularPrimary = fontCache.resolveFontKey(label.fontPath);
+            const auto fallbacks = fontCache.resolveFallbackFaces(regularPrimary);
+            slots.fallbackCount = fallbacks.count;
+            for (uint8_t i = 0; i < fallbacks.count; ++i)
+            {
+                const uint8_t slot = static_cast<uint8_t>(4 + i);
+                const resource::FontData* face = fallbacks.faces[i];
+                slots.keys[slot] = fallbacks.keys[i];
+                slots.faces[slot] = face;
+                slots.faceSet.fallback[i] = face;
+
+                slots.sdfEdge[slot] = face->sdfParams.edgeValue;
+                slots.sdfSmooth[slot] = resource::sdfSmoothWidth(*face);
+                slots.effectScale[slot] =
+                    static_cast<float>(face->metadata.baseFontSize) > 0.0f
+                        ? label.fontSize / static_cast<float>(face->metadata.baseFontSize)
+                        : 0.0f;
+                slots.baseEffect[slot] = ::text::buildTextEffectInstance(
+                    label.effects, slots.effectScale[slot], slots.sdfSmooth[slot] > 0.0f);
+            }
+        }
+
+        // A fallback slot is one layout actually populated. Every caller must test
+        // the same range as resolveGlyphSlot below, or a glyph can be batched under
+        // the base face while still being styled as a fallback.
+        bool isFallbackSlot(const StyleSlots& slots, uint8_t faceIndex) noexcept
+        {
+            return faceIndex >= 4 &&
+                   faceIndex < static_cast<uint8_t>(4 + slots.fallbackCount);
+        }
+
+        uint8_t resolveGlyphSlot(const StyleSlots& slots, uint8_t faceIndex,
+                                 uint8_t baseSlot) noexcept
+        {
+            if (faceIndex < slots.count) return faceIndex;
+            if (isFallbackSlot(slots, faceIndex)) return faceIndex;
+            return baseSlot;
+        }
+    }
+
     UITextPipeline::UITextPipeline(core::Device& device, core::SwapChain& swapChain,
                                     core::OffscreenResources& offscreenResources,
                                     render::text::TextFontCache& fontCache)
@@ -67,6 +191,7 @@ namespace render::ui
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         fontDescriptorSets.clear();
+        lastAtlasGeneration = fontCache.atlasGeneration();
         scissorGroups.clear();
         totalInstanceCount = 0;
 
@@ -93,14 +218,16 @@ namespace render::ui
         scissorGroups.clear();
         totalInstanceCount = 0;
 
+        // Ahead of the empty check: this also drains reimport invalidations, which must
+        // happen whether or not there is UI text on screen this frame.
+        fontCache.processPendingLoads();
+        refreshFontDescriptorSetsIfStale();
+
         if (labels.empty())
         {
             bufferManager.updateInstanceBuffer({});
             return;
         }
-
-        // Process pending font loads
-        fontCache.processPendingLoads();
 
         // Request any fonts that aren't loaded yet
         for (const auto& label : labels)
@@ -146,24 +273,34 @@ namespace render::ui
 
         for (const auto& label : labels)
         {
-            if (label.fontPath.empty() || label.text.empty())
+            // VK-1628: an empty fontPath is no longer a drop — resolveFontKey below
+            // maps it to the default font.
+            if (label.text.empty())
             {
                 continue;
             }
 
-            const render::text::CachedFont* cached = fontCache.getFont(label.fontPath);
-            if (!cached || !cached->fontData)
+            // VK-1636: one slot per distinct style this label needs. Slot 0 is always
+            // the label's own fontStyle, so a label with no [b]/[i] spans uses exactly
+            // one slot and an empty perCodepointFace - i.e. plain single-font layout.
+            //
+            // Note the slot index is NOT the style bits: it is an arbitrary handle,
+            // which is what lets slot 0 carry the label's style and keeps the common
+            // case allocation-free. LayoutGlyph::faceIndex indexes THIS table.
+            StyleSlots slots;
+            const uint32_t componentBits =
+                ::text::styleBitsFromFontStyle(static_cast<uint8_t>(label.fontStyle));
+            const uint8_t baseSlot = acquireStyleSlot(slots, fontCache, label, componentBits);
+
+            // VK-1628: falls back to the default font when this one is missing or
+            // still loading. Everything below keys off the slot's key, never fontPath.
+            if (slots.faces[baseSlot] == nullptr)
             {
                 continue;
             }
+            acquireFallbackSlots(slots, fontCache, label);
 
-            const auto& fontData = *cached->fontData;
-
-            // Compute SDF parameters
-            float sdfEdge = fontData.sdfParams.edgeValue;
-            float sdfSmooth = fontData.isSDF() ? (fontData.sdfParams.spread > 0.0f
-                ? 1.0f / fontData.sdfParams.spread * 0.5f
-                : 0.1f) : 0.0f;
+            const auto& fontData = *slots.faces[baseSlot];
 
             // Rich text: strip markup first, then lay out the stripped text.
             // Per-glyph styles resolve through LayoutGlyph::charIndex below.
@@ -178,11 +315,26 @@ namespace render::ui
             }
             const std::string& layoutSource = label.richText ? richText.strippedText : label.text;
 
+            // A [b] span asks for the label's style PLUS its own, so bold text inside
+            // an italic label resolves the BoldItalic face. Only rich text can produce
+            // more than one slot.
+            std::vector<uint8_t> perCodepointFace;
+            if (label.richText)
+            {
+                perCodepointFace.resize(richText.perCodepoint.size(), baseSlot);
+                for (size_t cp = 0; cp < richText.perCodepoint.size(); ++cp)
+                {
+                    const uint32_t bits = componentBits | richText.perCodepoint[cp].styleFlags;
+                    perCodepointFace[cp] = acquireStyleSlot(slots, fontCache, label, bits);
+                }
+            }
+
             // Layout text using shared text layout engine
             float maxWidth = label.wordWrap ? label.size.x : 0.0f;
-            auto layout = ::text::layoutText(
-                fontData,
+            auto layout = ::text::layoutTextStyled(
+                slots.faceSet,
                 layoutSource,
+                perCodepointFace,
                 label.fontSize,
                 maxWidth,
                 label.lineSpacing,
@@ -200,85 +352,36 @@ namespace render::ui
             if (label.overflow == components::TextOverflow::Ellipsis &&
                 label.size.x > 0.0f)
             {
+                // VK-1636: the ellipsis comes from slot 0 but has to sit on the block
+                // baseline, which a taller styled face may have pushed down. The shift
+                // is exactly 0 whenever slot 0 is the tallest, so single-style labels
+                // are unaffected.
                 ::text::applyEllipsis(layout, fontData, label.fontSize,
-                                      label.size.x, label.letterSpacing);
+                                      label.size.x, label.letterSpacing,
+                                      ::text::baselineShiftForFaceSet(slots.faceSet, label.fontSize));
                 if (layout.glyphs.empty())
                 {
                     continue;
                 }
             }
 
-            // Apply horizontal alignment per line
-            struct LineInfo
-            {
-                size_t startIdx = 0;
-                size_t count = 0;
-                float minX = 0.0f;
-                float maxX = 0.0f;
-            };
-            std::vector<LineInfo> lines;
+            // VK-1632: alignment lives in utilities/text now, shared with TextPipeline.
+            // Lines are grouped by LayoutGlyph::lineY, so a line no longer splits per
+            // bearingY; the block height no longer counts a full spaced lineHeight for
+            // the trailing line.
+            // VK-1636: metrics are the max over the slots in use, matching what
+            // layoutTextStyled laid the block out with.
+            const auto lineMetrics = ::text::computeLineMetrics(
+                slots.faceSet, label.fontSize, label.lineSpacing);
 
-            float currentLineY = layout.glyphs[0].offset.y;
-            LineInfo currentLine;
-            currentLine.startIdx = 0;
-            currentLine.count = 0;
-            currentLine.minX = layout.glyphs[0].offset.x;
-            currentLine.maxX = layout.glyphs[0].offset.x + layout.glyphs[0].size.x;
+            ::text::AlignParams alignParams;
+            alignParams.horizontal = ::text::toHAlign(label.horizontalAlignment);
+            alignParams.vertical = ::text::toVAlign(label.verticalAlignment);
+            alignParams.contentSize = label.size;
+            alignParams.lineHeight = lineMetrics.lineHeight;
+            alignParams.singleLineHeight = lineMetrics.singleLineHeight;
 
-            for (size_t i = 0; i < layout.glyphs.size(); ++i)
-            {
-                const auto& glyph = layout.glyphs[i];
-
-                if (std::abs(glyph.offset.y - currentLineY) > 0.1f)
-                {
-                    lines.push_back(currentLine);
-                    currentLineY = glyph.offset.y;
-                    currentLine.startIdx = i;
-                    currentLine.count = 0;
-                    currentLine.minX = glyph.offset.x;
-                    currentLine.maxX = glyph.offset.x + glyph.size.x;
-                }
-
-                currentLine.count++;
-                currentLine.minX = std::min(currentLine.minX, glyph.offset.x);
-                currentLine.maxX = std::max(currentLine.maxX, glyph.offset.x + glyph.size.x);
-            }
-            lines.push_back(currentLine);
-
-            // Compute per-line horizontal offset
-            std::vector<float> lineOffsetX(lines.size(), 0.0f);
-            for (size_t li = 0; li < lines.size(); ++li)
-            {
-                float lineWidth = lines[li].maxX - lines[li].minX;
-                switch (label.horizontalAlignment)
-                {
-                case 1: // Center
-                    lineOffsetX[li] = (label.size.x - lineWidth) * 0.5f;
-                    break;
-                case 2: // Right
-                    lineOffsetX[li] = label.size.x - lineWidth;
-                    break;
-                default: // Left (0)
-                    lineOffsetX[li] = 0.0f;
-                    break;
-                }
-            }
-
-            // Compute vertical alignment offset
-            float totalHeight = layout.boundingBox.y;
-            float verticalOffset = 0.0f;
-            switch (label.verticalAlignment)
-            {
-            case 1: // Middle
-                verticalOffset = (label.size.y - totalHeight) * 0.5f;
-                break;
-            case 2: // Bottom
-                verticalOffset = label.size.y - totalHeight;
-                break;
-            default: // Top (0)
-                verticalOffset = 0.0f;
-                break;
-            }
+            ::text::applyAlignment(layout, alignParams);
 
             // Build glyph instances
             ScissorKey scissorKey{
@@ -289,53 +392,87 @@ namespace render::ui
                 label.overlay
             };
 
-            uint32_t styleFlags = 0;
-            if (label.fontStyle == components::FontStyle::Bold ||
-                label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x1u;
-            if (label.fontStyle == components::FontStyle::Italic ||
-                label.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
-
-            size_t glyphIdx = 0;
-            for (size_t li = 0; li < lines.size(); ++li)
+            for (const auto& glyph : layout.glyphs)
             {
-                for (size_t gi = 0; gi < lines[li].count; ++gi, ++glyphIdx)
+                // VK-1636: SDF parameters, effect scale and the residual synthesis all
+                // belong to the face this glyph actually came from. layoutTextStyled
+                // may have demoted a glyph to slot 0 (a codepoint the styled face
+                // lacks), so read the slot off the glyph rather than recomputing it.
+                const bool tofu = glyph.faceIndex == ::text::TOFU_FACE_INDEX;
+                const uint8_t slot = resolveGlyphSlot(slots, glyph.faceIndex, baseSlot);
+                const float sdfEdge = slots.sdfEdge[slot];
+                const float sdfSmooth = slots.sdfSmooth[slot];
+                const float effectScale = slots.effectScale[slot];
+                // sdfSmooth is zero for bitmap and colour-emoji atlases, which carry
+                // no distance field - buildTextEffectInstance drops the effects there.
+                const bool hasDistanceField = sdfSmooth > 0.0f;
+                const ::text::TextEffectInstance& baseEffect = slots.baseEffect[slot];
+
+                UITextCharInstance inst{};
+                inst.posAndSize = glm::vec4(
+                    label.position.x + glyph.offset.x,
+                    label.position.y + glyph.offset.y,
+                    glyph.size.x,
+                    glyph.size.y
+                );
+                inst.uvRect = glyph.uvRect;
+                inst.color = label.color;
+                inst.sdfParams = tofu ? glm::vec2(0.0f) : glm::vec2(sdfEdge, sdfSmooth);
+                // VK-1636: the span's own [b]/[i] bits are already folded into this
+                // slot's face request, so they must NOT be OR-ed back in below - that
+                // would re-synthesize the very axis the real face just provided.
+                uint32_t requestedBits = componentBits;
+                if (label.richText && glyph.charIndex < richText.perCodepoint.size())
                 {
-                    const auto& glyph = layout.glyphs[glyphIdx];
-
-                    glm::vec2 alignedOffset = glyph.offset;
-                    alignedOffset.x += lineOffsetX[li];
-                    alignedOffset.y += verticalOffset;
-
-                    UITextCharInstance inst{};
-                    inst.posAndSize = glm::vec4(
-                        label.position.x + alignedOffset.x,
-                        label.position.y + alignedOffset.y,
-                        glyph.size.x,
-                        glyph.size.y
-                    );
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = label.color;
-                    inst.sdfParams = glm::vec2(sdfEdge, sdfSmooth);
-                    inst.styleFlags = styleFlags;
-
-                    // Rich text span overrides. Synthesized glyphs (ellipsis,
-                    // charIndex == UINT32_MAX) fail the bound check and keep
-                    // the base label style. Span colors inherit label alpha
-                    // so fade animations still apply.
-                    if (label.richText && glyph.charIndex < richText.perCodepoint.size())
-                    {
-                        const auto& span = richText.perCodepoint[glyph.charIndex];
-                        inst.styleFlags |= span.styleFlags;
-                        if (span.hasColor)
-                        {
-                            inst.color = glm::vec4(span.color.r, span.color.g,
-                                                   span.color.b, span.color.a * label.color.a);
-                        }
-                    }
-
-                    scissorMap[scissorKey].push_back({label.fontPath, inst,
-                        label.stencilOp, label.stencilRef});
+                    requestedBits |= richText.perCodepoint[glyph.charIndex].styleFlags;
                 }
+                const bool fallback = isFallbackSlot(slots, glyph.faceIndex);
+                // Not simply synthesizedBits[slot]: layout may have demoted this glyph
+                // to a different slot than the one its span asked for, and that slot's
+                // face provides only what IT was requested for. residualStyleBits is
+                // identical to synthesizedBits[slot] whenever no demotion happened.
+                inst.styleFlags = tofu ? ::text::STYLE_TOFU
+                    : (fallback ? (requestedBits & ::text::STYLE_MASK)
+                                : ::text::residualStyleBits(requestedBits,
+                                                            slots.requestBits[slot],
+                                                            slots.synthesizedBits[slot]));
+                inst.effectParams = tofu ? glm::vec4(0.0f) : baseEffect.params;
+                inst.effectColors = tofu ? glm::uvec4(0u) : baseEffect.colors;
+                inst.effectMargin = tofu ? 0.0f : baseEffect.marginPx;
+
+                // Rich text span overrides. Synthesized glyphs (ellipsis,
+                // charIndex == UINT32_MAX) fail the bound check and keep
+                // the base label style. Span colors inherit label alpha
+                // so fade animations still apply.
+                if (label.richText && glyph.charIndex < richText.perCodepoint.size())
+                {
+                    const auto& span = richText.perCodepoint[glyph.charIndex];
+                    if (span.hasColor)
+                    {
+                        inst.color = glm::vec4(span.color.r, span.color.g,
+                                               span.color.b, span.color.a * label.color.a);
+                    }
+                    // VK-1635: a span that names an effect re-derives the whole packed
+                    // instance, because the quad margin depends on every distance at once.
+                    // Only glyphs the tag actually covers pay for the rebuild.
+                    if (!tofu && span.overridesEffects())
+                    {
+                        const ::text::TextEffectInstance spanEffect =
+                            ::text::buildTextEffectInstance(span.applyTo(label.effects),
+                                                            effectScale, hasDistanceField);
+                        inst.effectParams = spanEffect.params;
+                        inst.effectColors = spanEffect.colors;
+                        inst.effectMargin = spanEffect.marginPx;
+                    }
+                }
+
+                // VK-1636: batch by THIS glyph's face key. A [b] run inside a label
+                // draws from the Bold atlas and must land in its own batch; the
+                // sub-grouping below already keys off GlyphEntry::fontPath, so a
+                // per-glyph key needs no further plumbing. The pointed-to string is
+                // owned by the font cache and outlives the frame, as before.
+                scissorMap[scissorKey].push_back({*slots.keys[slot], inst,
+                    label.stencilOp, label.stencilRef});
             }
         }
 
@@ -490,13 +627,14 @@ namespace render::ui
                 vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                     ? it->second : defaultDescriptorSet;
 
-                // Determine glyphMode from cached font data
+                // The cache validates the atlas format and stores its shader-facing mode.
                 const render::text::CachedFont* cached = fontCache.getFont(batch.fontPath);
-                uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+                uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
                 UITextPushConstants pushConstants{};
                 pushConstants.viewportSize = viewportSize;
                 pushConstants.glyphMode = glyphMode;
+                pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
                 commandBuffer.pushConstants(pipelineLayout,
                                              vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -617,13 +755,14 @@ namespace render::ui
                 vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                     ? it->second : defaultDescriptorSet;
 
-                // Determine glyphMode from cached font data
+                // The cache validates the atlas format and stores its shader-facing mode.
                 const render::text::CachedFont* cached = fontCache.getFont(batch.fontPath);
-                uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+                uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
                 UITextPushConstants pushConstants{};
                 pushConstants.viewportSize = viewportSize;
                 pushConstants.glyphMode = glyphMode;
+                pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
                 commandBuffer.pushConstants(pipelineLayout,
                                              vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

@@ -12,7 +12,9 @@
 #include "../../services/providers/render/IUILayerPreviewProvider.hpp"
 #include "../../graphics/controllers/preview/UILayerPreviewController.hpp"
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace core
 {
@@ -21,6 +23,7 @@ namespace core
     private:
         std::unordered_map<services::PreviewInstanceId,
                            std::unique_ptr<::controllers::UILayerPreviewController>> controllers;
+        std::vector<std::string> fontFallbackChain;
 
     public:
         explicit UILayerPreviewAdapter() = default;
@@ -34,6 +37,8 @@ namespace core
 
         void setUILayerReferenceResolution(services::PreviewInstanceId instanceId,
                                            uint32_t refWidth, uint32_t refHeight) override;
+        void setFontFallbackChain(std::span<const std::string> fontPaths) override;
+        void invalidateFont(const std::string& fontPath) override;
 
         void* renderUILayerPreview(services::PreviewInstanceId instanceId) override;
 

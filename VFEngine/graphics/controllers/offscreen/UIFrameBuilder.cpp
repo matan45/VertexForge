@@ -11,6 +11,7 @@
 #include "../../render/text/TextTypes.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "resource/DefaultFont.hpp"
 #include "text/RichTextParser.hpp"
 #include <algorithm>
 #include <cmath>
@@ -33,6 +34,11 @@ namespace controllers::offscreen
             float worldMaxWidth;
             float worldLetterSpacing;
             float worldRectHeight;
+            // VK-1635: layout pixels here per layout pixel at the label's authored
+            // fontSize. Text effects are authored in the same space as letterSpacing, so
+            // they need the same conversion or a world-space canvas would render an
+            // outline at a completely different weight from the screen-space one.
+            float worldEffectScale;
         };
 
         WorldLabelParams computeWorldLabelParams(
@@ -69,8 +75,14 @@ namespace controllers::offscreen
             float worldLetterSpacing = (labelComp.fontSize > 0.0f)
                 ? labelComp.letterSpacing * worldFontSize / labelComp.fontSize : 0.0f;
             float worldRectHeight = (h / canvas.pixelsPerUnit) * 32.0f / worldFontSize;
+            // Deliberately a separate expression from worldLetterSpacing rather than a
+            // shared factor: a * (b / c) and (a * b) / c do not round identically, and
+            // letterSpacing's existing value must not drift.
+            float worldEffectScale = (labelComp.fontSize > 0.0f)
+                ? worldFontSize / labelComp.fontSize : 0.0f;
 
-            return {glm::vec3(worldPos), worldFontSize, worldMaxWidth, worldLetterSpacing, worldRectHeight};
+            return {glm::vec3(worldPos), worldFontSize, worldMaxWidth, worldLetterSpacing,
+                    worldRectHeight, worldEffectScale};
         }
 
         // --- Screen-space labels: emit UILabel entities ---
@@ -109,7 +121,7 @@ namespace controllers::offscreen
                     continue;
 
                 const auto& labelComp = view.get<components::UILabelComponent>(entity);
-                if (labelComp.text.empty() || !labelComp.fontRef.isValid())
+                if (labelComp.text.empty())
                     continue;
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
@@ -148,7 +160,7 @@ namespace controllers::offscreen
                 uint8_t stencilDepth = computeStencilDepthForEntity(registry, entity);
 
                 render::ui::UITextRenderData renderData;
-                renderData.fontPath = labelComp.fontRef.resolve();
+                renderData.fontPath = resource::fontPathOrDefault(labelComp.fontRef);
                 renderData.text = labelComp.text;
                 renderData.fontSize = labelComp.fontSize * scale;
                 renderData.color = labelComp.color;
@@ -157,6 +169,10 @@ namespace controllers::offscreen
                 renderData.letterSpacing = labelComp.letterSpacing;
                 renderData.wordWrap = labelComp.wordWrap;
                 renderData.richText = labelComp.richText;
+                // VK-1635: effect distances travel with fontSize through the UI layout
+                // scale, or an outline authored at 2 px would stay 2 px on a 2x display
+                // while the glyph it hugs doubled.
+                renderData.effects = labelComp.effects.scaledBy(scale);
                 renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
                 renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
                 renderData.overflow = labelComp.overflow;
@@ -187,8 +203,6 @@ namespace controllers::offscreen
                     continue;
 
                 const auto& tiComp = registry.get<components::UITextInputComponent>(entity);
-                if (!tiComp.fontRef.isValid())
-                    continue;
 
                 bool showPlaceholder = tiComp.text.empty()
                     && tiComp.currentState != components::UITextInputState::Focused;
@@ -223,7 +237,7 @@ namespace controllers::offscreen
 
                 float padding = 4.0f * scale;
                 render::ui::UITextRenderData renderData;
-                renderData.fontPath = tiComp.fontRef.resolve();
+                renderData.fontPath = resource::fontPathOrDefault(tiComp.fontRef);
                 renderData.text = displayText;
                 renderData.fontSize = tiComp.fontSize * scale;
                 renderData.color = textColor;
@@ -269,6 +283,10 @@ namespace controllers::offscreen
                     }
                 }
             }
+            // VK-1628: last link in the chain — no component, own-label or child-label
+            // font means the engine default rather than dropping the options.
+            if (fontPath.empty()) fontPath = resource::DEFAULT_FONT_SENTINEL;
+            if (fontSize <= 0.0f) fontSize = 16.0f; // UIDropdownComponent's own default
             return fontPath;
         }
 
@@ -302,7 +320,6 @@ namespace controllers::offscreen
 
                 float fontSize = 0.0f;
                 std::string fontPath = findDropdownFont(registry, dropdownEntity, comp, fontSize);
-                if (fontPath.empty()) continue;
 
                 int visibleCount = std::min(static_cast<int>(comp.options.size()), comp.maxVisibleItems);
                 float itemHeight = headerRect.h;
@@ -352,8 +369,10 @@ namespace controllers::offscreen
                     continue;
 
                 const auto& window = view.get<components::UIWindowComponent>(entity);
-                if (!window.showTitleBar || !window.fontRef.isValid())
+                if (!window.showTitleBar)
                     continue;
+
+                const std::string windowFont = resource::fontPathOrDefault(window.fontRef);
 
                 const auto* canvas = findCanvasForEntity(registry, entity);
                 if (!canvas && registry.all_of<components::UICanvasComponent>(entity))
@@ -369,7 +388,7 @@ namespace controllers::offscreen
                 if (!window.title.empty())
                 {
                     render::ui::UITextRenderData title;
-                    title.fontPath = window.fontRef.resolve();
+                    title.fontPath = windowFont;
                     title.text = window.title;
                     title.fontSize = window.titleFontSize * scale;
                     title.color = window.titleTextColor;
@@ -386,7 +405,7 @@ namespace controllers::offscreen
                 if (window.closable)
                 {
                     render::ui::UITextRenderData closeGlyph;
-                    closeGlyph.fontPath = window.fontRef.resolve();
+                    closeGlyph.fontPath = windowFont;
                     closeGlyph.text = "x";
                     closeGlyph.fontSize = window.titleFontSize * scale;
                     closeGlyph.color = window.titleTextColor;
@@ -558,7 +577,7 @@ namespace controllers::offscreen
                 continue;
 
             const auto& labelComp = view.get<components::UILabelComponent>(entity);
-            if (labelComp.text.empty() || !labelComp.fontRef.isValid())
+            if (labelComp.text.empty())
                 continue;
 
             auto canvasInfo = findCanvasWithEntity(registry, entity);
@@ -577,7 +596,7 @@ namespace controllers::offscreen
                 *canvasInfo.canvas, worldTransform.worldMatrix, rectComp, labelComp);
 
             render::text::TextRenderData renderData;
-            renderData.fontPath = labelComp.fontRef.resolve();
+            renderData.fontPath = resource::fontPathOrDefault(labelComp.fontRef);
             // World-space (edit-mode) labels render through the 3D text
             // pipeline which has no per-char styles — strip markup so tags
             // don't show literally; styled spans are screen-space only.
@@ -595,7 +614,17 @@ namespace controllers::offscreen
             renderData.horizontalAlignment = static_cast<uint8_t>(labelComp.horizontalAlignment);
             renderData.verticalAlignment = static_cast<uint8_t>(labelComp.verticalAlignment);
             renderData.rectHeight = params.worldRectHeight;
+            // VK-1637: previously dropped on the floor - TextRenderData had nowhere to put
+            // them - so a world-space-canvas label always wrapped and never ellipsized,
+            // unlike its screen-space twin (UITextPipeline reads both). Clip stays the one
+            // mode that cannot cross: the 3D text pipeline issues no scissor.
+            renderData.overflow = labelComp.overflow;
+            renderData.wordWrap = labelComp.wordWrap;
             renderData.fontStyle = labelComp.fontStyle;
+            // VK-1635: unlike per-span rich text (stripped above, screen-space only),
+            // the label's own effects DO survive here - the 3D text pipeline reads the
+            // same per-instance effect block, so a world-space canvas keeps its outline.
+            renderData.effects = labelComp.effects.scaledBy(params.worldEffectScale);
             drawList.push_back(std::move(renderData));
         }
 
@@ -642,10 +671,10 @@ namespace controllers::offscreen
             {
                 const auto* tip = registry.try_get<components::UITooltipComponent>(tooltipState.hoveredEntity);
                 if (tip && tip->mode == components::UITooltipMode::Text &&
-                    !tip->text.empty() && tip->fontRef.isValid())
+                    !tip->text.empty())
                 {
                     render::ui::UITextRenderData tipText;
-                    tipText.fontPath = tip->fontRef.resolve();
+                    tipText.fontPath = resource::fontPathOrDefault(tip->fontRef);
                     tipText.text = tip->text;
                     tipText.fontSize = tip->fontSize * tooltipState.canvasScale;
                     tipText.letterSpacing = tip->letterSpacing * tooltipState.canvasScale;

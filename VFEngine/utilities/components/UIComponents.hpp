@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <entt/entt.hpp>
 #include "../asset/AssetRef.hpp"
+#include "TextEffects.hpp"
 
 namespace components
 {
@@ -186,8 +187,11 @@ namespace components
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
         // Parse BBCode-style markup in text: [b], [i], [color=#RRGGBB(AA)],
+        // [outline=#RRGGBB(AA)(,width)], [shadow(=#RRGGBBAA(,dx,dy))], [glow=#RRGGBBAA(,range)],
         // [[ escapes a literal '['. Unknown tags render literally.
         bool richText = false;
+        // VK-1635: outline / drop shadow / glow. Off by default; see TextEffects.hpp.
+        TextEffectSettings effects;
     };
 
     enum class UIButtonState : uint8_t

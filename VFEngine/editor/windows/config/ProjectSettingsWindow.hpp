@@ -1,6 +1,7 @@
 #pragma once
 #include "nfd/FileDialog.hpp"
 #include <string>
+#include <vector>
 
 namespace windows
 {
@@ -15,6 +16,7 @@ namespace windows
         std::string workingDirectory;
         std::string startupScene;
         std::string exeIconPath;
+        std::vector<std::string> fontFallbackChain;
 
         bool isDirty = false;
         bool hasProject = false;

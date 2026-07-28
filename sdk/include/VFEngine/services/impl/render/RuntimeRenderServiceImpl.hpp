@@ -19,10 +19,13 @@ namespace services {
         std::function<void()> preOffscreenRenderCallback;
 
         events::SubscriptionToken meshDataChangedToken;
+        events::SubscriptionToken projectLoadedToken;
+        events::SubscriptionToken projectConfigUpdatedToken;
+        events::SubscriptionToken projectClosedToken;
     public:
         explicit RuntimeRenderServiceImpl(IOffScreenProvider* offScreenProvider,
                                          IPostProcessProvider* postProcessProvider);
-        ~RuntimeRenderServiceImpl() override = default;
+        ~RuntimeRenderServiceImpl() override;
 
         void registerEventHandlers() override;
         

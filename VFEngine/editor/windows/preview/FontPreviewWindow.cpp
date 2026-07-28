@@ -1,12 +1,18 @@
 #include "FontPreviewWindow.hpp"
 #include "resource/ResourceManager.hpp"
+#include "resource/FontAtlasPreview.hpp"
 #include "asset/AssetRef.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/render/RenderEvents.hpp"
+#include "events/project/ResourceEvents.hpp"
 #include "math/MathHelper.hpp"
 #include "text/TextLayout.hpp"
+#include "text/FontStyleFace.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <filesystem>
+#include <limits>
+#include <stdexcept>
 
 namespace windows
 {
@@ -22,10 +28,46 @@ namespace windows
             "0123456789 !@#$%^&*()";
         std::strncpy(textInputBuffer, defaultText, sizeof(textInputBuffer) - 1);
         textInputBuffer[sizeof(textInputBuffer) - 1] = '\0';
+
+        // Pick up a reimport of the font currently on screen (VK-1629). Compared
+        // against the same path this window was opened with, normalised, because the
+        // importer reports its output path as it built it.
+        //
+        // The handler runs on the importer's detached worker thread and deliberately
+        // captures NO `this`: publish() dispatches outside its lock, so the destructor's
+        // unsubscribe cannot stop a call that is already under way. Everything it needs
+        // is copied in - the flag by shared_ptr, the path by value (it is immutable
+        // after construction anyway).
+        importCompletedToken = events::EventDispatcher::instance()
+            .subscribe<events::resource::ImportCompletedNotification>(
+                [reloadFlag = reloadRequested, watchedPath = fontPath](
+                    const events::resource::ImportCompletedNotification& notification)
+                {
+                    std::error_code ec;
+                    const auto mine = std::filesystem::weakly_canonical(watchedPath, ec);
+                    if (ec) return;
+
+                    for (const auto& result : notification.results)
+                    {
+                        if (!result.success || result.outputPath.empty()) continue;
+
+                        std::error_code compareEc;
+                        const auto theirs =
+                            std::filesystem::weakly_canonical(result.outputPath, compareEc);
+                        if (!compareEc && theirs == mine)
+                        {
+                            reloadFlag->store(true);
+                            return;
+                        }
+                    }
+                });
     }
 
     FontPreviewWindow::~FontPreviewWindow()
     {
+        if (importCompletedToken.isValid())
+            events::EventDispatcher::instance().unsubscribe(importCompletedToken);
+
         loadingCancelled.store(true);
 
         if (loadFuture.valid())
@@ -58,6 +100,9 @@ namespace windows
         if (!isOpen) return;
 
         if (needsInit) { startAsyncLoad(); needsInit = false; }
+        // Deliberately after the needsInit branch and before updateAsyncLoading, so a
+        // reload never races the initial load in flight.
+        if (reloadRequested->exchange(false) && !loadingInProgress.load()) { reloadFromDisk(); }
         updateAsyncLoading();
 
         if (initialSize.x <= 0.0f)
@@ -112,6 +157,28 @@ namespace windows
         {
             return loadFontBackground(fontPath);
         });
+    }
+
+    void FontPreviewWindow::reloadFromDisk()
+    {
+        // ResourceManager caches FontData by GUID and a reimport keeps the GUID, so
+        // without this the reload would hand back the pre-reimport atlas.
+        resource::ResourceManager::invalidateFontCache(asset::AssetRef::fromPath(fontPath));
+
+        if (atlasHandle.isValid())
+        {
+            events::render::ReleaseEditorTextureCommand releaseCmd;
+            releaseCmd.handle = atlasHandle.imguiDescriptorSet;
+            events::EventDispatcher::instance().execute(releaseCmd);
+            atlasHandle = services::EditorTextureHandle{};
+        }
+
+        fontData = resource::FontData{};
+        fontLoaded = false;
+        loadFailed = false;
+        errorMessage.clear();
+
+        startAsyncLoad();
     }
 
     void FontPreviewWindow::updateAsyncLoading()
@@ -172,7 +239,7 @@ namespace windows
                 return result;
             }
 
-            result.atlasAsRGBA = convertAtlasToRGBA(result.fontData.atlas);
+            result.atlasAsRGBA = resource::fontAtlasToPreviewRGBA(result.fontData);
 
             result.success = true;
         }
@@ -194,50 +261,64 @@ namespace windows
         return result;
     }
 
-    resource::TextureData FontPreviewWindow::convertAtlasToRGBA(const resource::FontAtlasData& atlas)
+    // VK-1636. Bold and italic are synthesized unless the family ships a real face
+    // next to this one, and nothing in the editor used to say which you were looking
+    // at - a "bold" label that quietly stayed a thickened Regular looked like a bug in
+    // the renderer. This panel answers it with the same naming convention the renderer
+    // resolves through, so the two can never disagree.
+    void FontPreviewWindow::drawStyleFamilyPanel()
     {
-        resource::TextureData textureData;
-        textureData.width = atlas.width;
-        textureData.height = atlas.height;
-        textureData.numbersOfChannels = 4;
-        textureData.mipLevels = 1;
-
-        size_t pixelCount = static_cast<size_t>(atlas.width) * atlas.height;
-        std::vector<unsigned char> rgbaData(pixelCount * 4);
-
-        if (atlas.format == resource::FontAtlasFormat::SDF_8)
+        if (!ImGui::CollapsingHeader("Style Family", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            for (size_t i = 0; i < pixelCount; ++i)
+            return;
+        }
+
+        struct StyleRow
+        {
+            const char* label;
+            uint32_t bits;
+        };
+        static constexpr StyleRow rows[] = {
+            {"Bold", ::text::STYLE_BOLD},
+            {"Italic", ::text::STYLE_ITALIC},
+            {"Bold Italic", ::text::STYLE_BOLD | ::text::STYLE_ITALIC},
+        };
+
+        for (const StyleRow& row : rows)
+        {
+            std::string found;
+            for (const std::string& candidate : ::text::styledPathCandidates(fontPath, row.bits))
             {
-                rgbaData[i * 4 + 0] = 255;
-                rgbaData[i * 4 + 1] = 255;
-                rgbaData[i * 4 + 2] = 255;
-                rgbaData[i * 4 + 3] = sdf::sdfToAlphaByte(atlas.pixels[i]);
+                std::error_code ec;
+                if (std::filesystem::exists(candidate, ec))
+                {
+                    found = candidate;
+                    break;
+                }
+            }
+
+            if (found.empty())
+            {
+                ImGui::TextDisabled("%s: synthesized", row.label);
+                if (ImGui::IsItemHovered())
+                {
+                    // Name the file the renderer will pick up, so importing the real
+                    // face is a matter of matching this name.
+                    const auto candidates = ::text::styledPathCandidates(fontPath, row.bits);
+                    if (!candidates.empty())
+                    {
+                        ImGui::SetTooltip("No sibling face. Import one named:\n%s",
+                                          std::filesystem::path(candidates.front())
+                                              .filename().string().c_str());
+                    }
+                }
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "%s: %s", row.label,
+                                   std::filesystem::path(found).filename().string().c_str());
             }
         }
-        else if (atlas.format == resource::FontAtlasFormat::GRAYSCALE_8)
-        {
-            for (size_t i = 0; i < pixelCount; ++i)
-            {
-                unsigned char value = atlas.pixels[i];
-                rgbaData[i * 4 + 0] = 255;
-                rgbaData[i * 4 + 1] = 255;
-                rgbaData[i * 4 + 2] = 255;
-                rgbaData[i * 4 + 3] = value;
-            }
-        }
-        else if (atlas.format == resource::FontAtlasFormat::RGBA_32)
-        {
-            rgbaData.assign(atlas.pixels.begin(), atlas.pixels.end());
-        }
-
-        resource::MipLevelData mip;
-        mip.width = atlas.width;
-        mip.height = atlas.height;
-        mip.data = std::move(rgbaData);
-        textureData.mipData.push_back(std::move(mip));
-
-        return textureData;
     }
 
     void FontPreviewWindow::drawInfoPanel()
@@ -262,6 +343,9 @@ namespace windows
         }
         ImGui::Spacing();
 
+        drawStyleFamilyPanel();
+        ImGui::Spacing();
+
         if (ImGui::CollapsingHeader("Metrics", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Line Height: %.2f", fontData.metadata.lineHeight);
             ImGui::Text("Ascender: %.2f", fontData.metadata.ascender);
@@ -278,6 +362,7 @@ namespace windows
             case resource::FontAtlasFormat::GRAYSCALE_8: formatStr = "Grayscale"; break;
             case resource::FontAtlasFormat::SDF_8: formatStr = "SDF"; break;
             case resource::FontAtlasFormat::RGBA_32: formatStr = "RGBA"; break;
+            case resource::FontAtlasFormat::MTSDF_RGBA_32: formatStr = "MTSDF"; break;
             }
             ImGui::Text("Format: %s", formatStr);
             ImGui::Text("Glyphs: %zu", fontData.glyphs.size());
@@ -289,6 +374,8 @@ namespace windows
             ImGui::Text("Spread: %.2f", fontData.sdfParams.spread);
             ImGui::Text("Padding: %u", fontData.sdfParams.padding);
             ImGui::Text("Edge Value: %.2f", fontData.sdfParams.edgeValue);
+            if (fontData.isMSDF())
+                ImGui::Text("Px Range: %.2f", fontData.sdfParams.pxRange);
         }
         ImGui::Spacing();
 
@@ -480,6 +567,25 @@ namespace windows
         {
             float x = startPos.x + glyph.offset.x;
             float y = startPos.y + glyph.offset.y;
+
+            // VK-1638: a tofu carries no atlas cell - its uvRect is the quad-local
+            // (0,0,1,1) the shader reinterprets, so feeding it to AddImage would blit
+            // the WHOLE atlas into the glyph box. Stroke the same hollow box the
+            // shader draws instead, so the preview reports missing coverage the way
+            // the engine renders it.
+            if (glyph.faceIndex == text::TOFU_FACE_INDEX)
+            {
+                const float thickness = std::max(1.0f, glyph.size.y * 0.08f);
+                drawList->AddRect(
+                    ImVec2(x, y),
+                    ImVec2(x + glyph.size.x, y + glyph.size.y),
+                    IM_COL32(255, 255, 255, 255),
+                    0.0f,
+                    ImDrawFlags_None,
+                    thickness
+                );
+                continue;
+            }
 
             drawList->AddImage(
                 atlasHandle.imguiDescriptorSet,

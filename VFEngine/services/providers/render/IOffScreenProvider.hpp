@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <optional>
 #include <functional>
+#include <span>
 #include "types/CameraTypes.hpp"
 #include "types/RenderSettings.hpp"
 #include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
@@ -241,6 +242,11 @@ namespace services {
 
         virtual void prepareFrameBillboards() = 0;
         virtual void prepareFrameText() = 0;
+        virtual void setFontFallbackChain(std::span<const std::string> fontPaths) = 0;
+        // VK-1638: drop the render-side atlas for a reimported .vfFont so the next frame
+        // reloads it. Without this the viewport keeps drawing the pre-reimport glyphs
+        // until the editor restarts. Safe to call from any thread.
+        virtual void invalidateFont(const std::string& fontPath) = 0;
         virtual void prepareSceneData() = 0;
         virtual void setShowBillboardIcons(bool show) = 0;
         virtual bool getShowBillboardIcons() const = 0;

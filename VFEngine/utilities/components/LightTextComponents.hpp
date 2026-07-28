@@ -118,8 +118,30 @@ namespace components
         glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
         float lineSpacing = 1.0f;
         float letterSpacing = 0.0f;
+        // VK-1637: the layout box, in the same layout pixels as fontSize. maxWidth is the
+        // horizontal alignment box AND - when wordWrap is on - the word-wrap width.
+        // 0 = no box: no wrap, no ellipsis, and horizontal alignment falls back to aligning
+        // lines against the widest line.
         float maxWidth = 0.0f;
+        // VK-1637: the vertical half of the box. There is no UIRect out here, so the
+        // component carries its own. 0 = no box, which forces VerticalAlignment::Top.
+        // Nothing wraps or truncates against it - it only positions the block.
+        float rectHeight = 0.0f;
         FontStyle fontStyle = FontStyle::Normal;
+        // VK-1637: mirrors UILabelComponent. Both are no-ops without the matching box
+        // dimension above.
+        HorizontalAlignment horizontalAlignment = HorizontalAlignment::Left;
+        VerticalAlignment verticalAlignment = VerticalAlignment::Top;
+        // VK-1637: Overflow and Ellipsis only. This path renders through the 3D text
+        // pipeline, which issues no scissor, and a scissor is the only implementation of
+        // Clip for UI text (UITextPipeline). Clip is accepted and round-trips losslessly -
+        // the enum is shared with UILabel - but renders as Overflow.
+        TextOverflow overflow = TextOverflow::Overflow;
+        // VK-1637: false = maxWidth still boxes alignment and ellipsis but does not wrap.
+        // Defaults true, which is exactly the historical "maxWidth wraps" behaviour.
+        bool wordWrap = true;
+        // VK-1635: outline / drop shadow / glow. Off by default; see TextEffects.hpp.
+        TextEffectSettings effects;
     };
 
 }

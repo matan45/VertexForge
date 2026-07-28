@@ -11,6 +11,7 @@ namespace import::builtin
         std::vector<FormatInfo> formats() const override;
         bool matches(const std::string& fileType, const DetectionInput& input) const override;
         void process(pipeline::ImportContext& context) override;
+        std::vector<ImportOptionDesc> options() const override;
 
     private:
         types::Font fontProcessor;

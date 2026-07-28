@@ -1,8 +1,10 @@
 #pragma once
 #include "ContentBrowserTypes.hpp"
+#include "ContentBrowserReimport.hpp"
 #include "data/EntityHandle.hpp"
 #include <asset/AssetGUID.hpp>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <functional>
 #include <vector>
@@ -80,6 +82,15 @@ namespace windows
         std::string resultMessage;
         std::vector<std::string> resultDetails;
 
+        // VK-1629: re-run the importer that produced the selected asset. The
+        // eligibility packet is captured when the menu item is clicked, so the modal
+        // never re-reads the sidecar while it is open.
+        bool showReimportModal = false;
+        std::string reimportAssetName;
+        fs::path reimportDestDir;
+        reimport::Eligibility reimportTarget;
+        std::map<std::string, importConfig::ImportOptionValue> reimportValues;
+
     public:
         using RefreshCallback = std::function<void()>;
         using ClipboardCallback = std::function<void()>;
@@ -94,6 +105,11 @@ namespace windows
         // Supplies the full current selection so Delete operates on every
         // selected item, not just the focused one.
         void setSelectionProvider(std::function<std::vector<std::string>()> provider);
+
+        // True while an import is running. Reimport is disabled then, because
+        // Import::location is a process-wide static that two concurrent imports
+        // would fight over.
+        void setImportInFlightProvider(std::function<bool()> provider);
 
         void processModals(const fs::path& currentPath, const fs::path& selectedFile);
         void drawContextMenu(const Asset* selectedAsset);
@@ -123,6 +139,12 @@ namespace windows
         void drawDependenciesModal();
         void drawErrorModal();
         void drawResultModal();
+        void drawReimportModal();
+
+        // Adds the Reimport entries for `selectedFile` (VK-1629).
+        void drawReimportMenuItems(const fs::path& selectedFile);
+        void startReimport(const fs::path& selectedFile, const reimport::Eligibility& eligibility,
+                           bool withOptions);
 
         // Lists asset paths for the given GUIDs (unresolved GUIDs shown
         // explicitly); returns true when a double-click navigated the
@@ -137,5 +159,6 @@ namespace windows
         PasteCallback pasteCallback;
         std::function<bool()> hasClipboardItemsCallback;
         std::function<std::vector<std::string>()> selectionProvider;
+        std::function<bool()> importInFlightProvider;
     };
 }

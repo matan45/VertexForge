@@ -619,6 +619,176 @@ namespace core::api
                 return value::Value(data->fontRef.resolve());
             }});
 
+        // ---- UILabel text effects (VK-1635) ----
+        // Same read-modify-write shape as the setters above. Each effect is switched off by
+        // passing 0 for its distance (width / offset / range), which is the same rule the
+        // component itself uses - there is no separate enable flag to get out of sync.
+
+        interpreter->registerNativeFunction("_native_ui_setLabelOutline",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 6) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelOutline"));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.effects.outlineColor.r = extractFloat(args[1], "_native_ui_setLabelOutline");
+                labelData.effects.outlineColor.g = extractFloat(args[2], "_native_ui_setLabelOutline");
+                labelData.effects.outlineColor.b = extractFloat(args[3], "_native_ui_setLabelOutline");
+                labelData.effects.outlineColor.a = extractFloat(args[4], "_native_ui_setLabelOutline");
+                labelData.effects.outlineWidth = extractFloat(args[5], "_native_ui_setLabelOutline");
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelOutline",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeOutline = [](float r, float g, float b, float a, float width) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(5, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    arr->set(4, value::Value(width));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeOutline(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelOutline"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeOutline(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeOutline(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                const auto& e = data->effects;
+                return makeOutline(e.outlineColor.r, e.outlineColor.g, e.outlineColor.b,
+                                   e.outlineColor.a, e.outlineWidth);
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelShadow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 7) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelShadow"));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.effects.shadowColor.r = extractFloat(args[1], "_native_ui_setLabelShadow");
+                labelData.effects.shadowColor.g = extractFloat(args[2], "_native_ui_setLabelShadow");
+                labelData.effects.shadowColor.b = extractFloat(args[3], "_native_ui_setLabelShadow");
+                labelData.effects.shadowColor.a = extractFloat(args[4], "_native_ui_setLabelShadow");
+                labelData.effects.shadowOffset.x = extractFloat(args[5], "_native_ui_setLabelShadow");
+                labelData.effects.shadowOffset.y = extractFloat(args[6], "_native_ui_setLabelShadow");
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelShadow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeShadow = [](float r, float g, float b, float a,
+                                     float dx, float dy) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(6, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    arr->set(4, value::Value(dx));
+                    arr->set(5, value::Value(dy));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeShadow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelShadow"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeShadow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeShadow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                const auto& e = data->effects;
+                return makeShadow(e.shadowColor.r, e.shadowColor.g, e.shadowColor.b,
+                                  e.shadowColor.a, e.shadowOffset.x, e.shadowOffset.y);
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_setLabelGlow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 6) return value::Value();
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_setLabelGlow"));
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return value::Value();
+
+                auto labelData = data.value();
+                labelData.effects.glowColor.r = extractFloat(args[1], "_native_ui_setLabelGlow");
+                labelData.effects.glowColor.g = extractFloat(args[2], "_native_ui_setLabelGlow");
+                labelData.effects.glowColor.b = extractFloat(args[3], "_native_ui_setLabelGlow");
+                labelData.effects.glowColor.a = extractFloat(args[4], "_native_ui_setLabelGlow");
+                labelData.effects.glowRange = extractFloat(args[5], "_native_ui_setLabelGlow");
+
+                events::ui::SetUILabelDataCommand setCmd;
+                setCmd.entity = handle;
+                setCmd.labelData = labelData;
+                dispatcher.execute(setCmd);
+                return value::Value();
+            }});
+
+        interpreter->registerNativeFunction("_native_ui_getLabelGlow",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto makeGlow = [](float r, float g, float b, float a, float range) -> value::Value {
+                    auto arr = std::make_shared<value::NativeArray>(5, value::ValueType::FLOAT);
+                    arr->set(0, value::Value(r));
+                    arr->set(1, value::Value(g));
+                    arr->set(2, value::Value(b));
+                    arr->set(3, value::Value(a));
+                    arr->set(4, value::Value(range));
+                    return value::Value(arr);
+                };
+                if (args.empty()) return makeGlow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+                auto handle = intToEntity(extractInt64(args[0], "_native_ui_getLabelGlow"));
+
+                events::ui::HasUILabelComponentQuery hasQuery;
+                hasQuery.entity = handle;
+                if (!dispatcher.query(hasQuery)) return makeGlow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                events::ui::GetUILabelDataQuery getQuery;
+                getQuery.entity = handle;
+                auto data = dispatcher.query(getQuery);
+                if (!data.has_value()) return makeGlow(0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+                const auto& e = data->effects;
+                return makeGlow(e.glowColor.r, e.glowColor.g, e.glowColor.b,
+                                e.glowColor.a, e.glowRange);
+            }});
+
         // ---- UIImage colorTint + UIButton state colors ----
         // Companions to _native_ui_setImageTexture / _native_ui_setButtonInteractable:
         // needed so scripts can skin textured HUD images/buttons at runtime (a dark

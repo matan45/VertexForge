@@ -41,9 +41,34 @@ namespace types
         if (progressCallback) progressCallback(0.2f);
 
         FontAtlasGenerator atlasGen;
-        bool atlasSuccess = colorFont
-            ? atlasGen.generateColorAtlas(face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData)
-            : atlasGen.generateSDFAtlas(face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData);
+        bool atlasSuccess = false;
+        if (colorFont)
+        {
+            atlasSuccess = atlasGen.generateColorAtlas(
+                face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData);
+        }
+        else
+        {
+            switch (config.fieldMode)
+            {
+                case FontFieldMode::Grayscale:
+                    atlasSuccess = atlasGen.generateGrayscaleAtlas(
+                        face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData);
+                    break;
+                case FontFieldMode::SDF:
+                    atlasSuccess = atlasGen.generateSDFAtlas(
+                        face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData);
+                    break;
+                case FontFieldMode::MTSDF:
+                    atlasSuccess = atlasGen.generateMTSDFAtlas(
+                        face, config.baseFontSize, fontData.characterRanges, effectiveConfig, fontData);
+                    break;
+                default:
+                    vfLogError("Invalid font field mode: {}",
+                               static_cast<uint32_t>(config.fieldMode));
+                    break;
+            }
+        }
         if (!atlasSuccess)
         {
             vfLogError("Failed to generate font atlas for: {}", file.path);
@@ -58,13 +83,25 @@ namespace types
         std::sort(fontData.glyphs.begin(), fontData.glyphs.end(),
                   [](const auto& a, const auto& b) { return a.codepoint < b.codepoint; });
 
-        FontSerializer{}.saveToFile(location, fileName, fontData);
+        if (!FontSerializer{}.saveToFile(location, fileName, fontData))
+        {
+            cleanupFT();
+            return false;
+        }
         cleanupFT();
         if (progressCallback) progressCallback(1.0f);
 
+        const char* atlasKind = "grayscale";
+        if (colorFont)
+            atlasKind = "color";
+        else if (config.fieldMode == FontFieldMode::SDF)
+            atlasKind = "SDF";
+        else if (config.fieldMode == FontFieldMode::MTSDF)
+            atlasKind = "MTSDF";
+
         vfLogDebug("Successfully imported font: {} ({} glyphs, {}x{} atlas, {})",
                   fileName, fontData.glyphs.size(), fontData.atlas.width, fontData.atlas.height,
-                  colorFont ? "color" : "SDF");
+                  atlasKind);
         return true;
     }
 
@@ -212,16 +249,36 @@ namespace types
         extractFontMetrics(face, config.baseFontSize, fontData.metadata, fileName);
 
         fontData.formatFlags = resource::FontFormatFlags::NONE;
+        fontData.sdfParams = {};
         if (colorFont)
         {
             fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::COLOR_EMOJI;
+            fontData.sdfParams.spread = 0.0f;
+            fontData.sdfParams.padding = 0;
+            fontData.sdfParams.edgeValue = 0.0f;
         }
-        else if (config.generateSDF)
+        else if (config.fieldMode == FontFieldMode::SDF)
         {
             fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::SDF_ENABLED;
             fontData.sdfParams.spread = config.sdfSpread;
             fontData.sdfParams.padding = config.sdfPadding;
             fontData.sdfParams.edgeValue = static_cast<float>(config.sdfOnEdgeValue) / 255.0f;
+        }
+        else if (config.fieldMode == FontFieldMode::MTSDF)
+        {
+            fontData.formatFlags = fontData.formatFlags |
+                resource::FontFormatFlags::SDF_ENABLED |
+                resource::FontFormatFlags::MSDF_ENABLED;
+            fontData.sdfParams.spread = config.mtsdfPxRange;
+            fontData.sdfParams.padding = 0;
+            fontData.sdfParams.edgeValue = 0.5f;
+            fontData.sdfParams.pxRange = config.mtsdfPxRange;
+        }
+        else
+        {
+            fontData.sdfParams.spread = 0.0f;
+            fontData.sdfParams.padding = 0;
+            fontData.sdfParams.edgeValue = 0.0f;
         }
         if (config.includeKerning)
             fontData.formatFlags = fontData.formatFlags | resource::FontFormatFlags::KERNING_ENABLED;
@@ -253,6 +310,10 @@ namespace types
             ranges.push_back({0x0370, 0x03FF});
         if (config.includeCyrillic)
             ranges.push_back({0x0400, 0x04FF});
+
+        // Text truncation uses the single-character ellipsis even when only the
+        // default Basic Latin range is selected.
+        ranges.push_back({0x2026, 0x2026});
 
         if (config.includeEmoji)
         {

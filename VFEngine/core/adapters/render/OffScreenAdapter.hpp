@@ -60,6 +60,8 @@ namespace core
 
         void prepareFrameBillboards() override;
         void prepareFrameText() override;
+        void setFontFallbackChain(std::span<const std::string> fontPaths) override;
+        void invalidateFont(const std::string& fontPath) override;
         void prepareSceneData() override;
         void setShowBillboardIcons(bool show) override;
         bool getShowBillboardIcons() const override;

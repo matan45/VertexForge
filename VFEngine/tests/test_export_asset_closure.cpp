@@ -104,6 +104,9 @@ TEST_CASE("isAlwaysIncluded: built-in safety rules")
 	CHECK(gameExport::AssetClosureResolver::isAlwaysIncluded("navmesh/tile_0_0.vfNavTile", none));
 	CHECK(gameExport::AssetClosureResolver::isAlwaysIncluded("config/input.vfInputMapping", none));
 	CHECK(gameExport::AssetClosureResolver::isAlwaysIncluded("fonts/Roboto.ttf", none));
+	// VK-1628: a font may be referenced only as a fallback or from a script, which
+	// the closure walk cannot see — it must survive stripping either way.
+	CHECK(gameExport::AssetClosureResolver::isAlwaysIncluded("fonts/Default.vffont", none));
 
 	CHECK_FALSE(gameExport::AssetClosureResolver::isAlwaysIncluded("assets/textures/wood.vfimage", none));
 }

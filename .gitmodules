@@ -71,3 +71,6 @@
 [submodule "dependencies/bcdec"]
 	path = dependencies/bcdec
 	url = https://github.com/iOrange/bcdec.git
+[submodule "dependencies/msdfgen"]
+	path = dependencies/msdfgen
+	url = https://github.com/Chlumsky/msdfgen.git

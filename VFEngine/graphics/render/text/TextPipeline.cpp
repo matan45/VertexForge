@@ -6,11 +6,45 @@
 #include "../../core/DynamicRenderingHelpers.hpp"
 #include "../../core/ImageUtilities.hpp"
 #include "text/TextLayout.hpp"
+#include "text/TextEffects.hpp"
+#include "text/FontStyleFace.hpp"
 #include "resource/Types.hpp"
 #include <algorithm>
 
 namespace render::text
 {
+    namespace
+    {
+        struct WorldFaceSlots
+        {
+            ::text::FaceSet faceSet;
+            const resource::FontData* faces[8] = {};
+            const std::string* keys[8] = {};
+            uint32_t synthesizedBits[8] = {};
+            float sdfEdge[8] = {};
+            float sdfSmooth[8] = {};
+            ::text::TextEffectInstance effect[8] = {};
+            uint8_t fallbackCount = 0;
+        };
+
+        // A fallback slot is one layout actually populated. Every caller must test
+        // the same range as resolveWorldGlyphSlot below, or a glyph can be batched
+        // under the primary while still being styled as a fallback.
+        bool isFallbackSlot(const WorldFaceSlots& slots, uint8_t faceIndex) noexcept
+        {
+            return faceIndex >= 4 &&
+                   faceIndex < static_cast<uint8_t>(4 + slots.fallbackCount);
+        }
+
+        uint8_t resolveWorldGlyphSlot(const WorldFaceSlots& slots,
+                                      uint8_t faceIndex) noexcept
+        {
+            if (faceIndex == 0) return 0;
+            if (isFallbackSlot(slots, faceIndex)) return faceIndex;
+            return 0;
+        }
+    }
+
     TextPipeline::TextPipeline(core::Device& device, core::SwapChain& swapChain,
                                core::OffscreenResources& offscreenResources)
         : device{device}
@@ -60,6 +94,7 @@ namespace render::text
         if (pipelineLayout) dev.destroyPipelineLayout(pipelineLayout);
 
         fontDescriptorSets.clear();
+        lastAtlasGeneration = fontCache.atlasGeneration();
         fontBatches.clear();
         totalInstanceCount = 0;
 
@@ -93,14 +128,16 @@ namespace render::text
         fontBatches.clear();
         totalInstanceCount = 0;
 
+        // Ahead of the empty check: this also drains reimport invalidations, which must
+        // happen whether or not there is world text on screen this frame.
+        fontCache.processPendingLoads();
+        refreshFontDescriptorSetsIfStale();
+
         if (textEntities.empty())
         {
             bufferManager.updateInstanceBuffer({});
             return;
         }
-
-        // Process pending font loads
-        fontCache.processPendingLoads();
 
         // Request any fonts that aren't loaded yet
         for (const auto& textEntity : textEntities)
@@ -111,150 +148,167 @@ namespace render::text
             }
         }
 
-        // Group text entities by font, lay out text, and build instances
+        // Group glyphs by their resolved atlas. A single entity may span its
+        // primary, multiple fallback atlases, and procedural tofu.
         std::unordered_map<std::string, std::vector<TextCharInstance>> fontInstances;
 
         for (const auto& textEntity : textEntities)
         {
-            const CachedFont* cached = fontCache.getFont(textEntity.fontPath);
+            // VK-1628: falls back to the default font when this one is missing or
+            // still loading. Everything below keys off fontKey, never fontPath.
+            // VK-1636: and to a real Bold / Italic sibling face when the family ships
+            // one, in which case the shader stops synthesizing that axis. The world
+            // text pipeline has no rich text, so one face per entity is enough.
+            const uint32_t requestedStyleBits =
+                ::text::styleBitsFromFontStyle(static_cast<uint8_t>(textEntity.fontStyle));
+            const TextFontCache::StyledFontResolution styled =
+                fontCache.resolveStyledFont(textEntity.fontPath, requestedStyleBits);
+
+            const std::string& fontKey = *styled.key;
+            const CachedFont* cached = fontCache.getFont(fontKey);
             if (!cached || !cached->fontData)
             {
                 continue;
             }
 
             const auto& fontData = *cached->fontData;
+            WorldFaceSlots slots;
+            slots.faceSet.faces[0] = &fontData;
+            slots.faces[0] = &fontData;
+            slots.keys[0] = styled.key;
+            slots.synthesizedBits[0] = styled.synthesizedBits;
 
-            // Compute SDF parameters
-            float sdfEdge = fontData.sdfParams.edgeValue;
-            float sdfSmooth = fontData.isSDF() ? (fontData.sdfParams.spread > 0.0f
-                ? 1.0f / fontData.sdfParams.spread * 0.5f
-                : 0.1f) : 0.0f;
+            const std::string& regularPrimary =
+                fontCache.resolveFontKey(textEntity.fontPath);
+            const auto fallbacks = fontCache.resolveFallbackFaces(regularPrimary);
+            slots.fallbackCount = fallbacks.count;
+            for (uint8_t i = 0; i < fallbacks.count; ++i)
+            {
+                const uint8_t slot = static_cast<uint8_t>(4 + i);
+                slots.faceSet.fallback[i] = fallbacks.faces[i];
+                slots.faces[slot] = fallbacks.faces[i];
+                slots.keys[slot] = fallbacks.keys[i];
+                slots.synthesizedBits[slot] = requestedStyleBits;
+            }
+
+            for (uint8_t slot = 0; slot < 8; ++slot)
+            {
+                const resource::FontData* face = slots.faces[slot];
+                if (!face) continue;
+
+                slots.sdfEdge[slot] = face->sdfParams.edgeValue;
+                slots.sdfSmooth[slot] = resource::sdfSmoothWidth(*face);
+                const float effectScale =
+                    static_cast<float>(face->metadata.baseFontSize) > 0.0f
+                        ? textEntity.fontSize /
+                            static_cast<float>(face->metadata.baseFontSize)
+                        : 0.0f;
+                slots.effect[slot] = ::text::buildTextEffectInstance(
+                    textEntity.effects, effectScale, slots.sdfSmooth[slot] > 0.0f);
+            }
+
+            // VK-1637: the box rules - which box, which wrap width, which gate - are pure,
+            // so they live in utilities/text where the CPU-only test suite can reach them;
+            // this TU is Vulkan-bound. clipSupported is false because this pipeline issues
+            // no vk::CommandBuffer::setScissor, so TextOverflow::Clip degrades to Overflow
+            // while still round-tripping losslessly through the scene file.
+            ::text::TextBoxRequest boxRequest;
+            boxRequest.maxWidth = textEntity.maxWidth;
+            boxRequest.rectHeight = textEntity.rectHeight;
+            boxRequest.wordWrap = textEntity.wordWrap;
+            boxRequest.overflow = static_cast<uint8_t>(textEntity.overflow);
+            boxRequest.horizontal = textEntity.horizontalAlignment;
+            boxRequest.vertical = textEntity.verticalAlignment;
+            boxRequest.clipSupported = false;
+            boxRequest.requireHeightForVAlign = true;
+            const ::text::TextBoxPolicy box = ::text::resolveTextBox(boxRequest);
 
             // Layout text using shared text layout engine
-            auto layout = ::text::layoutText(
-                fontData,
+            auto layout = ::text::layoutTextStyled(
+                slots.faceSet,
                 textEntity.text,
+                {},
                 textEntity.fontSize,
-                textEntity.maxWidth,
+                box.wrapWidth,
                 textEntity.lineSpacing,
                 textEntity.letterSpacing
             );
 
-            // Apply alignment offsets if needed
-            bool hasHAlign = textEntity.horizontalAlignment != 0;
-            bool hasVAlign = textEntity.verticalAlignment != 0 && textEntity.rectHeight > 0.0f;
-
-            std::vector<float> lineOffsetX;
-            float verticalOffset = 0.0f;
-
-            if ((hasHAlign || hasVAlign) && !layout.glyphs.empty())
+            // VK-1637: per-line ellipsis, BEFORE alignment - the ordering UITextPipeline
+            // uses, pinned by tests/test_textlayout_alignment.cpp - so a truncated line
+            // centres on its truncated width rather than its original one. Being per-line,
+            // it covers both wrap states: every wrapped line, or the single un-wrapped one.
+            if (box.ellipsis)
             {
-                // Group glyphs by line
-                struct LineInfo { size_t startIdx = 0; size_t count = 0; float minX = 0.0f; float maxX = 0.0f; };
-                std::vector<LineInfo> lines;
-                float currentLineY = layout.glyphs[0].offset.y;
-                LineInfo currentLine{0, 0, layout.glyphs[0].offset.x, layout.glyphs[0].offset.x + layout.glyphs[0].size.x};
-
-                for (size_t gi = 0; gi < layout.glyphs.size(); ++gi)
+                ::text::applyEllipsis(layout, fontData, textEntity.fontSize,
+                                      box.ellipsisWidth, textEntity.letterSpacing,
+                                      ::text::baselineShiftForFaceSet(
+                                          slots.faceSet, textEntity.fontSize));
+                if (layout.glyphs.empty())
                 {
-                    const auto& g = layout.glyphs[gi];
-                    if (std::abs(g.offset.y - currentLineY) > 0.1f)
-                    {
-                        lines.push_back(currentLine);
-                        currentLineY = g.offset.y;
-                        currentLine = {gi, 0, g.offset.x, g.offset.x + g.size.x};
-                    }
-                    currentLine.count++;
-                    currentLine.minX = std::min(currentLine.minX, g.offset.x);
-                    currentLine.maxX = std::max(currentLine.maxX, g.offset.x + g.size.x);
-                }
-                lines.push_back(currentLine);
-
-                // Horizontal alignment per line — use maxWidth (rect width in layout units) if available
-                float contentWidth = textEntity.maxWidth > 0.0f ? textEntity.maxWidth : layout.boundingBox.x;
-                lineOffsetX.resize(lines.size(), 0.0f);
-                if (hasHAlign)
-                {
-                    for (size_t li = 0; li < lines.size(); ++li)
-                    {
-                        float lineWidth = lines[li].maxX - lines[li].minX;
-                        if (textEntity.horizontalAlignment == 1)
-                            lineOffsetX[li] = (contentWidth - lineWidth) * 0.5f;
-                        else if (textEntity.horizontalAlignment == 2)
-                            lineOffsetX[li] = contentWidth - lineWidth;
-                    }
-                }
-
-                // Vertical alignment
-                if (hasVAlign)
-                {
-                    float totalHeight = layout.boundingBox.y;
-                    if (textEntity.verticalAlignment == 1)
-                        verticalOffset = (textEntity.rectHeight - totalHeight) * 0.5f;
-                    else if (textEntity.verticalAlignment == 2)
-                        verticalOffset = textEntity.rectHeight - totalHeight;
+                    // Before fontInstances[fontKey] below, so a fully truncated entity
+                    // never creates an empty batch bucket.
+                    continue;
                 }
             }
 
-            auto& instances = fontInstances[textEntity.fontPath];
+            // VK-1632: alignment lives in utilities/text now, shared with UITextPipeline.
+            const auto lineMetrics = ::text::computeLineMetrics(
+                slots.faceSet, textEntity.fontSize, textEntity.lineSpacing);
 
-            uint32_t styleFlags = 0;
-            if (textEntity.fontStyle == components::FontStyle::Bold ||
-                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x1u;
-            if (textEntity.fontStyle == components::FontStyle::Italic ||
-                textEntity.fontStyle == components::FontStyle::BoldItalic) styleFlags |= 0x2u;
+            ::text::AlignParams alignParams;
+            alignParams.horizontal = box.horizontal;
+            alignParams.vertical = box.vertical;
+            // boundingBox.x is only known after layout, which is why resolveTextBox hands
+            // back the flag rather than the width.
+            alignParams.contentSize = glm::vec2(
+                box.alignToInkWidth ? layout.boundingBox.x : box.alignWidth,
+                box.alignHeight);
+            alignParams.lineHeight = lineMetrics.lineHeight;
+            alignParams.singleLineHeight = lineMetrics.singleLineHeight;
 
-            if (!lineOffsetX.empty() || verticalOffset != 0.0f)
+            ::text::applyAlignment(layout, alignParams);
+
+            // The batch key is fully determined by the resolved slot, so resolve each
+            // bucket once per entity instead of hashing a path string per glyph.
+            // unordered_map never invalidates element pointers on rehash, so these
+            // stay valid as later glyphs insert new keys.
+            std::vector<TextCharInstance>* slotBuckets[8] = {};
+
+            for (const auto& glyph : layout.glyphs)
             {
-                size_t lineIdx = 0;
-                float prevY = layout.glyphs.empty() ? 0.0f : layout.glyphs[0].offset.y;
+                const bool tofu = glyph.faceIndex == ::text::TOFU_FACE_INDEX;
+                const uint8_t slot = resolveWorldGlyphSlot(slots, glyph.faceIndex);
+                const bool fallback = isFallbackSlot(slots, glyph.faceIndex);
+                const ::text::TextEffectInstance& effect = slots.effect[slot];
 
-                for (size_t gi = 0; gi < layout.glyphs.size(); ++gi)
+                TextCharInstance inst{};
+                inst.worldPosition = textEntity.worldPosition;
+                inst.fontSize = textEntity.fontSize;
+                inst.charOffset = glyph.offset;
+                inst.charSize = glyph.size;
+                inst.uvRect = glyph.uvRect;
+                inst.color = textEntity.color;
+                inst.renderMode = textEntity.renderMode;
+                inst.entityId = textEntity.entityId;
+                inst.sdfEdge = tofu ? 0.0f : slots.sdfEdge[slot];
+                inst.sdfSmooth = tofu ? 0.0f : slots.sdfSmooth[slot];
+                inst.styleFlags = tofu ? ::text::STYLE_TOFU
+                    : (fallback ? requestedStyleBits : slots.synthesizedBits[slot]);
+                inst.effectParams = tofu ? glm::vec4(0.0f) : effect.params;
+                inst.effectColors = tofu ? glm::uvec4(0u) : effect.colors;
+                inst.effectMargin = tofu ? 0.0f : effect.marginPx;
+
+                // Tofu has no atlas. resolveWorldGlyphSlot maps it to slot 0, whose key
+                // IS fontKey, so it batches under the primary and the existing
+                // descriptor/draw structure stays intact; the shader returns before
+                // sampling that descriptor.
+                std::vector<TextCharInstance>*& bucket = slotBuckets[slot];
+                if (!bucket)
                 {
-                    const auto& glyph = layout.glyphs[gi];
-
-                    if (gi > 0 && std::abs(glyph.offset.y - prevY) > 0.1f)
-                    {
-                        lineIdx++;
-                        prevY = glyph.offset.y;
-                    }
-
-                    TextCharInstance inst{};
-                    inst.worldPosition = textEntity.worldPosition;
-                    inst.fontSize = textEntity.fontSize;
-                    inst.charOffset = glyph.offset;
-                    if (lineIdx < lineOffsetX.size())
-                        inst.charOffset.x += lineOffsetX[lineIdx];
-                    inst.charOffset.y += verticalOffset;
-                    inst.charSize = glyph.size;
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = textEntity.color;
-                    inst.renderMode = textEntity.renderMode;
-                    inst.entityId = textEntity.entityId;
-                    inst.sdfEdge = sdfEdge;
-                    inst.sdfSmooth = sdfSmooth;
-                    inst.styleFlags = styleFlags;
-                    instances.push_back(inst);
+                    bucket = &fontInstances[*slots.keys[slot]];
                 }
-            }
-            else
-            {
-                for (const auto& glyph : layout.glyphs)
-                {
-                    TextCharInstance inst{};
-                    inst.worldPosition = textEntity.worldPosition;
-                    inst.fontSize = textEntity.fontSize;
-                    inst.charOffset = glyph.offset;
-                    inst.charSize = glyph.size;
-                    inst.uvRect = glyph.uvRect;
-                    inst.color = textEntity.color;
-                    inst.renderMode = textEntity.renderMode;
-                    inst.entityId = textEntity.entityId;
-                    inst.sdfEdge = sdfEdge;
-                    inst.sdfSmooth = sdfSmooth;
-                    inst.styleFlags = styleFlags;
-                    instances.push_back(inst);
-                }
+                bucket->push_back(inst);
             }
         }
 
@@ -328,13 +382,14 @@ namespace render::text
             vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                 ? it->second : defaultDescriptorSet;
 
-            // Determine glyphMode from cached font data
+            // The cache validates the atlas format and stores its shader-facing mode.
             const CachedFont* cached = fontCache.getFont(batch.fontPath);
-            uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+            uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
             TextPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
             pushConstants.glyphMode = glyphMode;
+            pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
             commandBuffer.pushConstants(pipelineLayout,
                                          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
@@ -392,13 +447,14 @@ namespace render::text
             vk::DescriptorSet descSet = (it != fontDescriptorSets.end())
                 ? it->second : defaultDescriptorSet;
 
-            // Determine glyphMode from cached font data
+            // The cache validates the atlas format and stores its shader-facing mode.
             const CachedFont* cached = fontCache.getFont(batch.fontPath);
-            uint32_t glyphMode = (cached && cached->isColorFont) ? 1u : 0u;
+            uint32_t glyphMode = cached ? cached->glyphMode : 0u;
 
             TextPushConstants pushConstants{};
             pushConstants.viewportSize = viewportSize;
             pushConstants.glyphMode = glyphMode;
+            pushConstants.pxRange = cached ? cached->pxRange : 0.0f;
 
             commandBuffer.pushConstants(pipelineLayout,
                                          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,

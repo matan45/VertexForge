@@ -37,6 +37,10 @@ namespace services
         events::SubscriptionToken editorModePreChangeToken;
         events::SubscriptionToken editorModeChangedToken;
         events::SubscriptionToken navmeshBakeCompleteToken;
+        events::SubscriptionToken projectLoadedToken;
+        events::SubscriptionToken projectConfigUpdatedToken;
+        events::SubscriptionToken projectClosedToken;
+        events::SubscriptionToken importCompletedToken;
         EntityHandle autoCreatedSunEntity;  // tracks auto-created Sun for cleanup
 
     public:

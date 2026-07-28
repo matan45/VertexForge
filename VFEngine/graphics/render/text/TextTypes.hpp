@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <glm/glm.hpp>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include "../common/CameraTypes.hpp"
@@ -56,6 +57,12 @@ namespace render::text
         float sdfSmooth;
         uint32_t styleFlags;    // bit0 = bold, bit1 = italic
 
+        // VK-1635 text effects. Built by text::buildTextEffectInstance(); all-zero means
+        // no effect and the shader then takes exactly the pre-VK-1635 path.
+        glm::vec4 effectParams;   // (outlineWidth, shadowX, shadowY, glowRange) in atlas TEXELS
+        glm::uvec4 effectColors;  // (outlineRGBA8, shadowRGBA8, glowRGBA8, flags)
+        float effectMargin;       // quad inflation in layout pixels; 0 when no effect
+
         static vk::VertexInputBindingDescription getBindingDescription()
         {
             vk::VertexInputBindingDescription bindingDescription{};
@@ -65,9 +72,9 @@ namespace render::text
             return bindingDescription;
         }
 
-        static std::array<vk::VertexInputAttributeDescription, 7> getAttributeDescriptions()
+        static std::array<vk::VertexInputAttributeDescription, 10> getAttributeDescriptions()
         {
-            std::array<vk::VertexInputAttributeDescription, 7> attributes{};
+            std::array<vk::VertexInputAttributeDescription, 10> attributes{};
 
             // location 2: worldPosition (vec3) + fontSize (float) packed as vec4
             attributes[0].binding = 1;
@@ -111,34 +118,91 @@ namespace render::text
             attributes[6].format = vk::Format::eR32Uint;
             attributes[6].offset = offsetof(TextCharInstance, styleFlags);
 
+            // location 9: effectParams (vec4)
+            attributes[7].binding = 1;
+            attributes[7].location = 9;
+            attributes[7].format = vk::Format::eR32G32B32A32Sfloat;
+            attributes[7].offset = offsetof(TextCharInstance, effectParams);
+
+            // location 10: effectColors (uvec4)
+            attributes[8].binding = 1;
+            attributes[8].location = 10;
+            attributes[8].format = vk::Format::eR32G32B32A32Uint;
+            attributes[8].offset = offsetof(TextCharInstance, effectColors);
+
+            // location 11: effectMargin (float)
+            attributes[9].binding = 1;
+            attributes[9].location = 11;
+            attributes[9].format = vk::Format::eR32Sfloat;
+            attributes[9].offset = offsetof(TextCharInstance, effectMargin);
+
             return attributes;
         }
     };
+
+    // glm is packed here (GLM_FORCE_DEFAULT_ALIGNED_GENTYPES is not defined anywhere in
+    // this build), so vec3 is 12 bytes with no tail padding and every member sits on its
+    // natural 4-byte boundary. Pinned because the vertex-input offsets above are computed
+    // from offsetof: a silent layout change would feed the shader the wrong bytes without
+    // tripping a single validation error.
+    static_assert(sizeof(TextCharInstance) == 120,
+                  "TextCharInstance layout is mirrored by text.glsl's instance attributes");
+    static_assert(offsetof(TextCharInstance, effectParams) == 84);
+    static_assert(offsetof(TextCharInstance, effectColors) == 100);
+    static_assert(offsetof(TextCharInstance, effectMargin) == 116);
 
     using TextCameraUBO = render::common::CameraUBO;
 
     struct TextPushConstants
     {
         glm::vec2 viewportSize;
-        uint32_t glyphMode;  // 0 = SDF, 1 = color bitmap
-        float padding2;
+        uint32_t glyphMode;  // 0 = field/coverage, 1 = color bitmap, 2 = MTSDF
+        // VK-1634: SDFParameters::pxRange for glyphMode 2, zero otherwise. The fragment
+        // stage turns it into the screen-space anti-aliasing band. Zero degrades to a
+        // one-pixel band rather than misbehaving, so a missed push site is soft, not fatal.
+        // Occupies what used to be dead padding, so the block is still 16 bytes and the
+        // pipeline layout (TextPipelineSetup.cpp: pushConstantSize = sizeof(...)) is
+        // unchanged.
+        float pxRange;
     };
+
+    // Mirrors the push_constant block in resources/shaders/text/text.glsl, which declares it
+    // identically in both stages. Nothing else cross-checks the two - these fire at compile
+    // time; the GLSL side is pinned by tests/test_text_shader_compile.cpp.
+    static_assert(sizeof(TextPushConstants) == 16,
+                  "text.glsl push_constant block is 16 bytes; keep C++ and GLSL in lockstep");
+    static_assert(offsetof(TextPushConstants, viewportSize) == 0);
+    static_assert(offsetof(TextPushConstants, glyphMode) == 8);
+    static_assert(offsetof(TextPushConstants, pxRange) == 12);
 
     struct TextRenderData
     {
         std::string fontPath;
         std::string text;
-        glm::vec3 worldPosition;
-        float fontSize;
-        glm::vec4 color;
-        uint32_t renderMode;   // 0 = ScreenSpace, 1 = WorldSpace
-        uint32_t entityId;
-        float lineSpacing;
-        float letterSpacing;
-        float maxWidth;
+        // VK-1637: these were previously uninitialized. Both producers happen to assign
+        // every one, so it was latent - but a third producer that missed one would read
+        // an indeterminate value with no diagnostic, and `overflow` on a garbage byte
+        // would truncate text at random. Cheaper to make it a property of the type.
+        glm::vec3 worldPosition{0.0f};
+        float fontSize = 0.0f;
+        glm::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        uint32_t renderMode = 1;   // 0 = ScreenSpace, 1 = WorldSpace
+        uint32_t entityId = 0;
+        float lineSpacing = 1.0f;
+        float letterSpacing = 0.0f;
+        float maxWidth = 0.0f;
         uint8_t horizontalAlignment = 0; // 0=Left, 1=Center, 2=Right
         uint8_t verticalAlignment = 0;   // 0=Top, 1=Middle, 2=Bottom
         float rectHeight = 0.0f;         // Bounding rect height for vertical alignment
         components::FontStyle fontStyle = components::FontStyle::Normal;
+        // VK-1637. Typed, matching fontStyle above - unlike the two alignment fields,
+        // which stay raw uint8_t because text::toHAlign / toVAlign own the out-of-range
+        // mapping. Clip has no implementation here (no scissor) and degrades to Overflow;
+        // see text::resolveTextBox.
+        components::TextOverflow overflow = components::TextOverflow::Overflow;
+        bool wordWrap = true;
+        // VK-1635. Distances are layout pixels at this fontSize, so they scale with the
+        // glyph as world-space text recedes.
+        components::TextEffectSettings effects;
     };
 }

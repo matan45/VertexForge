@@ -1,9 +1,12 @@
 #include "print/Log.hpp"
 #include "FontAtlasGenerator.hpp"
+#include "MsdfShapeBridge.hpp"
 #include "SDFGenerator.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <optional>
 
 #define STB_RECT_PACK_IMPLEMENTATION
 #include <stb_rect_pack.h>
@@ -25,6 +28,21 @@ namespace types
             float bearingX, bearingY;
             float advanceX;
             SDFResult sdfResult;
+        };
+
+        struct GrayscaleGlyphTemp
+        {
+            uint32_t codepoint;
+            int width, height;
+            float bearingX, bearingY;
+            float advanceX;
+            std::vector<unsigned char> pixels;
+        };
+
+        struct MTSDFGlyphTemp
+        {
+            uint32_t codepoint;
+            MtsdfGlyphResult glyph;
         };
 
         struct ColorGlyphTemp
@@ -118,6 +136,137 @@ namespace types
         }
 
         // ---- SDF helpers ----
+
+        std::optional<GrayscaleGlyphTemp> processGrayscaleGlyph(
+            FT_Face face, uint32_t fontSize, uint32_t cp)
+        {
+            const FT_UInt glyphIndex = FT_Get_Char_Index(face, cp);
+            if (glyphIndex == 0 && cp != ' ')
+                return std::nullopt;
+
+            if (FT_Set_Pixel_Sizes(face, 0, fontSize) != 0 ||
+                FT_Load_Glyph(face, glyphIndex, FT_LOAD_RENDER | FT_LOAD_NO_SVG) != 0)
+            {
+                return std::nullopt;
+            }
+
+            const FT_Bitmap& bitmap = face->glyph->bitmap;
+            GrayscaleGlyphTemp temp{};
+            temp.codepoint = cp;
+            temp.width = static_cast<int>(bitmap.width);
+            temp.height = static_cast<int>(bitmap.rows);
+            temp.bearingX = static_cast<float>(face->glyph->bitmap_left);
+            temp.bearingY = static_cast<float>(face->glyph->bitmap_top);
+            temp.advanceX = static_cast<float>(face->glyph->advance.x) / 64.0f;
+
+            if (temp.width == 0 || temp.height == 0)
+                return temp;
+            if (!bitmap.buffer || bitmap.pitch == (std::numeric_limits<int>::min)())
+                return std::nullopt;
+
+            const size_t width = static_cast<size_t>(temp.width);
+            const size_t height = static_cast<size_t>(temp.height);
+            if (width > (std::numeric_limits<size_t>::max)() / height)
+                return std::nullopt;
+            temp.pixels.resize(width * height);
+
+            const int rowBytes = std::abs(bitmap.pitch);
+            for (int y = 0; y < temp.height; ++y)
+            {
+                const int sourceY = bitmap.pitch >= 0 ? y : temp.height - 1 - y;
+                const unsigned char* row =
+                    bitmap.buffer + static_cast<size_t>(sourceY) * rowBytes;
+                unsigned char* destination =
+                    temp.pixels.data() + static_cast<size_t>(y) * width;
+
+                switch (bitmap.pixel_mode)
+                {
+                case FT_PIXEL_MODE_GRAY:
+                    if (rowBytes < temp.width)
+                        return std::nullopt;
+                    if (bitmap.num_grays > 1 && bitmap.num_grays != 256)
+                    {
+                        const unsigned int maximum = bitmap.num_grays - 1;
+                        for (int x = 0; x < temp.width; ++x)
+                            destination[x] = static_cast<unsigned char>(
+                                (static_cast<unsigned int>(row[x]) * 255u + maximum / 2u) /
+                                maximum);
+                    }
+                    else
+                    {
+                        std::copy_n(row, temp.width, destination);
+                    }
+                    break;
+
+                case FT_PIXEL_MODE_MONO:
+                    if (rowBytes < (temp.width + 7) / 8)
+                        return std::nullopt;
+                    for (int x = 0; x < temp.width; ++x)
+                        destination[x] = (row[x >> 3] & (0x80u >> (x & 7))) ? 255 : 0;
+                    break;
+
+                default:
+                    return std::nullopt;
+                }
+            }
+            return temp;
+        }
+
+        std::pair<std::vector<GrayscaleGlyphTemp>, std::vector<stbrp_rect>>
+        rasterizeGrayscaleGlyphs(FT_Face face, uint32_t fontSize,
+                                 const std::vector<resource::CharacterRange>& ranges,
+                                 const FontImportConfig& config)
+        {
+            const uint32_t totalGlyphs = countTotalGlyphs(ranges);
+            std::vector<GrayscaleGlyphTemp> glyphTemps;
+            glyphTemps.reserve(totalGlyphs);
+            std::vector<stbrp_rect> rects;
+            rects.reserve(totalGlyphs);
+            int rectId = 0;
+
+            for (const auto& range : ranges)
+            {
+                for (uint32_t cp = range.rangeStart; cp <= range.rangeEnd; ++cp)
+                {
+                    auto temp = processGrayscaleGlyph(face, fontSize, cp);
+                    if (!temp)
+                        continue;
+
+                    const uint64_t rectWidth =
+                        static_cast<uint64_t>(temp->width) + config.atlasPadding;
+                    const uint64_t rectHeight =
+                        static_cast<uint64_t>(temp->height) + config.atlasPadding;
+                    if (rectWidth > (std::numeric_limits<stbrp_coord>::max)() ||
+                        rectHeight > (std::numeric_limits<stbrp_coord>::max)())
+                    {
+                        continue;
+                    }
+
+                    glyphTemps.push_back(std::move(*temp));
+                    stbrp_rect rect{};
+                    rect.id = rectId++;
+                    rect.w = static_cast<stbrp_coord>(rectWidth);
+                    rect.h = static_cast<stbrp_coord>(rectHeight);
+                    rects.push_back(rect);
+                }
+            }
+            return {std::move(glyphTemps), std::move(rects)};
+        }
+
+        void copyGrayscalePixelsToAtlas(const GrayscaleGlyphTemp& temp,
+                                        const stbrp_rect& rect, uint32_t actualWidth,
+                                        resource::FontData& fontData)
+        {
+            for (int y = 0; y < temp.height; ++y)
+            {
+                const size_t atlasIndex =
+                    (static_cast<size_t>(rect.y) + static_cast<size_t>(y)) * actualWidth +
+                    static_cast<size_t>(rect.x);
+                const size_t sourceIndex = static_cast<size_t>(y) * temp.width;
+                std::copy_n(temp.pixels.data() + sourceIndex, temp.width,
+                            fontData.atlas.pixels.data() + atlasIndex);
+            }
+        }
 
         std::optional<SDFGlyphTemp> processSDFGlyph(FT_Face face, uint32_t fontSize,
                                                       uint32_t hiresSize, int padding,
@@ -244,13 +393,11 @@ namespace types
         void compositeSDFAtlas(const std::vector<SDFGlyphTemp>& glyphTemps,
                                 const std::vector<stbrp_rect>& rects,
                                 const PackedAtlasResult& dims,
-                                const FontImportConfig& config,
                                 resource::FontData& fontData)
         {
             fontData.atlas.width = dims.actualWidth;
             fontData.atlas.height = dims.actualHeight;
-            fontData.atlas.format = config.generateSDF ?
-                resource::FontAtlasFormat::SDF_8 : resource::FontAtlasFormat::GRAYSCALE_8;
+            fontData.atlas.format = resource::FontAtlasFormat::SDF_8;
             fontData.atlas.pixels.resize(static_cast<size_t>(dims.actualWidth) * dims.actualHeight, 0);
             fontData.glyphs.reserve(glyphTemps.size());
 
@@ -306,6 +453,208 @@ namespace types
                      "Atlas size: {}x{}",
                      packedCount, emptyGlyphCount, unpackedGlyphs.size(),
                      dims.actualWidth, dims.actualHeight);
+        }
+
+        void compositeGrayscaleAtlas(const std::vector<GrayscaleGlyphTemp>& glyphTemps,
+                                     const std::vector<stbrp_rect>& rects,
+                                     const PackedAtlasResult& dims,
+                                     resource::FontData& fontData)
+        {
+            fontData.atlas.width = dims.actualWidth;
+            fontData.atlas.height = dims.actualHeight;
+            fontData.atlas.format = resource::FontAtlasFormat::GRAYSCALE_8;
+            fontData.atlas.pixels.assign(
+                static_cast<size_t>(dims.actualWidth) * dims.actualHeight, 0);
+            fontData.glyphs.reserve(glyphTemps.size());
+
+            std::vector<uint32_t> unpackedGlyphs;
+            uint32_t emptyGlyphCount = 0;
+            uint32_t packedCount = 0;
+            for (size_t i = 0; i < glyphTemps.size(); ++i)
+            {
+                const auto& temp = glyphTemps[i];
+                const auto& rect = rects[i];
+                auto glyph = buildGlyphData(
+                    temp.codepoint, temp.advanceX, temp.bearingX, temp.bearingY,
+                    static_cast<float>(temp.width), static_cast<float>(temp.height));
+
+                if (rect.was_packed && temp.width > 0 && temp.height > 0)
+                {
+                    const uint32_t endX = static_cast<uint32_t>(rect.x) +
+                                          static_cast<uint32_t>(temp.width);
+                    const uint32_t endY = static_cast<uint32_t>(rect.y) +
+                                          static_cast<uint32_t>(temp.height);
+                    if (endX <= dims.actualWidth && endY <= dims.actualHeight &&
+                        temp.pixels.size() ==
+                            static_cast<size_t>(temp.width) * temp.height)
+                    {
+                        glyph.atlasX = static_cast<uint32_t>(rect.x);
+                        glyph.atlasY = static_cast<uint32_t>(rect.y);
+                        glyph.atlasWidth = static_cast<uint32_t>(temp.width);
+                        glyph.atlasHeight = static_cast<uint32_t>(temp.height);
+                        copyGrayscalePixelsToAtlas(temp, rect, dims.actualWidth, fontData);
+                        ++packedCount;
+                    }
+                    else
+                    {
+                        unpackedGlyphs.push_back(temp.codepoint);
+                    }
+                }
+                else if (temp.width > 0 && temp.height > 0)
+                {
+                    unpackedGlyphs.push_back(temp.codepoint);
+                }
+                else
+                {
+                    ++emptyGlyphCount;
+                }
+                fontData.glyphs.push_back(glyph);
+            }
+
+            reportUnpackedGlyphs(unpackedGlyphs, dims.actualWidth, dims.actualHeight);
+            vfLogDebug("Grayscale font atlas generated: {} glyphs packed, {} empty glyphs, "
+                       "{} failed to pack. Atlas size: {}x{}",
+                       packedCount, emptyGlyphCount, unpackedGlyphs.size(),
+                       dims.actualWidth, dims.actualHeight);
+        }
+
+        // ---- MTSDF helpers ----
+
+        std::optional<MTSDFGlyphTemp> processMTSDFGlyph(FT_Face face, uint32_t fontSize,
+                                                       double pxRange, uint32_t cp)
+        {
+            const FT_UInt glyphIndex = FT_Get_Char_Index(face, cp);
+            if (glyphIndex == 0 && cp != ' ')
+                return std::nullopt;
+
+            MtsdfGlyphResult glyph =
+                generateMtsdfGlyph(face, glyphIndex, fontSize, pxRange);
+            if (!glyph.valid)
+                return std::nullopt;
+            return MTSDFGlyphTemp{cp, std::move(glyph)};
+        }
+
+        std::pair<std::vector<MTSDFGlyphTemp>, std::vector<stbrp_rect>>
+        rasterizeMTSDFGlyphs(FT_Face face, uint32_t fontSize,
+                             const std::vector<resource::CharacterRange>& ranges,
+                             const FontImportConfig& config)
+        {
+            const uint32_t totalGlyphs = countTotalGlyphs(ranges);
+            std::vector<MTSDFGlyphTemp> glyphTemps;
+            glyphTemps.reserve(totalGlyphs);
+            std::vector<stbrp_rect> rects;
+            rects.reserve(totalGlyphs);
+            int rectId = 0;
+
+            for (const auto& range : ranges)
+            {
+                for (uint32_t cp = range.rangeStart; cp <= range.rangeEnd; ++cp)
+                {
+                    auto temp =
+                        processMTSDFGlyph(face, fontSize, config.mtsdfPxRange, cp);
+                    if (!temp)
+                        continue;
+
+                    const uint64_t rectWidth =
+                        static_cast<uint64_t>(temp->glyph.width) + config.atlasPadding;
+                    const uint64_t rectHeight =
+                        static_cast<uint64_t>(temp->glyph.height) + config.atlasPadding;
+                    if (rectWidth > (std::numeric_limits<stbrp_coord>::max)() ||
+                        rectHeight > (std::numeric_limits<stbrp_coord>::max)())
+                    {
+                        continue;
+                    }
+
+                    glyphTemps.push_back(std::move(*temp));
+                    stbrp_rect rect{};
+                    rect.id = rectId++;
+                    rect.w = static_cast<stbrp_coord>(rectWidth);
+                    rect.h = static_cast<stbrp_coord>(rectHeight);
+                    rects.push_back(rect);
+                }
+            }
+            return {std::move(glyphTemps), std::move(rects)};
+        }
+
+        void copyMTSDFPixelsToAtlas(const MtsdfGlyphResult& temp,
+                                    const stbrp_rect& rect, uint32_t actualWidth,
+                                    resource::FontData& fontData)
+        {
+            const size_t rowBytes = static_cast<size_t>(temp.width) * 4;
+            for (int y = 0; y < temp.height; ++y)
+            {
+                const size_t atlasIndex =
+                    ((static_cast<size_t>(rect.y) + static_cast<size_t>(y)) * actualWidth +
+                     static_cast<size_t>(rect.x)) * 4;
+                const size_t sourceIndex = static_cast<size_t>(y) * rowBytes;
+                std::copy_n(temp.pixels.data() + sourceIndex, rowBytes,
+                            fontData.atlas.pixels.data() + atlasIndex);
+            }
+        }
+
+        void compositeMTSDFAtlas(const std::vector<MTSDFGlyphTemp>& glyphTemps,
+                                 const std::vector<stbrp_rect>& rects,
+                                 const PackedAtlasResult& dims,
+                                 resource::FontData& fontData)
+        {
+            fontData.atlas.width = dims.actualWidth;
+            fontData.atlas.height = dims.actualHeight;
+            fontData.atlas.format = resource::FontAtlasFormat::MTSDF_RGBA_32;
+            fontData.atlas.pixels.assign(
+                static_cast<size_t>(dims.actualWidth) * dims.actualHeight * 4, 0);
+            fontData.glyphs.reserve(glyphTemps.size());
+
+            std::vector<uint32_t> unpackedGlyphs;
+            uint32_t emptyGlyphCount = 0;
+            uint32_t packedCount = 0;
+            for (size_t i = 0; i < glyphTemps.size(); ++i)
+            {
+                const auto& temp = glyphTemps[i];
+                const auto& rect = rects[i];
+                const auto& mtsdf = temp.glyph;
+                auto glyph = buildGlyphData(
+                    temp.codepoint, mtsdf.advanceX, mtsdf.bearingX, mtsdf.bearingY,
+                    static_cast<float>(mtsdf.width), static_cast<float>(mtsdf.height));
+
+                if (rect.was_packed && !mtsdf.empty && mtsdf.width > 0 && mtsdf.height > 0)
+                {
+                    const uint32_t endX = static_cast<uint32_t>(rect.x) +
+                                          static_cast<uint32_t>(mtsdf.width);
+                    const uint32_t endY = static_cast<uint32_t>(rect.y) +
+                                          static_cast<uint32_t>(mtsdf.height);
+                    const size_t expectedBytes =
+                        static_cast<size_t>(mtsdf.width) * mtsdf.height * 4;
+                    if (endX <= dims.actualWidth && endY <= dims.actualHeight &&
+                        mtsdf.pixels.size() == expectedBytes)
+                    {
+                        glyph.atlasX = static_cast<uint32_t>(rect.x);
+                        glyph.atlasY = static_cast<uint32_t>(rect.y);
+                        glyph.atlasWidth = static_cast<uint32_t>(mtsdf.width);
+                        glyph.atlasHeight = static_cast<uint32_t>(mtsdf.height);
+                        copyMTSDFPixelsToAtlas(mtsdf, rect, dims.actualWidth, fontData);
+                        ++packedCount;
+                    }
+                    else
+                    {
+                        unpackedGlyphs.push_back(temp.codepoint);
+                    }
+                }
+                else if (!mtsdf.empty && mtsdf.width > 0 && mtsdf.height > 0)
+                {
+                    unpackedGlyphs.push_back(temp.codepoint);
+                }
+                else
+                {
+                    ++emptyGlyphCount;
+                }
+                fontData.glyphs.push_back(glyph);
+            }
+
+            reportUnpackedGlyphs(unpackedGlyphs, dims.actualWidth, dims.actualHeight);
+            vfLogDebug("MTSDF font atlas generated: {} glyphs packed, {} empty glyphs, "
+                       "{} failed to pack. Atlas size: {}x{}",
+                       packedCount, emptyGlyphCount, unpackedGlyphs.size(),
+                       dims.actualWidth, dims.actualHeight);
         }
 
         // ---- Color helpers ----
@@ -497,6 +846,27 @@ namespace types
 
     // ---- Public methods ----
 
+    bool FontAtlasGenerator::generateGrayscaleAtlas(
+        FT_Face face, uint32_t fontSize,
+        const std::vector<resource::CharacterRange>& ranges,
+        const FontImportConfig& config, resource::FontData& fontData) const
+    {
+        auto [glyphTemps, rects] =
+            rasterizeGrayscaleGlyphs(face, fontSize, ranges, config);
+        FT_Set_Pixel_Sizes(face, 0, fontSize);
+
+        if (rects.empty())
+        {
+            vfLogWarning("No valid glyphs found in font");
+            return false;
+        }
+
+        const auto dims =
+            packGlyphRects(rects, config.atlasWidth, config.atlasHeight);
+        compositeGrayscaleAtlas(glyphTemps, rects, dims, fontData);
+        return true;
+    }
+
     bool FontAtlasGenerator::generateSDFAtlas(FT_Face face, uint32_t fontSize,
                                                const std::vector<resource::CharacterRange>& ranges,
                                                const FontImportConfig& config,
@@ -512,7 +882,30 @@ namespace types
         }
 
         auto dims = packGlyphRects(rects, config.atlasWidth, config.atlasHeight);
-        compositeSDFAtlas(glyphTemps, rects, dims, config, fontData);
+        compositeSDFAtlas(glyphTemps, rects, dims, fontData);
+        return true;
+    }
+
+    bool FontAtlasGenerator::generateMTSDFAtlas(
+        FT_Face face, uint32_t fontSize,
+        const std::vector<resource::CharacterRange>& ranges,
+        const FontImportConfig& config, resource::FontData& fontData) const
+    {
+        FontImportConfig effectiveConfig = config;
+        effectiveConfig.atlasPadding = std::max(effectiveConfig.atlasPadding, 1u);
+        auto [glyphTemps, rects] =
+            rasterizeMTSDFGlyphs(face, fontSize, ranges, effectiveConfig);
+        FT_Set_Pixel_Sizes(face, 0, fontSize);
+
+        if (rects.empty())
+        {
+            vfLogWarning("No valid scalable outline glyphs found for MTSDF generation");
+            return false;
+        }
+
+        const auto dims = packGlyphRects(
+            rects, effectiveConfig.atlasWidth, effectiveConfig.atlasHeight);
+        compositeMTSDFAtlas(glyphTemps, rects, dims, fontData);
         return true;
     }
 

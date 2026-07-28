@@ -3,6 +3,7 @@
 #include "../config/Config.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <fstream>
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -83,6 +84,33 @@ namespace serialization
                 project.pluginApiVersion = projectJson["pluginApiVersion"].get<uint32_t>();
             }
 
+            if (projectJson.contains("fontFallbackChain"))
+            {
+                const auto& fallbackJson = projectJson["fontFallbackChain"];
+                if (!fallbackJson.is_array())
+                {
+                    vfLogWarning("Ignoring invalid 'fontFallbackChain' in project file: expected an array");
+                }
+                else
+                {
+                    for (const auto& entry : fallbackJson)
+                    {
+                        if (!entry.is_string())
+                        {
+                            vfLogWarning("Ignoring non-string entry in project 'fontFallbackChain'");
+                            continue;
+                        }
+                        if (project.fontFallbackChain.size() >= config::ProjectConfig::maxFontFallbacks)
+                        {
+                            vfLogWarning("Ignoring project font fallback beyond the maximum of {}",
+                                         config::ProjectConfig::maxFontFallbacks);
+                            break;
+                        }
+                        project.fontFallbackChain.push_back(entry.get<std::string>());
+                    }
+                }
+            }
+
             vfLogInfo("Project loaded successfully: {}", project.projectName);
             return project;
         }
@@ -126,6 +154,22 @@ namespace serialization
             if (project.pluginApiVersion.has_value())
             {
                 projectJson["pluginApiVersion"] = *project.pluginApiVersion;
+            }
+
+            if (!project.fontFallbackChain.empty())
+            {
+                projectJson["fontFallbackChain"] = json::array();
+                const size_t fallbackCount =
+                    std::min(project.fontFallbackChain.size(), config::ProjectConfig::maxFontFallbacks);
+                for (size_t i = 0; i < fallbackCount; ++i)
+                {
+                    projectJson["fontFallbackChain"].push_back(project.fontFallbackChain[i]);
+                }
+                if (project.fontFallbackChain.size() > fallbackCount)
+                {
+                    vfLogWarning("Saving only the first {} project font fallbacks",
+                                 config::ProjectConfig::maxFontFallbacks);
+                }
             }
 
             std::string filePath{filename};

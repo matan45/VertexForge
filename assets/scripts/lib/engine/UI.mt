@@ -247,6 +247,45 @@ public class UI {
     }
 
     // ============================================
+    // Label Text Effects (VK-1635)
+    // ============================================
+    // Distances are pixels at the label's own font size. Each effect is disabled by
+    // passing 0 for its distance (width / offset / range) or 0 alpha for its color.
+    // Effects need a distance-field font: they are ignored on bitmap or color-emoji
+    // atlases. Outline and glow are also capped by how far the font's field reaches -
+    // re-import the font with a larger MTSDF px range for a thicker outline.
+
+    // Set the outline color (RGBA, each channel 0..1) and width in pixels
+    public static function setLabelOutline(int entityId, float r, float g, float b, float a, float width): void {
+        _native_ui_setLabelOutline(entityId, r, g, b, a, width);
+    }
+
+    // Get the outline as a float[5] = [r, g, b, a, width]
+    public static function getLabelOutline(int entityId): float[] {
+        return _native_ui_getLabelOutline(entityId);
+    }
+
+    // Set the drop shadow color (RGBA, each channel 0..1) and offset in pixels (+x right, +y down)
+    public static function setLabelShadow(int entityId, float r, float g, float b, float a, float offsetX, float offsetY): void {
+        _native_ui_setLabelShadow(entityId, r, g, b, a, offsetX, offsetY);
+    }
+
+    // Get the drop shadow as a float[6] = [r, g, b, a, offsetX, offsetY]
+    public static function getLabelShadow(int entityId): float[] {
+        return _native_ui_getLabelShadow(entityId);
+    }
+
+    // Set the glow color (RGBA, each channel 0..1) and falloff range in pixels
+    public static function setLabelGlow(int entityId, float r, float g, float b, float a, float range): void {
+        _native_ui_setLabelGlow(entityId, r, g, b, a, range);
+    }
+
+    // Get the glow as a float[5] = [r, g, b, a, range]
+    public static function getLabelGlow(int entityId): float[] {
+        return _native_ui_getLabelGlow(entityId);
+    }
+
+    // ============================================
     // Image Texture
     // ============================================
 

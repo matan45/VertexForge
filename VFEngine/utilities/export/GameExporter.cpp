@@ -400,6 +400,23 @@ namespace gameExport
 			copyDirectoryRecursive(iblSrc, iblDst, result);
 		}
 
+		// VK-1628: engine-shipped default font. Without it, any text whose fontRef is
+		// unset or unresolvable renders nothing in the shipped game. Warn rather than
+		// fail — an export with no text is still a valid export.
+		fs::path fontsSrc = findFontsDirectory();
+		if (fs::exists(fontsSrc))
+		{
+			fs::path fontsDst = config.outputDirectory / "_temp_shaders" / "resources" / "fonts";
+			fs::create_directories(fontsDst, ec);
+			copyDirectoryRecursive(fontsSrc, fontsDst, result);
+		}
+		else
+		{
+			result.warnings.push_back(
+				"resources/fonts not found — the default font will be missing from the "
+				"exported game and text without an explicit font will not render.");
+		}
+
 		return true;
 	}
 
@@ -790,6 +807,8 @@ namespace gameExport
 					sourceType = "material_shader";
 				else if (archivePath.find("ibl") != std::string::npos)
 					sourceType = "ibl";
+				else if (archivePath.find("resources/fonts") != std::string::npos)
+					sourceType = "engine_font";
 
 				ManifestSource src;
 				src.path = relativePath.generic_string();
@@ -987,6 +1006,7 @@ namespace gameExport
 		projConfig.version = config.gameVersion;
 		projConfig.workingDirectory = "Assets";
 		projConfig.startupScene = config.startupScene;
+		projConfig.fontFallbackChain = config.fontFallbackChain;
 		projConfig.exeIconPath = config.iconPath;
 		if (config.expectedPluginApiVersion != 0)
 		{
@@ -1197,6 +1217,25 @@ namespace gameExport
 		}
 
 		candidate = cwd / "resources/ibl";
+		if (fs::exists(candidate))
+		{
+			return fs::canonical(candidate);
+		}
+
+		return {};
+	}
+
+	fs::path GameExporter::findFontsDirectory() const
+	{
+		fs::path cwd = fs::current_path();
+
+		fs::path candidate = cwd / "../../resources/fonts";
+		if (fs::exists(candidate))
+		{
+			return fs::canonical(candidate);
+		}
+
+		candidate = cwd / "resources/fonts";
 		if (fs::exists(candidate))
 		{
 			return fs::canonical(candidate);

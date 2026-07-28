@@ -38,6 +38,7 @@ namespace windows
         );
 
         modals->setSelectionProvider([this]() { return getSelectedPaths(); });
+        modals->setImportInFlightProvider([this]() { return importInFlight.load(); });
 
         auto& dispatcher = events::EventDispatcher::instance();
 
@@ -87,9 +88,19 @@ namespace windows
                 }
             });
 
+        // Tracked so Reimport can be greyed out while an import runs: it retargets
+        // the process-wide Import::location, which two concurrent imports would
+        // fight over (VK-1629).
+        importStartedToken = dispatcher.subscribe<events::resource::ImportStartedNotification>(
+            [this](const events::resource::ImportStartedNotification&)
+            {
+                importInFlight.store(true);
+            });
+
         importCompletedToken = dispatcher.subscribe<events::resource::ImportCompletedNotification>(
             [this](const events::resource::ImportCompletedNotification&)
             {
+                importInFlight.store(false);
                 projectResultsStale.store(true);
                 if (fs::exists(currentPath) && fs::is_directory(currentPath))
                     loadDirectory(currentPath);
@@ -157,6 +168,7 @@ namespace windows
 
         auto& dispatcher = events::EventDispatcher::instance();
         if (projectLoadedToken.isValid()) dispatcher.unsubscribe(projectLoadedToken);
+        if (importStartedToken.isValid()) dispatcher.unsubscribe(importStartedToken);
         if (importCompletedToken.isValid()) dispatcher.unsubscribe(importCompletedToken);
         if (assetSavedToken.isValid()) dispatcher.unsubscribe(assetSavedToken);
         if (fileMovedToken.isValid()) dispatcher.unsubscribe(fileMovedToken);

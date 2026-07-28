@@ -11,6 +11,7 @@
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
 #include "components/LightTextComponents.hpp"
+#include "resource/DefaultFont.hpp"
 #include "../../../services/providers/render/IDecalRenderProvider.hpp"
 #include "threading/JobSystem.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
@@ -88,10 +89,10 @@ namespace controllers::offscreen
             const auto& textComp = view.get<components::TextComponent>(entity);
             const auto& worldTransform = view.get<components::WorldTransformComponent>(entity);
 
-            if (!textComp.fontRef.isValid() || textComp.text.empty()) continue;
+            if (textComp.text.empty()) continue;
 
             render::text::TextRenderData renderData;
-            renderData.fontPath = textComp.fontRef.resolve();
+            renderData.fontPath = resource::fontPathOrDefault(textComp.fontRef);
             renderData.text = textComp.text;
             renderData.worldPosition = glm::vec3(worldTransform.worldMatrix[3]);
             renderData.fontSize = textComp.fontSize;
@@ -101,7 +102,16 @@ namespace controllers::offscreen
             renderData.lineSpacing = textComp.lineSpacing;
             renderData.letterSpacing = textComp.letterSpacing;
             renderData.maxWidth = textComp.maxWidth;
+            // VK-1637: TextRenderData has carried these three since world text was written,
+            // but nothing ever set them, so world text was unconditionally Left/Top and
+            // TextPipeline's alignment ran as a guaranteed no-op.
+            renderData.horizontalAlignment = static_cast<uint8_t>(textComp.horizontalAlignment);
+            renderData.verticalAlignment = static_cast<uint8_t>(textComp.verticalAlignment);
+            renderData.rectHeight = textComp.rectHeight;
+            renderData.overflow = textComp.overflow;
+            renderData.wordWrap = textComp.wordWrap;
             renderData.fontStyle = textComp.fontStyle;
+            renderData.effects = textComp.effects;
 
             textDrawList.push_back(std::move(renderData));
         }

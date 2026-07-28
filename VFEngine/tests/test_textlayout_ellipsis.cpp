@@ -251,4 +251,115 @@ TEST_CASE("applyEllipsis: multi-line, only the long line is ellipsized") {
     CHECK(layout.glyphs.back().lineY == doctest::Approx(line2Y));
 }
 
+// ============================================================
+// VK-1638: applyEllipsis must shrink boundingBox.y when it drops whole lines.
+//
+// A line is dropped outright when even the ellipsis will not fit in maxWidth. Only
+// boundingBox.x was updated, so vertical alignment (which VK-1637 newly applies to world
+// text) kept sizing the block for lines that no longer exist and the text sat off-centre.
+//
+// The fixture below gives the ellipsis a WIDER advance than a normal glyph, which is what
+// makes "this line does not fit at all" and "this line fits" coexist under one maxWidth.
+// Note the dropped line can be INTERIOR, so scaling the height by the surviving line
+// count would be wrong - the box is measured to the last SURVIVING line.
+// ============================================================
+
+namespace
+{
+    // Normal glyphs advance 8 px; U+2026 advances 24 px. lineHeight 40 at fontSize 32.
+    resource::FontData makeWideEllipsisFont()
+    {
+        resource::FontData font;
+        font.metadata.baseFontSize = 32;
+        font.metadata.lineHeight = 40.0f;
+        font.metadata.ascender = 32.0f;
+        font.metadata.descender = -8.0f;
+        font.atlas.width = 256;
+        font.atlas.height = 256;
+        font.atlas.format = resource::FontAtlasFormat::GRAYSCALE_8;
+
+        auto pushGlyph = [&](uint32_t cp, float advance, uint32_t atlasW) {
+            resource::GlyphData g;
+            g.codepoint = cp;
+            g.advanceX = advance;
+            g.bearingX = 0.0f;
+            g.bearingY = 32.0f;
+            g.glyphWidth = advance;
+            g.glyphHeight = 32.0f;
+            g.atlasWidth = atlasW;
+            g.atlasHeight = 32;
+            font.glyphs.push_back(g);
+        };
+
+        for (uint32_t cp = 0x20; cp < 0x7F; ++cp)
+        {
+            pushGlyph(cp, 8.0f, 8);
+        }
+        pushGlyph(0x2026, 24.0f, 24);
+
+        std::sort(font.glyphs.begin(), font.glyphs.end(),
+                  [](const resource::GlyphData& a, const resource::GlyphData& b) {
+                      return a.codepoint < b.codepoint;
+                  });
+        return font;
+    }
+}
+
+TEST_CASE("applyEllipsis: dropping the last line shrinks boundingBox.y") {
+    auto font = makeWideEllipsisFont();
+    // Three lines: 8 px, 8 px, 16 px. maxWidth 12 keeps the first two and drops the
+    // third, because the 24 px ellipsis cannot fit in 12 px either.
+    auto layout = text::layoutText(font, "A\nB\nCC", 32.0f, 0.0f, 1.0f, 0.0f);
+    REQUIRE(layout.boundingBox.y == doctest::Approx(120.0f)); // 3 * lineHeight
+
+    text::applyEllipsis(layout, font, 32.0f, 12.0f, 0.0f);
+
+    REQUIRE(layout.glyphs.size() == 2);
+    CHECK(layout.glyphs[0].codepoint == 'A');
+    CHECK(layout.glyphs[1].codepoint == 'B');
+    // Last surviving line origin is 40; the box ends one lineHeight past it.
+    CHECK(layout.boundingBox.y == doctest::Approx(80.0f));
+}
+
+TEST_CASE("applyEllipsis: an interior drop keeps the box measured to the last line") {
+    auto font = makeWideEllipsisFont();
+    // Lines: 8 px, 16 px, 8 px. The MIDDLE one is dropped; the third survives, so the
+    // block still reaches its original depth. A count-based shrink would get this wrong.
+    auto layout = text::layoutText(font, "A\nBB\nC", 32.0f, 0.0f, 1.0f, 0.0f);
+    REQUIRE(layout.boundingBox.y == doctest::Approx(120.0f));
+
+    text::applyEllipsis(layout, font, 32.0f, 12.0f, 0.0f);
+
+    REQUIRE(layout.glyphs.size() == 2);
+    CHECK(layout.glyphs[0].codepoint == 'A');
+    CHECK(layout.glyphs[1].codepoint == 'C');
+    CHECK(layout.glyphs[1].lineY == doctest::Approx(80.0f));
+    CHECK(layout.boundingBox.y == doctest::Approx(120.0f));
+}
+
+TEST_CASE("applyEllipsis: dropping every line collapses the bounding box") {
+    auto font = makeWideEllipsisFont();
+    auto layout = text::layoutText(font, "AA\nBB", 32.0f, 0.0f, 1.0f, 0.0f);
+    REQUIRE_FALSE(layout.glyphs.empty());
+
+    text::applyEllipsis(layout, font, 32.0f, 12.0f, 0.0f);
+
+    CHECK(layout.glyphs.empty());
+    CHECK(layout.boundingBox.x == doctest::Approx(0.0f));
+    CHECK(layout.boundingBox.y == doctest::Approx(0.0f));
+}
+
+TEST_CASE("applyEllipsis: truncating without dropping leaves boundingBox.y alone") {
+    auto font = makeWideEllipsisFont();
+    // maxWidth 32 is wide enough for the 24 px ellipsis, so the long line is truncated
+    // rather than dropped and every line survives.
+    auto layout = text::layoutText(font, "A\nBBBBBB", 32.0f, 0.0f, 1.0f, 0.0f);
+    REQUIRE(layout.boundingBox.y == doctest::Approx(80.0f));
+
+    text::applyEllipsis(layout, font, 32.0f, 32.0f, 0.0f);
+
+    CHECK(layout.glyphs.back().codepoint == 0x2026u);
+    CHECK(layout.boundingBox.y == doctest::Approx(80.0f));
+}
+
 } // TEST_SUITE

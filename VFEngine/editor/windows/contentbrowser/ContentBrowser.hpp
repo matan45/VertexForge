@@ -58,6 +58,7 @@ namespace windows
         std::string pathEditBuffer;
         bool isEditingPath = false;
 
+        events::SubscriptionToken importStartedToken;
         events::SubscriptionToken importCompletedToken;
         events::SubscriptionToken assetSavedToken;
         events::SubscriptionToken fileMovedToken;
@@ -67,6 +68,7 @@ namespace windows
         events::SubscriptionToken batchCompletedToken;
         events::SubscriptionToken openMeshPreviewToken;
         std::atomic<bool> pendingRefresh{false};
+        std::atomic<bool> importInFlight{false};
 
         AssetThumbnailCache thumbnailCache;
         std::unique_ptr<AssetGridRenderer> gridRenderer;

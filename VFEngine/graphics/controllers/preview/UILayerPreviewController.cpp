@@ -89,6 +89,7 @@ namespace controllers
             // Own a self-contained font cache for the text pipeline (see header note).
             ownedFontCache = std::make_unique<render::text::TextFontCache>(device);
             ownedFontCache->init();
+            ownedFontCache->setFallbackChain(fontFallbackChain);
             fontCache = ownedFontCache.get();
 
             uiPipeline = std::make_unique<render::ui::UIRenderPipeline>(device, swapChain, *offscreenResources);
@@ -371,6 +372,26 @@ namespace controllers
         }
         cleanupOffscreenResources();
         createOffscreenResources();
+    }
+
+    void UILayerPreviewController::setFontFallbackChain(std::span<const std::string> fontPaths)
+    {
+        fontFallbackChain.assign(fontPaths.begin(), fontPaths.end());
+        if (ownedFontCache)
+        {
+            ownedFontCache->setFallbackChain(fontFallbackChain);
+        }
+    }
+
+    void UILayerPreviewController::invalidateFont(const std::string& fontPath)
+    {
+        // Only queues; the owned pipeline drains it on its next draw-list build, which is
+        // the render thread. Nothing to do before the cache exists - it will load the
+        // reimported file from disk the first time it is asked for.
+        if (ownedFontCache)
+        {
+            ownedFontCache->requestInvalidate(fontPath);
+        }
     }
 
     void* UILayerPreviewController::render()

@@ -1,13 +1,12 @@
-#include "print/Log.hpp"
 #include "TextDrawer.hpp"
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/project/SceneEvents.hpp"
-#include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "DrawerHelpers.hpp"
+#include "FontSlotWidget.hpp"
 #include <imgui.h>
 #include <cstring>
-#include <fstream>
 
 namespace windows::details
 {
@@ -58,11 +57,17 @@ namespace windows::details
             ImGui::Spacing();
             changed |= drawColor(data);
             ImGui::Spacing();
+            changed |= drawAlignment(data);
+            ImGui::Spacing();
+            changed |= drawOverflow(data);
+            ImGui::Spacing();
             changed |= drawLineSpacing(data);
             ImGui::Spacing();
             changed |= drawLetterSpacing(data);
             ImGui::Spacing();
-            changed |= drawMaxWidth(data);
+            changed |= drawTextBox(data);
+            ImGui::Spacing();
+            changed |= drawTextEffects(data.effects, "Text");
 
             if (changed)
             {
@@ -109,55 +114,7 @@ namespace windows::details
 
     bool TextDrawer::drawFontPath(services::TextData& data)
     {
-        bool changed = false;
-
-        if (data.fontRef.isValid())
-        {
-            std::string filename = data.fontRef.resolve();
-            auto lastSlash = filename.find_last_of("/\\");
-            if (lastSlash != std::string::npos)
-            {
-                filename = filename.substr(lastSlash + 1);
-            }
-            ImGui::Text("Font: %s", filename.c_str());
-        }
-        else
-        {
-            ImGui::TextDisabled("No font selected");
-        }
-
-        if (ImGui::Button("Select Font##Text"))
-        {
-            nfd::FileDialog fileDialog;
-            std::string path = fileDialog.openFileDialog(
-                {{L"VF Font Files (*.vfFont)", L"*.vfFont"}});
-            if (!path.empty())
-            {
-                std::ifstream file(path);
-                if (file.good())
-                {
-                    file.close();
-                    data.fontRef = asset::AssetRef::fromPath(path);
-                    changed = true;
-                }
-                else
-                {
-                    vfLogError("Selected font file does not exist or cannot be read: {}", path);
-                }
-            }
-        }
-
-        ImGui::SameLine();
-        bool wasEmpty = !data.fontRef.isValid();
-        if (wasEmpty) ImGui::BeginDisabled();
-        if (ImGui::Button("Clear##TextFont"))
-        {
-            data.fontRef = asset::AssetRef::invalid();
-            changed = true;
-        }
-        if (wasEmpty) ImGui::EndDisabled();
-
-        return changed;
+        return drawFontSlot(data.fontRef, "Text");
     }
 
     bool TextDrawer::drawTextInput(services::TextData& data)
@@ -241,7 +198,64 @@ namespace windows::details
         return changed;
     }
 
-    bool TextDrawer::drawMaxWidth(services::TextData& data)
+    // VK-1637. In all three combos below the item index IS the enum ordinal - the arrays
+    // are ordered to match components::HorizontalAlignment / VerticalAlignment /
+    // TextOverflow. Same coupling as UILabelDrawer; reordering an enum silently corrupts
+    // both drawers.
+    bool TextDrawer::drawAlignment(services::TextData& data)
+    {
+        bool changed = false;
+
+        const char* hAlignments[] = {"Left", "Center", "Right"};
+        int hAlign = static_cast<int>(data.horizontalAlignment);
+
+        if (ImGui::Combo("Horizontal##Text", &hAlign, hAlignments, 3))
+        {
+            data.horizontalAlignment = static_cast<uint8_t>(hAlign);
+            changed = true;
+        }
+
+        const char* vAlignments[] = {"Top", "Middle", "Bottom"};
+        int vAlign = static_cast<int>(data.verticalAlignment);
+
+        if (ImGui::Combo("Vertical##Text", &vAlign, vAlignments, 3))
+        {
+            data.verticalAlignment = static_cast<uint8_t>(vAlign);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Needs a Rect Height to align inside.\n"
+                              "With Rect Height 0 the text is always top-aligned.");
+        }
+
+        return changed;
+    }
+
+    bool TextDrawer::drawOverflow(services::TextData& data)
+    {
+        bool changed = false;
+
+        const char* overflows[] = {"Overflow", "Clip", "Ellipsis"};
+        int overflow = static_cast<int>(data.overflow);
+
+        if (ImGui::Combo("Overflow##Text", &overflow, overflows, 3))
+        {
+            data.overflow = static_cast<uint8_t>(overflow);
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Ellipsis truncates each line to Max Width and appends an\n"
+                              "ellipsis glyph.\n"
+                              "Clip is not supported for world text (the 3D text pipeline\n"
+                              "has no scissor) and renders as Overflow.");
+        }
+
+        return changed;
+    }
+
+    bool TextDrawer::drawTextBox(services::TextData& data)
     {
         bool changed = false;
 
@@ -251,7 +265,32 @@ namespace windows::details
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("0 = no word wrap");
+            // Deliberately not "0 = no alignment": with no box, horizontal alignment still
+            // works - it aligns each line against the widest line instead.
+            ImGui::SetTooltip("Width of the layout box.\n"
+                              "0 = no box: no word wrap and no ellipsis. Horizontal\n"
+                              "alignment then aligns each line against the widest line.");
+        }
+
+        if (ImGui::DragFloat("Rect Height##Text", &data.rectHeight, 1.0f, 0.0f, 10000.0f, "%.0f"))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Height of the layout box, used for Vertical alignment only.\n"
+                              "0 = no box: the text is always top-aligned.\n"
+                              "Nothing is clipped or truncated against it.");
+        }
+
+        if (ImGui::Checkbox("Word Wrap##Text", &data.wordWrap))
+        {
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Off: Max Width still boxes alignment and ellipsis, but the\n"
+                              "text runs past it on a single line.");
         }
 
         return changed;
