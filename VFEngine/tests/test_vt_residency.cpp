@@ -1,6 +1,7 @@
 #include <doctest.h>
 #include <render/virtualtexture/VTResidencyCore.hpp>
 
+#include <algorithm>
 #include <vector>
 #include <utility>
 
@@ -30,6 +31,74 @@ TEST_CASE("VT residency: allocate misses, respect the per-frame cap")
     CHECK(plan.toEvict.empty());
     CHECK(plan.toAllocate[0].packed() == K(0, 0, 0, 0).packed()); // requested order preserved
     CHECK(plan.toAllocate[1].packed() == K(0, 0, 1, 0).packed());
+}
+
+TEST_CASE("VK-1610 VT residency: missCount separates a budget cap from a pool that is too small")
+{
+    // toAllocate is clamped TWICE - by pagesPerFrame, then by (freeTiles + evictable) - so its size
+    // alone cannot say which bound bit. That matters because the two call for opposite fixes, and
+    // the dangerous one produces the SMALLER list: a pool with no room looks identical to an idle
+    // frame unless the unclamped miss count is reported alongside.
+    SUBCASE("capped by the per-frame budget, pool has room")
+    {
+        VTResidencyCore core;
+        const std::vector<VTPageKey> req = {K(0, 0, 0, 0), K(0, 0, 1, 0), K(0, 0, 2, 0), K(0, 0, 3, 0)};
+
+        const auto plan = core.planFrame(req, /*frame*/ 10, /*freeTiles*/ 100, /*pagesPerFrame*/ 2, /*age*/ 60);
+        CHECK(plan.missCount == 4);
+        CHECK(plan.toAllocate.size() == 2);
+
+        // What TerrainRVTManager derives. Budget-limited, not pool-limited.
+        const uint32_t ideal = std::min<uint32_t>(2, plan.missCount);
+        const bool poolLimited = plan.toAllocate.size() < ideal;
+        CHECK_FALSE(poolLimited);
+        CHECK(plan.missCount > plan.toAllocate.size()); // => budgetLimited
+    }
+
+    SUBCASE("pool genuinely too small: nothing allocatable, and it must not read as idle")
+    {
+        // Every resident page is re-requested this frame, so none is an eviction candidate
+        // (planFrame protects requested-this-frame). With no free tiles, canAlloc collapses to 0.
+        VTResidencyCore core;
+        core.commitAllocation(K(0, 0, 0, 0), 0, /*frame*/ 100, /*pinned*/ false);
+        core.commitAllocation(K(0, 0, 1, 0), 1, /*frame*/ 100, /*pinned*/ false);
+
+        const std::vector<VTPageKey> req = {
+            K(0, 0, 0, 0), K(0, 0, 1, 0),                 // resident, so protected from eviction
+            K(0, 0, 5, 0), K(0, 0, 6, 0), K(0, 0, 7, 0)}; // misses with nowhere to go
+
+        const auto plan = core.planFrame(req, /*frame*/ 200, /*freeTiles*/ 0, /*pagesPerFrame*/ 64, /*age*/ 10);
+        CHECK(plan.toAllocate.empty());
+        CHECK(plan.toEvict.empty());
+        // The old signal (did an allocation fail?) would report a perfectly quiet frame here.
+        CHECK(plan.missCount == 3);
+
+        const uint32_t ideal = std::min<uint32_t>(64, plan.missCount);
+        const bool poolLimited = plan.toAllocate.size() < ideal;
+        CHECK(poolLimited); // this is the thrash verdict the profiler shows in red
+    }
+
+    SUBCASE("everything fits: neither bound bit")
+    {
+        VTResidencyCore core;
+        const std::vector<VTPageKey> req = {K(0, 0, 0, 0), K(0, 0, 1, 0)};
+
+        const auto plan = core.planFrame(req, /*frame*/ 10, /*freeTiles*/ 100, /*pagesPerFrame*/ 64, /*age*/ 60);
+        CHECK(plan.missCount == 2);
+        CHECK(plan.toAllocate.size() == 2);
+        const uint32_t ideal = std::min<uint32_t>(64, plan.missCount);
+        CHECK_FALSE(plan.toAllocate.size() < ideal);       // not pool-limited
+        CHECK_FALSE(plan.missCount > plan.toAllocate.size()); // not budget-limited
+    }
+
+    SUBCASE("missCount dedups, matching toAllocate")
+    {
+        VTResidencyCore core;
+        const std::vector<VTPageKey> req = {K(0, 0, 0, 0), K(0, 0, 0, 0), K(0, 0, 1, 0)};
+        const auto plan = core.planFrame(req, 10, 100, 8, 60);
+        CHECK(plan.missCount == 2);
+        CHECK(plan.toAllocate.size() == 2);
+    }
 }
 
 TEST_CASE("VT residency: resident requests are touched, not re-allocated")

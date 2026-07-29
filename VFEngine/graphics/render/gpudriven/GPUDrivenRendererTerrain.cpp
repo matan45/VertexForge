@@ -3,6 +3,7 @@
 #include "../virtualtexture/svt/SVTManager.hpp" // VK-1209: complete type for svtManager->setResidencyBudget
 #include "terrain/TerrainRVTBaker.hpp"
 #include "terrain/TerrainRVTLayout.hpp"
+#include "terrain/TerrainRVTBudget.hpp" // VK-1610: pool geometry shared with the editor UI
 #include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
@@ -16,6 +17,7 @@
 #include "../../core/Texture.hpp"
 #include "../../core/SwapChain.hpp"
 #include "types/RenderSettings.hpp"
+#include "stats/TerrainRVTStats.hpp" // VK-1610: residency/thrash readout for the profiler
 #include "print/Log.hpp"
 #include <chrono>
 #include <limits>
@@ -221,6 +223,8 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::updateTerrainRVTResidency()
     {
+        // The caller gates on isTerrainRVTActive() and clears the VK-1610 residency readout when
+        // there is no manager, so this only guards against a direct call.
         if (!terrainRVT)
             return;
         terrainRVT->markFeedbackReady();   // the prior frame's copy has completed (fence-gated caller)
@@ -250,6 +254,32 @@ namespace render::gpudriven
             return terrainRectCovered(q, coverageRects, /*requireFull*/ false);
         };
         terrainRVT->updateResidency(rvtFrameCounter++, covered);
+
+        // VK-1610: publish residency for the profiler. Read straight after updateResidency so the
+        // counters describe the frame that was just planned, not a mix of two.
+        const auto& cpu = terrainRVT->lastCpuStats();
+        const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, terrain.detailMaps);
+        TerrainRVTFrameStats out;
+        out.active = terrainRVT->isInitialized();
+        out.poolDim = geo.poolDim;
+        out.planeCount = geo.planeCount;
+        out.bytesPerTexel = geo.bytesPerTexel;
+        out.budgetMB = vtCache.rvtPoolBudgetMB;
+        // The pool is the authority on capacity; geo only mirrors the math that sized it.
+        out.capacityPages = terrainRVT->getPool() ? terrainRVT->getPool()->maxTiles() : geo.capacityPages;
+        out.residentPages = terrainRVT->residentPageCount();
+        out.requestedPages = cpu.requestedPages;
+        out.allocatedPages = cpu.allocatedPages;
+        out.evictedPages = cpu.evictedPages;
+        out.scheduledBakes = terrainRVT->bakesThisFrame();
+        out.uncoveredSkipped = cpu.uncoveredSkipped;
+        out.unmetPages = cpu.unmetPages;
+        out.budgetLimited = cpu.budgetLimited;
+        out.poolLimited = cpu.poolLimited;
+        out.readbackUs = cpu.readbackUs;
+        out.decodeUs = cpu.decodeUs;
+        out.residencyUs = cpu.residencyUs;
+        TerrainRVTStats::instance().publish(out);
     }
 
     void GPUDrivenRenderer::bakeTerrainRVT(vk::CommandBuffer cmd)
@@ -349,14 +379,37 @@ namespace render::gpudriven
             shadowSystem->notifySceneChanged();
     }
 
-    void GPUDrivenRenderer::setTerrainDetailMaps(bool enabled)
+    void GPUDrivenRenderer::setTerrainDetailMaps(bool allowed)
     {
-        if (terrain.detailMaps == enabled)
+        if (terrain.detailMapsAllowed == allowed)
             return;
 
-        // Settings can arrive before terrain/pipeline initialization; initTerrainSubsystems consumes
-        // this cached value when it creates both shader permutations.
-        terrain.detailMaps = enabled;
+        terrain.detailMapsAllowed = allowed;
+
+        // VK-1610: the effective permutation is derived from the terrain material, so this setter
+        // does NOT decide it. Re-resolving the loaded terrain both re-derives the flag and
+        // registers (on) or drops (off) the per-layer normal/emission slots to match, which keeps
+        // one code path instead of two that can disagree.
+        if (initialized && bindlessTextures && materials.textureCache && !terrain.currentMaterialPath.empty())
+        {
+            invalidateTerrainLayerData();
+            registerTerrainLayerTextures(terrain.currentMaterialPath);
+            return;
+        }
+
+        // No material to derive from - which also means no detail content, in either direction.
+        // Settings routinely arrive before a terrain exists; the first material load re-derives.
+        syncTerrainDetailMapsPermutation(false);
+    }
+
+    void GPUDrivenRenderer::syncTerrainDetailMapsPermutation(bool effective)
+    {
+        if (terrain.detailMaps == effective)
+            return;
+
+        // Cached for initTerrainSubsystems, which consumes it when it builds both the terrain
+        // pipeline permutation and the RVT baker.
+        terrain.detailMaps = effective;
         if (!initialized || !terrain.pipeline)
             return;
 
@@ -364,34 +417,48 @@ namespace render::gpudriven
         // unready before that wait so no subsequent recording can sample manager-owned views while
         // they are being replaced.
         terrain.pipeline->invalidateRVTSampleResources();
-        terrain.pipeline->setDetailMapsEnabled(enabled);
+        terrain.pipeline->setDetailMapsEnabled(effective);
         recreateTerrainPipelineForRVT();
-
-        // Layer normal/emission textures are registered only when detail maps are on (dead-VRAM
-        // gate in registerTerrainLayerTextures). Re-resolve the already-loaded terrain so a runtime
-        // toggle registers (on) or drops (off) those slots instead of leaving them dead / missing
-        // until the next material load.
-        if (bindlessTextures && materials.textureCache && !terrain.currentMaterialPath.empty())
-        {
-            invalidateTerrainLayerData();
-            registerTerrainLayerTextures(terrain.currentMaterialPath);
-        }
 
         if (vtCache.rvtEnabled)
         {
+            // Unlike VK-1609's height-blend flag, this one changes the RVT PLANE LAYOUT (2 planes
+            // at 8 B/texel vs 4 at 20), so the pool images themselves are wrong, not just the bake
+            // shader - the manager has to go too. updateTerrain re-creates it next frame from
+            // terrain.detailMaps, which is why this assignment happens before any early return.
             terrainRVT.reset();
             terrainRVTBaker.reset();
 
-            const TerrainRVTLayout layout = terrainRVTLayout(enabled);
+            // Deliberately NOT guarded on `bindlessTextures`: reaching here means `initialized`,
+            // which cannot be true without it. A guard would look defensive but would leave the
+            // baker permanently null, and syncTerrainHeightBlendPermutation's `terrainRVTBaker &&`
+            // precondition would then never rebuild it - RVT would silently stop baking for the
+            // rest of the session.
+            const TerrainRVTLayout layout = terrainRVTLayout(effective);
             terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
             terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  enabled,
+                                  effective,
                                   terrain.pipeline->isHeightBlendEnabled());
             rvtFrameCounter = 0;
+            // A brand-new pool holds no pages, so there is nothing left to invalidate.
             rvtInvalidateAll = false;
+
+            // The page count is what decides whether the camera thrashes, and it moves with the
+            // plane layout even though the MB budget did not - so say it out loud.
+            const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, effective);
+            vfLogInfo("VK-1610 terrain detail maps: {} (setting allows: {}); RVT pool {}x{} = {} pages "
+                      "at {} B/texel from a {} MB budget",
+                      effective ? "ON" : "OFF", terrain.detailMapsAllowed ? "yes" : "no",
+                      geo.poolDim, geo.poolDim, geo.capacityPages, geo.bytesPerTexel,
+                      vtCache.rvtPoolBudgetMB);
+        }
+        else
+        {
+            vfLogInfo("VK-1610 terrain detail maps: {} (setting allows: {})",
+                      effective ? "ON" : "OFF", terrain.detailMapsAllowed ? "yes" : "no");
         }
     }
 
@@ -498,12 +565,25 @@ namespace render::gpudriven
 
             ResolvedTerrainLayerPBR& r = resolvedLayers[i];
             r = resolveTerrainLayerPBR(layer, pbrPtr);
+        }
+
+        // VK-1610. Resolving every layer first is what makes this possible: the detail-maps
+        // permutation is derived from the material, and it has to be settled BEFORE the
+        // registration loop below, because that loop's dead-VRAM gate reads it.
+        syncTerrainDetailMapsPermutation(terrain.detailMapsAllowed
+                                         && terrainMaterialWantsDetailMaps(resolvedLayers));
+
+        for (uint8_t i = 0; i < materialData->activeLayerCount; ++i)
+        {
+            const ResolvedTerrainLayerPBR& r = resolvedLayers[i];
+            TerrainLayerGPUData& gpuLayer = terrain.layerData[i];
 
             gpuLayer.albedoTextureIndex = tryRegisterLayerTex(r.albedoPath, vk::Format::eR8G8B8A8Srgb);
             // Normal + emission textures are sampled only by the detail-maps shader permutation
             // (the non-detail composite drops the normal fetch and uses scalar emission), so skip
-            // uploading them to VRAM / the bindless table when detail maps are off. setTerrainDetailMaps
-            // re-resolves the terrain on toggle so these register/drop to match the live flag.
+            // uploading them to VRAM / the bindless table when detail maps are off. The sync above
+            // has already settled the effective flag for exactly this material, so these register
+            // or drop together with the permutation that samples them.
             gpuLayer.normalTextureIndex = terrain.detailMaps ? tryRegisterLayerTex(r.normalPath) : 0;
             gpuLayer.ormTextureIndex = tryRegisterLayerTex(r.ormPath);
             gpuLayer.emissionTextureIndex = terrain.detailMaps
@@ -541,10 +621,18 @@ namespace render::gpudriven
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
         }
 
-        // VK-1609. Deliberately NOT routed through a setter that re-enters this function (the way
-        // setTerrainDetailMaps does): unlike detail maps, the height-blend flag does not gate which
-        // textures get registered, so terrain.layerData is already correct and only the compiled
-        // shader needs to change.
+        // VK-1609. Runs at the END, not next to the detail sync above, because it derives its flag
+        // from terrain.layerData - which only exists once the registration loop has filled it. The
+        // detail permutation is the mirror image: it has to be settled BEFORE that loop, because it
+        // decides what the loop registers. Neither re-enters this function.
+        //
+        // VK-1610 consequence: a material change that flips BOTH flags rebuilds the RVT baker twice
+        // - once above with the previous height flag, once here with the correct one. That is
+        // deliberate, not an oversight. Collapsing it into a single rebuild would mean leaving the
+        // baker stale between the two syncs, and a baker whose macros disagree with the live
+        // pipeline is exactly the failure VK-1609 warns about (baked pages and the live composite
+        // diverge at page-residency boundaries, invisible with RVT off). The cost is one extra
+        // pipeline build per material load, never per frame.
         syncTerrainHeightBlendPermutation();
 
         terrain.currentMaterialPath = materialPath;

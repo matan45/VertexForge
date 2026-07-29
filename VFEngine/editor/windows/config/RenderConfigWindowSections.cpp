@@ -4,6 +4,7 @@
 #include "events/render/RenderEvents.hpp"
 #include "events/vfx/VFXRuntimeEvents.hpp"
 #include "events/animation/AnimationBudgetEvents.hpp"
+#include "terrain/TerrainRVTBudget.hpp" // VK-1610: what an RVT pool budget actually buys
 #include <imgui.h>
 #include <algorithm>
 
@@ -325,13 +326,17 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("UV scale for terrain textures.\nLower = larger texture tiles.");
 
-                if (ImGui::Checkbox("Detail Normal & Emission Maps", &settings.terrain.detailMaps))
+                if (ImGui::Checkbox("Allow Detail Normal & Emission Maps", &settings.terrain.detailMaps))
                 {
                     applyRenderSettings();
                 }
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Samples normal and emission textures from terrain layer materials.\n"
-                                      "When RVT is enabled, toggling this rebuilds its terrain detail planes.");
+                    ImGui::SetTooltip("Allows sampling normal and emission textures from terrain layer materials.\n"
+                                      "The shader permutation follows the CONTENT: it turns on only when the\n"
+                                      "loaded terrain material actually has normal or emission maps, so leaving\n"
+                                      "this on costs nothing on terrain that has none.\n"
+                                      "When RVT is enabled, an effective change rebuilds the page pool with the\n"
+                                      "4-plane detail layout - see the pool size under Virtual Texturing.");
 
                 ImGui::Separator();
                 ImGui::Text("Shadow Settings");
@@ -402,6 +407,27 @@ namespace windows
                     vt.rvtPoolBudgetMB = static_cast<uint32_t>(rvtMB < 32 ? 32 : rvtMB);
                     markDirty();
                 }
+                if (vt.rvtEnabled)
+                {
+                    // VK-1610: MB is the VRAM contract, but resident PAGES is what decides whether the
+                    // camera thrashes - and the same budget buys very different page counts depending
+                    // on the plane layout. Both layouts are shown because which one is live depends on
+                    // the terrain MATERIAL (detail planes exist only when a layer has normal/emission
+                    // maps), which this window cannot know; the Task Graph Profiler's Terrain RVT
+                    // section reports the pool that actually got built.
+                    const auto plain = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, false);
+                    const auto detail = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, true);
+                    ImGui::TextDisabled("  albedo+ORM: %ux%u, %u pages @ %u B/texel",
+                                        plain.poolDim, plain.poolDim, plain.capacityPages, plain.bytesPerTexel);
+                    ImGui::TextDisabled("  +detail maps: %ux%u, %u pages @ %u B/texel",
+                                        detail.poolDim, detail.poolDim, detail.capacityPages, detail.bytesPerTexel);
+                    if (detail.capacityPages < ::terrain::TERRAIN_RVT_MIN_HEALTHY_PAGES)
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                                           "  Detail terrain would get few resident pages here -\n"
+                                           "  expect re-bakes as the camera moves. Raise the budget.");
+                    }
+                }
                 int svtMB = static_cast<int>(vt.svtPoolBudgetMB);
                 if (ImGui::DragInt("SVT Pool (MB)", &svtMB, 32, 64, 4096))
                 {
@@ -429,7 +455,9 @@ namespace windows
                 }
 
                 ImGui::Spacing();
-                ImGui::TextDisabled("Press Apply to activate. RVT collapses per-fragment terrain\nsplat blending (up to 24 samples) into 2 atlas reads.");
+                ImGui::TextDisabled("Press Apply to activate. RVT collapses per-fragment terrain\n"
+                                    "splat blending (up to 24 samples) into 2 atlas reads -\n"
+                                    "4 when the terrain material carries detail maps.");
             }
 
             ImGui::Unindent(10.0f);

@@ -42,4 +42,13 @@ namespace render::gpudriven
 
         return out;
     }
+
+    bool terrainMaterialWantsDetailMaps(const std::vector<ResolvedTerrainLayerPBR>& layers)
+    {
+        return std::any_of(layers.begin(), layers.end(),
+                           [](const ResolvedTerrainLayerPBR& l)
+                           {
+                               return !l.normalPath.empty() || !l.emissionPath.empty();
+                           });
+    }
 }

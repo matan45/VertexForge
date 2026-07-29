@@ -667,9 +667,12 @@ namespace render::gpudriven
         // Out-of-line: a change invalidates all cached VSM pages (they were baked
         // with the old caster set).
         void setTerrainCastShadows(bool cast);
-        // Changes the terrain shader permutation and, when RVT is enabled, rebuilds its
-        // baker/pool layout as one synchronized transition. Safe to call before init.
-        void setTerrainDetailMaps(bool enabled);
+        // VK-1610: does the project ALLOW per-layer normal/emission detail maps. Whether they are
+        // actually compiled in is derived from the loaded terrain material (a material with no
+        // normal/emission maps gets nothing from the permutation but would still pay the
+        // four-plane RVT pool), so this re-resolves the terrain rather than flipping a switch.
+        // Safe to call before init.
+        void setTerrainDetailMaps(bool allowed);
 
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
@@ -860,6 +863,13 @@ namespace render::gpudriven
         // pipeline AND rebuild the RVT baker so the live composite and the baked pages stay in
         // lockstep. Cheap no-op when the flag is unchanged.
         void syncTerrainHeightBlendPermutation();
+        // VK-1610: same idea for TERRAIN_DETAIL_MAPS, but the flag also changes the RVT plane
+        // layout (2 planes -> 4), so this rebuilds the RVT *manager* as well as the baker rather
+        // than just recompiling. `effective` is `terrain.detailMapsAllowed && the resolved material
+        // carries normal/emission maps`. Called from registerTerrainLayerTextures BEFORE the
+        // bindless registration loop, because it decides whether that loop uploads those textures
+        // at all — and, unlike setTerrainDetailMaps used to, it never re-enters that function.
+        void syncTerrainDetailMapsPermutation(bool effective);
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,

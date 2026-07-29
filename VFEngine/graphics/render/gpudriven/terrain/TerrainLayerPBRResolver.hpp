@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include "terrain/TerrainMaterialTypes.hpp"
 
 namespace render::mesh
@@ -44,4 +45,19 @@ namespace render::gpudriven
     //                        makes such a layer bit-identical to the pre-VK-1609 linear composite.
     ResolvedTerrainLayerPBR resolveTerrainLayerPBR(const terrain::TerrainMaterialLayer& layer,
                                                    const mesh::ExtractedPBRValues* pbr);
+
+    // VK-1610 - does this terrain material actually carry per-layer detail maps?
+    //
+    // This is what drives the TERRAIN_DETAIL_MAPS permutation, so that "detail maps on" costs
+    // nothing at all on terrain nobody authored normal or emission maps for. The live composite
+    // is already content-proportional (a layer with normalTextureIndex == 0 takes a branch, not
+    // a fetch), but the RVT pool is NOT: switching to the four-plane layout costs 20 bytes per
+    // texel instead of 8 whether or not a single layer uses it, which at the default budget cuts
+    // resident pages from 1024 to 400. Deriving the permutation from the material is what keeps
+    // that bill off terrain that would get nothing for it.
+    //
+    // Deliberately reads the RESOLVED paths, not the authored layer: resolveTerrainLayerPBR is
+    // where a material reference becomes a texture path, so a layer whose .vfMat failed to load
+    // correctly reads as "no detail maps" rather than promising maps that will never bind.
+    [[nodiscard]] bool terrainMaterialWantsDetailMaps(const std::vector<ResolvedTerrainLayerPBR>& layers);
 }

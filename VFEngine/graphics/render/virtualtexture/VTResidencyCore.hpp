@@ -49,6 +49,12 @@ namespace render::vt
     {
         std::vector<VTPageKey> toAllocate; // requested, not resident (bounded by pagesPerFrame + evictable room)
         std::vector<VTPageKey> toEvict;    // freed to make room this frame
+        // VK-1610: how many distinct non-resident pages were requested, BEFORE either bound applied.
+        // toAllocate is clamped twice - by pagesPerFrame and by (freeTiles + evictable) - and the
+        // caller cannot tell those apart from the clamped result alone. Without this, "the pool is
+        // too small" is indistinguishable from "everything fit", because a pool-limited frame
+        // produces a SHORTER toAllocate, not a failed allocation.
+        uint32_t missCount = 0;
     };
 
     class VTResidencyCore
@@ -152,6 +158,8 @@ namespace render::vt
                 else if (wantedSeen.insert(pk).second)
                     wanted.push_back(k);
             }
+
+            plan.missCount = static_cast<uint32_t>(wanted.size());
 
             if (wanted.empty())
                 return plan;

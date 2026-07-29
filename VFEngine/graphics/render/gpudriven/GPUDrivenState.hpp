@@ -82,7 +82,13 @@ namespace render::gpudriven::detail
         uint32_t renderLayer = 0;
         // Terrain as a shadow CASTER (gates the VSM terrain raster); receiving is unaffected.
         bool castShadows = true;
-        // Per-layer normal/emission texture sampling and the matching four-plane RVT layout.
+        // VK-1610: two flags, because "the user allows detail maps" and "this terrain actually
+        // has any" are different questions. `detailMapsAllowed` is the render setting; `detailMaps`
+        // is what the shader permutation, the bindless registration gate and the RVT plane layout
+        // were last built with — `allowed && the material carries normal/emission maps`. Keeping
+        // them apart is what stops terrain with no detail maps from paying the four-plane RVT
+        // (20 B/texel instead of 8, i.e. 400 resident pages instead of 1024) for nothing.
+        bool detailMapsAllowed = true;
         bool detailMaps = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
