@@ -22,8 +22,7 @@ namespace render::gpudriven
                                vk::DescriptorSetLayout bindlessLayout,
                                vk::DescriptorSetLayout terrainDataLayout,
                                const std::vector<vk::Format>& planeFormats,
-                               bool detailMaps,
-                               bool heightBlend)
+                               const TerrainCompositePermutation& permutation)
     {
         if (graphicsPipeline)
             return;
@@ -31,13 +30,10 @@ namespace render::gpudriven
         const vk::Device vkDevice = device.getLogicalDevice();
 
         core::Shader shader(device);
-        if (detailMaps)
-            shader.addMacroDefinition("TERRAIN_DETAIL_MAPS");
-        // VK-1609 — mirrors TerrainMeshShaderPipeline::loadTerrainShaders. Both pipelines #include
-        // the same terrain_material_generated.glsl, so the two macro sets must agree or the baked
-        // pages composite differently from the live fallback.
-        if (heightBlend)
-            shader.addMacroDefinition("TERRAIN_HEIGHT_BLEND");
+        // Mirrors TerrainMeshShaderPipeline::loadTerrainShaders — literally the same function on
+        // the same struct. Both pipelines #include terrain_material_generated.glsl, so the two
+        // macro sets must agree or the baked pages composite differently from the live fallback.
+        applyTerrainCompositeMacros(shader, permutation);
         shader.readShader("../../resources/shaders/gpudriven/terrain_rvt_bake.glsl");
         const auto& stages = shader.getShaderStages();
         if (stages.size() < 2)

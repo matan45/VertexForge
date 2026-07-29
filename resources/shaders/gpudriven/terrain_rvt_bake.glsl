@@ -73,10 +73,22 @@ layout(std430, set = 0, binding = 0) readonly buffer WeightMapBuffer {
 layout(std430, set = 0, binding = 1) readonly buffer TerrainLayerBuffer {
     TerrainLayerGPUData terrainLayers[];
 };
+// VK-1611: the same weight-map descriptor set the live pipeline binds at set 1 — the bake is
+// handed that identical vk::DescriptorSet object — so the shared composite reads the same
+// material-global anti-tiling scalars in both paths.
+layout(std430, set = 0, binding = 2) readonly buffer TerrainAntiTilingBuffer {
+    TerrainAntiTilingGPUData terrainAntiTiling;
+};
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 layout(std430, set = 2, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
+
+#include "../common/terrain_value_noise.glsl"
+#ifdef TERRAIN_HEX_TILING
+// Must follow bindlessTextures — the hex helpers index it directly.
+#include "../common/hex_tiling_terrain.glsl"
+#endif
 
 layout(push_constant) uniform BakePC {
     vec2 pageWorldMin;
@@ -127,6 +139,19 @@ void main()
     // uniform control flow, so the gradients are well-defined either way — kept for a single contract).
     vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
+
+    // VK-1611 composite contract, the bake's half.
+    // terrainWorldXZ is unscaled world XZ, so macro variation is anchored identically here and in
+    // the live path — that is what makes it view-independent and therefore safe to bake.
+    vec2 terrainWorldXZ = vWorldXZ;
+    // Same footprint formula as mesh_terrain.glsl. There is no camera in this pass; the value it
+    // produces is the PAGE's texel density, which rises with the page's virtual-texture mip. That
+    // is precisely the quantity the live path's distance rescale keys off, because VT residency
+    // picks the page mip so a page texel is about a screen pixel — so bake and live agree by
+    // construction rather than by tuning. (Epic solves the same problem the same way: RVT shading
+    // is camera-independent, so distance effects are expressed as mip-level-dependent shading.)
+    float terrainFootprintLog2 = 0.5 * log2(max(max(dot(triplanarWorldUVdx, triplanarWorldUVdx),
+                                                    dot(triplanarWorldUVdy, triplanarWorldUVdy)), 1e-30));
 
     // The composite declares the material properties and legacy scalar emission accumulator.
 #include "../material/terrain_material_generated.glsl"

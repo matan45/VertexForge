@@ -31,6 +31,8 @@ namespace windows
         void compileMaterial();
 
         void drawToolbar();
+        // VK-1611 material-global anti-tiling (macro variation + distance tiling rescale).
+        void drawAntiTilingProperties();
         void drawLayerProperties();
 
         void removeLayer(int removeIndex, int currentCount);

@@ -92,6 +92,11 @@ namespace render::gpudriven::detail
         bool detailMaps = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
+        // VK-1611: the material-global anti-tiling scalars last uploaded to the weight-map set's
+        // binding 2, kept here because the composite permutation is derived from them (a rescale
+        // strength of 0 means the extra textureGrad is never compiled) and the derivation runs
+        // separately from the upload.
+        TerrainAntiTilingGPUData antiTiling{};
         bool layerDataDirty = false;
         // VK-1486: set (editor/saver thread) when any material asset changes, so a terrain layer
         // that sources a .vfMat/.vfMatInstance re-resolves. Consumed (render thread) via exchange().

@@ -858,11 +858,14 @@ namespace render::gpudriven
         // VK-1209: rebuild the terrain pipeline so set 5 + RVT_ENABLED match rvtSampleEnabled
         // (used when the RVT config is toggled at runtime). Gathers the same layouts as init.
         void recreateTerrainPipelineForRVT();
-        // VK-1609: derive TERRAIN_HEIGHT_BLEND from the freshly resolved terrain.layerData (any
-        // layer with a non-zero height-blend contrast) and, if it changed, recompile the terrain
-        // pipeline AND rebuild the RVT baker so the live composite and the baked pages stay in
-        // lockstep. Cheap no-op when the flag is unchanged.
-        void syncTerrainHeightBlendPermutation();
+        // Derive the generated composite's content-driven macros and, if any of them changed,
+        // recompile the terrain pipeline AND rebuild the RVT baker so the live composite and the
+        // baked pages stay in lockstep. Cheap no-op when nothing moved.
+        //   TERRAIN_HEIGHT_BLEND    (VK-1609) any layer with a non-zero height-blend contrast
+        //   TERRAIN_DISTANCE_RESCALE (VK-1611) the material's resolved rescale strength/scale
+        // Both are settled here, in one rebuild, because neither changes what the bindless
+        // registration loop uploads. TERRAIN_DETAIL_MAPS cannot join them — see below.
+        void syncTerrainCompositePermutation();
         // VK-1610: same idea for TERRAIN_DETAIL_MAPS, but the flag also changes the RVT plane
         // layout (2 planes -> 4), so this rebuilds the RVT *manager* as well as the baker rather
         // than just recompiling. `effective` is `terrain.detailMapsAllowed && the resolved material

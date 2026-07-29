@@ -267,21 +267,37 @@ TEST_SUITE("TerrainHeightBlend")
         }
     }
 
-    TEST_CASE("the four-arm snippet nests both permutation macros")
+    TEST_CASE("the snippet is a flat, total chain over all four composite permutations")
     {
+        // VK-1611/VK-1612 took the emitter from two macros to four. A four-deep #ifdef nest would
+        // have been 16 arms at four levels of indentation; the emitter writes a FLAT
+        // #if / 14x #elif / #else chain instead, in which every arm names all four macros
+        // explicitly. Totality then comes from the #else rather than from counting braces, so no
+        // combination can fall through and leave mat_albedo undeclared.
         const std::string snippet = buildTerrainCompositeSnippet();
-        CHECK(countOccurrences(snippet, "#ifdef TERRAIN_DETAIL_MAPS") == 1u);
-        CHECK(countOccurrences(snippet, "#ifdef TERRAIN_HEIGHT_BLEND") == 2u);
-        CHECK(countOccurrences(snippet, "#else") == 3u);
-        CHECK(countOccurrences(snippet, "#endif") == 3u);
-        // Each of the four bodies must appear exactly once.
-        for (bool detail : {false, true})
+
+        CHECK(countOccurrences(snippet, "\n#if ") + (snippet.rfind("#if ", 0) == 0 ? 1u : 0u) == 1u);
+        CHECK(countOccurrences(snippet, "#elif ") == 14u);
+        CHECK(countOccurrences(snippet, "\n#else\n") == 1u);
+
+        // Every arm body appears, exactly once.
+        for (unsigned mask = 0; mask < 16u; ++mask)
         {
-            for (bool hb : {false, true})
-            {
-                CHECK(countOccurrences(snippet, buildTerrainCompositeLoop(detail, hb)) >= 1u);
-            }
+            const std::string arm = buildTerrainCompositeLoop((mask & 1u) != 0, (mask & 2u) != 0,
+                                                              (mask & 4u) != 0, (mask & 8u) != 0);
+            CAPTURE(mask);
+            CHECK(countOccurrences(snippet, arm) == 1u);
         }
+
+        // Macro variation is gated too, but OUTSIDE the chain — that is what keeps it from
+        // doubling the arm count, and what keeps buildTerrainCompositeLoop (and therefore the
+        // golden strings) untouched by it.
+        CHECK(countOccurrences(snippet, "#ifdef TERRAIN_MACRO_VARIATION") == 1u);
+        CHECK(countOccurrences(snippet, "terrainValueNoise2D") == 2u);
+        const size_t chainEnd = snippet.rfind("#ifdef TERRAIN_MACRO_VARIATION");
+        REQUIRE(chainEnd != std::string::npos);
+        CHECK_MESSAGE(snippet.find("terrainValueNoise2D") > chainEnd,
+                      "macro variation leaked into an arm body instead of the tail");
     }
 
     // ------------------------------------------------------------------
@@ -315,7 +331,7 @@ TEST_SUITE("TerrainHeightBlend")
     // 4. All four permutations compile to SPIR-V.
     // ------------------------------------------------------------------
 
-    TEST_CASE("terrain_rvt_bake.glsl compiles in all four composite permutations")
+    TEST_CASE("terrain_rvt_bake.glsl compiles in every composite permutation")
     {
         // terrain_rvt_bake.glsl is plain VERTEX + FRAGMENT (no mesh-shader extension) and
         // #includes the generated composite, so it is the one shader in the terrain path that a
@@ -328,38 +344,55 @@ TEST_SUITE("TerrainHeightBlend")
         const auto stages = resource::ShaderResource::readShaderFile(shaderPath.string());
         REQUIRE_MESSAGE(!stages.empty(), "no #type stages parsed from " << shaderPath.string());
 
-        for (bool detail : {false, true})
+        // Five independent macros: the four arm-selecting ones plus VK-1611's macro-variation
+        // tail, which is gated separately. 32 combinations x 2 stages. This is by far the
+        // highest-value case in the file — it compiles the REAL bake shader against the REAL
+        // generated composite and gpu_types.glsl, so a contract variable an includer forgot to
+        // define, or a struct field added on only one side, fails here with no GPU involved.
+        static constexpr const char* MACROS[] = {
+            "TERRAIN_DETAIL_MAPS",
+            "TERRAIN_HEIGHT_BLEND",
+            "TERRAIN_DISTANCE_RESCALE",
+            "TERRAIN_HEX_TILING",
+            "TERRAIN_MACRO_VARIATION",
+        };
+        constexpr unsigned MACRO_COUNT = 5;
+
+        for (unsigned mask = 0; mask < (1u << MACRO_COUNT); ++mask)
         {
-            for (bool heightBlend : {false, true})
+            CAPTURE(mask);
+
+            shaderCompiler::CompileOptions options;
+            options.includeBasePath = shaderDir;
+            std::string suffix;
+            for (unsigned bit = 0; bit < MACRO_COUNT; ++bit)
             {
-                CAPTURE(detail);
-                CAPTURE(heightBlend);
-
-                shaderCompiler::CompileOptions options;
-                options.includeBasePath = shaderDir;
-                if (detail) options.macroNames.push_back("TERRAIN_DETAIL_MAPS");
-                if (heightBlend) options.macroNames.push_back("TERRAIN_HEIGHT_BLEND");
-
-                bool sawVertex = false;
-                bool sawFragment = false;
-                for (const auto& stage : stages)
+                if ((mask & (1u << bit)) != 0)
                 {
-                    sawVertex = sawVertex || stage.type == resource::ShaderType::VERTEX;
-                    sawFragment = sawFragment || stage.type == resource::ShaderType::FRAGMENT;
-
-                    const auto vkStage =
-                        shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(stage.type));
-                    const std::string name = "terrain_rvt_bake.glsl:" +
-                                             std::to_string(static_cast<int>(stage.type)) +
-                                             (detail ? "+detail" : "") + (heightBlend ? "+height" : "");
-
-                    // compile() returns an empty vector and logs on failure.
-                    const auto spirv = shaderCompiler::compile(stage.source, vkStage, name, options);
-                    CHECK_MESSAGE(!spirv.empty(), "failed to compile " << name);
+                    options.macroNames.push_back(MACROS[bit]);
+                    suffix += "+";
+                    suffix += MACROS[bit];
                 }
-                CHECK(sawVertex);
-                CHECK(sawFragment);
             }
+
+            bool sawVertex = false;
+            bool sawFragment = false;
+            for (const auto& stage : stages)
+            {
+                sawVertex = sawVertex || stage.type == resource::ShaderType::VERTEX;
+                sawFragment = sawFragment || stage.type == resource::ShaderType::FRAGMENT;
+
+                const auto vkStage =
+                    shaderCompiler::shaderTypeToVulkanStage(static_cast<uint8_t>(stage.type));
+                const std::string name = "terrain_rvt_bake.glsl:" +
+                                         std::to_string(static_cast<int>(stage.type)) + suffix;
+
+                // compile() returns an empty vector and logs on failure.
+                const auto spirv = shaderCompiler::compile(stage.source, vkStage, name, options);
+                CHECK_MESSAGE(!spirv.empty(), "failed to compile " << name);
+            }
+            CHECK(sawVertex);
+            CHECK(sawFragment);
         }
     }
 
@@ -523,12 +556,31 @@ TEST_SUITE("TerrainHeightBlend")
         using render::gpudriven::TerrainLayerGPUData;
         // Mirrors the static_asserts as named cases, so a failure reads as a diagnosis rather
         // than a wall of compiler output.
-        CHECK(sizeof(TerrainLayerGPUData) == 48);
+        CHECK(sizeof(TerrainLayerGPUData) == 64); // VK-1612 grew it from 48
         CHECK(alignof(TerrainLayerGPUData) == 4);
         CHECK(sizeof(TerrainLayerGPUData) % 16 == 0);
         CHECK(offsetof(TerrainLayerGPUData, heightBlendContrast) == 36);
+        // VK-1614's reservation must survive VK-1612 — it appended rather than borrowing.
         CHECK(offsetof(TerrainLayerGPUData, reservedPorosity) == 40);
         CHECK(offsetof(TerrainLayerGPUData, reservedSnowRetention) == 44);
+        CHECK(offsetof(TerrainLayerGPUData, hexTilingStrength) == 48);
+        CHECK(offsetof(TerrainLayerGPUData, hexCellScale) == 52);
+        CHECK(offsetof(TerrainLayerGPUData, hexContrast) == 56);
+        CHECK(offsetof(TerrainLayerGPUData, hexRotationStrength) == 60);
+    }
+
+    TEST_CASE("TerrainAntiTilingGPUData layout matches its GLSL mirror")
+    {
+        using render::gpudriven::TerrainAntiTilingGPUData;
+        // VK-1611's material-global block. Small, but it lives on a descriptor binding BOTH the
+        // live terrain pipeline and the RVT bake pipeline read, so a layout slip corrupts baked
+        // pages and the live fallback in different ways.
+        CHECK(sizeof(TerrainAntiTilingGPUData) == 32);
+        CHECK(alignof(TerrainAntiTilingGPUData) == 4);
+        CHECK(sizeof(TerrainAntiTilingGPUData) % 16 == 0);
+        CHECK(offsetof(TerrainAntiTilingGPUData, macroSeed) == 12);
+        CHECK(offsetof(TerrainAntiTilingGPUData, rescaleStrength) == 16);
+        CHECK(offsetof(TerrainAntiTilingGPUData, rescaleWidthLog2) == 28);
     }
 
     TEST_CASE("gpu_types.glsl mirrors TerrainLayerGPUData field for field")
@@ -560,6 +612,10 @@ TEST_SUITE("TerrainHeightBlend")
             {"float", "heightBlendContrast"},
             {"float", "reservedPorosity"},
             {"float", "reservedSnowRetention"},
+            {"float", "hexTilingStrength"},
+            {"float", "hexCellScale"},
+            {"float", "hexContrast"},
+            {"float", "hexRotationStrength"},
         };
 
         const std::regex field(R"((uint|float|int)\s+(\w+)\s*;)");

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "terrain/TerrainMaterialTypes.hpp"
+#include "../GPUDrivenTypes.hpp"
 
 namespace render::mesh
 {
@@ -28,6 +29,12 @@ namespace render::gpudriven
         // VK-1609: height-blend contrast uploaded to TerrainLayerGPUData. 0 => this layer blends
         // linearly, bit-identically to the pre-VK-1609 composite.
         float heightBlendContrast = 0.0f;
+        // VK-1612: hex stochastic sampling. 0 strength => single-tap, i.e. the sampling this layer
+        // did before the story existed.
+        float hexTilingStrength = 0.0f;
+        float hexCellScale = 0.0f;
+        float hexContrast = 0.0f;
+        float hexRotationStrength = 0.0f;
     };
 
     // Resolves a terrain layer's terrain-supported PBR fields from a referenced material's
@@ -43,6 +50,10 @@ namespace render::gpudriven
     //                        selects HeightBlend and the resolved material actually has a packed
     //                        ORM (height rides ORM alpha). Otherwise exactly 0.0f, which is what
     //                        makes such a layer bit-identical to the pre-VK-1609 linear composite.
+    //   hexTiling* (VK-1612) => the layer's own hex settings, clamped, but ONLY when the layer opts
+    //                        in AND resolved to an albedo texture. A layer with no albedo composites
+    //                        a constant vec3(0.5); hex-sampling a constant is pure waste, so it is
+    //                        forced to strength 0 and takes the single-tap path.
     ResolvedTerrainLayerPBR resolveTerrainLayerPBR(const terrain::TerrainMaterialLayer& layer,
                                                    const mesh::ExtractedPBRValues* pbr);
 
@@ -60,4 +71,34 @@ namespace render::gpudriven
     // where a material reference becomes a texture path, so a layer whose .vfMat failed to load
     // correctly reads as "no detail maps" rather than promising maps that will never bind.
     [[nodiscard]] bool terrainMaterialWantsDetailMaps(const std::vector<ResolvedTerrainLayerPBR>& layers);
+
+    // VK-1611 - the material-global counterpart of resolveTerrainLayerPBR: the one seam where
+    // authored anti-tiling intent becomes GPU scalars. Everything is clamped here rather than at
+    // the use site, because two of the clamps are correctness invariants and not taste:
+    //   * a macro-variation SIZE at or below zero would upload an infinite frequency;
+    //   * a rescale WIDTH of zero would reach smoothstep with equal edges, which is undefined.
+    // Sizes are authored in world metres and inverted here, so the shader multiplies instead of
+    // dividing per fragment.
+    [[nodiscard]] TerrainAntiTilingGPUData resolveTerrainAntiTiling(
+        const terrain::TerrainAntiTilingSettings& settings);
+
+    // Does this material actually want the second, larger-scale albedo tap? Drives the
+    // TERRAIN_DISTANCE_RESCALE permutation, so "off" means the extra textureGrad is not compiled
+    // into the shader at all rather than being multiplied by zero.
+    //
+    // A rescaleScale of exactly 1.0 counts as OFF: the far tap would sample the same texels as the
+    // near one, so the material would pay a full extra fetch per layer to blend a value with
+    // itself. That is the one configuration where the feature is provably pure cost.
+    [[nodiscard]] bool terrainMaterialWantsDistanceRescale(const TerrainAntiTilingGPUData& params);
+
+    // Does this material actually want macro variation? Drives TERRAIN_MACRO_VARIATION. At
+    // strength 0 the shader's multiplier is exactly 1.0 either way, so this is a pure cost gate,
+    // not a correctness one — but it is worth 4032 bytes of SPIR-V (~200 ALU) per terrain shader.
+    [[nodiscard]] bool terrainMaterialWantsMacroVariation(const TerrainAntiTilingGPUData& params);
+
+    // VK-1612 - does any layer actually hex-tile? Drives TERRAIN_HEX_TILING, so a material with no
+    // opted-in layer compiles the shader it would have compiled before the story existed. Reads
+    // the RESOLVED strength, so a layer that opted in but whose material failed to supply an albedo
+    // texture correctly reads as "no".
+    [[nodiscard]] bool terrainMaterialWantsHexTiling(const std::vector<ResolvedTerrainLayerPBR>& layers);
 }

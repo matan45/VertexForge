@@ -84,8 +84,7 @@ namespace render::gpudriven
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  terrain.detailMaps,
-                                  terrain.pipeline->isHeightBlendEnabled());
+                                  terrain.pipeline->getCompositePermutation());
         }
     }
 
@@ -132,8 +131,7 @@ namespace render::gpudriven
                                           bindlessTextures->getDescriptorSetLayout(),
                                           terrain.pipeline->getTerrainDataLayout(),
                                           layout.planeFormats,
-                                          terrain.detailMaps,
-                                          terrain.pipeline->isHeightBlendEnabled());
+                                          terrain.pipeline->getCompositePermutation());
                 }
             }
             else
@@ -174,13 +172,13 @@ namespace render::gpudriven
             cachedColorFormats, cachedDepthFormat);
     }
 
-    void GPUDrivenRenderer::syncTerrainHeightBlendPermutation()
+    void GPUDrivenRenderer::syncTerrainCompositePermutation()
     {
         if (!initialized || !terrain.pipeline)
             return;
 
-        // resolveTerrainLayerPBR already forced the contrast to 0 for every layer without a real
-        // height source, so this is exactly "does any layer actually height-blend".
+        // VK-1609. resolveTerrainLayerPBR already forced the contrast to 0 for every layer without
+        // a real height source, so this is exactly "does any layer actually height-blend".
         bool anyHeightBlend = false;
         for (const auto& l : terrain.layerData)
         {
@@ -191,13 +189,39 @@ namespace render::gpudriven
             }
         }
 
-        if (!terrain.pipeline->setHeightBlendEnabled(anyHeightBlend))
+        // Every setter must run before the short-circuit — writing `changed || setter(...)` would
+        // skip the later setters as soon as one flag moved, silently leaving the pipeline on a
+        // stale permutation. Separate statements, deliberately, rather than a chain of ||.
+        bool changed = terrain.pipeline->setHeightBlendEnabled(anyHeightBlend);
+        // VK-1611. Material-global rather than per-layer, and derived from the RESOLVED (clamped)
+        // scalars so a knee/width the artist typed out of range cannot flip the permutation.
+        const bool wantsRescale = terrainMaterialWantsDistanceRescale(terrain.antiTiling);
+        if (terrain.pipeline->setDistanceRescaleEnabled(wantsRescale))
+            changed = true;
+        if (terrain.pipeline->setMacroVariationEnabled(
+                terrainMaterialWantsMacroVariation(terrain.antiTiling)))
+            changed = true;
+        // VK-1612. Like the height-blend flag, derived from the uploaded per-layer scalars, so a
+        // layer that opted in without an albedo texture cannot switch the permutation on.
+        bool anyHexTiling = false;
+        for (const auto& l : terrain.layerData)
+        {
+            if (l.hexTilingStrength > 0.0f)
+            {
+                anyHexTiling = true;
+                break;
+            }
+        }
+        if (terrain.pipeline->setHexTilingEnabled(anyHexTiling))
+            changed = true;
+
+        if (!changed)
             return; // unchanged - no recompile
 
         recreateTerrainPipelineForRVT(); // performs the single device-idle wait for this transition
 
         // The bake shader #includes the same generated composite, so it must be recompiled with the
-        // matching macro. init() early-returns once its pipeline exists, hence the full reset. Every
+        // matching macros. init() early-returns once its pipeline exists, hence the full reset. Every
         // resident page was baked with the old composite, so they all have to go.
         if (vtCache.rvtEnabled && terrainRVTBaker && bindlessTextures)
         {
@@ -208,12 +232,12 @@ namespace render::gpudriven
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  terrain.detailMaps,
-                                  anyHeightBlend);
+                                  terrain.pipeline->getCompositePermutation());
             rvtInvalidateAll = true;
         }
 
-        vfLogInfo("VK-1609 terrain height blending: {}", anyHeightBlend ? "ON" : "OFF");
+        vfLogInfo("Terrain composite permutation: {}",
+                  describeTerrainCompositePermutation(terrain.pipeline->getCompositePermutation()));
     }
 
     bool GPUDrivenRenderer::isTerrainRVTActive() const
@@ -440,8 +464,7 @@ namespace render::gpudriven
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  effective,
-                                  terrain.pipeline->isHeightBlendEnabled());
+                                  terrain.pipeline->getCompositePermutation());
             rvtFrameCounter = 0;
             // A brand-new pool holds no pages, so there is nothing left to invalidate.
             rvtInvalidateAll = false;
@@ -598,6 +621,12 @@ namespace render::gpudriven
             // VK-1609. Exactly 0 for every layer with no height source, which is what keeps such a
             // layer bit-identical to the pre-VK-1609 composite even inside the height permutation.
             gpuLayer.heightBlendContrast = r.heightBlendContrast;
+            // VK-1612. Exactly 0 for every layer that did not opt in or has no albedo texture,
+            // which is what makes such a layer take the single-tap path inside the hex permutation.
+            gpuLayer.hexTilingStrength = r.hexTilingStrength;
+            gpuLayer.hexCellScale = r.hexCellScale;
+            gpuLayer.hexContrast = r.hexContrast;
+            gpuLayer.hexRotationStrength = r.hexRotationStrength;
             // VK-1614 reserved fields stay at the value-initialized 0 from `gpuLayer = {}` above.
         }
 
@@ -616,24 +645,35 @@ namespace render::gpudriven
             registerTextureDependencies(materialPath, texPaths);
         }
 
+        // VK-1611. Material-global, so it is resolved straight from the asset rather than from the
+        // per-layer loop. Uploaded before the permutation sync below, which derives the
+        // distance-rescale macro from these same clamped values.
+        terrain.antiTiling = resolveTerrainAntiTiling(materialData->antiTiling);
+
         if (terrain.pipeline)
         {
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
+            terrain.pipeline->updateTerrainAntiTiling(terrain.antiTiling);
         }
 
-        // VK-1609. Runs at the END, not next to the detail sync above, because it derives its flag
-        // from terrain.layerData - which only exists once the registration loop has filled it. The
-        // detail permutation is the mirror image: it has to be settled BEFORE that loop, because it
-        // decides what the loop registers. Neither re-enters this function.
+        // VK-1609/VK-1611. Runs at the END, not next to the detail sync above, because it derives
+        // the height flag from terrain.layerData - which only exists once the registration loop has
+        // filled it. The detail permutation is the mirror image: it has to be settled BEFORE that
+        // loop, because it decides what the loop registers. Neither re-enters this function.
         //
-        // VK-1610 consequence: a material change that flips BOTH flags rebuilds the RVT baker twice
-        // - once above with the previous height flag, once here with the correct one. That is
-        // deliberate, not an oversight. Collapsing it into a single rebuild would mean leaving the
-        // baker stale between the two syncs, and a baker whose macros disagree with the live
-        // pipeline is exactly the failure VK-1609 warns about (baked pages and the live composite
-        // diverge at page-residency boundaries, invisible with RVT off). The cost is one extra
-        // pipeline build per material load, never per frame.
-        syncTerrainHeightBlendPermutation();
+        // Height blend and distance rescale share ONE sync (and therefore one pipeline rebuild)
+        // precisely because neither changes what the loop registers. Detail maps cannot join them:
+        // it also changes the RVT PLANE LAYOUT, so it has to tear down the manager, not just the
+        // baker.
+        //
+        // VK-1610 consequence, unchanged: a material change that flips the detail flag as well
+        // rebuilds the RVT baker twice - once above with the previous composite macros, once here
+        // with the correct ones. That is deliberate. Collapsing it would mean leaving the baker
+        // stale between the two syncs, and a baker whose macros disagree with the live pipeline is
+        // exactly the failure VK-1609 warns about (baked pages and the live composite diverge at
+        // page-residency boundaries, invisible with RVT off). The cost is one extra pipeline build
+        // per material load, never per frame.
+        syncTerrainCompositePermutation();
 
         terrain.currentMaterialPath = materialPath;
         terrain.layerDataDirty = false;

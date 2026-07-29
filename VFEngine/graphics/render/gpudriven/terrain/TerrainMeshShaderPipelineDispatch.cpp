@@ -65,6 +65,12 @@ namespace render::gpudriven
         std::memcpy(terrainLayerBufferMapped, layers.data(), count * sizeof(TerrainLayerGPUData));
     }
 
+    void TerrainMeshShaderPipeline::updateTerrainAntiTiling(const TerrainAntiTilingGPUData& params)
+    {
+        if (!terrainAntiTilingBufferMapped) return;
+        std::memcpy(terrainAntiTilingBufferMapped, &params, sizeof(TerrainAntiTilingGPUData));
+    }
+
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                                             vk::DescriptorSet bindlessDescSet,
                                                             vk::DescriptorSet lightDataDescSet,

@@ -13,19 +13,39 @@
 // emitted text is only reachable from a test if it is inline. test_terrain_height_blend.cpp
 // pins the linear (non-height-blend) arms against a golden string — that is what makes
 // VK-1609's "bit-identical fallback" claim a build failure rather than a belief.
+//
+// CONTRACT WITH THE INCLUDER. All of these must be defined, in UNIFORM control flow, before
+// the #include (the snippet is included INSIDE main(), so it can declare no functions of its
+// own — every helper it calls comes from a file-scope include in mesh_terrain.glsl and
+// terrain_rvt_bake.glsl):
+//   tiles[], terrainLayers[], terrainAntiTiling, bindlessTextures[], sampleTileWeight()
+//   fragTileIndex, fragTexCoord
+//   triplanarWorldUV, triplanarWorldUVdx, triplanarWorldUVdy
+//   terrainWorldXZ           world-space XZ, UNSCALED (VK-1611 macro variation is world-anchored,
+//                            and triplanarWorldUV is already multiplied by textureScale and is
+//                            triplanar-blended inside caves, so it cannot serve)
+//   terrainFootprintLog2     log2(texture repeats per output texel) of the BASE UV, i.e.
+//                            0.5 * log2(max(dot(dx,dx), dot(dy,dy))). See TerrainAntiTiling.hpp
+//                            for why this, and not camera distance, is the distance signal.
 
 namespace editor::graph
 {
     // Emits the per-tile terrain composite loop for one shader permutation. All permutations
     // share a single body here so the per-layer logic (weight sampling, ORM unpack, tiling /
     // gradient math) can only be edited in one place.
-    //   `detail`      inserts the extra work the TERRAIN_DETAIL_MAPS permutation samples — the
-    //                 normal-map fetch, the emission-texture path, and the mat_normalTS output.
-    //   `heightBlend` inserts the VK-1609 TERRAIN_HEIGHT_BLEND weight sharpening.
-    // With heightBlend == false the output is byte-identical to the pre-VK-1609 emitter: the
-    // accumulation operand is the literal `w`, the ORM sample stays a vec3, and not one extra
-    // token is emitted. That is bit-identity by construction rather than by inspection.
-    inline std::string buildTerrainCompositeLoop(bool detail, bool heightBlend)
+    //   `detail`          inserts the extra work the TERRAIN_DETAIL_MAPS permutation samples — the
+    //                     normal-map fetch, the emission-texture path, and the mat_normalTS output.
+    //   `heightBlend`     inserts the VK-1609 TERRAIN_HEIGHT_BLEND weight sharpening.
+    //   `distanceRescale` inserts the VK-1611 TERRAIN_DISTANCE_RESCALE second albedo tap.
+    //   `hexTiling`       inserts the VK-1612 TERRAIN_HEX_TILING 3-tap stochastic sampling.
+    // The last two default to false so that every pre-existing two-argument call — including the
+    // golden-string tests — returns the identical text it always did. With all three optional
+    // flags false the output is byte-identical to the pre-VK-1609 emitter: the accumulation
+    // operand is the literal `w`, the ORM sample stays a vec3, and not one extra token is
+    // emitted. That is bit-identity by construction rather than by inspection, and it is what
+    // makes each of these features provably free for projects that do not use it.
+    inline std::string buildTerrainCompositeLoop(bool detail, bool heightBlend,
+                                                 bool distanceRescale = false, bool hexTiling = false)
     {
         // Naming the accumulation operand once is what keeps the two arms in lockstep. The two
         // emission accumulators below sit inside an `if (emissionIdx > 0u)` block, visually
@@ -33,6 +53,34 @@ namespace editor::graph
         // accumulated the sharpened weight, terrain emission would be normalized by the wrong
         // denominator and silently drift with height.
         const std::string W = heightBlend ? "bw" : "w";
+
+        // VK-1612: one layer fetch, as either the single textureGrad the composite has always
+        // used or a hex 3-tap blend selected per layer. Emitting it through these two helpers is
+        // what guarantees the non-hex text is unchanged character for character — the `plain`
+        // string below IS the original expression, and when hexTiling is false nothing wraps it.
+        //
+        // The hex selector is a ternary, not an `if`, deliberately: GLSL evaluates only the taken
+        // operand, so a layer that opted out pays one compare rather than three texture fetches,
+        // and the composite's `if (` count is unchanged — the "no new branch" property the
+        // explicit-gradient (textureGrad) contract rests on.
+        auto albedoFetch = [&](const char* uv, const char* dx, const char* dy, const char* blend)
+        {
+            const std::string plain = std::string("textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], ")
+                                    + uv + ", " + dx + ", " + dy + ").rgb";
+            if (!hexTiling)
+                return plain;
+            return "((hexStrength > 0.0) ? hexTerrainSampleAlbedo(albedoIdx, " + std::string(blend)
+                 + ") : " + plain + ")";
+        };
+        auto normalFetch = [&](const char* uv, const char* dx, const char* dy, const char* blend)
+        {
+            const std::string plain = std::string("textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], ")
+                                    + uv + ", " + dx + ", " + dy + ").xyz * 2.0 - 1.0";
+            if (!hexTiling)
+                return plain;
+            return "((hexStrength > 0.0) ? hexTerrainSampleNormal(normalIdx, " + std::string(blend)
+                 + ") : " + plain + ")";
+        };
 
         std::string s;
         s += "vec3 ls_Albedo = vec3(0.0);\n";
@@ -68,9 +116,48 @@ namespace editor::graph
         s += "    vec2 layerUV = triplanarWorldUV * terrainLayers[paletteIdx].tilingScale;\n";
         s += "    vec2 layerUVdx = triplanarWorldUVdx * terrainLayers[paletteIdx].tilingScale;\n";
         s += "    vec2 layerUVdy = triplanarWorldUVdy * terrainLayers[paletteIdx].tilingScale;\n";
+        if (distanceRescale)
+        {
+            // VK-1611: the layer's own footprint is the base footprint shifted by
+            // log2(tilingScale) — exact, because layerUVdx == triplanarWorldUVdx * tilingScale.
+            // That is why ONE material-global knee is correct across layers that tile at wildly
+            // different rates: the knee lives in footprint space, not in world space.
+            s += "    float lsFpLog2 = terrainFootprintLog2 + log2(terrainLayers[paletteIdx].tilingScale);\n";
+            s += "    float lsFarT = smoothstep(terrainAntiTiling.rescaleKneeLog2, "
+                 "terrainAntiTiling.rescaleKneeLog2 + terrainAntiTiling.rescaleWidthLog2, lsFpLog2) "
+                 "* terrainAntiTiling.rescaleStrength;\n";
+            s += "    vec2 layerFarUV = layerUV * terrainAntiTiling.rescaleScale;\n";
+            s += "    vec2 layerFarUVdx = layerUVdx * terrainAntiTiling.rescaleScale;\n";
+            s += "    vec2 layerFarUVdy = layerUVdy * terrainAntiTiling.rescaleScale;\n";
+        }
+        if (hexTiling)
+        {
+            // resolveTerrainLayerPBR uploads 0 for every layer that did not opt in, so this is
+            // exactly "does this layer hex-tile". The lattice math below is pure ALU (~35 ops);
+            // only the three texture taps are gated, which is where the cost actually is.
+            s += "    float hexStrength = terrainLayers[paletteIdx].hexTilingStrength;\n";
+            s += "    HexTerrainBlend hb = hexTerrainComputeBlend(layerUV, layerUVdx, layerUVdy, "
+                 "terrainLayers[paletteIdx].hexCellScale, terrainLayers[paletteIdx].hexContrast, "
+                 "terrainLayers[paletteIdx].hexRotationStrength);\n";
+            if (distanceRescale)
+            {
+                // The far tap must hex-tile too when the layer does. Mixing a hex-sampled near
+                // tap toward a PLAIN far tap would make the layer revert to visibly repeating
+                // sampling exactly where repetition is worst — the opposite of the intent.
+                s += "    HexTerrainBlend hbFar = hexTerrainComputeBlend(layerFarUV, layerFarUVdx, layerFarUVdy, "
+                     "terrainLayers[paletteIdx].hexCellScale, terrainLayers[paletteIdx].hexContrast, "
+                     "terrainLayers[paletteIdx].hexRotationStrength);\n";
+            }
+        }
         s += "    uint albedoIdx = terrainLayers[paletteIdx].albedoTextureIndex;\n";
         s += "    vec3 layerAlbedo = (albedoIdx > 0u) ? "
-             "textureGrad(bindlessTextures[nonuniformEXT(albedoIdx)], layerUV, layerUVdx, layerUVdy).rgb : vec3(0.5);\n";
+             + albedoFetch("layerUV", "layerUVdx", "layerUVdy", "hb") + " : vec3(0.5);\n";
+        if (distanceRescale)
+        {
+            s += "    layerAlbedo = mix(layerAlbedo, (albedoIdx > 0u) ? "
+                 + albedoFetch("layerFarUV", "layerFarUVdx", "layerFarUVdy", "hbFar")
+                 + " : vec3(0.5), lsFarT);\n";
+        }
         // The non-detail permutation lights terrain with the geometric normal only (mesh_terrain
         // uses N = normalize(fragNormal); the RVT bake writes no normal plane), so it omits the
         // per-layer normal fetch — a composited tangent-space normal would be dead work there.
@@ -78,7 +165,7 @@ namespace editor::graph
         {
             s += "    uint normalIdx = terrainLayers[paletteIdx].normalTextureIndex;\n";
             s += "    vec3 layerNormal = (normalIdx > 0u) ? "
-                 "textureGrad(bindlessTextures[nonuniformEXT(normalIdx)], layerUV, layerUVdx, layerUVdy).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);\n";
+                 + normalFetch("layerUV", "layerUVdx", "layerUVdy", "hb") + " : vec3(0.0, 0.0, 1.0);\n";
         }
         s += "    uint ormIdx = terrainLayers[paletteIdx].ormTextureIndex;\n";
         if (heightBlend)
@@ -180,25 +267,101 @@ namespace editor::graph
         return s;
     }
 
-    // The four-arm preprocessor assembly written to terrain_material_generated.glsl, without the
-    // leading provenance comments (those carry the material's layer count and so are emitted by
+    // VK-1611 world-anchored macro variation, emitted ONCE after the permutation nest rather than
+    // inside every arm. Three things fall out of that placement, and all three are load-bearing:
+    //
+    //  1. buildTerrainCompositeLoop() is untouched, so the golden strings that pin VK-1609's
+    //     byte-identical linear arms need no regeneration.
+    //  2. It runs after each arm has already computed mat_emission from mat_albedo, so emission
+    //     is NOT modulated. Macro variation is a reflectance tint; emission is a light source.
+    //  3. One evaluation per fragment instead of one per active splat channel.
+    //
+    // It carries its own macro, and — because it sits OUTSIDE the arm nest — that macro costs one
+    // extra #ifdef rather than doubling the 16 arms. Worth it: measured against the pre-VK-1611
+    // tree with glslc -O, the ungated tail added 4032 bytes of SPIR-V to EVERY permutation
+    // (~200 ALU: two octaves x four 32-bit hashes plus the interpolation). At strength 0 the
+    // multiplier is still exactly 1.0, so leaving it ungated would have been correct — but
+    // "correct and free" beats "correct and 200 ALU on every terrain fragment that misses the RVT
+    // page cache", and this repo's other permutations all hold that line.
+    //
+    // Anchored to terrainWorldXZ, NOT to any layer UV, so the pattern is fixed in the world and
+    // identical in the bake (which has no camera) and live. Deliberately NOT slope-masked the way
+    // Godot Terrain3D masks its equivalent: the RVT bake is a flat top-down pass with no surface
+    // normal, so a slope term would make baked pages disagree with the live fallback.
+    inline std::string buildTerrainMacroVariationSnippet()
+    {
+        std::string s;
+        s += "// VK-1611 world-anchored macro variation (identity at strength 0).\n";
+        s += "float tmv_n0 = terrainValueNoise2D(terrainWorldXZ * terrainAntiTiling.macroFrequency0, "
+             "terrainAntiTiling.macroSeed);\n";
+        s += "float tmv_n1 = terrainValueNoise2D(terrainWorldXZ * terrainAntiTiling.macroFrequency1, "
+             "terrainAntiTiling.macroSeed ^ 0x9E3779B9u);\n";
+        s += "mat_albedo *= (1.0 + terrainAntiTiling.macroStrength * (tmv_n0 - 0.5)) "
+             "* (1.0 + terrainAntiTiling.macroStrength * (tmv_n1 - 0.5));\n";
+        return s;
+    }
+
+    // The preprocessor assembly written to terrain_material_generated.glsl, without the leading
+    // provenance comments (those carry the material's layer count and so are emitted by
     // ShaderGraphCompiler::compileTerrainMaterial). Keeping the assembly here means the golden
     // test can assert the checked-in file ends with exactly this text.
+    //
+    // Four independent permutation macros = 16 arms. They are emitted as a FLAT #if / #elif chain
+    // in which every arm names all four macros explicitly (`defined` or `!defined`), rather than
+    // as a four-deep #ifdef nest: the conditions are then exhaustive and mutually exclusive by
+    // construction, and adding a fifth flag is a one-line change here instead of a re-indent of
+    // the whole file. Only one arm survives preprocessing, so shaderc's cost is unchanged.
     inline std::string buildTerrainCompositeSnippet()
     {
+        struct Flag { const char* macro; };
+        // Bit order must stay stable: it decides the emitted arm order and the goldens' position.
+        static constexpr Flag FLAGS[] = {
+            {"TERRAIN_DETAIL_MAPS"},      // bit 0
+            {"TERRAIN_HEIGHT_BLEND"},     // bit 1
+            {"TERRAIN_DISTANCE_RESCALE"}, // bit 2
+            {"TERRAIN_HEX_TILING"},       // bit 3
+        };
+        constexpr unsigned FLAG_COUNT = 4;
+        constexpr unsigned ARM_COUNT = 1u << FLAG_COUNT;
+
+        auto condition = [](unsigned mask)
+        {
+            std::string c;
+            for (unsigned bit = 0; bit < FLAG_COUNT; ++bit)
+            {
+                if (bit > 0) c += " && ";
+                if ((mask & (1u << bit)) == 0) c += "!";
+                c += "defined(";
+                c += FLAGS[bit].macro;
+                c += ")";
+            }
+            return c;
+        };
+
         std::string code;
-        code += "#ifdef TERRAIN_DETAIL_MAPS\n";
-        code += "#ifdef TERRAIN_HEIGHT_BLEND\n";
-        code += buildTerrainCompositeLoop(/*detail=*/true, /*heightBlend=*/true);
-        code += "#else\n";
-        code += buildTerrainCompositeLoop(/*detail=*/true, /*heightBlend=*/false);
+        // Descending so that mask 0 — every feature off, the shader most projects compile — is
+        // last and can be the #else, which makes the chain total: no combination can fall
+        // through and leave mat_albedo undeclared.
+        for (unsigned mask = ARM_COUNT - 1;; --mask)
+        {
+            if (mask == ARM_COUNT - 1)
+                code += "#if " + condition(mask) + "\n";
+            else if (mask > 0)
+                code += "#elif " + condition(mask) + "\n";
+            else
+                code += "#else\n";
+
+            code += buildTerrainCompositeLoop(/*detail=*/(mask & 1u) != 0,
+                                              /*heightBlend=*/(mask & 2u) != 0,
+                                              /*distanceRescale=*/(mask & 4u) != 0,
+                                              /*hexTiling=*/(mask & 8u) != 0);
+            if (mask == 0)
+                break;
+        }
         code += "#endif\n";
-        code += "#else\n";
-        code += "#ifdef TERRAIN_HEIGHT_BLEND\n";
-        code += buildTerrainCompositeLoop(/*detail=*/false, /*heightBlend=*/true);
-        code += "#else\n";
-        code += buildTerrainCompositeLoop(/*detail=*/false, /*heightBlend=*/false);
-        code += "#endif\n";
+        // Gated OUTSIDE the arm chain, so this is one extra #ifdef rather than 16 more arms.
+        code += "#ifdef TERRAIN_MACRO_VARIATION\n";
+        code += buildTerrainMacroVariationSnippet();
         code += "#endif\n";
         return code;
     }

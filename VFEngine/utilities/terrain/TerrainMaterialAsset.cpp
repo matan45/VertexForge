@@ -133,6 +133,17 @@ namespace terrain
                             // VK-1609. Purely additive key: a file written before this story simply
                             // takes the default, which is why no format-version bump is needed.
                             layer.heightContrast = layerJson.value("heightContrast", 4.0f);
+                            // VK-1612. Additive too; absent keys read as "hex tiling off".
+                            layer.hexTiling = layerJson.value("hexTiling", false);
+                            layer.hexCellScale = std::clamp(
+                                layerJson.value("hexCellScale", HEX_TILING_DEFAULT_CELL_SCALE),
+                                MIN_HEX_TILING_CELL_SCALE, MAX_HEX_TILING_CELL_SCALE);
+                            layer.hexContrast = std::clamp(
+                                layerJson.value("hexContrast", HEX_TILING_DEFAULT_CONTRAST),
+                                MIN_HEX_TILING_CONTRAST, MAX_HEX_TILING_CONTRAST);
+                            layer.hexRotation = std::clamp(
+                                layerJson.value("hexRotation", HEX_TILING_DEFAULT_ROTATION),
+                                0.0f, MAX_HEX_TILING_ROTATION);
                             layer.enabled = layerJson.value("enabled", true);
 
                             if (layer.tilingScale <= 0.0f)
@@ -158,6 +169,37 @@ namespace terrain
                         }
                     }
                 }
+            }
+
+            // VK-1611. Additive block, same discipline as heightContrast above: a file written
+            // before this story has no "antiTiling" object, so every field takes its default and
+            // both features read as OFF. No format-version bump.
+            if (j.contains("antiTiling") && j["antiTiling"].is_object())
+            {
+                const auto& at = j["antiTiling"];
+                auto& dst = material.antiTiling;
+                dst.macroVariationStrength = std::clamp(
+                    at.value("macroVariationStrength", 0.0f), 0.0f, MACRO_VARIATION_MAX_STRENGTH);
+                dst.macroVariationSize0 = std::clamp(
+                    at.value("macroVariationSize0", MACRO_VARIATION_DEFAULT_SIZE0),
+                    MACRO_VARIATION_MIN_SIZE, MACRO_VARIATION_MAX_SIZE);
+                dst.macroVariationSize1 = std::clamp(
+                    at.value("macroVariationSize1", MACRO_VARIATION_DEFAULT_SIZE1),
+                    MACRO_VARIATION_MIN_SIZE, MACRO_VARIATION_MAX_SIZE);
+                dst.macroVariationSeed = at.value("macroVariationSeed", 0u);
+                dst.distanceRescaleStrength = std::clamp(
+                    at.value("distanceRescaleStrength", 0.0f), 0.0f, DISTANCE_RESCALE_MAX_STRENGTH);
+                dst.distanceRescaleScale = std::clamp(
+                    at.value("distanceRescaleScale", DISTANCE_RESCALE_DEFAULT_SCALE),
+                    DISTANCE_RESCALE_MIN_SCALE, DISTANCE_RESCALE_MAX_SCALE);
+                dst.distanceRescaleKnee = std::clamp(
+                    at.value("distanceRescaleKnee", DISTANCE_RESCALE_DEFAULT_KNEE),
+                    DISTANCE_RESCALE_MIN_KNEE, DISTANCE_RESCALE_MAX_KNEE);
+                // Clamped away from zero because the shader feeds this straight to smoothstep,
+                // whose behaviour with equal edges is undefined.
+                dst.distanceRescaleWidth = std::clamp(
+                    at.value("distanceRescaleWidth", DISTANCE_RESCALE_DEFAULT_WIDTH),
+                    DISTANCE_RESCALE_MIN_WIDTH, DISTANCE_RESCALE_MAX_WIDTH);
             }
 
             material.cachedMaterialSnippet = j.value("cachedMaterialSnippet", "");
@@ -200,10 +242,28 @@ namespace terrain
             layerJson["tilingScale"] = layer.tilingScale;
             layerJson["blendMode"] = blendModeToString(layer.blendMode);
             layerJson["heightContrast"] = layer.heightContrast;
+            layerJson["hexTiling"] = layer.hexTiling;
+            layerJson["hexCellScale"] = layer.hexCellScale;
+            layerJson["hexContrast"] = layer.hexContrast;
+            layerJson["hexRotation"] = layer.hexRotation;
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
         }
         j["layers"] = layersJson;
+
+        // VK-1611 material-global anti-tiling.
+        {
+            json at;
+            at["macroVariationStrength"] = material.antiTiling.macroVariationStrength;
+            at["macroVariationSize0"] = material.antiTiling.macroVariationSize0;
+            at["macroVariationSize1"] = material.antiTiling.macroVariationSize1;
+            at["macroVariationSeed"] = material.antiTiling.macroVariationSeed;
+            at["distanceRescaleStrength"] = material.antiTiling.distanceRescaleStrength;
+            at["distanceRescaleScale"] = material.antiTiling.distanceRescaleScale;
+            at["distanceRescaleKnee"] = material.antiTiling.distanceRescaleKnee;
+            at["distanceRescaleWidth"] = material.antiTiling.distanceRescaleWidth;
+            j["antiTiling"] = at;
+        }
 
         if (!material.cachedMaterialSnippet.empty())
         {

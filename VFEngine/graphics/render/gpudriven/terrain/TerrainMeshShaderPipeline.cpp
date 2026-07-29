@@ -96,7 +96,14 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+        // Binding 2 is VK-1611's material-global anti-tiling block. It lives on THIS set, and not
+        // on set 11 as the story originally specified, because this is the only descriptor set
+        // the RVT bake pipeline also binds — TerrainRVTBaker::init takes
+        // {weightMapLayout, bindlessLayout, terrainDataLayout} and GPUDrivenRendererTerrain hands
+        // it this very same vk::DescriptorSet object. Anything the shared generated composite
+        // reads has to be reachable from both pipelines or the baked pages and the live fallback
+        // composite differently.
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -107,11 +114,16 @@ namespace render::gpudriven
         bindings[1].descriptorCount = 1;
         bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        bindings[2].binding = 2;
+        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         weightMapLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 2;
+        poolSize.descriptorCount = 3;
 
         weightMapPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 
@@ -154,6 +166,41 @@ namespace render::gpudriven
         vkDevice.updateDescriptorSets(write, {});
     }
 
+    // VK-1611. Zero-initialized, and zero is the OFF value for both features (macroStrength and
+    // rescaleStrength), so a terrain that never loads a material renders exactly as it did before
+    // this story — the buffer exists but contributes an identity multiply.
+    void TerrainMeshShaderPipeline::createTerrainAntiTilingBuffer()
+    {
+        vk::Device vkDevice = device.getLogicalDevice();
+        constexpr vk::DeviceSize antiTilingSize = sizeof(TerrainAntiTilingGPUData);
+
+        core::BufferInfoRequest request(vkDevice, device.getPhysicalDevice());
+        request.size = antiTilingSize;
+        request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                             vk::MemoryPropertyFlagBits::eHostCoherent;
+
+        core::BufferUtilities::createBuffer(request, terrainAntiTilingBuffer, terrainAntiTilingBufferAllocation,
+                                            device.getMemoryManager());
+
+        terrainAntiTilingBufferMapped = terrainAntiTilingBufferAllocation.mappedPtr;
+        std::memset(terrainAntiTilingBufferMapped, 0, antiTilingSize);
+
+        vk::DescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = terrainAntiTilingBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = antiTilingSize;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet = weightMapDescriptorSet;
+        write.dstBinding = 2;
+        write.descriptorCount = 1;
+        write.descriptorType = vk::DescriptorType::eStorageBuffer;
+        write.pBufferInfo = &bufferInfo;
+
+        vkDevice.updateDescriptorSets(write, {});
+    }
+
     void TerrainMeshShaderPipeline::init(vk::DescriptorSetLayout iblLayout,
                                           vk::DescriptorSetLayout bindlessTextureLayout,
                                           vk::DescriptorSetLayout meshletDataLayout,
@@ -183,6 +230,7 @@ namespace render::gpudriven
             createRVTSampleDescriptor();
         createWeightMapDescriptor();
         createTerrainLayerBuffer();
+        createTerrainAntiTilingBuffer();
         createTileDataBuffer();
         createStatsBuffer();
         createTerrainDataDescriptor();
@@ -277,6 +325,8 @@ namespace render::gpudriven
 
         terrainLayerBufferMapped = nullptr;
         core::BufferUtilities::destroyBuffer(vkDevice, terrainLayerBuffer, terrainLayerBufferAllocation, device.getMemoryManager());
+        terrainAntiTilingBufferMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(vkDevice, terrainAntiTilingBuffer, terrainAntiTilingBufferAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(vkDevice, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
 
         cleanupDescriptorResources();
@@ -467,7 +517,7 @@ namespace render::gpudriven
         rvtSampleResourcesReady = false;
         if (!rvtSampleDescriptorSet || !pageTableBuffer || !albedoView || !ormView || !sampler || !feedbackBuffer)
             return;
-        if (detailMapsEnabled && (!normalView || !emissionView))
+        if (compositePermutation.detailMaps && (!normalView || !emissionView))
             return;
 
         if (params && rvtParamsAllocation.mappedPtr)
@@ -497,7 +547,7 @@ namespace render::gpudriven
         writes[6].dstSet = rvtSampleDescriptorSet; writes[6].dstBinding = 6; writes[6].descriptorCount = 1;
         writes[6].descriptorType = vk::DescriptorType::eCombinedImageSampler; writes[6].pImageInfo = &emissionInfo;
 
-        const uint32_t writeCount = detailMapsEnabled ? static_cast<uint32_t>(writes.size()) : 5u;
+        const uint32_t writeCount = compositePermutation.detailMaps ? static_cast<uint32_t>(writes.size()) : 5u;
         device.getLogicalDevice().updateDescriptorSets(writeCount, writes.data(), 0, nullptr);
         rvtSampleResourcesReady = true;
     }
@@ -526,16 +576,10 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("RVT_ENABLED");
         }
-        if (detailMapsEnabled)
-        {
-            terrainShader->addMacroDefinition("TERRAIN_DETAIL_MAPS");
-        }
-        if (heightBlendEnabled)
-        {
-            // VK-1609 — must be kept in lockstep with TerrainRVTBaker::init, which compiles the
-            // same generated composite for the bake.
-            terrainShader->addMacroDefinition("TERRAIN_HEIGHT_BLEND");
-        }
+        // The generated terrain composite's macros, from the single shared definition. The RVT
+        // bake pipeline calls the same function with the struct this pipeline hands it, which is
+        // what keeps baked pages and the live fallback compositing identically.
+        applyTerrainCompositeMacros(*terrainShader, compositePermutation);
         if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");

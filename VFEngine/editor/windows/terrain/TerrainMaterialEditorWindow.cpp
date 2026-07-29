@@ -129,6 +129,7 @@ namespace windows
             if (isOpen)
             {
                 drawToolbar();
+                drawAntiTilingProperties();
                 drawLayerProperties();
             }
         }
@@ -191,6 +192,110 @@ namespace windows
         }
         ImGui::PopItemWidth();
 
+        ImGui::Separator();
+    }
+
+    // VK-1611. Material-global, not per-layer: macro variation modulates the COMPOSITED albedo
+    // once per fragment, and the distance-rescale knee lives in footprint space (log2 texture
+    // repeats per output texel), which already accounts for each layer's own tiling scale — so one
+    // knee is correct across layers that tile at wildly different rates.
+    void TerrainMaterialEditorWindow::drawAntiTilingProperties()
+    {
+        if (!materialData) return;
+
+        if (!ImGui::CollapsingHeader("Anti-Tiling"))
+            return;
+
+        auto& at = materialData->antiTiling;
+        ImGui::Indent(8.0f);
+
+        ImGui::SeparatorText("Macro Variation");
+        ImGui::TextDisabled("Low-frequency world-anchored tint that breaks up large flat areas.");
+        if (ImGui::DragFloat("Strength##Macro", &at.macroVariationStrength, 0.01f,
+                             0.0f, terrain::MACRO_VARIATION_MAX_STRENGTH, "%.2f"))
+        {
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("0 disables it exactly: the shader's multiplier becomes 1.0 and the\n"
+                              "composite is bit-identical to a terrain without macro variation.\n"
+                              "Costs no texture fetch (the noise is procedural) and is baked into\n"
+                              "RVT pages, so it is paid once per page rather than every frame.");
+        }
+
+        ImGui::BeginDisabled(at.macroVariationStrength <= 0.0f);
+        if (ImGui::DragFloat("Size A (m)##Macro", &at.macroVariationSize0, 1.0f,
+                             terrain::MACRO_VARIATION_MIN_SIZE, terrain::MACRO_VARIATION_MAX_SIZE, "%.0f"))
+        {
+            onChanged();
+        }
+        if (ImGui::DragFloat("Size B (m)##Macro", &at.macroVariationSize1, 1.0f,
+                             terrain::MACRO_VARIATION_MIN_SIZE, terrain::MACRO_VARIATION_MAX_SIZE, "%.0f"))
+        {
+            onChanged();
+        }
+        ImGui::TextDisabled("Two octaves multiplied together, in world metres.");
+        int seed = static_cast<int>(at.macroVariationSeed);
+        if (ImGui::DragInt("Seed##Macro", &seed, 1.0f, 0, 65535))
+        {
+            at.macroVariationSeed = static_cast<uint32_t>(std::max(seed, 0));
+            onChanged();
+        }
+        ImGui::EndDisabled();
+
+        ImGui::Spacing();
+        ImGui::SeparatorText("Distance Tiling Rescale");
+        ImGui::TextDisabled("Blends toward a larger-scale copy of each layer as it recedes.");
+        if (ImGui::DragFloat("Strength##Rescale", &at.distanceRescaleStrength, 0.01f,
+                             0.0f, terrain::DISTANCE_RESCALE_MAX_STRENGTH, "%.2f"))
+        {
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(!)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Unlike macro variation this costs a SECOND texture fetch per layer\n"
+                              "(albedo only), so it is compiled into the shader only while the\n"
+                              "strength is above 0 and the scale is below 1. At 0 the extra fetch\n"
+                              "does not exist in the shader at all.\n\n"
+                              "With RVT on, distant terrain is already served from baked pages whose\n"
+                              "mip chain mitigates repetition, so this mainly helps the RVT-off and\n"
+                              "page-streaming paths.");
+        }
+
+        ImGui::BeginDisabled(at.distanceRescaleStrength <= 0.0f);
+        if (ImGui::DragFloat("Far Scale##Rescale", &at.distanceRescaleScale, 0.01f,
+                             terrain::DISTANCE_RESCALE_MIN_SCALE, terrain::DISTANCE_RESCALE_MAX_SCALE, "%.2f"))
+        {
+            onChanged();
+        }
+        ImGui::TextDisabled("UV multiplier for the far tap; 0.25 reads 4x larger. 1.0 disables it.");
+        if (ImGui::DragFloat("Knee (log2)##Rescale", &at.distanceRescaleKnee, 0.1f,
+                             terrain::DISTANCE_RESCALE_MIN_KNEE, terrain::DISTANCE_RESCALE_MAX_KNEE, "%.1f"))
+        {
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Where the fade starts, in log2(texture repeats per output pixel).\n"
+                              "-7 is one repeat per 128 pixels — about where a repeat stops reading\n"
+                              "as detail and starts reading as a pattern. Lower = starts nearer.");
+        }
+        if (ImGui::DragFloat("Fade Width (log2)##Rescale", &at.distanceRescaleWidth, 0.1f,
+                             terrain::DISTANCE_RESCALE_MIN_WIDTH, terrain::DISTANCE_RESCALE_MAX_WIDTH, "%.1f"))
+        {
+            onChanged();
+        }
+        ImGui::EndDisabled();
+
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
         ImGui::Separator();
     }
 
@@ -351,6 +456,73 @@ namespace windows
                 if (ImGui::DragFloat("Tiling", &layer.tilingScale, 0.01f, 0.01f, 100.0f))
                 {
                     onChanged();
+                }
+
+                // VK-1612 hex-tile stochastic sampling, per layer because the cost is per layer.
+                if (ImGui::Checkbox("Hex Anti-Tiling", &layer.hexTiling))
+                {
+                    onChanged();
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(!)");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Samples this layer three times on a randomly offset hexagonal\n"
+                                      "lattice and blends the taps, so the exemplar stops repeating on a\n"
+                                      "visible grid. Costs 3x the albedo and normal fetches FOR THIS LAYER;\n"
+                                      "layers with it off are unaffected.\n\n"
+                                      "With RVT on, most fragments read a baked page instead of running the\n"
+                                      "composite, so the steady-state frame cost is close to zero and the\n"
+                                      "work is paid once per page at bake time.\n\n"
+                                      "Needs an albedo texture: a layer without one composites a constant\n"
+                                      "colour, and re-tiling a constant does nothing.");
+                }
+                if (layer.hexTiling)
+                {
+                    ImGui::Indent(8.0f);
+                    if (ImGui::DragFloat("Cell Scale##Hex", &layer.hexCellScale, 0.05f,
+                                         terrain::MIN_HEX_TILING_CELL_SCALE,
+                                         terrain::MAX_HEX_TILING_CELL_SCALE, "%.2f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::TextDisabled("Hex cells per texture repeat.");
+                    if (ImGui::DragFloat("Blend Contrast##Hex", &layer.hexContrast, 0.1f,
+                                         terrain::MIN_HEX_TILING_CONTRAST,
+                                         terrain::MAX_HEX_TILING_CONTRAST, "%.1f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("How hard the three taps are sharpened toward a single winner.\n"
+                                          "Too low and the taps average into visible ghosting; too high and\n"
+                                          "the hexagon edges themselves become visible. Around 4 is the\n"
+                                          "published sweet spot (ghosting below 2, hex structure above 8).");
+                    }
+                    if (ImGui::DragFloat("Rotation##Hex", &layer.hexRotation, 0.01f,
+                                         0.0f, terrain::MAX_HEX_TILING_ROTATION, "%.2f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Randomly rotates each hex tile. Offsetting alone leaves every tap\n"
+                                          "in the same orientation, and blending a periodic texture with\n"
+                                          "itself at a shifted phase can cancel detail rather than vary it;\n"
+                                          "rotation breaks that up. Defaults to 0, which is what the\n"
+                                          "reference implementation ships, because rotation also swirls any\n"
+                                          "deliberate directional grain in the texture.");
+                    }
+                    if (!layer.materialRef.isValid())
+                    {
+                        ImGui::TextDisabled("Hex anti-tiling needs a material with an albedo texture");
+                    }
+                    ImGui::Unindent(8.0f);
                 }
 
                 ImGui::Spacing();

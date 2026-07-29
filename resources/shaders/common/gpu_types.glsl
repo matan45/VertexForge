@@ -119,7 +119,7 @@ struct TerrainTileGPUData {
     uvec4 caveMeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
 };
 
-// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (48 bytes)
+// Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (64 bytes)
 struct TerrainLayerGPUData {
     uint albedoTextureIndex;    // Bindless index (0 = default white)
     uint normalTextureIndex;    // Bindless index (0 = default)
@@ -133,6 +133,25 @@ struct TerrainLayerGPUData {
     float heightBlendContrast;  // VK-1609: 0 = linear blend; height is sampled from ORM alpha
     float reservedPorosity;     // VK-1614 reserved (uploaded 0.0)
     float reservedSnowRetention;// VK-1614 reserved (uploaded 0.0)
+    float hexTilingStrength;    // VK-1612: 0 = this layer samples with a single tap
+    float hexCellScale;         // hex cells per texture repeat
+    float hexContrast;          // Burley weight exponent, clamped to [1, 16]
+    float hexRotationStrength;  // 0 = translation only (Mikkelsen's own default)
+};
+
+// Must match TerrainAntiTilingGPUData in GPUDrivenTypes.hpp (32 bytes).
+// VK-1611 material-global anti-tiling. Bound at binding 2 of the weight-map set — live set 1,
+// bake set 0 — which is the only descriptor set BOTH the terrain pipeline and the RVT bake
+// pipeline bind, so the shared composite snippet reads the same values in both.
+struct TerrainAntiTilingGPUData {
+    float macroStrength;        // 0 = off; the composite multiplier is then exactly 1.0
+    float macroFrequency0;      // 1 / world metres per cycle
+    float macroFrequency1;
+    uint  macroSeed;            // octave 1 uses macroSeed ^ 0x9E3779B9u
+    float rescaleStrength;      // 0 = off
+    float rescaleScale;         // UV multiplier for the far tap
+    float rescaleKneeLog2;      // footprint where the fade starts
+    float rescaleWidthLog2;     // fade width, clamped away from 0
 };
 
 uvec4 getTerrainLODMeshletData(TerrainTileGPUData tile, uint lodLevel) {

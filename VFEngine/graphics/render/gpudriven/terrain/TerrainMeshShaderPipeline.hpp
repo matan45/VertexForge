@@ -7,6 +7,7 @@
 #include <vector>
 #include <array>
 #include "../GPUDrivenTypes.hpp"
+#include "TerrainCompositePermutation.hpp"
 
 namespace core
 {
@@ -93,12 +94,14 @@ namespace render::gpudriven
         // them + compiles the RVT_ENABLED shader path when rvtSampleEnabled is set, so terrain
         // keeps the disabled render/sampling path equivalent with RVT off.
         bool rvtSampleEnabled = false;
-        bool detailMapsEnabled = false;
-        // VK-1609: compiles the TERRAIN_HEIGHT_BLEND arm of the generated composite. Derived from
-        // content (any active layer selecting Height Blend with a resolved ORM), not from a render
-        // setting — so a project that never uses the feature compiles the pre-VK-1609 token stream
-        // verbatim and pays no ALU for it.
-        bool heightBlendEnabled = false;
+        // Which arm of the generated terrain composite this pipeline compiles. Every flag in here
+        // is derived from CONTENT (what the loaded terrain material actually uses), not from a
+        // render setting, so a project that never uses a feature compiles the token stream it
+        // would have compiled before that feature existed and pays nothing for it.
+        //
+        // TerrainRVTBaker::init is handed this whole struct — never individual flags — because the
+        // bake #includes the same generated composite and a mismatch is a page-boundary seam.
+        TerrainCompositePermutation compositePermutation{};
         // VK-1577: compile the reflection-probe path into the terrain shader. Terrain shares the
         // set-0 IBL layout with meshes, so this needs no extra descriptor set — but terrain MUST
         // track the mesh path, or a cave floor and the crates standing on it disagree exactly where
@@ -156,6 +159,13 @@ namespace render::gpudriven
         vk::Buffer terrainLayerBuffer;
         core::VulkanAllocation terrainLayerBufferAllocation;
         void* terrainLayerBufferMapped = nullptr;
+
+        // VK-1611 material-global anti-tiling scalars (Set 1, binding 2 — the one set the RVT
+        // bake pipeline also binds, so the shared generated composite reads the same values in
+        // the baked and live paths).
+        vk::Buffer terrainAntiTilingBuffer;
+        core::VulkanAllocation terrainAntiTilingBufferAllocation;
+        void* terrainAntiTilingBufferMapped = nullptr;
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
@@ -231,6 +241,9 @@ namespace render::gpudriven
         void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
 
         void updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers);
+        // VK-1611. Host-coherent mapped write, same as updateTerrainLayerInfo — the buffer is 32
+        // bytes and changes only when a terrain material is (re)loaded.
+        void updateTerrainAntiTiling(const TerrainAntiTilingGPUData& params);
 
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,
@@ -283,26 +296,58 @@ namespace render::gpudriven
         bool isRVTSampleEnabled() const { return rvtSampleEnabled; }
         void setDetailMapsEnabled(bool enabled)
         {
-            if (detailMapsEnabled == enabled)
+            if (compositePermutation.detailMaps == enabled)
                 return;
-            detailMapsEnabled = enabled;
+            compositePermutation.detailMaps = enabled;
             if (rvtSampleEnabled)
                 rvtSampleResourcesReady = false;
         }
-        bool areDetailMapsEnabled() const { return detailMapsEnabled; }
+        bool areDetailMapsEnabled() const { return compositePermutation.detailMaps; }
         // VK-1609: compile the height-blend arm of the generated terrain composite into the shader.
         // Returns true when the flag actually changed, so the caller knows a pipeline recreate is
-        // required (the macro is baked into the compiled shader). The RVT bake pipeline compiles
-        // the SAME generated snippet and MUST be given the same flag, or baked pages and the live
-        // fallback disagree at page-residency boundaries.
+        // required (the macro is baked into the compiled shader).
         bool setHeightBlendEnabled(bool enabled)
         {
-            if (heightBlendEnabled == enabled)
+            if (compositePermutation.heightBlend == enabled)
                 return false;
-            heightBlendEnabled = enabled;
+            compositePermutation.heightBlend = enabled;
             return true;
         }
-        bool isHeightBlendEnabled() const { return heightBlendEnabled; }
+        bool isHeightBlendEnabled() const { return compositePermutation.heightBlend; }
+        // VK-1611: compile the second, larger-scale albedo tap. Behind a macro rather than a
+        // uniform because it costs a texture fetch per layer, not ALU — MicroSplat's equivalent is
+        // documented as taking a worked example from 100 to 196 samples per pixel.
+        bool setDistanceRescaleEnabled(bool enabled)
+        {
+            if (compositePermutation.distanceRescale == enabled)
+                return false;
+            compositePermutation.distanceRescale = enabled;
+            return true;
+        }
+        bool isDistanceRescaleEnabled() const { return compositePermutation.distanceRescale; }
+        // VK-1612: compile the hex stochastic-sampling arm.
+        bool setHexTilingEnabled(bool enabled)
+        {
+            if (compositePermutation.hexTiling == enabled)
+                return false;
+            compositePermutation.hexTiling = enabled;
+            return true;
+        }
+        bool isHexTilingEnabled() const { return compositePermutation.hexTiling; }
+        // VK-1611: compile the macro-variation tail. Pure ALU, but a measured 4032 bytes of SPIR-V
+        // per shader, so it is gated rather than left to a runtime strength of 0.
+        bool setMacroVariationEnabled(bool enabled)
+        {
+            if (compositePermutation.macroVariation == enabled)
+                return false;
+            compositePermutation.macroVariation = enabled;
+            return true;
+        }
+        bool isMacroVariationEnabled() const { return compositePermutation.macroVariation; }
+        // The ONLY way callers should build TerrainRVTBaker::init's permutation argument: passing
+        // the whole struct is what makes "the bake and the live pipeline compile the same arm" a
+        // property of the type rather than of remembering to update two call sites.
+        const TerrainCompositePermutation& getCompositePermutation() const { return compositePermutation; }
         // VK-1577: returns true when the flag actually changed, so the caller knows a pipeline
         // recreate is required (the macro is baked into the compiled shader).
         bool setReflectionProbesEnabled(bool enabled)
@@ -413,6 +458,7 @@ namespace render::gpudriven
         void createRVTSampleDescriptor();
         void createWeightMapDescriptor();
         void createTerrainLayerBuffer();
+        void createTerrainAntiTilingBuffer();
         void createTileDataBuffer();
         void createStatsBuffer();
         void createTerrainDataDescriptor();

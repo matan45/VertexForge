@@ -75,6 +75,87 @@ TEST_SUITE("TerrainMaterialAsset")
         fs::remove(path);
     }
 
+    TEST_CASE("VK-1611/VK-1612 anti-tiling settings round-trip")
+    {
+        terrain::TerrainMaterialData mat;
+        mat.activeLayerCount = 1;
+        mat.layers[0].name = "Ground";
+        mat.layers[0].materialRef = makeRef();
+        mat.layers[0].hexTiling = true;
+        mat.layers[0].hexCellScale = 2.5f;
+        mat.layers[0].hexContrast = 6.5f;
+        mat.layers[0].hexRotation = 0.75f;
+
+        mat.antiTiling.macroVariationStrength = 0.35f;
+        mat.antiTiling.macroVariationSize0 = 300.0f;
+        mat.antiTiling.macroVariationSize1 = 90.0f;
+        mat.antiTiling.macroVariationSeed = 4242u;
+        mat.antiTiling.distanceRescaleStrength = 0.8f;
+        mat.antiTiling.distanceRescaleScale = 0.2f;
+        mat.antiTiling.distanceRescaleKnee = -6.5f;
+        mat.antiTiling.distanceRescaleWidth = 1.5f;
+
+        const auto path = tempPath("vf_test_terrainmat_antitiling.vfterrainmat");
+        REQUIRE(terrain::TerrainMaterialAsset::save(path.string(), mat));
+
+        auto loaded = terrain::TerrainMaterialAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+
+        CHECK(loaded->layers[0].hexTiling == true);
+        CHECK(loaded->layers[0].hexCellScale == doctest::Approx(2.5f));
+        CHECK(loaded->layers[0].hexContrast == doctest::Approx(6.5f));
+        CHECK(loaded->layers[0].hexRotation == doctest::Approx(0.75f));
+
+        CHECK(loaded->antiTiling.macroVariationStrength == doctest::Approx(0.35f));
+        CHECK(loaded->antiTiling.macroVariationSize0 == doctest::Approx(300.0f));
+        CHECK(loaded->antiTiling.macroVariationSize1 == doctest::Approx(90.0f));
+        CHECK(loaded->antiTiling.macroVariationSeed == 4242u);
+        CHECK(loaded->antiTiling.distanceRescaleStrength == doctest::Approx(0.8f));
+        CHECK(loaded->antiTiling.distanceRescaleScale == doctest::Approx(0.2f));
+        CHECK(loaded->antiTiling.distanceRescaleKnee == doctest::Approx(-6.5f));
+        CHECK(loaded->antiTiling.distanceRescaleWidth == doctest::Approx(1.5f));
+
+        fs::remove(path);
+    }
+
+    TEST_CASE("out-of-range anti-tiling values are clamped on load, not passed through")
+    {
+        // The load path clamps as well as the resolver, so a hand-edited file cannot put an
+        // infinite macro frequency or a zero-width smoothstep in front of the GPU even if it
+        // somehow bypassed the editor's sliders.
+        const auto path = tempPath("vf_test_terrainmat_clamp.vfterrainmat");
+        {
+            std::ofstream f(path);
+            f << R"JSON({
+  "version": "1.0",
+  "name": "Clamped",
+  "activeLayerCount": 1,
+  "layers": [ { "name": "L0", "hexTiling": true, "hexContrast": 999.0, "hexCellScale": 0.0 } ],
+  "antiTiling": {
+    "macroVariationStrength": 5.0,
+    "macroVariationSize0": 0.0,
+    "distanceRescaleWidth": 0.0,
+    "distanceRescaleScale": 99.0
+  }
+})JSON";
+        }
+
+        auto loaded = terrain::TerrainMaterialAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+        CHECK(loaded->layers[0].hexContrast == doctest::Approx(terrain::MAX_HEX_TILING_CONTRAST));
+        CHECK(loaded->layers[0].hexCellScale == doctest::Approx(terrain::MIN_HEX_TILING_CELL_SCALE));
+        CHECK(loaded->antiTiling.macroVariationStrength
+              == doctest::Approx(terrain::MACRO_VARIATION_MAX_STRENGTH));
+        CHECK(loaded->antiTiling.macroVariationSize0
+              == doctest::Approx(terrain::MACRO_VARIATION_MIN_SIZE));
+        CHECK(loaded->antiTiling.distanceRescaleWidth
+              == doctest::Approx(terrain::DISTANCE_RESCALE_MIN_WIDTH));
+        CHECK(loaded->antiTiling.distanceRescaleScale
+              == doctest::Approx(terrain::DISTANCE_RESCALE_MAX_SCALE));
+
+        fs::remove(path);
+    }
+
     TEST_CASE("a layer with no material source round-trips as invalid")
     {
         terrain::TerrainMaterialData mat;
@@ -132,6 +213,11 @@ TEST_SUITE("TerrainMaterialAsset")
         CHECK(loaded->layers[0].heightContrast == doctest::Approx(4.0f));
         CHECK(loaded->layers[0].enabled == true);
         CHECK_FALSE(loaded->layers[0].materialRef.isValid());
+        // VK-1611/VK-1612: absent keys must read as OFF, so an old file cannot silently acquire a
+        // new shader permutation (and the cost that comes with it) just by being loaded.
+        CHECK(loaded->layers[0].hexTiling == false);
+        CHECK(loaded->antiTiling.macroVariationStrength == doctest::Approx(0.0f));
+        CHECK(loaded->antiTiling.distanceRescaleStrength == doctest::Approx(0.0f));
 
         fs::remove(path);
     }
@@ -165,6 +251,17 @@ TEST_SUITE("TerrainMaterialAsset")
         CHECK_FALSE(layer0.contains("roughness"));
         CHECK_FALSE(layer0.contains("metallic"));
         CHECK_FALSE(layer0.contains("emissionStrength"));
+        // VK-1612 per-layer keys.
+        CHECK(layer0.contains("hexTiling"));
+        CHECK(layer0.contains("hexCellScale"));
+        CHECK(layer0.contains("hexContrast"));
+        CHECK(layer0.contains("hexRotation"));
+        // VK-1611 material-global block.
+        REQUIRE(j.contains("antiTiling"));
+        CHECK(j["antiTiling"].contains("macroVariationStrength"));
+        CHECK(j["antiTiling"].contains("distanceRescaleKnee"));
+        // Additive only: the format version is unchanged, exactly as VK-1609 did it.
+        CHECK(j["version"] == terrain::TERRAIN_MATERIAL_FORMAT_VERSION);
     }
 }
 

@@ -277,7 +277,25 @@ layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
     TerrainLayerGPUData terrainLayers[];
 };
 
+// VK-1611 material-global anti-tiling. Binding 2 of the weight-map set is the ONE home reachable
+// from both composite consumers: terrain_rvt_bake.glsl binds this very same descriptor set as its
+// set 0 (TerrainRVTBaker::init takes {weightMap, bindless, terrainData} and nothing else), so the
+// generated snippet reads identical values in the live and baked paths. Set 11 — which the story
+// originally called for — does not exist in the bake pipeline at all.
+layout(std430, set = 1, binding = 2) readonly buffer TerrainAntiTilingBuffer {
+    TerrainAntiTilingGPUData terrainAntiTiling;
+};
+
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
+
+// VK-1611: world-anchored value noise for macro variation. File scope, because the generated
+// composite is #include-d INSIDE main() and so cannot declare functions of its own.
+#include "../common/terrain_value_noise.glsl"
+#ifdef TERRAIN_HEX_TILING
+// VK-1612: must follow the bindlessTextures declaration — the helpers index it directly rather
+// than taking a sampler2D parameter.
+#include "../common/hex_tiling_terrain.glsl"
+#endif
 
 #ifdef RVT_ENABLED
 // VK-1209 terrain Runtime Virtual Texture (set 5, the previously-empty placeholder set).
@@ -502,6 +520,19 @@ void main() {
     vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
+    // VK-1611 composite contract. terrainWorldXZ is the UNSCALED world position: macro variation
+    // is world-anchored, and triplanarWorldUV is already multiplied by textureScale and is
+    // triplanar-blended inside caves, so it cannot stand in for it.
+    vec2 terrainWorldXZ = fragWorldPos.xz;
+    // Footprint = log2(texture repeats per output texel), the distance signal that is meaningful
+    // in the camera-less RVT bake as well as here. rho_MAX with no anisotropy division: Vulkan's
+    // lambda_base divides by eta and therefore follows the minor axis, which under a grazing RTS
+    // view reports "near" for distant ground. Computed rather than queried because the spec only
+    // BOUNDS hardware rho, so textureQueryLod is not reproducible across vendors — disqualifying
+    // for content baked into shared pages.
+    float terrainFootprintLog2 = 0.5 * log2(max(max(dot(triplanarWorldUVdx, triplanarWorldUVdx),
+                                                    dot(triplanarWorldUVdy, triplanarWorldUVdy)), 1e-30));
+
 #ifdef RVT_ENABLED
     // Sample the baked terrain RVT atlas (2 or 4 planes) instead of the live 8-layer composite.
     // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
@@ -529,6 +560,21 @@ void main() {
     VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
     vec4 rvtO = (rvtSurfaceEligible && rvtS.valid) ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
     bool rvtResolved = rvtSurfaceEligible && rvtS.valid && rvtO.a >= 0.5;
+    // VK-1611 bake/live parity for the footprint-driven distance rescale. A fragment that falls
+    // back to the live composite sits right next to fragments served from a baked page, and the
+    // bake computed ITS footprint from the page's texel size, not from screen derivatives. Keying
+    // the fallback off the same page's mip is what makes the rescale transition continuous across
+    // the page-residency boundary instead of drawing a seam that crawls with the camera — the
+    // failure mode VK-1609 documented and that an RVT-off test cannot see.
+    //
+    // The bake's world step per fragment is exactly the page's texel size, T0 * 2^mip: it expands
+    // the page rect by VT_BORDER / VT_PAGE_INTERIOR and then rasterizes the full 128-texel tile,
+    // and those two cancel. T0 is the mip-0 world texel size. Selected branchlessly; this sits in
+    // uniform control flow, above the divergent branch, so no derivative is taken inside it.
+    float rvtWorldTexel0 = 1.0 / max(rvt.invWorldExtent.x * rvt.virtualResTexels, 1e-20);
+    float rvtBakeFootprintLog2 = log2(max(rvtWorldTexel0 * textureScale, 1e-20))
+                               + float(rvtS.valid ? rvtS.residentMip : rvtMip);
+    terrainFootprintLog2 = rvtSurfaceEligible ? rvtBakeFootprintLog2 : terrainFootprintLog2;
     if (rvtResolved) {
         vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
         // Coverage renormalization: rvtO.a is the per-texel baked-coverage bit (1.0 baked,

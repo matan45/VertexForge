@@ -1,5 +1,6 @@
 #include "TerrainLayerPBRResolver.hpp"
 #include "../../material/MaterialPBRExtractor.hpp"
+#include "terrain/TerrainAntiTiling.hpp"
 #include "terrain/TerrainHeightBlend.hpp"
 #include <algorithm>
 
@@ -40,7 +41,33 @@ namespace render::gpudriven
                 ? std::clamp(layer.heightContrast, 0.0f, terrain::MAX_HEIGHT_BLEND_CONTRAST)
                 : 0.0f;
 
+        // VK-1612, the same seam and the same discipline: a layer that did not opt in, or that has
+        // no albedo texture to stochastically re-tile (the composite substitutes a constant
+        // vec3(0.5) for those), uploads exactly 0.0f and takes the single-tap path — which is the
+        // sampling it did before this story. The contrast clamp is a correctness bound as well as
+        // a taste one: below 1 the exponent flattens the weights instead of sharpening them,
+        // reintroducing the ghosting the ramp exists to remove.
+        const bool canHexTile = layer.hexTiling && !out.albedoPath.empty();
+        out.hexTilingStrength = canHexTile ? 1.0f : 0.0f;
+        out.hexCellScale = canHexTile
+            ? std::clamp(layer.hexCellScale, terrain::MIN_HEX_TILING_CELL_SCALE,
+                         terrain::MAX_HEX_TILING_CELL_SCALE)
+            : 0.0f;
+        out.hexContrast = canHexTile
+            ? std::clamp(layer.hexContrast, terrain::MIN_HEX_TILING_CONTRAST,
+                         terrain::MAX_HEX_TILING_CONTRAST)
+            : 0.0f;
+        out.hexRotationStrength = canHexTile
+            ? std::clamp(layer.hexRotation, 0.0f, terrain::MAX_HEX_TILING_ROTATION)
+            : 0.0f;
+
         return out;
+    }
+
+    bool terrainMaterialWantsHexTiling(const std::vector<ResolvedTerrainLayerPBR>& layers)
+    {
+        return std::any_of(layers.begin(), layers.end(),
+                           [](const ResolvedTerrainLayerPBR& l) { return l.hexTilingStrength > 0.0f; });
     }
 
     bool terrainMaterialWantsDetailMaps(const std::vector<ResolvedTerrainLayerPBR>& layers)
@@ -50,5 +77,44 @@ namespace render::gpudriven
                            {
                                return !l.normalPath.empty() || !l.emissionPath.empty();
                            });
+    }
+
+    TerrainAntiTilingGPUData resolveTerrainAntiTiling(const terrain::TerrainAntiTilingSettings& settings)
+    {
+        TerrainAntiTilingGPUData out{};
+
+        out.macroStrength = std::clamp(settings.macroVariationStrength,
+                                       0.0f, terrain::MACRO_VARIATION_MAX_STRENGTH);
+        // macroVariationFrequency clamps the size before inverting, so the uploaded frequency is
+        // always finite. That matters: the composite's identity-at-strength-0 argument needs
+        // finite inputs, exactly like VK-1609's exp2 clamp.
+        out.macroFrequency0 = terrain::macroVariationFrequency(settings.macroVariationSize0);
+        out.macroFrequency1 = terrain::macroVariationFrequency(settings.macroVariationSize1);
+        out.macroSeed = settings.macroVariationSeed;
+
+        out.rescaleStrength = std::clamp(settings.distanceRescaleStrength,
+                                         0.0f, terrain::DISTANCE_RESCALE_MAX_STRENGTH);
+        out.rescaleScale = std::clamp(settings.distanceRescaleScale,
+                                      terrain::DISTANCE_RESCALE_MIN_SCALE,
+                                      terrain::DISTANCE_RESCALE_MAX_SCALE);
+        out.rescaleKneeLog2 = std::clamp(settings.distanceRescaleKnee,
+                                         terrain::DISTANCE_RESCALE_MIN_KNEE,
+                                         terrain::DISTANCE_RESCALE_MAX_KNEE);
+        out.rescaleWidthLog2 = std::clamp(settings.distanceRescaleWidth,
+                                          terrain::DISTANCE_RESCALE_MIN_WIDTH,
+                                          terrain::DISTANCE_RESCALE_MAX_WIDTH);
+
+        return out;
+    }
+
+    bool terrainMaterialWantsDistanceRescale(const TerrainAntiTilingGPUData& params)
+    {
+        return params.rescaleStrength > 0.0f
+            && params.rescaleScale < terrain::DISTANCE_RESCALE_MAX_SCALE;
+    }
+
+    bool terrainMaterialWantsMacroVariation(const TerrainAntiTilingGPUData& params)
+    {
+        return params.macroStrength > 0.0f;
     }
 }
