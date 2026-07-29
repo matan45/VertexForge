@@ -130,6 +130,9 @@ namespace terrain
                             layer.materialRef = serialization::readAssetRef(layerJson, "materialRef");
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
                             layer.blendMode = stringToLayerBlendMode(layerJson.value("blendMode", "Linear"));
+                            // VK-1609. Purely additive key: a file written before this story simply
+                            // takes the default, which is why no format-version bump is needed.
+                            layer.heightContrast = layerJson.value("heightContrast", 4.0f);
                             layer.enabled = layerJson.value("enabled", true);
 
                             if (layer.tilingScale <= 0.0f)
@@ -138,6 +141,14 @@ namespace terrain
                                     "Layer {} has invalid tilingScale {}, clamping to 0.01",
                                     i, layer.tilingScale));
                                 layer.tilingScale = 0.01f;
+                            }
+
+                            if (layer.heightContrast < 0.0f || layer.heightContrast > MAX_HEIGHT_BLEND_CONTRAST)
+                            {
+                                logWarningLimited(std::format(
+                                    "Layer {} has out-of-range heightContrast {}, clamping to [0, {}]",
+                                    i, layer.heightContrast, MAX_HEIGHT_BLEND_CONTRAST));
+                                layer.heightContrast = std::clamp(layer.heightContrast, 0.0f, MAX_HEIGHT_BLEND_CONTRAST);
                             }
                         }
                         catch (const std::exception& e)
@@ -188,6 +199,7 @@ namespace terrain
             serialization::writeAssetRef(layerJson, "materialRef", layer.materialRef);
             layerJson["tilingScale"] = layer.tilingScale;
             layerJson["blendMode"] = blendModeToString(layer.blendMode);
+            layerJson["heightContrast"] = layer.heightContrast;
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
         }

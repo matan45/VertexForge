@@ -530,6 +530,12 @@ namespace render::gpudriven
         {
             terrainShader->addMacroDefinition("TERRAIN_DETAIL_MAPS");
         }
+        if (heightBlendEnabled)
+        {
+            // VK-1609 — must be kept in lockstep with TerrainRVTBaker::init, which compiles the
+            // same generated composite for the bake.
+            terrainShader->addMacroDefinition("TERRAIN_HEIGHT_BLEND");
+        }
         if (rtSpotShadowEnabled && rtSpotShadowMaskLayout)
         {
             terrainShader->addMacroDefinition("RT_SPOT_SHADOW_ENABLED");

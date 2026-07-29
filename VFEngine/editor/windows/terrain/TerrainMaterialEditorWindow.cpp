@@ -267,8 +267,9 @@ namespace windows
                     {
                         ImGui::SetTooltip("Terrain layers source PBR from the linked .vfMat or .vfMatInstance.\n"
                                           "Supported maps: albedo, packed ORM (Occlusion=R, Roughness=G, "
-                                          "Metallic=B), normal, and emission.\n"
-                                          "Separate AO, roughness, and metallic textures are not supported.");
+                                          "Metallic=B, Height=A), normal, and emission.\n"
+                                          "Separate AO, roughness, metallic, and height textures are not\n"
+                                          "supported - pack height into the ORM alpha channel instead.");
                     }
                     ImGui::SameLine();
                     std::string matDisplay = !layer.materialRef.isValid() ? "(None)" :
@@ -308,17 +309,42 @@ namespace windows
                     ImGui::TextDisabled("No material assigned (layer renders with defaults)");
                 }
 
-                if (i > 0)
+                // VK-1609: shown for EVERY layer, including layer 0. The composite is a symmetric
+                // 8-channel blend with no privileged base layer, and rock - the layer most likely
+                // to want height blending - is frequently layer 0.
                 {
-                    const char* blendModes[] = {"Linear", "Overlay"};
-                    int currentBlend = (layer.blendMode == terrain::TerrainLayerBlendMode::Overlay) ? 1 : 0;
+                    const char* blendModes[] = {"Linear", "Height Blend"};
+                    int currentBlend = (layer.blendMode == terrain::TerrainLayerBlendMode::HeightBlend) ? 1 : 0;
 
                     if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, IM_ARRAYSIZE(blendModes)))
                     {
                         layer.blendMode = (currentBlend == 1)
-                            ? terrain::TerrainLayerBlendMode::Overlay
+                            ? terrain::TerrainLayerBlendMode::HeightBlend
                             : terrain::TerrainLayerBlendMode::Linear;
                         onChanged();
+                    }
+                }
+
+                if (layer.blendMode == terrain::TerrainLayerBlendMode::HeightBlend)
+                {
+                    if (ImGui::DragFloat("Height Contrast", &layer.heightContrast, 0.05f,
+                                         0.0f, terrain::MAX_HEIGHT_BLEND_CONTRAST, "%.2f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("Sharpness of the height transition: higher values make this layer\n"
+                                          "poke through neighbours along its own height detail instead of\n"
+                                          "fading by splat weight. 0 = plain linear blend.\n\n"
+                                          "Height comes from the ALPHA channel of this layer material's packed\n"
+                                          "ORM texture. A layer with no ORM texture blends linearly.");
+                    }
+                    if (!layer.materialRef.isValid())
+                    {
+                        ImGui::TextDisabled("Height blend needs a material with a packed ORM texture");
                     }
                 }
 

@@ -82,7 +82,8 @@ namespace render::gpudriven
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  terrain.detailMaps);
+                                  terrain.detailMaps,
+                                  terrain.pipeline->isHeightBlendEnabled());
         }
     }
 
@@ -129,7 +130,8 @@ namespace render::gpudriven
                                           bindlessTextures->getDescriptorSetLayout(),
                                           terrain.pipeline->getTerrainDataLayout(),
                                           layout.planeFormats,
-                                          terrain.detailMaps);
+                                          terrain.detailMaps,
+                                          terrain.pipeline->isHeightBlendEnabled());
                 }
             }
             else
@@ -168,6 +170,48 @@ namespace render::gpudriven
             shadowSystem->getShadowDataLayout(),
             shadowSystem->getShadowTextureLayout(),
             cachedColorFormats, cachedDepthFormat);
+    }
+
+    void GPUDrivenRenderer::syncTerrainHeightBlendPermutation()
+    {
+        if (!initialized || !terrain.pipeline)
+            return;
+
+        // resolveTerrainLayerPBR already forced the contrast to 0 for every layer without a real
+        // height source, so this is exactly "does any layer actually height-blend".
+        bool anyHeightBlend = false;
+        for (const auto& l : terrain.layerData)
+        {
+            if (l.heightBlendContrast > 0.0f)
+            {
+                anyHeightBlend = true;
+                break;
+            }
+        }
+
+        if (!terrain.pipeline->setHeightBlendEnabled(anyHeightBlend))
+            return; // unchanged - no recompile
+
+        recreateTerrainPipelineForRVT(); // performs the single device-idle wait for this transition
+
+        // The bake shader #includes the same generated composite, so it must be recompiled with the
+        // matching macro. init() early-returns once its pipeline exists, hence the full reset. Every
+        // resident page was baked with the old composite, so they all have to go.
+        if (vtCache.rvtEnabled && terrainRVTBaker && bindlessTextures)
+        {
+            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
+            terrainRVTBaker.reset();
+            terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
+            terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
+                                  bindlessTextures->getDescriptorSetLayout(),
+                                  terrain.pipeline->getTerrainDataLayout(),
+                                  layout.planeFormats,
+                                  terrain.detailMaps,
+                                  anyHeightBlend);
+            rvtInvalidateAll = true;
+        }
+
+        vfLogInfo("VK-1609 terrain height blending: {}", anyHeightBlend ? "ON" : "OFF");
     }
 
     bool GPUDrivenRenderer::isTerrainRVTActive() const
@@ -344,7 +388,8 @@ namespace render::gpudriven
                                   bindlessTextures->getDescriptorSetLayout(),
                                   terrain.pipeline->getTerrainDataLayout(),
                                   layout.planeFormats,
-                                  enabled);
+                                  enabled,
+                                  terrain.pipeline->isHeightBlendEnabled());
             rvtFrameCounter = 0;
             rvtInvalidateAll = false;
         }
@@ -417,13 +462,31 @@ namespace render::gpudriven
                         && (!pbr.metallicTexturePath.empty() || !pbr.roughnessTexturePath.empty() || !pbr.aoTexturePath.empty());
                     const bool droppedAlbedoTint = pbr.albedoTexturePath.empty()
                         && (pbr.albedo.r != 1.0f || pbr.albedo.g != 1.0f || pbr.albedo.b != 1.0f);
-                    if ((separateOrmMaps || droppedAlbedoTint) && warnedUnrepresentableMaterials.insert(matPath).second)
+                    // VK-1609: terrain reads per-layer height from ORM alpha, so a standalone Height
+                    // slot is dropped, and selecting Height Blend without any ORM is a silent no-op
+                    // (resolveTerrainLayerPBR forces the contrast to 0). Both are actionable for the
+                    // artist, and both are free to detect from data already extracted above.
+                    const bool droppedHeightMap = !pbr.heightTexturePath.empty();
+                    const bool heightBlendNoOrm =
+                        layer.blendMode == terrain::TerrainLayerBlendMode::HeightBlend && !pbr.usesORM();
+                    if ((separateOrmMaps || droppedAlbedoTint || droppedHeightMap || heightBlendNoOrm)
+                        && warnedUnrepresentableMaterials.insert(matPath).second)
                     {
+                        std::string dropped;
+                        auto addDropped = [&dropped](const char* what)
+                        {
+                            if (!dropped.empty()) dropped += " + ";
+                            dropped += what;
+                        };
+                        if (separateOrmMaps) addDropped("separate metallic/roughness/AO maps");
+                        if (droppedAlbedoTint) addDropped("albedo tint");
+                        if (droppedHeightMap) addDropped("standalone height map (terrain reads height "
+                                                         "from ORM alpha - repack it into the ORM)");
+                        if (heightBlendNoOrm) addDropped("height blend selected but the material has no "
+                                                         "packed ORM, so this layer blends linearly");
                         vfLogWarning("GPUDrivenRenderer: terrain material source '{}' uses PBR data terrain cannot "
-                                     "represent ({}{}); falling back to packed ORM / scalars.",
-                                     matPath,
-                                     separateOrmMaps ? "separate metallic/roughness/AO maps" : "",
-                                     droppedAlbedoTint ? (separateOrmMaps ? " + albedo tint" : "albedo tint") : "");
+                                     "represent ({}); falling back to packed ORM / scalars.",
+                                     matPath, dropped);
                     }
                 }
                 else
@@ -452,6 +515,10 @@ namespace render::gpudriven
             gpuLayer.metallic = r.metallic;
             gpuLayer.ao = r.ao;
             gpuLayer.emissionStrength = r.emissionStrength;
+            // VK-1609. Exactly 0 for every layer with no height source, which is what keeps such a
+            // layer bit-identical to the pre-VK-1609 composite even inside the height permutation.
+            gpuLayer.heightBlendContrast = r.heightBlendContrast;
+            // VK-1614 reserved fields stay at the value-initialized 0 from `gpuLayer = {}` above.
         }
 
         {
@@ -473,6 +540,12 @@ namespace render::gpudriven
         {
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
         }
+
+        // VK-1609. Deliberately NOT routed through a setter that re-enters this function (the way
+        // setTerrainDetailMaps does): unlike detail maps, the height-blend flag does not gate which
+        // textures get registered, so terrain.layerData is already correct and only the compiled
+        // shader needs to change.
+        syncTerrainHeightBlendPermutation();
 
         terrain.currentMaterialPath = materialPath;
         terrain.layerDataDirty = false;

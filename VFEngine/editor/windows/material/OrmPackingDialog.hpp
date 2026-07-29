@@ -12,6 +12,7 @@ namespace editor::materialeditor
         std::string aoPath;
         std::string roughnessPath;
         std::string metallicPath;
+        std::string heightPath; // VK-1609: packs into ORM alpha for terrain height blending
         std::string outputPath;
 
         importConfig::TextureCompressionMode compressionMode = importConfig::TextureCompressionMode::BC;

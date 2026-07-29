@@ -195,6 +195,9 @@ namespace render::gpudriven
     };
     static_assert(sizeof(TerrainTileGPUData) == 272);
 
+    // Every member is a 4-byte scalar on purpose: std430 then gives base alignment 4 and an array
+    // stride equal to sizeof, so C++ and gpu_types.glsl agree with no 16-byte rounding. Adding a
+    // vec2/vec3/vec4 member would raise the base alignment and silently desync the two layouts.
     struct TerrainLayerGPUData
     {
         uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
@@ -206,12 +209,31 @@ namespace render::gpudriven
         float ao;                      // Scalar fallback when no ORM
         float emissionStrength;        // Emission intensity
         uint32_t emissionTextureIndex; // Bindless index (0 = no emission texture)
+        // VK-1609 height-blended compositing. Per-texel height rides the ORM texture's alpha
+        // channel, so it costs no extra fetch and no extra bindless slot.
+        // 0.0 == linear: the generated composite's mix() then returns EXACTLY 1.0 and the layer's
+        // contribution is bit-identical to the pre-VK-1609 weighted average. resolveTerrainLayerPBR
+        // clamps to [0, terrain::MAX_HEIGHT_BLEND_CONTRAST]; that bound keeps exp2's argument in
+        // [-8, 8] and is REQUIRED for the mix() exactness argument to hold (an infinity here would
+        // make 0.0 * y == NaN and poison the linear case).
+        float heightBlendContrast;     // 0 = this layer blends linearly
+        // VK-1614 (local wetness / snow) reservation — uploaded 0.0 until that story lands, so the
+        // epic pays exactly ONE ABI bump. 48 is also a 16-byte multiple, which keeps a later vec4
+        // member from silently changing the std430 array stride.
+        float reservedPorosity;
+        float reservedSnowRetention;
     };
-    static_assert(sizeof(TerrainLayerGPUData) == 36);
+    static_assert(sizeof(TerrainLayerGPUData) == 48);
+    static_assert(alignof(TerrainLayerGPUData) == 4);
+    static_assert(sizeof(TerrainLayerGPUData) % 16 == 0,
+                  "keep a 16-byte multiple so a later vec4 member cannot desync the std430 stride");
     static_assert(offsetof(TerrainLayerGPUData, albedoTextureIndex) == 0);
     static_assert(offsetof(TerrainLayerGPUData, normalTextureIndex) == 4);
     static_assert(offsetof(TerrainLayerGPUData, ormTextureIndex) == 12);
     static_assert(offsetof(TerrainLayerGPUData, emissionTextureIndex) == 32);
+    static_assert(offsetof(TerrainLayerGPUData, heightBlendContrast) == 36);
+    static_assert(offsetof(TerrainLayerGPUData, reservedPorosity) == 40);
+    static_assert(offsetof(TerrainLayerGPUData, reservedSnowRetention) == 44);
 
     struct alignas(16) TerrainCullingStats
     {

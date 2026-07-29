@@ -53,7 +53,11 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout bindlessLayout,    // set 1 (bindless b0)
                   vk::DescriptorSetLayout terrainDataLayout, // set 2 (tiles b0)
                   const std::vector<vk::Format>& planeFormats,
-                  bool detailMaps);
+                  bool detailMaps,
+                  // VK-1609: MUST match TerrainMeshShaderPipeline's flag. The bake and the live
+                  // fallback compile the same generated composite; a mismatch shows up as a hard
+                  // seam wherever a page is resident, and is invisible with RVT off.
+                  bool heightBlend);
         void cleanup();
         [[nodiscard]] bool isReady() const { return graphicsPipeline != nullptr; }
 

@@ -45,7 +45,8 @@ TEST_SUITE("TerrainMaterialAsset")
         mat.layers[1].name = "Rock";
         mat.layers[1].materialRef = makeRef();
         mat.layers[1].tilingScale = 2.5f;
-        mat.layers[1].blendMode = terrain::TerrainLayerBlendMode::Overlay;
+        mat.layers[1].blendMode = terrain::TerrainLayerBlendMode::HeightBlend;
+        mat.layers[1].heightContrast = 7.25f;
         mat.layers[1].enabled = false;
 
         const auto path = tempPath("vf_test_terrainmat_roundtrip.vfterrainmat");
@@ -61,12 +62,14 @@ TEST_SUITE("TerrainMaterialAsset")
         CHECK(loaded->layers[0].materialRef == mat.layers[0].materialRef);
         CHECK(loaded->layers[0].tilingScale == doctest::Approx(4.0f));
         CHECK(loaded->layers[0].blendMode == terrain::TerrainLayerBlendMode::Linear);
+        CHECK(loaded->layers[0].heightContrast == doctest::Approx(4.0f)); // VK-1609 default
         CHECK(loaded->layers[0].enabled == true);
 
         CHECK(loaded->layers[1].name == "Rock");
         CHECK(loaded->layers[1].materialRef == mat.layers[1].materialRef);
         CHECK(loaded->layers[1].tilingScale == doctest::Approx(2.5f));
-        CHECK(loaded->layers[1].blendMode == terrain::TerrainLayerBlendMode::Overlay);
+        CHECK(loaded->layers[1].blendMode == terrain::TerrainLayerBlendMode::HeightBlend);
+        CHECK(loaded->layers[1].heightContrast == doctest::Approx(7.25f));
         CHECK(loaded->layers[1].enabled == false);
 
         fs::remove(path);
@@ -93,6 +96,8 @@ TEST_SUITE("TerrainMaterialAsset")
     {
         // A pre-VK-1486 file: inline texture refs + PBR scalars, no materialRef key. The removed
         // inline PBR is ignored; terrain-local fields (name/tiling/blend/enabled) still load.
+        // VK-1609: "Overlay" was retired and now loads as Linear (it always rendered as a plain
+        // linear average anyway), and the absent heightContrast key takes its default.
         const auto path = tempPath("vf_test_terrainmat_legacy.vfterrainmat");
         {
             std::ofstream f(path);
@@ -123,7 +128,8 @@ TEST_SUITE("TerrainMaterialAsset")
         CHECK(loaded->name == "Legacy");
         CHECK(loaded->layers[0].name == "OldLayer");
         CHECK(loaded->layers[0].tilingScale == doctest::Approx(3.0f));
-        CHECK(loaded->layers[0].blendMode == terrain::TerrainLayerBlendMode::Overlay);
+        CHECK(loaded->layers[0].blendMode == terrain::TerrainLayerBlendMode::Linear);
+        CHECK(loaded->layers[0].heightContrast == doctest::Approx(4.0f));
         CHECK(loaded->layers[0].enabled == true);
         CHECK_FALSE(loaded->layers[0].materialRef.isValid());
 

@@ -24,6 +24,9 @@ namespace render::gpudriven
         float ao = 1.0f;
         float emissionStrength = 0.0f;
         float tilingScale = 1.0f; // always terrain-layer-local, never sourced from a material
+        // VK-1609: height-blend contrast uploaded to TerrainLayerGPUData. 0 => this layer blends
+        // linearly, bit-identically to the pre-VK-1609 composite.
+        float heightBlendContrast = 0.0f;
     };
 
     // Resolves a terrain layer's terrain-supported PBR fields from a referenced material's
@@ -34,6 +37,11 @@ namespace render::gpudriven
     //   - pbr == nullptr  => no material assigned, or extraction failed: struct defaults
     //                        (empty texture paths + default scalars).
     //   - tilingScale     => always the layer's own value (never sourced from a material).
+    //   - heightBlendContrast (VK-1609) => the layer's own heightContrast, clamped to
+    //                        [0, terrain::MAX_HEIGHT_BLEND_CONTRAST], but ONLY when the layer
+    //                        selects HeightBlend and the resolved material actually has a packed
+    //                        ORM (height rides ORM alpha). Otherwise exactly 0.0f, which is what
+    //                        makes such a layer bit-identical to the pre-VK-1609 linear composite.
     ResolvedTerrainLayerPBR resolveTerrainLayerPBR(const terrain::TerrainMaterialLayer& layer,
                                                    const mesh::ExtractedPBRValues* pbr);
 }

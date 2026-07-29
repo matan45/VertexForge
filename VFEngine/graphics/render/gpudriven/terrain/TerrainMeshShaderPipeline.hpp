@@ -94,6 +94,11 @@ namespace render::gpudriven
         // keeps the disabled render/sampling path equivalent with RVT off.
         bool rvtSampleEnabled = false;
         bool detailMapsEnabled = false;
+        // VK-1609: compiles the TERRAIN_HEIGHT_BLEND arm of the generated composite. Derived from
+        // content (any active layer selecting Height Blend with a resolved ORM), not from a render
+        // setting — so a project that never uses the feature compiles the pre-VK-1609 token stream
+        // verbatim and pays no ALU for it.
+        bool heightBlendEnabled = false;
         // VK-1577: compile the reflection-probe path into the terrain shader. Terrain shares the
         // set-0 IBL layout with meshes, so this needs no extra descriptor set — but terrain MUST
         // track the mesh path, or a cave floor and the crates standing on it disagree exactly where
@@ -285,6 +290,19 @@ namespace render::gpudriven
                 rvtSampleResourcesReady = false;
         }
         bool areDetailMapsEnabled() const { return detailMapsEnabled; }
+        // VK-1609: compile the height-blend arm of the generated terrain composite into the shader.
+        // Returns true when the flag actually changed, so the caller knows a pipeline recreate is
+        // required (the macro is baked into the compiled shader). The RVT bake pipeline compiles
+        // the SAME generated snippet and MUST be given the same flag, or baked pages and the live
+        // fallback disagree at page-residency boundaries.
+        bool setHeightBlendEnabled(bool enabled)
+        {
+            if (heightBlendEnabled == enabled)
+                return false;
+            heightBlendEnabled = enabled;
+            return true;
+        }
+        bool isHeightBlendEnabled() const { return heightBlendEnabled; }
         // VK-1577: returns true when the flag actually changed, so the caller knows a pipeline
         // recreate is required (the macro is baked into the compiled shader).
         bool setReflectionProbesEnabled(bool enabled)

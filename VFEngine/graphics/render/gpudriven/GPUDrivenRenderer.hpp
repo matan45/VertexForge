@@ -855,6 +855,11 @@ namespace render::gpudriven
         // VK-1209: rebuild the terrain pipeline so set 5 + RVT_ENABLED match rvtSampleEnabled
         // (used when the RVT config is toggled at runtime). Gathers the same layouts as init.
         void recreateTerrainPipelineForRVT();
+        // VK-1609: derive TERRAIN_HEIGHT_BLEND from the freshly resolved terrain.layerData (any
+        // layer with a non-zero height-blend contrast) and, if it changed, recompile the terrain
+        // pipeline AND rebuild the RVT baker so the live composite and the baked pages stay in
+        // lockstep. Cheap no-op when the flag is unchanged.
+        void syncTerrainHeightBlendPermutation();
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,
