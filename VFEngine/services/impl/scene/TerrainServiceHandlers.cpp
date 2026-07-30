@@ -13,6 +13,9 @@
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/terrain/PaintModeEvents.hpp"
+#include "../../events/terrain/HoleModeEvents.hpp"
+#include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/foliage/FoliageEvents.hpp"
@@ -278,7 +281,45 @@ namespace services
         dispatcher.registerCommandHandler<events::holeBrush::ApplyHoleBrushCommand>(
             [this](const events::holeBrush::ApplyHoleBrushCommand& cmd)
             {
-                applyHoleBrush(cmd.worldPosition, cmd.erase);
+                applyHoleBrush(cmd.worldPosition, cmd.erase, cmd.isFirstApplication);
+            });
+
+        // VK-1615: closes the open sculpt/paint/hole/mask stroke and pushes its undo entry.
+        dispatcher.registerCommandHandler<events::terrain::FinalizeTerrainStrokeCommand>(
+            [this](const events::terrain::FinalizeTerrainStrokeCommand&)
+            {
+                finalizeTerrainStroke();
+            });
+
+        // Undo/redo restore of a terrain stroke (heights / weights / hole masks).
+        dispatcher.registerCommandHandler<events::terrain::RestoreStrokeStateCommand>(
+            [this](const events::terrain::RestoreStrokeStateCommand& cmd)
+            {
+                restoreStrokeState(cmd.entityId, cmd.tiles);
+            });
+
+        // Undo/redo restore of a wetness/snow surface-mask stroke.
+        dispatcher.registerCommandHandler<events::terrain::RestoreSurfaceMaskRegionCommand>(
+            [this](const events::terrain::RestoreSurfaceMaskRegionCommand& cmd)
+            {
+                restoreSurfaceMaskRegion(cmd);
+            });
+
+        // Leaving paint or hole mode mid-drag must not silently drop the stroke's undo
+        // entry (the bug the cave brush had). Sculpt's equivalent is folded into the
+        // existing SculptModeChangedNotification subscription below.
+        dispatcher.subscribe<events::paint::PaintModeChangedNotification>(
+            [this](const events::paint::PaintModeChangedNotification& n)
+            {
+                if (!n.isActive)
+                    finalizeTerrainStroke();
+            });
+
+        dispatcher.subscribe<events::hole::HoleModeChangedNotification>(
+            [this](const events::hole::HoleModeChangedNotification& n)
+            {
+                if (!n.isActive)
+                    finalizeTerrainStroke();
             });
 
         dispatcher.registerCommandHandler<events::brush::ResetRampCommand>(
@@ -298,7 +339,10 @@ namespace services
             [this](const events::sculpt::SculptModeChangedNotification& n)
             {
                 if (!n.isActive)
+                {
                     rampStartCaptured = false;
+                    finalizeTerrainStroke(); // VK-1615: no-op when no stroke is open
+                }
             });
 
         dispatcher.registerQueryHandler<events::brush::IsRampStartCapturedQuery>(

@@ -31,4 +31,17 @@ namespace events::undoredo {
         std::string_view getName() const override { return "EndBatch"; }
     };
 
+    // Applies the persisted undo-history limits. 0 == unlimited for either field.
+    // maxBytes exists because a depth cap cannot bound RAM: a terrain paint stroke
+    // snapshots whole tile weight maps (~532 KB per 129^2 tile, before AND after).
+    struct SetUndoHistoryLimitsCommand : ICommand<> {
+        size_t maxDepth = 50;
+        size_t maxBytes = 0;
+        std::string_view getName() const override { return "SetUndoHistoryLimits"; }
+    };
+
+    struct GetUndoHistoryStatsQuery : IQuery<services::UndoHistoryStats> {
+        std::string_view getName() const override { return "GetUndoHistoryStats"; }
+    };
+
 }

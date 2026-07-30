@@ -31,7 +31,13 @@ namespace services
         virtual std::string getRedoDescription() const = 0;
         
         virtual void beginBatch(const std::string& description) = 0;
-        
+
         virtual void endBatch() = 0;
+
+        // Per-user history limits. 0 == unlimited for either. Applied at editor
+        // startup from EditorPreferences and again whenever the preference changes.
+        virtual void setHistoryLimits(size_t maxDepth, size_t maxBytes) = 0;
+
+        virtual UndoHistoryStats getHistoryStats() const = 0;
     };
 }

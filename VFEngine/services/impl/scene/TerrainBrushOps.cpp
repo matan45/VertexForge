@@ -13,6 +13,7 @@
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
@@ -78,7 +79,12 @@ namespace services
                 }
                 else
                 {
+                    // VK-1615: ramp is atomic on the second click -- it mutates, welds
+                    // seams and rebuilds colliders in one shot -- so there is no drag
+                    // latch to close the stroke. Open and close it here.
+                    beginStroke(targetEntity->id, StrokeTool::Ramp, /*isFirstApplication=*/true);
                     applyRamp(*targetEntity, grid, rampStartPos, worldPosition, brushParams);
+                    finalizeTerrainStroke();
                     rampStartCaptured = false;
                 }
             }
@@ -115,6 +121,11 @@ namespace services
             }
             return;
         }
+
+        // VK-1615: open the sculpt stroke here rather than at the top of the function, so
+        // Ramp (which returned above with its own atomic stroke) and Stamp's
+        // !isFirstApplication early-out never open one.
+        beginStroke(targetEntity->id, StrokeTool::Sculpt, isFirstApplication);
 
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         float worldTileSize = 32.0f;
@@ -185,6 +196,13 @@ namespace services
                 gpuParams.stampHeight = stampData->height;
             }
 
+            // VK-1615: snapshot the CPU height mirror BEFORE the first dispatch that
+            // touches this tile. applyBrushGPU takes heightData by non-const reference --
+            // it uploads it, dispatches, blocks on a fence and memcpys the result back --
+            // so the CPU array is authoritative here and fully resolved on return.
+            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                       ::events::terrain::StrokeDataKind::Heights));
+
             if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
             {
                 tile->isDirty = true;
@@ -247,8 +265,14 @@ namespace services
                 maskParams.deltaTime = deltaTime;
                 maskParams.invert = invert;
 
+                // VK-1615: snapshot the painted channel's plane once per stroke, before the
+                // first dab. The mask is one world-anchored image, so the undo entry is
+                // bounded by the union of the per-dab dirty rects instead of per-tile.
+                beginSurfaceMaskStroke(targetEntity->id, maskParams.channel, isFirstApplication);
+
                 const auto dirtyRect =
                     terrain::SurfaceMaskBrushApplicator::apply(*surfaceMask, maskParams);
+                accumulateStrokeMaskDirty(dirtyRect);
                 if (!dirtyRect.isEmpty())
                 {
                     // Whole-image re-upload: the mask is one texture, and a partial vk::BufferImageCopy
@@ -264,6 +288,10 @@ namespace services
             dispatcher.publish(maskNotification);
             return;
         }
+
+        // VK-1615: only the Layers target reaches here; the wetness/snow branch above
+        // opened its own surface-mask stroke and returned.
+        beginStroke(targetEntity->id, StrokeTool::Paint, isFirstApplication);
 
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
@@ -309,6 +337,11 @@ namespace services
                 uint8_t newBase = static_cast<uint8_t>(brushParams.activeLayer);
                 if (tile->weightMap.layerIndices[0] != newBase)
                 {
+                    // VK-1615: initializeDefault wipes every channel of the whole tile, so
+                    // the snapshot has to precede it.
+                    captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                               ::events::terrain::StrokeDataKind::Weights));
+
                     tile->weightMap.initializeDefault(tile->weightMap.resolution);
                     tile->weightMap.layerIndices[0] = newBase;
                     tile->weightMapDirty = true;
@@ -334,6 +367,13 @@ namespace services
             applyParams.deltaTime = deltaTime;
             applyParams.invert = invert;
 
+            // VK-1615: apply() may evict a channel via assignChannel, which zeroes that
+            // channel and renormalises every texel of the tile -- a mutation well outside
+            // the brush footprint -- so the whole weight map (including the layerIndices
+            // palette) is snapshotted before the call.
+            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                       ::events::terrain::StrokeDataKind::Weights));
+
             if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
             {
                 tile->weightMapDirty = true;
@@ -356,7 +396,7 @@ namespace services
         }
     }
 
-    void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase)
+    void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication)
     {
         if (saveInProgress.load(std::memory_order_acquire))
             return;
@@ -374,6 +414,8 @@ namespace services
         terrain::TerrainGrid* grid = gridIt->second.get();
 
         auto brushParams = dispatcher.query(events::holeBrush::GetHoleBrushParamsQuery{});
+
+        beginStroke(targetEntity->id, StrokeTool::Hole, isFirstApplication);
 
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
@@ -409,6 +451,11 @@ namespace services
                 if (!fileCache->ensureHeightsLoaded(*tile))
                     continue;
             }
+
+            // VK-1615: must precede initializeHoleMask() so a tile that had NO hole mask
+            // before the stroke is captured as empty, and undo restores it to having none.
+            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                       ::events::terrain::StrokeDataKind::Holes));
 
             if (!tile->hasHoleMask())
                 tile->initializeHoleMask();
@@ -467,16 +514,27 @@ namespace services
         uint32_t quadCount = vertexCount - 1;
         uint32_t lastQuad = quadCount - 1;
 
+        constexpr uint8_t holeKind =
+            ::events::terrain::strokeKindBit(::events::terrain::StrokeDataKind::Holes);
+
         for (const auto& coord : modifiedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
             if (!tile || !tile->hasHoleMask())
                 continue;
 
+            // VK-1615: this helper writes FOUR neighbour tiles, none of which are in the
+            // caller's modifiedTiles list. Capturing here is what makes a hole stroke's
+            // undo cover the whole seam; captureStrokeTileBefore is a no-op when no stroke
+            // is open, so the non-brush callers are unaffected.
+            captureStrokeTileBefore(*tile, holeKind);
+
             // Sync +X neighbor: tile's last quad column == neighbor's first quad column
             terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
             if (neighborPX)
             {
+                captureStrokeTileBefore(*neighborPX, holeKind);
+
                 if (!neighborPX->hasHoleMask())
                     neighborPX->initializeHoleMask();
 
@@ -502,6 +560,8 @@ namespace services
             terrain::TerrainTile* neighborNX = grid->getTile({coord.x - 1, coord.z});
             if (neighborNX)
             {
+                captureStrokeTileBefore(*neighborNX, holeKind);
+
                 if (!neighborNX->hasHoleMask())
                     neighborNX->initializeHoleMask();
 
@@ -527,6 +587,8 @@ namespace services
             terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
             if (neighborPZ)
             {
+                captureStrokeTileBefore(*neighborPZ, holeKind);
+
                 if (!neighborPZ->hasHoleMask())
                     neighborPZ->initializeHoleMask();
 
@@ -552,6 +614,8 @@ namespace services
             terrain::TerrainTile* neighborNZ = grid->getTile({coord.x, coord.z - 1});
             if (neighborNZ)
             {
+                captureStrokeTileBefore(*neighborNZ, holeKind);
+
                 if (!neighborNZ->hasHoleMask())
                     neighborNZ->initializeHoleMask();
 
@@ -613,6 +677,11 @@ namespace services
             }
             if (fileCache)
                 fileCache->markDirty(coord);
+
+            // VK-1615: ramp is the one CPU-side sculpt brush -- it writes heightData
+            // directly in the loop below.
+            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                       ::events::terrain::StrokeDataKind::Heights));
 
             uint32_t vertCount = tile->config.getVertexCount();
             float vertSpacing = tile->config.getVertexSpacing();
@@ -681,6 +750,9 @@ namespace services
         if (modifiedTiles.empty())
             return;
 
+        constexpr uint8_t heightKind =
+            ::events::terrain::strokeKindBit(::events::terrain::StrokeDataKind::Heights);
+
         for (const auto& coord : modifiedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
@@ -690,10 +762,21 @@ namespace services
             uint32_t vertCount = tile->config.getVertexCount();
             uint32_t lastIdx = vertCount - 1;
 
+            // VK-1615: the averaging below writes BOTH sides of each seam, so the +X/+Z
+            // neighbours are mutated even though they are not in modifiedTiles. Capturing
+            // them here is what stops an undo from leaving a visible seam.
+            //
+            // The strokeActive guard inside captureStrokeTileBefore is load-bearing: this
+            // helper is also called by the spline-terrain handlers, which must not
+            // accumulate into a brush stroke's snapshot.
+            captureStrokeTileBefore(*tile, heightKind);
+
             // Sync +X boundary: tile's last column == neighbor's first column
             terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
             if (neighborPX && neighborPX->hasHeightData())
             {
+                captureStrokeTileBefore(*neighborPX, heightKind);
+
                 for (uint32_t z = 0; z < vertCount; ++z)
                 {
                     float avg = (tile->heightData[z * vertCount + lastIdx] +
@@ -709,6 +792,8 @@ namespace services
             terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
             if (neighborPZ && neighborPZ->hasHeightData())
             {
+                captureStrokeTileBefore(*neighborPZ, heightKind);
+
                 for (uint32_t x = 0; x < vertCount; ++x)
                 {
                     float avg = (tile->heightData[lastIdx * vertCount + x] +

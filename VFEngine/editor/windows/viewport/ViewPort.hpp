@@ -33,6 +33,7 @@ namespace windows
 
         bool sculptDragging = false;
         bool paintDragging = false;
+        bool holeDragging = false;   // VK-1615: hole strokes had no drag latch at all
         bool caveDragging = false;
         bool vegetationDragging = false;
         bool meshBrushDragging = false;

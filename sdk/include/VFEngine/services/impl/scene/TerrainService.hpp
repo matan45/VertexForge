@@ -12,6 +12,8 @@
 #include "../../providers/physics/IPhysicsProvider.hpp"
 #include "../foliage/FoliagePhysicsActivator.hpp"
 #include "terrain/TerrainSerializer.hpp"
+#include "terrain/TerrainWeightMap.hpp"
+#include "terrain/SurfaceMaskBrushApplicator.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
 #include "world/WorldTypes.hpp"
@@ -44,6 +46,12 @@ namespace components
 namespace events::caveBrush
 {
     struct CaveTileState;
+}
+
+namespace events::terrain
+{
+    struct StrokeTileState;
+    struct RestoreSurfaceMaskRegionCommand;
 }
 
 namespace services
@@ -103,6 +111,36 @@ namespace services
         };
         std::unordered_map<terrain::TileCoord, CaveStrokeTileBefore, terrain::TileCoordHash> caveStrokeBefore;
         uint64_t caveStrokeEntityId = 0;
+
+        // VK-1615 sculpt / weight-paint / hole / ramp stroke undo. Same shape as the cave
+        // block above, with two differences: a per-kind bitmask (so a sculpt stroke does
+        // not claim, and therefore cannot clobber, a tile's holes) and an explicit
+        // strokeActive latch. The latch is load-bearing -- syncBrushBoundaryHeights is
+        // shared with the spline tool, and without it the spline handlers would accumulate
+        // snapshots that the next brush stroke pushes as part of its entry.
+        enum class StrokeTool : uint8_t { None, Sculpt, Ramp, Paint, Hole, SurfaceMask };
+
+        struct StrokeTileBefore
+        {
+            uint8_t kinds = 0;
+            std::vector<float> heightData;
+            terrain::TileWeightMapData weightMap;
+            std::vector<uint8_t> holeMask;
+        };
+        std::unordered_map<terrain::TileCoord, StrokeTileBefore, terrain::TileCoordHash> strokeBefore;
+        uint64_t strokeEntityId = 0;
+        StrokeTool strokeTool = StrokeTool::None;
+        bool strokeActive = false;
+
+        // VK-1614 surface-mask stroke: the painted channel's plane captured once at stroke
+        // start (one byte per texel), cropped to the union of the per-dab dirty rects when
+        // the stroke finalizes. The transient plane is ~1 MB at the 1024^2 default; only
+        // the cropped rect is retained in the undo entry.
+        std::vector<uint8_t> strokeMaskBefore;
+        uint32_t strokeMaskWidth = 0;
+        uint32_t strokeMaskHeight = 0;
+        uint32_t strokeMaskChannel = 0;
+        terrain::SurfaceMaskBrushApplicator::DirtyRect strokeMaskDirty{};
         std::vector<terrain::StreamingAction> streamingActions; // persistent scratch buffer
         std::vector<std::pair<uint64_t, terrain::TileCoord>> pendingPhysicsTiles;
 
@@ -189,7 +227,7 @@ namespace services
 
         void applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
-        void applyHoleBrush(const glm::vec3& worldPosition, bool erase);
+        void applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication);
         void applyCaveBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication);
         void finalizeCaveBrush();
 
@@ -305,6 +343,18 @@ namespace services
         void syncCaveBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncCaveNeighborEdge(terrain::CaveSDFData& sdf, terrain::TerrainTile& neighbor, int axis);
         void restoreCaveState(uint64_t entityId, const std::vector<::events::caveBrush::CaveTileState>& tiles);
+
+        // VK-1615 stroke undo. Implemented in TerrainStrokeUndoOps.cpp.
+        void beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication);
+        void captureStrokeTileBefore(const terrain::TerrainTile& tile, uint8_t kinds);
+        void beginSurfaceMaskStroke(uint64_t entityId, uint32_t channel, bool isFirstApplication);
+        void accumulateStrokeMaskDirty(const terrain::SurfaceMaskBrushApplicator::DirtyRect& rect);
+        void finalizeTerrainStroke();
+        void discardTerrainStroke();
+        void restoreStrokeState(uint64_t entityId,
+                                const std::vector<::events::terrain::StrokeTileState>& tiles);
+        void restoreSurfaceMaskRegion(const ::events::terrain::RestoreSurfaceMaskRegionCommand& cmd);
+        static const char* strokeLabelFor(StrokeTool tool);
         void punchCaveHolesForTile(terrain::TerrainTile& tile);
         void rebuildCaveColliders(EntityHandle entity, terrain::TerrainGrid* grid,
                                   const std::vector<terrain::TileCoord>& caveTiles);

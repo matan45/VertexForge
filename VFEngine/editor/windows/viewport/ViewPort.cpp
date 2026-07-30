@@ -11,6 +11,7 @@
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
+#include "events/terrain/TerrainStrokeEvents.hpp"
 #include "events/terrain/CaveModeEvents.hpp"
 #include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
@@ -665,6 +666,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::sculpt::IsSculptModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            // VK-1615: dragging off the viewport (or leaving sculpt mode) must still close
+            // the stroke, or its undo entry is silently discarded.
+            if (sculptDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             sculptDragging = false;
             return;
         }
@@ -680,6 +685,8 @@ namespace windows
                 sculptDragging = true;
             }
         } else {
+            if (sculptDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             sculptDragging = false;
         }
     }
@@ -693,6 +700,8 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::paint::IsPaintModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            if (paintDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             paintDragging = false;
             return;
         }
@@ -708,6 +717,8 @@ namespace windows
                 paintDragging = true;
             }
         } else {
+            if (paintDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             paintDragging = false;
         }
     }
@@ -720,15 +731,28 @@ namespace windows
     void ViewPort::handleHoleBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        if (!dispatcher.query(events::hole::IsHoleModeActiveQuery{}) || !ImGui::IsWindowHovered()) return;
+        if (!dispatcher.query(events::hole::IsHoleModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            if (holeDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
+            holeDragging = false;
+            return;
+        }
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit) {
                 events::holeBrush::ApplyHoleBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.erase = ImGui::GetIO().KeyShift;
+                // VK-1615: hole strokes previously had no drag concept at all, so every
+                // frame of a drag was an independent edit with nothing to undo.
+                applyCmd.isFirstApplication = !holeDragging;
                 dispatcher.execute(applyCmd);
+                holeDragging = true;
             }
+        } else {
+            if (holeDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
+            holeDragging = false;
         }
     }
 
@@ -737,6 +761,14 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered())
         {
+            // VK-1615: this path used to reset the latch without finalizing, so dragging
+            // off the viewport silently dropped the cave stroke's undo entry (mesh,
+            // foliage and vegetation brushes all finalize here).
+            if (caveDragging)
+            {
+                events::caveBrush::FinalizeCaveBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             caveDragging = false;
             return;
         }

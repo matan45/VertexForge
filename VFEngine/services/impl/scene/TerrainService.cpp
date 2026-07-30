@@ -12,6 +12,7 @@
 #include "../../events/terrain/BrushEvents.hpp"
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
+#include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -49,6 +50,9 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::SetTerrainStreamingConfigCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::PrepareTerrainSaveCommand>();
         dispatcher.unregisterCommandHandler<events::holeBrush::ApplyHoleBrushCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::FinalizeTerrainStrokeCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RestoreStrokeStateCommand>();
+        dispatcher.unregisterCommandHandler<events::terrain::RestoreSurfaceMaskRegionCommand>();
         dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
         dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
@@ -231,6 +235,11 @@ namespace services
         auto it = terrainGrids.find(entity.id);
         if (it != terrainGrids.end())
         {
+            // VK-1615: the grid this stroke was snapshotting is about to be destroyed, so
+            // there is nothing left to restore into -- discard rather than finalize.
+            if (strokeActive && strokeEntityId == entity.id)
+                discardTerrainStroke();
+
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(entity);
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
@@ -275,6 +284,11 @@ namespace services
 
         events::terrain::TerrainDeletedNotification notification;
         events::EventDispatcher::instance().publish(notification);
+
+        // VK-1615: discard, not finalize -- every grid is going away and UndoRedoServiceImpl
+        // clears its stacks on the same SceneCleared notification, so a pushed entry would
+        // be dropped anyway (or worse, outlive the grid).
+        discardTerrainStroke();
 
         terrainGrids.clear();
         fileCaches.clear();

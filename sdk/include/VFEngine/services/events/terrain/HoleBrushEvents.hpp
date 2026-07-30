@@ -42,6 +42,9 @@ namespace events::holeBrush
     {
         glm::vec3 worldPosition{0.0f};
         bool erase = false;
+        // VK-1615: true on the first dab of a drag, so the service can latch a stroke and
+        // snapshot the pre-stroke hole masks for undo.
+        bool isFirstApplication = false;
 
         std::string_view getName() const override { return "ApplyHoleBrush"; }
     };

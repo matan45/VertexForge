@@ -76,6 +76,7 @@
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
+#include "events/editor/UndoRedoEvents.hpp"
 #include "events/lifecycle/AssetLifecycleEvents.hpp"
 #include "cpumem/CpuMemoryManager.hpp"
 #include "impl/editor/EditorKeybindingServiceImpl.hpp"
@@ -427,6 +428,15 @@ namespace handlers
                 events::lifecycle::SetMemoryBudgetCommand lifeCmd;
                 lifeCmd.totalBudgetBytes = static_cast<size_t>(settings.memory.cpuMemoryBudgetBytes);
                 events::EventDispatcher::instance().execute(lifeCmd);
+            }
+
+            // VK-1615: undo depth and the snapshot byte ceiling are per-user preferences.
+            // Safe here because undoRedoService->registerEventHandlers() already ran.
+            {
+                events::undoredo::SetUndoHistoryLimitsCommand undoCmd;
+                undoCmd.maxDepth = static_cast<size_t>(settings.undo.maxHistoryDepth);
+                undoCmd.maxBytes = static_cast<size_t>(settings.undo.maxHistoryBytes);
+                events::EventDispatcher::instance().execute(undoCmd);
             }
         }
 

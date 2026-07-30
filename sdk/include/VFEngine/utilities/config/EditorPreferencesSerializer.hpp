@@ -184,6 +184,25 @@ namespace config
     }
 
     // ============================================
+    // UndoSettings
+    // ============================================
+
+    inline void to_json(json& j, const UndoSettings& s)
+    {
+        j = json{
+            {"maxHistoryDepth", s.maxHistoryDepth},
+            {"maxHistoryBytes", s.maxHistoryBytes}
+        };
+    }
+
+    inline void from_json(const json& j, UndoSettings& s)
+    {
+        UndoSettings defaults;
+        s.maxHistoryDepth = j.value("maxHistoryDepth", defaults.maxHistoryDepth);
+        s.maxHistoryBytes = j.value("maxHistoryBytes", defaults.maxHistoryBytes);
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -197,7 +216,8 @@ namespace config
             {"export", prefs.exportSettings},
             {"previewWindows", prefs.previewWindows},
             {"memory", prefs.memory},
-            {"audio", prefs.audio}
+            {"audio", prefs.audio},
+            {"undo", prefs.undo}
         };
     }
 
@@ -225,5 +245,9 @@ namespace config
         // Old settings files predate the global editor-audio toggle and remain audible.
         if (j.contains("audio") && j["audio"].is_object())
             prefs.audio = j["audio"].get<EditorAudioSettings>();
+
+        // Old settings files predate the configurable undo history and get the defaults.
+        if (j.contains("undo") && j["undo"].is_object())
+            prefs.undo = j["undo"].get<UndoSettings>();
     }
 }

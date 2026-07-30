@@ -10,7 +10,7 @@ namespace config
     struct EditorSettingsSchemaVersion
     {
         static constexpr uint32_t major = 1;
-        static constexpr uint32_t minor = 3;
+        static constexpr uint32_t minor = 4;
     };
 
     struct AppearanceSettings
@@ -72,6 +72,19 @@ namespace config
         bool globalMuted = false;
     };
 
+    // Undo/redo history limits. Deliberately separate from MemorySettings: that field is
+    // the CPU allocation gate, this is editor behaviour.
+    struct UndoSettings
+    {
+        // 0 = unlimited, matching MemorySettings' convention.
+        uint32_t maxHistoryDepth = 50;
+
+        // Ceiling across the undo AND redo stacks. 0 = unlimited. A depth cap alone cannot
+        // bound RAM: terrain strokes snapshot whole tile arrays before and after, so one
+        // entry ranges from a few KB (a file rename) to ~4 MB (a 129^2 4-tile paint stroke).
+        uint64_t maxHistoryBytes = 512ull * 1024 * 1024;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
@@ -81,6 +94,7 @@ namespace config
         PreviewWindowSettings previewWindows;
         MemorySettings memory;
         EditorAudioSettings audio;
+        UndoSettings undo;
 
         static EditorPreferences createDefault()
         {

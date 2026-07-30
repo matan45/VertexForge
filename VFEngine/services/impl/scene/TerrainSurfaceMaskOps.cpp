@@ -68,6 +68,10 @@ namespace services
         if (!mask || !mask->isValid())
             return false;
 
+        // VK-1615: an open mask stroke's snapshot addresses the OLD image, so it cannot be
+        // restored into the new one.
+        discardTerrainStroke();
+
         surfaceMask = std::move(mask);
         surfaceMaskWorldRect = rect;
         surfaceMaskOwner = terrainEntityId;
@@ -110,6 +114,9 @@ namespace services
             return false;
         }
 
+        // VK-1615: see createSurfaceMask -- the pending snapshot belongs to the old image.
+        discardTerrainStroke();
+
         surfaceMask = std::move(mask);
         surfaceMaskWorldRect = rect;
         surfaceMaskOwner = terrainEntityId;
@@ -145,6 +152,10 @@ namespace services
     {
         if (!surfaceMask)
             return;
+
+        // VK-1615: the image is going away, so an open mask stroke has nothing to snapshot
+        // against.
+        discardTerrainStroke();
 
         const uint64_t owner = surfaceMaskOwner;
         surfaceMask.reset();

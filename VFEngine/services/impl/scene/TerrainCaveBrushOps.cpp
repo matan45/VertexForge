@@ -311,6 +311,9 @@ namespace services
             return;
         terrain::TerrainGrid* grid = gridIt->second.get();
 
+        auto cacheIt = fileCaches.find(entityId);
+        auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
         std::vector<terrain::TileCoord> coords;
         coords.reserve(tiles.size());
         for (const auto& st : tiles)
@@ -342,6 +345,13 @@ namespace services
             tile->topologyDirty = true;
             tile->setAllLODsDirty();
             tile->isDirty = true;
+
+            // VK-1615: incremental save keys off TerrainFileCache::dirtyCoords, which also
+            // blocks geometry eviction. Without this an undone cave tile could be written
+            // out stale, or evicted from under a later redo.
+            if (fileCache)
+                fileCache->markDirty(coord);
+
             coords.push_back(coord);
         }
 
