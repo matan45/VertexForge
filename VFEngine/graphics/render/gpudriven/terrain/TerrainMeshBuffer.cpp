@@ -479,6 +479,17 @@ namespace render::gpudriven
 
         if (!it->second.hasAnyAllocation())
         {
+            // VK-1613: hasAnyAllocation() only inspects LODs, so erasing here used to destroy the
+            // entry — and with it weightMapOffset/weightMapSize — while the weight region was still
+            // marked allocated. freeTile() is the only other place that releases it and its single
+            // caller is TerrainGPUAdapter::clear(), so every streaming evict/re-add cycle leaked one
+            // tile's worth of the 128 MB weight arena (~1000 cycles at High/129² resolution).
+            // Releasing it here is the same thing freeTile does, and it is safe for the same reason:
+            // the entry is going away, so nothing can reference the region afterwards.
+            if (it->second.weightMapAllocated && it->second.weightMapSize > 0)
+            {
+                weightMapAllocator_.free(it->second.weightMapOffset, it->second.weightMapSize);
+            }
             tileAllocations_.erase(it);
         }
     }

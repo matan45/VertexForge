@@ -28,9 +28,16 @@ namespace terrain
         Sharp = 3
     };
 
+    // VK-1613: `Square` was missing here while the Sculpt, Paint and Cave panels all offered it as
+    // combo index 1 and cast that straight in. The value was never dead — every consumer implements
+    // it as the `else` of `shape == Circle`, i.e. a Chebyshev (square) distance: see
+    // WeightBrushApplicator / HoleBrushApplicator / CaveBrushApplicator and brush_compute.glsl,
+    // plus the viewport preview overlay in mesh_terrain.glsl. So this names what already shipped
+    // rather than adding behaviour, and the casts stop producing an unnamed enumerator.
     enum class BrushShape : uint8_t
     {
-        Circle = 0
+        Circle = 0,
+        Square = 1
     };
 
     struct BrushParams

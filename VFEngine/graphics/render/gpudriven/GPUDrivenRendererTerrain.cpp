@@ -7,6 +7,7 @@
 #include "terrain/TerrainRVTCoverage.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
+#include "terrain/TerrainLayerVisibility.hpp" // VK-1613: per-layer visibility mask
 #include "terrain/TerrainLayerPBRResolver.hpp"
 #include "../material/MaterialTextureCache.hpp"
 #include "../material/MaterialPBRExtractor.hpp"
@@ -654,6 +655,22 @@ namespace render::gpudriven
         {
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
             terrain.pipeline->updateTerrainAntiTiling(terrain.antiTiling);
+        }
+
+        // VK-1613. Per-layer `enabled` is honoured on the WEIGHT side, not in TerrainLayerGPUData:
+        // the adapter zeroes a hidden layer's weight bytes as it packs them, which the composite
+        // already treats as "this channel is not here". Pushing the mask from here means it lands
+        // before this frame's weight-upload pass (streamManager->update, further down updateTerrain)
+        // and inherits the RVT invalidate at the end of this function, so baked pages and the live
+        // composite cannot disagree about which layers exist.
+        //
+        // Texture registration above deliberately does NOT skip hidden layers, unlike the
+        // detail-maps VRAM gate. The weight re-pack lands a frame later than the mask, and a layer
+        // whose albedo slot had been dropped would composite as flat vec3(0.5) grey in between;
+        // keeping the slots also makes unhiding instant instead of a texture reload.
+        if (terrain.adapter)
+        {
+            terrain.adapter->setLayerEnabledMask(terrain::buildLayerEnabledMask(*materialData));
         }
 
         // VK-1609/VK-1611. Runs at the END, not next to the detail sync above, because it derives

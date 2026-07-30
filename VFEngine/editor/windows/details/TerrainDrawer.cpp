@@ -2,12 +2,14 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/world/WorldSectorEvents.hpp" // VK-1613: IsWorldModeQuery gates the streaming block
 #include "events/physics/PhysicsEvents.hpp"
 #include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <chrono>
+#include <iterator>
 
 namespace windows::details {
 
@@ -67,9 +69,12 @@ namespace windows::details {
 
     void TerrainDrawer::drawInfo(const services::TerrainData& terrain)
     {
-        const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
+        // VK-1613: "Ultra (257x257)" was a 4th label for an enumerator that does not exist —
+        // terrain::TileResolution stops at High/129 (TerrainTypes.hpp), and TerrainCreationWindow
+        // correctly offers three. Bound by the array itself so the two can never drift again.
+        const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)" };
         int resIndex = static_cast<int>(terrain.resolution);
-        if (resIndex >= 0 && resIndex < 4)
+        if (resIndex >= 0 && resIndex < static_cast<int>(std::size(resolutionNames)))
         {
             ImGui::Text("Resolution: %s", resolutionNames[resIndex]);
         }
@@ -84,11 +89,11 @@ namespace windows::details {
 
         ImGui::Separator();
 
-        ImGui::Text("Active: %s", terrain.isActive ? "Yes" : "No");
-        ImGui::Text("Dirty: %s", terrain.isDirty ? "Yes" : "No");
-
-        ImGui::Separator();
-
+        // VK-1613: "Active" and "Dirty" used to be printed here, but TerrainComponent::isActive is
+        // only ever written `true` and isDirty only ever `false` (TerrainCreationOps /
+        // TerrainPersistenceOps), so both were constants dressed up as state. Removed rather than
+        // wired: neither has a meaning anything acts on. "Visible Tiles" IS real now — the main
+        // camera's visibility pass fills it (TerrainVisibilityOps::getRawVisibleTiles).
         ImGui::Text("Active Tiles: %u", terrain.activeTileCount);
         ImGui::Text("Visible Tiles: %u", terrain.visibleTileCount);
 
@@ -225,6 +230,13 @@ namespace windows::details {
         ImGui::Separator();
         ImGui::Text("World Streaming");
 
+        // VK-1613: in World mode the sector streamer owns terrain tile streaming, and BOTH commands
+        // below early-return on it (TerrainService's SetTerrainStreamingEnabled /
+        // SetTerrainStreamingConfig handlers). These controls were therefore silently inert there —
+        // they just snapped back with no explanation. Say so instead of pretending.
+        const bool worldMode = dispatcher.query(events::world::IsWorldModeQuery{});
+        ImGui::BeginDisabled(worldMode);
+
         events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
         enabledQuery.terrainEntity = handle;
         bool streamingEnabled = dispatcher.query(enabledQuery);
@@ -288,6 +300,19 @@ namespace windows::details {
         {
             ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
                               "Re-enable streaming via the checkbox above.");
+        }
+
+        ImGui::EndDisabled();
+
+        if (worldMode)
+        {
+            ImGui::TextDisabled("Managed by the world sector streamer");
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("This terrain is part of a world. Tile streaming follows sector\n"
+                                  "residency, so these per-terrain settings are ignored — tune them\n"
+                                  "in the World Sector window instead.");
+            }
         }
     }
 

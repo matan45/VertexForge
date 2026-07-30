@@ -3,6 +3,7 @@
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
 #include <imgui.h>
+#include <iterator>
 
 namespace windows
 {
@@ -91,15 +92,16 @@ namespace windows
             dispatcher.execute(cmd);
         }
 
-        const char* shapeLabels[] = {"Circle"};
-        ImGui::BeginDisabled(true);
-        if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, 1))
+        // VK-1613: this was a one-entry combo behind BeginDisabled(true) — a control that could never
+        // do anything, while HoleBrushApplicator::computeNormalizedDistance has always implemented the
+        // square (Chebyshev) branch. Enabled with both shapes, matching the Sculpt/Paint/Cave panels.
+        const char* shapeLabels[] = {"Circle", "Square"};
+        if (ImGui::Combo("Shape", &shapeIndex, shapeLabels, static_cast<int>(std::size(shapeLabels))))
         {
             events::holeBrush::SetHoleBrushShapeCommand cmd;
             cmd.shape = static_cast<terrain::BrushShape>(shapeIndex);
             dispatcher.execute(cmd);
         }
-        ImGui::EndDisabled();
 
         ImGui::Spacing();
         ImGui::Separator();

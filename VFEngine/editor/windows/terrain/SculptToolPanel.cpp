@@ -54,6 +54,10 @@ namespace windows
                     brushStrength = params.strength;
                     falloffIndex = static_cast<int>(params.falloff);
                     shapeIndex = static_cast<int>(params.shape);
+                    // VK-1613: stampMode was the one field missing from both sync paths, so the combo
+                    // reverted to "Add" on re-entering sculpt mode while the service still held
+                    // Subtract — the control worked, the readout lied.
+                    stampMode = params.stampSubtract ? 1 : 0;
                     stampRotation = params.stampRotation;
                     stampScale = params.stampScale;
                     talusAngle = params.talusAngle;
@@ -80,6 +84,7 @@ namespace windows
                 brushStrength = n.params.strength;
                 falloffIndex = static_cast<int>(n.params.falloff);
                 shapeIndex = static_cast<int>(n.params.shape);
+                stampMode = n.params.stampSubtract ? 1 : 0; // VK-1613: see the mode-enter sync above
                 stampRotation = n.params.stampRotation;
                 stampScale = n.params.stampScale;
                 talusAngle = n.params.talusAngle;

@@ -3,6 +3,7 @@
 #include "../GPUDrivenTypes.hpp"
 #include "TerrainMeshBuffer.hpp"
 #include "resource/MeshletTypes.hpp"
+#include "terrain/TerrainLayerVisibility.hpp"
 #include <glm/glm.hpp>
 #include <array>
 #include <vector>
@@ -71,6 +72,14 @@ namespace render::gpudriven
 
         uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
         bool weightMapUploaded = false;
+        // VK-1613: which layer-visibility mask this tile's uploaded weight bytes were packed for.
+        // Starts at 0 while the adapter's live version starts at 1, so a tile that has never
+        // uploaded can never be mistaken for one that is already current.
+        uint32_t weightMaskVersion = 0;
+        // VK-1613: gates the arena-exhaustion error to once per tile per failure episode. It does NOT
+        // gate the retry — a tile that never uploaded publishes weightMapOffset = 0 and samples
+        // another tile's weights, and retrying is the only way it recovers.
+        bool weightMapAllocFailed = false;
 
         bool isUploaded = false;
 
@@ -103,6 +112,12 @@ namespace render::gpudriven
         int32_t selectedCoordZ_ = 0;
         bool hasSelectedTile_ = false;
 
+        // VK-1613 per-layer visibility. The mask is material state pushed down by
+        // registerTerrainLayerTextures; the version is what lets each tile discover, on its own
+        // schedule, that its uploaded weight bytes were packed for an older mask.
+        uint32_t layerEnabledMask_ = terrain::ALL_TERRAIN_LAYERS_ENABLED;
+        uint32_t maskVersion_ = 1;
+
         void populateGPUTile(TerrainTileGPUData& gpuTile,
                              const TerrainTileAllocation& alloc,
                              const terrain::TerrainTile& tile,
@@ -120,6 +135,16 @@ namespace render::gpudriven
         bool uploadTileAddLOD(const terrain::TerrainTile& tile, uint32_t lodLevel);
 
         bool uploadWeightMap(const terrain::TerrainTile& tile);
+
+        // VK-1613: hidden layers are honoured by zeroing their weight bytes at upload time, so a
+        // visibility change has to re-pack the tiles. Setting a NEW mask bumps the version, which is
+        // what needsWeightMapUpload() below compares against — an unchanged mask re-uploads nothing.
+        void setLayerEnabledMask(uint32_t mask);
+        [[nodiscard]] uint32_t getLayerEnabledMask() const { return layerEnabledMask_; }
+
+        // Single decision point for "does this tile's weight map need to go to the GPU": the
+        // caller's dirty flag, a tile that has no upload yet, or one packed for an older mask.
+        [[nodiscard]] bool needsWeightMapUpload(const terrain::TerrainTile& tile) const;
         bool uploadCaveMesh(const terrain::TerrainTile& tile);
         // Frees a tile's GPU cave allocation (when a cave is filled/undone away). The
         // next buildGPUTileData zeroes caveMeshletData so the cave stops rendering.

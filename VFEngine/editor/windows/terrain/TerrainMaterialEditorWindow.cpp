@@ -339,9 +339,38 @@ namespace windows
 
             ImGui::PushID(i);
 
-            if (ImGui::Checkbox("##enabled", &layer.enabled))
+            // VK-1613: this used to be a lie — it round-tripped through the .vfTerrainMat and hid the
+            // layer from the paint picker, but the renderer never consulted it, so a hidden layer
+            // kept drawing wherever it had been painted. It is now honoured at weight-upload time.
+            //
+            // Hiding the LAST visible layer is refused rather than allowed: with no weight left, the
+            // composite's 1.0/max(totalW, 0.001) clamp renders painted terrain black, which reads as
+            // a bug rather than as a choice. Same spirit as the activeLayerCount >= 1 invariant.
             {
-                onChanged();
+                int visibleCount = 0;
+                for (int j = 0; j < layerCount; ++j)
+                {
+                    if (materialData->layers[j].enabled) ++visibleCount;
+                }
+                const bool isLastVisible = layer.enabled && visibleCount <= 1;
+
+                ImGui::BeginDisabled(isLastVisible);
+                if (ImGui::Checkbox("##enabled", &layer.enabled))
+                {
+                    onChanged();
+                }
+                ImGui::EndDisabled();
+
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip(isLastVisible
+                        ? "Visible. This is the last visible layer — at least one must stay visible."
+                        : "Layer visibility.\n\n"
+                          "Hidden layers are not rendered and cannot be painted with. The remaining\n"
+                          "layers redistribute to fill in, and painted weights are kept untouched, so\n"
+                          "unhiding restores exactly what was there.\n\n"
+                          "Areas painted ONLY with hidden layers have no weight left and go black.");
+                }
             }
             ImGui::SameLine();
 

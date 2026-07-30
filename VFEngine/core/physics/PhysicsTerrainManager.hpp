@@ -105,6 +105,10 @@ namespace core::physics
         JPH::BodyID addTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ,
                                         const TerrainHeightFieldCreateInfo& info);
         void removeTerrainTileBody(uint64_t entityId, int32_t tileX, int32_t tileZ);
+        // VK-1613: re-apply collider material to a terrain's existing tile bodies (the editor only
+        // offers these controls once a collider exists, so creation-time values are not enough).
+        void setTerrainColliderMaterial(uint64_t entityId, float friction, float restitution,
+                                        uint32_t collisionLayer);
         void removeAllTerrainBodies(uint64_t entityId);
         bool hasTerrainBodies(uint64_t entityId) const;
 

@@ -42,16 +42,17 @@ namespace windows::details {
             const auto& tile = *tileOpt;
 
             ImGui::Text("Coordinates: (%d, %d)", tile.tileX, tile.tileZ);
-            ImGui::Text("Visible: %s", tile.isVisible ? "Yes" : "No");
-
-            ImGui::Separator();
-
-            ImGui::Text("Dirty: %s", tile.isDirty ? "Yes" : "No");
-            ImGui::Text("GPU Resident: %s", tile.isGPUResident ? "Yes" : "No");
 
             ImGui::Separator();
 
             ImGui::Text("Height Range: %.2f to %.2f", tile.boundingMinY, tile.boundingMaxY);
+
+            // VK-1613: "Visible", "Dirty" and "GPU Resident" used to be printed here and none of them
+            // was live. TerrainTileComponent::isVisible/isDirty are a creation-time snapshot
+            // (TerrainCreationOps writes them once and nothing refreshes them) and isGPUResident's only
+            // write in the repo is `= false`. The live state lives on terrain::TerrainTile, which this
+            // component has no link to — the tile entity does not record its parent terrain — so these
+            // are removed rather than wired. The terrain's own panel reports the real aggregates.
 
             ImGui::Unindent(10.0f);
         }

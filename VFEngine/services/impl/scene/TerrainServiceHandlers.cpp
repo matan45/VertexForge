@@ -1309,6 +1309,17 @@ namespace services
                     cc.collisionLayer = cmd.collisionLayer;
                     cc.friction = cmd.friction;
                     cc.restitution = cmd.restitution;
+
+                    // VK-1613: the component write above is only read when a body is BUILT
+                    // (buildTileColliderInfo), and the editor exposes these controls exclusively while
+                    // a collider already exists — so on its own it changed nothing observable. Push
+                    // the values onto the live bodies too. Component stays the source of truth, so
+                    // tiles that stream in later still get the same values at creation time.
+                    if (physicsProvider)
+                    {
+                        physicsProvider->setTerrainColliderMaterial(cmd.entity, cc.friction,
+                                                                    cc.restitution, cc.collisionLayer);
+                    }
                 }
             });
     }

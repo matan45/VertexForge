@@ -94,6 +94,7 @@ namespace services
                 physicsProvider->updatePhysicsColliderStreaming(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
+            const size_t resultBefore = result.size();
 
             if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
             {
@@ -119,6 +120,20 @@ namespace services
                     {
                         result.push_back(tile);
                     }
+                }
+            }
+
+            // VK-1613: the details panel printed a visibleTileCount that was only ever written 0 at
+            // creation. This is the one place that knows the answer — and specifically the MAIN
+            // camera path: secondary frustums (minimap, RTT) go through queryVisibleTiles instead, so
+            // the number cannot flip between views frame to frame.
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity terrainEnt = internal::fromHandle(EntityHandle{entityId});
+                if (registry.valid(terrainEnt) && registry.all_of<components::TerrainComponent>(terrainEnt))
+                {
+                    registry.get<components::TerrainComponent>(terrainEnt).visibleTileCount =
+                        static_cast<uint32_t>(result.size() - resultBefore);
                 }
             }
         }

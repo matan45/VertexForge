@@ -252,6 +252,13 @@ namespace render::gpudriven
         allocations_.clear();
         cachedGPUTileData_.clear();
         gpuTileDataDirty_ = true;
+
+        // VK-1613: the mask is material state, and this adapter no longer holds the material's
+        // terrain. Leaving it set would carry the previous scene's hidden layers into a scene whose
+        // material load never overwrites it (one with no terrain material at all). The version bump
+        // is only tidiness — every per-tile stamp was just erased with the allocations.
+        layerEnabledMask_ = terrain::ALL_TERRAIN_LAYERS_ENABLED;
+        ++maskVersion_;
     }
 
     bool TerrainGPUAdapter::uploadLODData(
@@ -362,12 +369,33 @@ namespace render::gpudriven
         uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
         if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
         {
-            vfLogError("TerrainGPUAdapter: Failed to allocate weight map for tile ({}, {})",
-                       key.coordX, key.coordZ);
+            // VK-1613: log once per tile, not once per frame. needsWeightMapUpload keeps returning
+            // true for a tile that has never uploaded (deliberately — it is publishing
+            // weightMapOffset = 0 and sampling another tile's weights until it succeeds), so an
+            // ungated error here would spam every frame for as long as the arena stays full.
+            if (!alloc.weightMapAllocFailed)
+            {
+                alloc.weightMapAllocFailed = true;
+                vfLogError("TerrainGPUAdapter: Failed to allocate weight map for tile ({}, {}) — "
+                           "weight arena is full; this tile will render with another tile's weights "
+                           "until space frees up",
+                           key.coordX, key.coordZ);
+            }
             return false;
         }
+        alloc.weightMapAllocFailed = false;
 
         std::vector<uint8_t> packedData(totalBytes);
+
+        // VK-1613: resolve each channel's visibility ONCE (it is per channel, not per texel) and
+        // then write a hard 0 for a hidden layer. The composite culls at w < 0.001 and normalizes by
+        // the surviving weight, so a zeroed channel disappears and the rest scale up — no shader
+        // change, and `wm` itself is never modified, so unhiding restores the artist's paint exactly.
+        std::array<bool, terrain::WEIGHT_CHANNELS> channelVisible{};
+        for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
+        {
+            channelVisible[ch] = terrain::isWeightChannelEnabled(wm, ch, layerEnabledMask_);
+        }
 
         for (uint32_t z = 0; z < wm.resolution; ++z)
         {
@@ -376,8 +404,9 @@ namespace render::gpudriven
                 uint32_t pixelOffset = (z * wm.resolution + x) * terrain::WEIGHT_CHANNELS;
                 for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                 {
-                    packedData[pixelOffset + ch] = static_cast<uint8_t>(
-                        wm.getWeight(ch, x, z) * 255.0f + 0.5f);
+                    packedData[pixelOffset + ch] = channelVisible[ch]
+                        ? static_cast<uint8_t>(wm.getWeight(ch, x, z) * 255.0f + 0.5f)
+                        : uint8_t{0};
                 }
             }
         }
@@ -392,9 +421,52 @@ namespace render::gpudriven
         // Store byte offset (elements * 4) for shader access
         alloc.weightMapOffset = offsetElements * 4;
         alloc.weightMapUploaded = true;
+        alloc.weightMaskVersion = maskVersion_;
         gpuTileDataDirty_ = true;
 
         return true;
+    }
+
+    void TerrainGPUAdapter::setLayerEnabledMask(uint32_t mask)
+    {
+        if (layerEnabledMask_ == mask)
+        {
+            return;
+        }
+
+        layerEnabledMask_ = mask;
+        // Every stamped tile is now out of date. Bumping one counter is what makes this scale: the
+        // alternative — walking the tiles and marking them dirty — cannot reach tiles that are not
+        // resident yet, and those are exactly the ones that would come back with the old visibility.
+        ++maskVersion_;
+    }
+
+    bool TerrainGPUAdapter::needsWeightMapUpload(const terrain::TerrainTile& tile) const
+    {
+        if (!tile.hasWeightMap())
+        {
+            // Nothing to pack. Without this guard a tile whose CPU weight data has been evicted
+            // would fail uploadWeightMap() every frame forever, since neither flag below can clear.
+            return false;
+        }
+
+        if (tile.weightMapGPUDirty)
+        {
+            return true;
+        }
+
+        auto it = allocations_.find(TerrainTileKey{tile.coord.x, tile.coord.z});
+        if (it == allocations_.end())
+        {
+            return false;
+        }
+
+        // !weightMapUploaded belongs in this disjunction rather than as a precondition on the
+        // version compare: removeTileLOD erases the whole allocation when the last LOD goes, while
+        // TerrainMeshBuffer::freeTileLOD does not free the weight region — so a re-added tile arrives
+        // with weightMapUploaded == false, weightMapOffset == 0 and nobody having set the dirty flag,
+        // and would otherwise sample whichever tile owns offset 0 in the shared weight SSBO.
+        return !it->second.weightMapUploaded || it->second.weightMaskVersion != maskVersion_;
     }
 
     bool TerrainGPUAdapter::uploadCaveMesh(const terrain::TerrainTile& tile)

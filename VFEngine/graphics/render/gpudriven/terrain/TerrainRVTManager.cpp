@@ -354,6 +354,21 @@ namespace render::gpudriven
                 }
         }
 
+        // VK-1613. updateResidency built this frame's bake list EARLIER in the frame (it runs from the
+        // light-occlusion readback, well before updateTerrain calls us), and recordBakes consumes it
+        // LATER during command recording — so anything we just evicted above is still sitting in
+        // scheduledBakes pointing at a pool tile that no longer belongs to it. Baking into a freed
+        // tile corrupts whatever page is handed that tile next.
+        //
+        // Filtering on residency rather than on the world rect is exact by construction: the loop
+        // above is what dropped these pages, so "no longer resident" is precisely "its tile was
+        // freed". Evicted pages get re-requested by feedback and re-baked on a later frame.
+        //
+        // Pre-existing, but VK-1613 turns this from a rare material-change event into something that
+        // fires on every layer-visibility toggle, which is what makes it worth closing here.
+        std::erase_if(scheduledBakes,
+                      [this](const ScheduledBake& b) { return !residency.isResident(b.page); });
+
         // The pinned coarsest mip is skipped by the loop above but must also refresh after a material
         // change (finding #8) — flag it for an in-place re-bake in the next updateResidency.
         coarseRebakePending = true;

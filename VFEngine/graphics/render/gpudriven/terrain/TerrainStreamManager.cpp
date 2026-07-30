@@ -71,7 +71,9 @@ namespace render::gpudriven
         {
             if (!tile) continue;
             if (tile->hasAnyGPUDirtyLOD() || tile->caveGPUDirty) return true;
-            if (tile->weightMapGPUDirty && tile->hasWeightMap()) return true;
+            // VK-1613: the adapter owns this decision now — a layer-visibility change makes tiles
+            // need a re-pack without any per-tile flag being set.
+            if (adapter.needsWeightMapUpload(*tile)) return true;
         }
         return false;
     }
@@ -114,7 +116,7 @@ namespace render::gpudriven
                 infoIt->second.targetLOD = selectTargetLOD(entry.distance);
                 infoIt->second.lastAccessFrame = currentFrame;
             }
-            if (tile->hasWeightMap() && tile->weightMapGPUDirty)
+            if (adapter.needsWeightMapUpload(*tile))
                 if (adapter.uploadWeightMap(*tile)) tile->weightMapGPUDirty = false;
 
             if (infoIt->second.hasLODLoaded(FALLBACK_LOD)) continue;
@@ -180,7 +182,7 @@ namespace render::gpudriven
     {
         for (auto* tile : visibleTiles)
         {
-            if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap()) continue;
+            if (!tile || !adapter.needsWeightMapUpload(*tile)) continue;
             if (adapter.uploadWeightMap(*tile))
                 tile->weightMapGPUDirty = false;
         }

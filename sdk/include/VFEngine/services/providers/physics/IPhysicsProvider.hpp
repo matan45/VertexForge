@@ -136,6 +136,12 @@ namespace services
         virtual void addTerrainTileCollider(EntityHandle entity, const TerrainTileColliderInfo& tile) = 0;
         virtual void removeTerrainTileCollider(EntityHandle entity, int32_t tileX, int32_t tileZ) = 0;
 
+        // VK-1613: apply collider material to a terrain's ALREADY-CREATED tile bodies. The editor
+        // only shows these controls once a collider exists, so writing the component alone (which is
+        // read at body construction) left them with no observable effect at all.
+        virtual void setTerrainColliderMaterial(EntityHandle entity, float friction, float restitution,
+                                                 uint32_t collisionLayer) = 0;
+
         // Async collider streaming — build shape on background thread, add body on main thread
         virtual void submitAsyncTerrainTileCollider(EntityHandle entity,
                                                       const TerrainTileColliderInfo& tile,
