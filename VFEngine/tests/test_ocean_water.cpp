@@ -190,8 +190,6 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     out.shoreFoamIntensity = 0.55f;
     out.shoreBreakingStrength = 1.25f;
     out.shoreWetRange = 7.5f;
-    out.shoreWetDarkening = 0.45f;
-    out.shoreWetRoughness = 0.35f;
 
     out.ssrEnabled = true;
     out.ssrIntensity = 0.65f;
@@ -245,8 +243,6 @@ TEST_CASE("OceanSerializer: .vfOcean round-trip preserves every visual field") {
     CHECK(in.shoreFoamIntensity == doctest::Approx(0.55f));
     CHECK(in.shoreBreakingStrength == doctest::Approx(1.25f));
     CHECK(in.shoreWetRange == doctest::Approx(7.5f));
-    CHECK(in.shoreWetDarkening == doctest::Approx(0.45f));
-    CHECK(in.shoreWetRoughness == doctest::Approx(0.35f));
 
     CHECK(in.ssrEnabled == true);
     CHECK(in.ssrIntensity == doctest::Approx(0.65f));

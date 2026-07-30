@@ -223,8 +223,6 @@ namespace services
                 comp.shoreFoamIntensity = cmd.settings.shoreFoamIntensity;
                 comp.shoreBreakingStrength = cmd.settings.shoreBreakingStrength;
                 comp.shoreWetRange = cmd.settings.shoreWetRange;
-                comp.shoreWetDarkening = cmd.settings.shoreWetDarkening;
-                comp.shoreWetRoughness = cmd.settings.shoreWetRoughness;
                 // VK-1604
                 comp.ssrEnabled = cmd.settings.ssrEnabled;
                 comp.ssrIntensity = cmd.settings.ssrIntensity;
@@ -584,8 +582,6 @@ namespace services
         data.shoreFoamIntensity = comp.shoreFoamIntensity;
         data.shoreBreakingStrength = comp.shoreBreakingStrength;
         data.shoreWetRange = comp.shoreWetRange;
-        data.shoreWetDarkening = comp.shoreWetDarkening;
-        data.shoreWetRoughness = comp.shoreWetRoughness;
         // VK-1604
         data.ssrEnabled = comp.ssrEnabled;
         data.ssrIntensity = comp.ssrIntensity;
@@ -1286,8 +1282,6 @@ namespace services
         settings.shoreFoamIntensity = comp.shoreFoamIntensity;
         settings.shoreBreakingStrength = comp.shoreBreakingStrength;
         settings.shoreWetRange = comp.shoreWetRange;
-        settings.shoreWetDarkening = comp.shoreWetDarkening;
-        settings.shoreWetRoughness = comp.shoreWetRoughness;
         // VK-1604
         settings.ssrEnabled = comp.ssrEnabled;
         settings.ssrIntensity = comp.ssrIntensity;
@@ -1377,8 +1371,6 @@ namespace services
         fileData.shoreFoamIntensity = comp.shoreFoamIntensity;
         fileData.shoreBreakingStrength = comp.shoreBreakingStrength;
         fileData.shoreWetRange = comp.shoreWetRange;
-        fileData.shoreWetDarkening = comp.shoreWetDarkening;
-        fileData.shoreWetRoughness = comp.shoreWetRoughness;
         // VK-1604
         fileData.ssrEnabled = comp.ssrEnabled;
         fileData.ssrIntensity = comp.ssrIntensity;
@@ -1512,8 +1504,6 @@ namespace services
             comp.shoreFoamIntensity = fileData.shoreFoamIntensity;
             comp.shoreBreakingStrength = fileData.shoreBreakingStrength;
             comp.shoreWetRange = fileData.shoreWetRange;
-            comp.shoreWetDarkening = fileData.shoreWetDarkening;
-            comp.shoreWetRoughness = fileData.shoreWetRoughness;
             // VK-1604
             comp.ssrEnabled = fileData.ssrEnabled;
             comp.ssrIntensity = fileData.ssrIntensity;

@@ -2,6 +2,7 @@
 #include "../../material/MaterialPBRExtractor.hpp"
 #include "terrain/TerrainAntiTiling.hpp"
 #include "terrain/TerrainHeightBlend.hpp"
+#include "terrain/TerrainWeatherResponse.hpp"
 #include <algorithm>
 
 namespace render::gpudriven
@@ -61,6 +62,19 @@ namespace render::gpudriven
             ? std::clamp(layer.hexRotation, 0.0f, terrain::MAX_HEX_TILING_ROTATION)
             : 0.0f;
 
+        // VK-1614, same seam again. Unlike the two above there is no texture precondition: porosity
+        // and snow retention modulate the shared weather response, which every layer receives
+        // whether or not it resolved to any texture at all. The only gate is the layer's own opt-in.
+        //
+        // The clamp deliberately has a NON-ZERO lower bound. 0.0f is the sentinel that means "this
+        // layer did not opt in", and the shader's authority accumulator relies on it: an unopted
+        // layer — and every unused palette slot, which reads a value-initialised
+        // TerrainLayerGPUData — must resolve to the neutral default rather than to "absorbs nothing"
+        // / "sheds all snow". See TerrainWeatherResponse.hpp.
+        out.porosity = terrain::resolveLayerWeatherScalar(layer.porosity, layer.weatherResponse);
+        out.snowRetention =
+            terrain::resolveLayerWeatherScalar(layer.snowRetention, layer.weatherResponse);
+
         return out;
     }
 
@@ -68,6 +82,15 @@ namespace render::gpudriven
     {
         return std::any_of(layers.begin(), layers.end(),
                            [](const ResolvedTerrainLayerPBR& l) { return l.hexTilingStrength > 0.0f; });
+    }
+
+    bool terrainMaterialWantsWeatherResponse(const std::vector<ResolvedTerrainLayerPBR>& layers)
+    {
+        return std::any_of(layers.begin(), layers.end(),
+                           [](const ResolvedTerrainLayerPBR& l)
+                           {
+                               return l.porosity > 0.0f || l.snowRetention > 0.0f;
+                           });
     }
 
     bool terrainMaterialWantsDetailMaps(const std::vector<ResolvedTerrainLayerPBR>& layers)

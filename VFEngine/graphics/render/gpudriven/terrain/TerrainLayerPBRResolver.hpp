@@ -35,6 +35,11 @@ namespace render::gpudriven
         float hexCellScale = 0.0f;
         float hexContrast = 0.0f;
         float hexRotationStrength = 0.0f;
+        // VK-1614: per-layer weather response. 0 => this layer did not opt in, and the shader falls
+        // back to the derived porosity / full snow retention it used before the story existed. The
+        // sentinel must be exactly 0 — see TerrainWeatherResponse.hpp for why.
+        float porosity = 0.0f;
+        float snowRetention = 0.0f;
     };
 
     // Resolves a terrain layer's terrain-supported PBR fields from a referenced material's
@@ -54,6 +59,11 @@ namespace render::gpudriven
     //                        in AND resolved to an albedo texture. A layer with no albedo composites
     //                        a constant vec3(0.5); hex-sampling a constant is pure waste, so it is
     //                        forced to strength 0 and takes the single-tap path.
+    //   porosity / snowRetention (VK-1614) => the layer's own values, clamped into
+    //                        [terrain::MIN_LAYER_WEATHER_SCALAR, 1], but ONLY when the layer opts in.
+    //                        Otherwise exactly 0.0f, the sentinel meaning "fall back to the derived
+    //                        porosity / full retention". Unlike the two above there is no texture
+    //                        precondition: the weather response applies to every layer.
     ResolvedTerrainLayerPBR resolveTerrainLayerPBR(const terrain::TerrainMaterialLayer& layer,
                                                    const mesh::ExtractedPBRValues* pbr);
 
@@ -101,4 +111,16 @@ namespace render::gpudriven
     // the RESOLVED strength, so a layer that opted in but whose material failed to supply an albedo
     // texture correctly reads as "no".
     [[nodiscard]] bool terrainMaterialWantsHexTiling(const std::vector<ResolvedTerrainLayerPBR>& layers);
+
+    // VK-1614 - does any layer actually author a weather response? Drives TERRAIN_WEATHER_RESPONSE,
+    // so a material with no opted-in layer compiles the shader it would have compiled before the
+    // story existed — and, more to the point, does not pay the per-fragment 8-channel splat gather
+    // the response needs. That gather is the one real cost here (~150 ALU, comparable to the 4032
+    // bytes of SPIR-V VK-1611 gated macro variation for), and it cannot be avoided in the
+    // RVT-resolved path any other way: the composite never runs there, so per-layer identity is gone
+    // by the time wetness/snow are applied.
+    //
+    // Reads the RESOLVED scalars, so the opt-in and the clamp are already applied and the sentinel
+    // is authoritative.
+    [[nodiscard]] bool terrainMaterialWantsWeatherResponse(const std::vector<ResolvedTerrainLayerPBR>& layers);
 }

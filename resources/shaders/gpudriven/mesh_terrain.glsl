@@ -240,6 +240,23 @@ layout(set = 11, binding = 4) uniform WorldMaskUBO {
 } worldMask;
 #endif
 
+#ifdef TERRAIN_WEATHER_MASK
+// VK-1614 world-anchored wetness/snow mask: R = wetness, G = snow, XZ-projected over worldMinMax.
+// Bindings 5/6 of set 11, mirroring the plugin world mask at 3/4 — set 11 is the right home here
+// precisely because it does NOT exist in the RVT bake pipeline (TerrainRVTBaker binds
+// {weightMap, bindless, terrainData} as its sets 0/1/2), and the mask must not reach the bake.
+// That is the inverse of VK-1611's anti-tiling block, which had to go on the weight-map set for
+// exactly the opposite reason.
+layout(set = 11, binding = 5) uniform sampler2D terrainWeatherMaskTexture;
+layout(set = 11, binding = 6) uniform TerrainWeatherMaskUBO {
+    vec4 worldMinMax;          // minX, minZ, maxX, maxZ — AUTHORED, never derived from live grid bounds
+    float wetnessScale;        // authored strength multiplier on the R channel
+    float snowScale;           // authored strength multiplier on the G channel
+    uint flags;                // bit0 enabled
+    float _padTWM;
+} weatherMask;
+#endif
+
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -295,6 +312,18 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 // VK-1612: must follow the bindlessTextures declaration — the helpers index it directly rather
 // than taking a sampler2D parameter.
 #include "../common/hex_tiling_terrain.glsl"
+#endif
+
+// VK-1614. TERRAIN_LOCAL_WEATHER is the union gate: it selects the unified weather block at the apply
+// point, and each individual feature inside it stays behind its own macro. CAUSTICS_ENABLED is part of
+// the union because this story folds the shoreline wetness — previously a second, uncoordinated
+// material model — into the same signal, so a caustics build takes the unified path even with no mask
+// and no authored layer.
+#if defined(TERRAIN_WEATHER_RESPONSE) || defined(TERRAIN_WEATHER_MASK) || defined(TERRAIN_PUDDLES) || defined(CAUSTICS_ENABLED)
+#define TERRAIN_LOCAL_WEATHER 1
+// Must follow tiles[] / weightMapData[] / sampleTileWeight / terrainLayers[] — the splat gather reads
+// them directly rather than taking parameters, same contract as hex_tiling_terrain.glsl above.
+#include "../common/terrain_weather.glsl"
 #endif
 
 #ifdef RVT_ENABLED
@@ -411,9 +440,11 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float depthFalloff;
     float patchSize;
     float shoreWetRange;
-    float shoreWetDarkening;
-    float shoreWetRoughness;
+    // VK-1614 retired shoreWetDarkening / shoreWetRoughness — the shoreline feeds the unified terrain
+    // wetness signal now instead of applying a second material model of its own.
+    float pad0;
     float pad1;
+    float pad2;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif
@@ -683,25 +714,80 @@ void main() {
     }
 
 #ifdef CAUSTICS_ENABLED
-    // Shoreline wetness: darken and roughen terrain near and above waterline
+    // Shoreline wetness, VK-1614: this block now only COMPUTES how wet the shore is. It used to
+    // apply its own material model here — `albedo *= mix(1, shoreWetDarkening, w)`,
+    // `roughness = mix(roughness, max(roughness, shoreWetRoughness), w)` and an AO raise — running
+    // immediately before applyWetness, which pulls roughness the OTHER WAY (x0.3). Only one of those
+    // can be right: wet surfaces get smoother. Worse, shoreWetRoughness defaulted to 0.15 against a
+    // terrain layer roughness default of 0.9, so `max(0.9, 0.15)` made that slider a no-op across its
+    // whole plausible range. Both authored knobs are retired; shoreWetRange still sets the extent.
+    float shoreWet = 0.0;
     if (causticParams.shoreWetRange > 0.0) {
         float waveFreq = 6.2831853 / causticParams.patchSize;
         float waveApprox = sin(fragWorldPos.x * waveFreq + fragWorldPos.z * waveFreq * 1.5 + camera.time) * 0.5;
         float heightAboveWater = fragWorldPos.y - causticParams.waterHeight + waveApprox;
-        // Only apply above water (fade in from waterline up to shoreWetRange)
-        float wetness = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);
-        // Fade out below waterline (terrain underwater doesn't need wet effect)
-        wetness *= smoothstep(-1.0, 0.0, heightAboveWater);
-        wetness *= wetness;
-        albedo *= mix(1.0, causticParams.shoreWetDarkening, wetness);
-        roughness = mix(roughness, max(roughness, causticParams.shoreWetRoughness), wetness);
-        ao = mix(ao, 1.0, wetness * 0.3);
+        // Fade in from the waterline up to shoreWetRange...
+        shoreWet = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);
+        // ...and out below it (terrain underwater doesn't need the wet look).
+        shoreWet *= smoothstep(-1.0, 0.0, heightAboveWater);
+        shoreWet *= shoreWet;
     }
 #endif
 
     // Weather surface effects (wetness first, then snow on top)
+#ifdef TERRAIN_LOCAL_WEATHER
+    // VK-1614. Deliberately HERE, after the RVT-resolve / live-composite join above, so baked pages
+    // stay weather-independent and one page serves every weather state.
+    float twWet = camera.wetness;
+    float twSnow = camera.snowAccumulation;
+#ifdef CAUSTICS_ENABLED
+    twWet = terrainWeatherOr(twWet, shoreWet);
+#endif
+#ifdef TERRAIN_WEATHER_MASK
+    if ((weatherMask.flags & 1u) != 0u) {
+        vec2 twMaskUV = (fragWorldPos.xz - weatherMask.worldMinMax.xy)
+                      / max(weatherMask.worldMinMax.zw - weatherMask.worldMinMax.xy, vec2(1e-6));
+        // Outside the authored rect the mask contributes nothing, so terrain that streamed in beyond
+        // it falls back to global-only weather instead of sampling a clamped edge texel.
+        if (all(greaterThanEqual(twMaskUV, vec2(0.0))) && all(lessThanEqual(twMaskUV, vec2(1.0)))) {
+            vec2 twM = texture(terrainWeatherMaskTexture, twMaskUV).rg;
+            twWet = terrainWeatherOr(twWet, twM.r * weatherMask.wetnessScale);
+            twSnow = terrainWeatherOr(twSnow, twM.g * weatherMask.snowScale);
+        }
+    }
+#endif
+    // The derived porosity is computed HERE, not earlier: wetness.glsl derives it from the roughness
+    // AS IT ARRIVES, i.e. after the cave darkening above forces roughness >= 0.9. Hoisting it would
+    // change today's output.
+    float twPorosity = clamp(roughness * roughness, 0.0, 1.0);
+    float twRetention = 1.0;
+#ifdef TERRAIN_WEATHER_RESPONSE
+    TerrainWeatherResponse twR = sampleTerrainWeatherResponse(fragTileIndex, fragTexCoord);
+    // mix(x, y, 0.0) == x bitwise, and the T factors are EXACTLY 0 when no layer covering this
+    // fragment opted in — so a tile painted only with unauthored layers renders bit-identically to
+    // the pre-VK-1614 shader even inside this permutation.
+    twPorosity = mix(twPorosity, twR.porosity, twR.porosityT);
+    twRetention = mix(twRetention, twR.retention, twR.retentionT);
+#endif
+#ifdef TERRAIN_PUDDLES
+    // Computed BEFORE applyTerrainWetness, which mutates the roughness twPorosity was derived from
+    // and the albedo the puddle then tints.
+    float twPuddle = terrainPuddleCoverage(twWet, normalize(fragNormal).y, ao, twPorosity);
+#endif
+    applyTerrainWetness(twWet, twPorosity, albedo, roughness, metallic, N);
+#ifdef TERRAIN_PUDDLES
+    applyTerrainPuddle(twPuddle, albedo, roughness, metallic, N);
+#endif
+    // Retention folds into the AMOUNT rather than needing a new parameter: applySnowAccumulation
+    // computes snowFactor = amount * slopeMask, and (amount * retention) * slopeMask ==
+    // snowFactor * retention. So snow_accumulation.glsl is untouched — which keeps
+    // mesh_shader_gpudriven.glsl byte-identical — and its `snowAmount < 0.001` early-out makes a
+    // fully-shedding layer free.
+    applySnowAccumulation(twSnow * twRetention, fragNormal, albedo, roughness, metallic, N);
+#else
     applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
+#endif
 
     // Fog-of-war visibility for this terrain fragment (1.0 = fully visible). Stays 1.0 unless
     // the bound mask opts in to affecting shadows (bit3), so shadow fading is configurable.

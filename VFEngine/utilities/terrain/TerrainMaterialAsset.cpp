@@ -144,6 +144,18 @@ namespace terrain
                             layer.hexRotation = std::clamp(
                                 layerJson.value("hexRotation", HEX_TILING_DEFAULT_ROTATION),
                                 0.0f, MAX_HEX_TILING_ROTATION);
+                            // VK-1614. Additive too; absent keys read as "no weather response", so a
+                            // file written before this story renders bit-identically after it.
+                            // Clamped to [0, 1] here rather than to the non-zero authored floor: the
+                            // 0.0f sentinel lives on the RESOLVED scalar (resolveLayerWeatherScalar),
+                            // and forcing a floor here would make the opt-out flag the only way to
+                            // express "off" while silently rewriting the artist's slider value.
+                            layer.weatherResponse = layerJson.value("weatherResponse", false);
+                            layer.porosity = std::clamp(
+                                layerJson.value("porosity", DEFAULT_LAYER_POROSITY), 0.0f, 1.0f);
+                            layer.snowRetention = std::clamp(
+                                layerJson.value("snowRetention", DEFAULT_LAYER_SNOW_RETENTION),
+                                0.0f, 1.0f);
                             layer.enabled = layerJson.value("enabled", true);
 
                             if (layer.tilingScale <= 0.0f)
@@ -246,6 +258,9 @@ namespace terrain
             layerJson["hexCellScale"] = layer.hexCellScale;
             layerJson["hexContrast"] = layer.hexContrast;
             layerJson["hexRotation"] = layer.hexRotation;
+            layerJson["weatherResponse"] = layer.weatherResponse;
+            layerJson["porosity"] = layer.porosity;
+            layerJson["snowRetention"] = layer.snowRetention;
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
         }

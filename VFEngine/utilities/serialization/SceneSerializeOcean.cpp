@@ -30,8 +30,6 @@ namespace serialization
         j["shoreFoamIntensity"] = ocean.shoreFoamIntensity;
         j["shoreBreakingStrength"] = ocean.shoreBreakingStrength;
         j["shoreWetRange"] = ocean.shoreWetRange;
-        j["shoreWetDarkening"] = ocean.shoreWetDarkening;
-        j["shoreWetRoughness"] = ocean.shoreWetRoughness;
 
         // VK-1604
         j["ssrEnabled"] = ocean.ssrEnabled;
@@ -153,12 +151,10 @@ namespace serialization
             ocean.shoreFoamIntensity = it->get<float>();
         if (auto it = j.find("shoreBreakingStrength"); it != j.end() && it->is_number())
             ocean.shoreBreakingStrength = it->get<float>();
+        // VK-1614: shoreWetDarkening / shoreWetRoughness retired. Scenes saved before this change
+        // still carry the keys; they are simply no longer read.
         if (auto it = j.find("shoreWetRange"); it != j.end() && it->is_number())
             ocean.shoreWetRange = it->get<float>();
-        if (auto it = j.find("shoreWetDarkening"); it != j.end() && it->is_number())
-            ocean.shoreWetDarkening = it->get<float>();
-        if (auto it = j.find("shoreWetRoughness"); it != j.end() && it->is_number())
-            ocean.shoreWetRoughness = it->get<float>();
 
         // VK-1604 — absent keys leave the component defaults (all features off), so scenes
         // saved before this story load unchanged.

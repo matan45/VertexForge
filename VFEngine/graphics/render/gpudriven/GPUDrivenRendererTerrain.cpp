@@ -216,15 +216,47 @@ namespace render::gpudriven
         if (terrain.pipeline->setHexTilingEnabled(anyHexTiling))
             changed = true;
 
-        if (!changed)
+        // VK-1614. Tracked SEPARATELY from `changed`: these three macros gate code that runs after the
+        // RVT-resolve / live-composite join, so they cannot alter a single byte the bake writes.
+        // Folding them into `changed` would tear down the baker and invalidate every resident page
+        // every time an artist ticked "weather response" on a layer — a full RVT re-bake for a change
+        // the bake cannot see.
+        bool liveOnlyChanged = false;
+        // Derived from the uploaded per-layer scalars, exactly like the two loops above: a layer that
+        // did not opt in resolved to 0 and cannot switch the permutation on.
+        bool anyWeatherResponse = false;
+        for (const auto& l : terrain.layerData)
+        {
+            if (l.layerPorosity > 0.0f || l.layerSnowRetention > 0.0f)
+            {
+                anyWeatherResponse = true;
+                break;
+            }
+        }
+        if (terrain.pipeline->setWeatherResponseEnabled(anyWeatherResponse))
+            liveOnlyChanged = true;
+        // Puddles need somewhere for water to come from, so they ride the same content signal as the
+        // response plus an assigned mask. With neither, the term would be multiplied by a wetness that
+        // only the global weather can raise — which the plain wetness response already handles.
+        if (terrain.pipeline->setPuddlesEnabled(anyWeatherResponse || terrain.surfaceMaskAssigned))
+            liveOnlyChanged = true;
+        if (terrain.pipeline->setSurfaceMaskEnabled(terrain.surfaceMaskAssigned))
+            liveOnlyChanged = true;
+
+        if (!changed && !liveOnlyChanged)
             return; // unchanged - no recompile
 
         recreateTerrainPipelineForRVT(); // performs the single device-idle wait for this transition
+        // recreate() rebuilds only the pipeline/layout/shader — the descriptor set survives — but a
+        // mask assign in the same tick is what flipped surfaceMaskAssigned above, so bindings 5/6 may
+        // be pointing at the dummy. No-op unless the owner reports a resource change.
+        terrain.pipeline->syncSurfaceMaskDescriptor();
 
         // The bake shader #includes the same generated composite, so it must be recompiled with the
         // matching macros. init() early-returns once its pipeline exists, hence the full reset. Every
         // resident page was baked with the old composite, so they all have to go.
-        if (vtCache.rvtEnabled && terrainRVTBaker && bindlessTextures)
+        // Guarded on `changed`, NOT on liveOnlyChanged: see the note above.
+        if (changed && vtCache.rvtEnabled && terrainRVTBaker && bindlessTextures)
         {
             const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
             terrainRVTBaker.reset();
@@ -425,6 +457,69 @@ namespace render::gpudriven
         // No material to derive from - which also means no detail content, in either direction.
         // Settings routinely arrive before a terrain exists; the first material load re-derives.
         syncTerrainDetailMapsPermutation(false);
+    }
+
+    void GPUDrivenRenderer::setTerrainSurfaceMask(uint32_t width, uint32_t height,
+                                                  const std::vector<uint8_t>& rgba,
+                                                  const glm::vec4& worldRect,
+                                                  float wetnessScale, float snowScale)
+    {
+        if (!initialized || !terrain.pipeline)
+            return;
+
+        if (width == 0 || height == 0 || rgba.empty())
+        {
+            clearTerrainSurfaceMask();
+            return;
+        }
+
+        auto& mask = terrain.pipeline->getSurfaceMask();
+        if (!mask.createMask(width, height))
+            return;
+
+        mask.queueUpload(rgba);
+        mask.setParams(worldRect.x, worldRect.y, worldRect.z, worldRect.w,
+                       wetnessScale, snowScale, true);
+        terrain.pipeline->syncSurfaceMaskDescriptor();
+
+        // The macro is resource-derived, so flipping this is what compiles the sampler in. The sync
+        // treats it as live-only and therefore skips the RVT baker teardown.
+        terrain.surfaceMaskAssigned = true;
+        syncTerrainCompositePermutation();
+    }
+
+    void GPUDrivenRenderer::updateTerrainSurfaceMaskPixels(const std::vector<uint8_t>& rgba)
+    {
+        if (!initialized || !terrain.pipeline || !terrain.surfaceMaskAssigned)
+            return;
+
+        // Paint-stroke path: pixels only. No descriptor rewrite, no permutation sync, no pipeline
+        // recreate — the image object is unchanged, only its contents.
+        terrain.pipeline->getSurfaceMask().queueUpload(rgba);
+    }
+
+    void GPUDrivenRenderer::clearTerrainSurfaceMask()
+    {
+        if (!initialized || !terrain.pipeline || !terrain.surfaceMaskAssigned)
+            return;
+
+        auto& mask = terrain.pipeline->getSurfaceMask();
+        mask.releaseMask();
+        mask.setParams(0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, false);
+        // Point bindings 5/6 back at the 1x1 dummy BEFORE the macro is dropped, so the set is never
+        // left holding a destroyed view (this layout has no ePartiallyBound).
+        terrain.pipeline->syncSurfaceMaskDescriptor();
+
+        terrain.surfaceMaskAssigned = false;
+        syncTerrainCompositePermutation();
+    }
+
+    void GPUDrivenRenderer::flushTerrainSurfaceMaskUploads(const vk::CommandBuffer& cmd)
+    {
+        if (!initialized || !terrain.pipeline)
+            return;
+
+        terrain.pipeline->flushSurfaceMaskUploads(cmd);
     }
 
     void GPUDrivenRenderer::syncTerrainDetailMapsPermutation(bool effective)
@@ -628,7 +723,14 @@ namespace render::gpudriven
             gpuLayer.hexCellScale = r.hexCellScale;
             gpuLayer.hexContrast = r.hexContrast;
             gpuLayer.hexRotationStrength = r.hexRotationStrength;
-            // VK-1614 reserved fields stay at the value-initialized 0 from `gpuLayer = {}` above.
+            // VK-1614. Exactly 0 for every layer that did not opt into a weather response — the
+            // sentinel the shader's authority accumulator resolves back to the derived porosity /
+            // full snow retention, so such a layer renders bit-identically to the pre-VK-1614
+            // shader even inside the weather permutation. Slots past activeLayerCount keep the
+            // value-initialized 0 from `gpuLayer = {}` and therefore read neutral too, which
+            // matters because palette indices are allowed to point at them.
+            gpuLayer.layerPorosity = r.porosity;
+            gpuLayer.layerSnowRetention = r.snowRetention;
         }
 
         {

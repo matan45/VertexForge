@@ -560,9 +560,11 @@ TEST_SUITE("TerrainHeightBlend")
         CHECK(alignof(TerrainLayerGPUData) == 4);
         CHECK(sizeof(TerrainLayerGPUData) % 16 == 0);
         CHECK(offsetof(TerrainLayerGPUData, heightBlendContrast) == 36);
-        // VK-1614's reservation must survive VK-1612 — it appended rather than borrowing.
-        CHECK(offsetof(TerrainLayerGPUData, reservedPorosity) == 40);
-        CHECK(offsetof(TerrainLayerGPUData, reservedSnowRetention) == 44);
+        // VK-1614 consumed VK-1609's reservation IN PLACE. These two offsets and the size above are
+        // the whole "no second ABI bump" claim: the story renamed the fields and started writing
+        // them, and changed nothing about the layout. If either moves, the claim is false.
+        CHECK(offsetof(TerrainLayerGPUData, layerPorosity) == 40);
+        CHECK(offsetof(TerrainLayerGPUData, layerSnowRetention) == 44);
         CHECK(offsetof(TerrainLayerGPUData, hexTilingStrength) == 48);
         CHECK(offsetof(TerrainLayerGPUData, hexCellScale) == 52);
         CHECK(offsetof(TerrainLayerGPUData, hexContrast) == 56);
@@ -610,8 +612,8 @@ TEST_SUITE("TerrainHeightBlend")
             {"float", "emissionStrength"},
             {"uint",  "emissionTextureIndex"},
             {"float", "heightBlendContrast"},
-            {"float", "reservedPorosity"},
-            {"float", "reservedSnowRetention"},
+            {"float", "layerPorosity"},
+            {"float", "layerSnowRetention"},
             {"float", "hexTilingStrength"},
             {"float", "hexCellScale"},
             {"float", "hexContrast"},

@@ -56,5 +56,12 @@ namespace core
 
         void markTerrainMaterialDirty() override;
         bool consumeTerrainMaterialDirty() override;
+
+        // VK-1614. Pure forwarding: the mask bytes, its rect and both dirty flags live on
+        // TerrainService, which owns the paintable master copy.
+        bool consumeSurfaceMaskAssignDirty() override;
+        bool consumeSurfaceMaskPixelsDirty() override;
+        const terrain::TerrainSurfaceMaskData* getSurfaceMask() const override;
+        glm::vec4 getSurfaceMaskWorldRect() const override;
     };
 }

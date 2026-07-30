@@ -217,14 +217,25 @@ namespace render::gpudriven
         // [-8, 8] and is REQUIRED for the mix() exactness argument to hold (an infinity here would
         // make 0.0 * y == NaN and poison the linear case).
         float heightBlendContrast;     // 0 = this layer blends linearly
-        // VK-1614 (local wetness / snow) reservation — uploaded 0.0 until that story lands.
-        // Deliberately NOT consumed by VK-1612: this struct is never serialized (it is rebuilt from
-        // the .vfTerrainMat on every material load), so growing it costs a full rebuild, not an
-        // asset migration — and spending VK-1614's reservation to avoid one rebuild would be a bad
-        // trade. Keeping the size a 16-byte multiple stops a later vec4 member from silently
-        // changing the std430 array stride.
-        float reservedPorosity;
-        float reservedSnowRetention;
+        // VK-1614 local wetness / snow, consuming the two slots VK-1609 reserved here — so this is a
+        // rename, not a layout change: the offsets below and sizeof are untouched, which is the whole
+        // "no second ABI bump" guarantee.
+        //
+        // 0.0 is the SENTINEL for "this layer did not opt in", not a meaningful value, and that
+        // choice is load-bearing rather than cosmetic. Every slot is value-initialised
+        // (`gpuLayer = {}` in GPUDrivenRendererTerrain), and a per-tile palette index may legitimately
+        // exceed activeLayerCount (TerrainLayerVisibility.hpp), so an all-zero layer is reachable by
+        // real fragments. Had 1.0 meant "retains snow", every pre-VK-1614 material and every unused
+        // palette slot would silently have shed all snow the moment this field was read. The shader
+        // resolves the sentinel with a weighted authority accumulator; see
+        // terrain/TerrainWeatherResponse.hpp.
+        //
+        //   layerPorosity      how much water this layer absorbs. Overrides the roughness*roughness
+        //                      value common/wetness.glsl derives, and suppresses puddling.
+        //   layerSnowRetention how much of the snow amount this layer holds. Scales the amount, so it
+        //                      composes with the shared slope mask instead of fighting it.
+        float layerPorosity;
+        float layerSnowRetention;
         // VK-1612 hex-tile stochastic sampling. Per layer, because the opt-in is per layer.
         // hexTilingStrength is exactly 0 for every layer that did not opt in (or that has no albedo
         // texture worth stochastically sampling), and the composite's ternary then takes the
@@ -245,8 +256,8 @@ namespace render::gpudriven
     static_assert(offsetof(TerrainLayerGPUData, ormTextureIndex) == 12);
     static_assert(offsetof(TerrainLayerGPUData, emissionTextureIndex) == 32);
     static_assert(offsetof(TerrainLayerGPUData, heightBlendContrast) == 36);
-    static_assert(offsetof(TerrainLayerGPUData, reservedPorosity) == 40);
-    static_assert(offsetof(TerrainLayerGPUData, reservedSnowRetention) == 44);
+    static_assert(offsetof(TerrainLayerGPUData, layerPorosity) == 40);
+    static_assert(offsetof(TerrainLayerGPUData, layerSnowRetention) == 44);
     static_assert(offsetof(TerrainLayerGPUData, hexTilingStrength) == 48);
     static_assert(offsetof(TerrainLayerGPUData, hexCellScale) == 52);
     static_assert(offsetof(TerrainLayerGPUData, hexContrast) == 56);

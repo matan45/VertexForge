@@ -554,6 +554,59 @@ namespace windows
                     ImGui::Unindent(8.0f);
                 }
 
+                // VK-1614 per-layer weather response. Per layer because how a surface reacts to rain
+                // and snow is a material property, not a terrain-wide one.
+                if (ImGui::Checkbox("Weather Response", &layer.weatherResponse))
+                {
+                    onChanged();
+                }
+                ImGui::SameLine();
+                ImGui::TextDisabled("(!)");
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Overrides how this layer reacts to rain and snow.\n\n"
+                                      "Off, the layer uses the engine default: absorption derived from\n"
+                                      "its roughness, and full snow retention — exactly the behaviour\n"
+                                      "before this option existed.\n\n"
+                                      "Turning it on for ANY layer compiles a per-fragment blend of these\n"
+                                      "values into the terrain shader, so leave it off on layers that do\n"
+                                      "not need it.");
+                }
+                if (layer.weatherResponse)
+                {
+                    ImGui::Indent(8.0f);
+                    if (ImGui::DragFloat("Porosity##Weather", &layer.porosity, 0.01f, 0.0f, 1.0f, "%.2f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("How much water this surface drinks.\n"
+                                          "High (sand, soil): darkens a lot when wet, and never puddles.\n"
+                                          "Low (rock, stone, tile): darkens little, and pools water in\n"
+                                          "its hollows.");
+                    }
+                    if (ImGui::DragFloat("Snow Retention##Weather", &layer.snowRetention, 0.01f,
+                                         0.0f, 1.0f, "%.2f"))
+                    {
+                        onChanged();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(?)");
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("How much of the falling snow this surface holds.\n"
+                                          "1 = holds all of it, 0 = sheds it entirely.\n\n"
+                                          "This scales the amount, so it composes with the shared slope\n"
+                                          "rule: it can make a layer shed snow on ground that would\n"
+                                          "otherwise keep it, but it cannot hold snow on a steeper slope\n"
+                                          "than the engine allows.");
+                    }
+                    ImGui::Unindent(8.0f);
+                }
+
                 ImGui::Spacing();
                 ImGui::BeginDisabled(layerCount <= 1);
                 bool removeClicked = ImGui::SmallButton("Remove Layer");

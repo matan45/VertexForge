@@ -82,6 +82,7 @@ namespace windows
                     activeLayer = static_cast<int>(params.activeLayer);
                     falloffIndex = static_cast<int>(params.falloff);
                     shapeIndex = static_cast<int>(params.shape);
+                    selectedTarget = static_cast<int>(params.target);
 
                     auto type = d.query(events::paintBrush::GetPaintBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -110,6 +111,7 @@ namespace windows
                 activeLayer = static_cast<int>(n.params.activeLayer);
                 falloffIndex = static_cast<int>(n.params.falloff);
                 shapeIndex = static_cast<int>(n.params.shape);
+                selectedTarget = static_cast<int>(n.params.target);
             });
 
         subscribed = true;
@@ -132,12 +134,21 @@ namespace windows
             return;
         }
 
+        drawPaintTarget();
         drawBrushType();
-        drawTerrainMaterial();
-        drawLayerSelection();
+        // VK-1614: layers and the surface mask are different data. The material and layer pickers
+        // only mean something for a Layers stroke, so they are hidden rather than left inert — the
+        // dead-control failure mode VK-1613 existed to clean up.
+        const bool paintingLayers = (selectedTarget == static_cast<int>(terrain::PaintTarget::Layers));
+        if (paintingLayers)
+        {
+            drawTerrainMaterial();
+            drawLayerSelection();
+        }
         drawBrushParams();
 
-        bool isBaseLayerMode = (selectedBrushType == static_cast<int>(terrain::PaintBrushType::SetBaseLayer));
+        bool isBaseLayerMode = paintingLayers
+            && selectedBrushType == static_cast<int>(terrain::PaintBrushType::SetBaseLayer);
         ImGui::Spacing();
         ImGui::Separator();
         if (isBaseLayerMode)
@@ -157,6 +168,61 @@ namespace windows
             events::paint::SetPaintModeActiveCommand cmd;
             cmd.active = false;
             events::EventDispatcher::instance().execute(cmd);
+        }
+    }
+
+    void PaintToolPanel::drawPaintTarget()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Text("Paint Target");
+        ImGui::Separator();
+
+        const bool hasMask = dispatcher.query(events::terrain::HasSurfaceMaskQuery{});
+
+        const char* targetLabels[] = {"Layers", "Wetness", "Snow"};
+        bool targetChanged = false;
+
+        for (int i = 0; i < 3; ++i)
+        {
+            // Wetness/Snow need a mask to write into. Disabled rather than hidden so the feature is
+            // discoverable, with the tooltip pointing at where to create one.
+            const bool needsMask = (i != static_cast<int>(terrain::PaintTarget::Layers));
+            if (needsMask && !hasMask)
+            {
+                ImGui::BeginDisabled(true);
+            }
+            if (ImGui::RadioButton(targetLabels[i], &selectedTarget, i))
+            {
+                targetChanged = true;
+            }
+            if (needsMask && !hasMask)
+            {
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip("No surface mask on this terrain.\n"
+                                      "Create one in the Terrain inspector (Surface Mask).");
+                }
+            }
+            if (i < 2)
+            {
+                ImGui::SameLine();
+            }
+        }
+
+        // A mask cleared while Wetness/Snow was selected would leave strokes writing nowhere.
+        if (!hasMask && selectedTarget != static_cast<int>(terrain::PaintTarget::Layers))
+        {
+            selectedTarget = static_cast<int>(terrain::PaintTarget::Layers);
+            targetChanged = true;
+        }
+
+        if (targetChanged)
+        {
+            events::paintBrush::SetPaintTargetCommand cmd;
+            cmd.target = static_cast<terrain::PaintTarget>(selectedTarget);
+            dispatcher.execute(cmd);
         }
     }
 

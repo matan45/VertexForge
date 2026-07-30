@@ -395,9 +395,12 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float depthFalloff;
     float patchSize;
     float shoreWetRange;
-    float shoreWetDarkening;
-    float shoreWetRoughness;
+    // VK-1614 retired shoreWetDarkening / shoreWetRoughness. This shader never read any of the three
+    // shoreline fields (only waterHeight/causticStrength/depthFalloff/patchSize), so the block is kept
+    // in layout lock-step with mesh_terrain.glsl and render::water::CausticParams and nothing else.
+    float pad0;
     float pad1;
+    float pad2;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif

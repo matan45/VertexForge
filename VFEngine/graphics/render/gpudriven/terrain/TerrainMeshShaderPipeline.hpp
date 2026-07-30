@@ -8,6 +8,7 @@
 #include <array>
 #include "../GPUDrivenTypes.hpp"
 #include "TerrainCompositePermutation.hpp"
+#include "TerrainSurfaceMaskTexture.hpp"
 
 namespace core
 {
@@ -59,6 +60,11 @@ namespace render::gpudriven
         std::unique_ptr<core::Shader> terrainShader;
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
+
+        // VK-1614: the surface mask's image, sampler and params UBO live here because this class owns
+        // set 11, and bindings 5/6 must be written before the set is ever bound. Declared after
+        // `device` so the reference is bound before this member is constructed.
+        TerrainSurfaceMaskTexture surfaceMask{device};
 
         vk::DescriptorSetLayout terrainDataLayout;
         vk::DescriptorPool terrainDataPool;
@@ -149,6 +155,17 @@ namespace render::gpudriven
         // The bindings always exist in terrainDataLayout; the WORLD_MASK_ENABLED macro
         // (and thus the shader cost) is only compiled in once a mask is bound.
         bool worldMaskEnabled = false;
+
+        // VK-1614 local weather. Three LIVE-ONLY macros: everything they gate runs after the
+        // RVT-resolve / live-composite join, so none of them belongs in TerrainCompositePermutation
+        // and none of them can change a byte the RVT bake writes. That is what lets the caller skip
+        // the baker teardown + full page invalidation when one of these toggles.
+        //   surfaceMask      resource-derived: a mask asset is assigned (sampler + params UBO on 5/6)
+        //   weatherResponse  content-derived: some layer authored porosity / snow retention
+        //   puddles          content-derived: the material asked for standing water
+        bool surfaceMaskEnabled = false;
+        bool weatherResponseEnabled = false;
+        bool puddlesEnabled = false;
 
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
@@ -366,6 +383,53 @@ namespace render::gpudriven
                                       vk::Buffer feedbackBuffer, const void* params, vk::DeviceSize paramsSize);
         void updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
                                       vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
+        // VK-1614: set 11 bindings 5/6. Unlike the world mask above this is written EAGERLY at set
+        // creation (with the owner's 1x1 dummy) and rewritten on every resource change, because the
+        // layout has eUpdateAfterBind but not ePartiallyBound.
+        void updateSurfaceMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
+                                        vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
+
+        // VK-1614 live-only permutation flags. Each returns true when the flag actually changed, so
+        // the caller knows a pipeline recreate is required — but NOT an RVT re-bake, because none of
+        // these macros reaches the bake shader.
+        bool setSurfaceMaskEnabled(bool enabled)
+        {
+            if (surfaceMaskEnabled == enabled)
+                return false;
+            surfaceMaskEnabled = enabled;
+            return true;
+        }
+        bool isSurfaceMaskEnabled() const { return surfaceMaskEnabled; }
+        bool setWeatherResponseEnabled(bool enabled)
+        {
+            if (weatherResponseEnabled == enabled)
+                return false;
+            weatherResponseEnabled = enabled;
+            return true;
+        }
+        bool isWeatherResponseEnabled() const { return weatherResponseEnabled; }
+        bool setPuddlesEnabled(bool enabled)
+        {
+            if (puddlesEnabled == enabled)
+                return false;
+            puddlesEnabled = enabled;
+            return true;
+        }
+        bool arePuddlesEnabled() const { return puddlesEnabled; }
+
+        // VK-1614 surface-mask resource access. The pipeline owns the texture (it owns set 11), so
+        // the renderer drives it through here rather than holding a second reference.
+        TerrainSurfaceMaskTexture& getSurfaceMask() { return surfaceMask; }
+        // Rewrites bindings 5/6 if — and only if — the owner reports a resource change. Cheap to call
+        // every frame.
+        void syncSurfaceMaskDescriptor()
+        {
+            if (!surfaceMask.consumeDescriptorDirty()) return;
+            updateSurfaceMaskResources(surfaceMask.getImageView(), surfaceMask.getSampler(),
+                                       surfaceMask.getParamsBuffer(), surfaceMask.getParamsSize());
+        }
+        // MUST be recorded outside any render pass — see TerrainSurfaceMaskTexture::flushUploads.
+        void flushSurfaceMaskUploads(const vk::CommandBuffer& cmd) { surfaceMask.flushUploads(cmd); }
 
         void dispatch(vk::CommandBuffer cmd,
                       uint32_t imageIndex,

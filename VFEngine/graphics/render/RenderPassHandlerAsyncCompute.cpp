@@ -54,6 +54,30 @@ namespace render
             if (terrainRenderProvider->consumeTerrainMaterialDirty())
                 gpuDrivenRenderer->invalidateTerrainLayerData();
 
+            // VK-1614 surface mask. Assign is the expensive transition (image recreate + descriptor
+            // rewrite + pipeline recreate for the macro); pixels is the paint-stroke path and does
+            // nothing but queue a copy. Checked in that order so an assign in the same frame does not
+            // also pay a redundant pixel upload — setTerrainSurfaceMask already queues one.
+            if (terrainRenderProvider->consumeSurfaceMaskAssignDirty())
+            {
+                if (const auto* mask = terrainRenderProvider->getSurfaceMask())
+                {
+                    gpuDrivenRenderer->setTerrainSurfaceMask(
+                        mask->width, mask->height, mask->rgba,
+                        terrainRenderProvider->getSurfaceMaskWorldRect(), 1.0f, 1.0f);
+                }
+                else
+                {
+                    gpuDrivenRenderer->clearTerrainSurfaceMask();
+                }
+                (void)terrainRenderProvider->consumeSurfaceMaskPixelsDirty();
+            }
+            else if (terrainRenderProvider->consumeSurfaceMaskPixelsDirty())
+            {
+                if (const auto* mask = terrainRenderProvider->getSurfaceMask())
+                    gpuDrivenRenderer->updateTerrainSurfaceMaskPixels(mask->rgba);
+            }
+
             auto visibleTiles = terrainRenderProvider->getVisibleTiles(*currentFrustum, currentCameraPosition);
 
             std::unordered_set<::terrain::TerrainTile*> terrainSeen(visibleTiles.begin(), visibleTiles.end());

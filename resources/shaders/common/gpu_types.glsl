@@ -131,8 +131,8 @@ struct TerrainLayerGPUData {
     float emissionStrength;     // Emission intensity
     uint emissionTextureIndex;  // Bindless index (0 = no emission texture)
     float heightBlendContrast;  // VK-1609: 0 = linear blend; height is sampled from ORM alpha
-    float reservedPorosity;     // VK-1614 reserved (uploaded 0.0)
-    float reservedSnowRetention;// VK-1614 reserved (uploaded 0.0)
+    float layerPorosity;        // VK-1614: 0 = this layer did not opt in (derive from roughness)
+    float layerSnowRetention;   // VK-1614: 0 = this layer did not opt in (retains snow fully)
     float hexTilingStrength;    // VK-1612: 0 = this layer samples with a single tap
     float hexCellScale;         // hex cells per texture repeat
     float hexContrast;          // Burley weight exponent, clamped to [1, 16]

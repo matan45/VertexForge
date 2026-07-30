@@ -173,6 +173,20 @@ namespace serialization
             cleanNullTerminators(cleanWeightPath);
             j["weightMapPath"] = cleanWeightPath;
         }
+        // VK-1614. The rect rides the scene alongside the path because the `.vfImage` header has no
+        // room for it — so the two can in principle desync if someone hand-edits one. The editor only
+        // ever writes them together (create-mask snapshots both).
+        if (!terrain.surfaceMaskPath.empty())
+        {
+            std::string cleanMaskPath = terrain.surfaceMaskPath;
+            cleanNullTerminators(cleanMaskPath);
+            j["surfaceMaskPath"] = cleanMaskPath;
+            j["surfaceMaskMinX"] = terrain.surfaceMaskWorldRect.x;
+            j["surfaceMaskMinZ"] = terrain.surfaceMaskWorldRect.y;
+            j["surfaceMaskMaxX"] = terrain.surfaceMaskWorldRect.z;
+            j["surfaceMaskMaxZ"] = terrain.surfaceMaskWorldRect.w;
+            j["surfaceMaskResolution"] = terrain.surfaceMaskResolution;
+        }
         if (!terrain.savePath.empty())
         {
             std::string cleanSavePath = terrain.savePath;
@@ -227,6 +241,20 @@ namespace serialization
         terrain.terrainMaterialRef = readAssetRef(j, "terrainMaterialRef");
         if (auto it = j.find("weightMapPath"); it != j.end() && it->is_string())
             terrain.weightMapPath = it->get<std::string>();
+        // VK-1614. Additive keys: a scene saved before this story leaves surfaceMaskPath empty, which
+        // is what makes TERRAIN_WEATHER_MASK stay uncompiled and the shader bit-identical.
+        if (auto it = j.find("surfaceMaskPath"); it != j.end() && it->is_string())
+            terrain.surfaceMaskPath = it->get<std::string>();
+        if (auto it = j.find("surfaceMaskMinX"); it != j.end() && it->is_number())
+            terrain.surfaceMaskWorldRect.x = it->get<float>();
+        if (auto it = j.find("surfaceMaskMinZ"); it != j.end() && it->is_number())
+            terrain.surfaceMaskWorldRect.y = it->get<float>();
+        if (auto it = j.find("surfaceMaskMaxX"); it != j.end() && it->is_number())
+            terrain.surfaceMaskWorldRect.z = it->get<float>();
+        if (auto it = j.find("surfaceMaskMaxZ"); it != j.end() && it->is_number())
+            terrain.surfaceMaskWorldRect.w = it->get<float>();
+        if (auto it = j.find("surfaceMaskResolution"); it != j.end() && it->is_number_unsigned())
+            terrain.surfaceMaskResolution = it->get<uint32_t>();
         if (auto it = j.find("savePath"); it != j.end() && it->is_string())
             terrain.savePath = it->get<std::string>();
         // State flags (with backward-compatible defaults)

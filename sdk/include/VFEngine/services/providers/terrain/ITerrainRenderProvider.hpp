@@ -1,6 +1,7 @@
 #pragma once
 
 #include "terrain/TerrainSerializer.hpp"
+#include "terrain/TerrainSurfaceMaskAsset.hpp"
 #include "foliage/FoliageTypes.hpp"
 #include <vector>
 #include <string>
@@ -65,5 +66,22 @@ namespace services
 
         virtual void markTerrainMaterialDirty() = 0;
         virtual bool consumeTerrainMaterialDirty() = 0;
+
+        /// VK-1614 world-anchored wetness/snow mask. Two separate dirty signals because the two
+        /// transitions cost wildly different amounts:
+        ///   ASSIGN  - a mask was created, loaded, resized or cleared. Needs image (re)creation, a
+        ///             descriptor rewrite and a pipeline recreate for the TERRAIN_WEATHER_MASK macro.
+        ///             Rare (asset assign, scene load).
+        ///   PIXELS  - the same image's contents changed. One buffer-to-image copy, nothing else.
+        ///             This is the paint-stroke path and runs at interactive rates, so it must not
+        ///             drag the assign work behind it.
+        virtual bool consumeSurfaceMaskAssignDirty() = 0;
+        virtual bool consumeSurfaceMaskPixelsDirty() = 0;
+        /// Null when no mask is assigned. Borrowed for the duration of the call — the service owns
+        /// the paintable master copy and keeps mutating it.
+        virtual const terrain::TerrainSurfaceMaskData* getSurfaceMask() const = 0;
+        /// (minX, minZ, maxX, maxZ) in world space. AUTHORED and snapshotted at mask creation, never
+        /// derived from live grid bounds — see components::TerrainComponent for why that matters.
+        virtual glm::vec4 getSurfaceMaskWorldRect() const = 0;
     };
 }

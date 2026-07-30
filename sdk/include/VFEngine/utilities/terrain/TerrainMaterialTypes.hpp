@@ -6,6 +6,7 @@
 #include "TerrainAntiTiling.hpp"
 #include "TerrainHeightBlend.hpp"
 #include "TerrainHexTiling.hpp"
+#include "TerrainWeatherResponse.hpp"
 
 namespace terrain
 {
@@ -56,6 +57,19 @@ namespace terrain
         float hexCellScale = HEX_TILING_DEFAULT_CELL_SCALE;
         float hexContrast = HEX_TILING_DEFAULT_CONTRAST;
         float hexRotation = HEX_TILING_DEFAULT_ROTATION;
+        // VK-1614 per-layer weather response. Per-layer opt-in, default OFF, following the VK-1612
+        // shape above: with no layer opted in, TERRAIN_WEATHER_RESPONSE is never compiled and the
+        // shader is the one shipped before this story.
+        //   porosity      - how much water this layer absorbs: drives the wetness darkening and
+        //                   suppresses puddling (sand drinks it, rock pools it). Overrides the
+        //                   roughness*roughness value common/wetness.glsl derives today.
+        //   snowRetention - how much of the global/local snow amount this layer holds. Scales the
+        //                   amount, so it composes with (and cannot defeat) the shared slope mask.
+        // Both are clamped INTO [MIN_LAYER_WEATHER_SCALAR, 1] on upload, never to 0: 0.0f is
+        // reserved as the "did not opt in" sentinel the GPU struct relies on.
+        bool weatherResponse = false;
+        float porosity = DEFAULT_LAYER_POROSITY;
+        float snowRetention = DEFAULT_LAYER_SNOW_RETENTION;
         bool enabled = true;
     };
 

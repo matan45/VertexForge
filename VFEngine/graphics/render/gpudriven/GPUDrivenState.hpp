@@ -97,6 +97,10 @@ namespace render::gpudriven::detail
         // strength of 0 means the extra textureGrad is never compiled) and the derivation runs
         // separately from the upload.
         TerrainAntiTilingGPUData antiTiling{};
+        // VK-1614: whether a world-anchored wetness/snow mask is currently assigned. Drives the
+        // TERRAIN_WEATHER_MASK macro (resource-derived, unlike the two content-derived weather flags),
+        // so the sampler on set 11 binding 5 is only statically used once it points at a real image.
+        bool surfaceMaskAssigned = false;
         bool layerDataDirty = false;
         // VK-1486: set (editor/saver thread) when any material asset changes, so a terrain layer
         // that sources a .vfMat/.vfMatInstance re-resolves. Consumed (render thread) via exchange().

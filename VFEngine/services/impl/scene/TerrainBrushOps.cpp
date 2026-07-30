@@ -6,6 +6,7 @@
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
+#include "terrain/SurfaceMaskBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -226,6 +227,43 @@ namespace services
 
         auto brushParams = dispatcher.query(events::paintBrush::GetPaintBrushParamsQuery{});
         auto brushType = dispatcher.query(events::paintBrush::GetPaintBrushTypeQuery{});
+
+        // VK-1614: a wetness/snow stroke writes one world-anchored image, not the per-tile weight
+        // maps, so it short-circuits the whole tile loop below (no affected-tile query, no
+        // stream-in, no palette indirection, no cross-channel renormalisation).
+        if (brushParams.target != terrain::PaintTarget::Layers)
+        {
+            if (surfaceMask && surfaceMask->isValid())
+            {
+                terrain::SurfaceMaskBrushApplicator::ApplyParams maskParams;
+                maskParams.brushCenter = glm::vec2(worldPosition.x, worldPosition.z);
+                maskParams.maskWorldRect = surfaceMaskWorldRect;
+                maskParams.brushRadius = brushParams.radius;
+                maskParams.brushStrength = brushParams.strength;
+                maskParams.brushOpacity = brushParams.opacity;
+                maskParams.falloff = brushParams.falloff;
+                maskParams.shape = brushParams.shape;
+                maskParams.channel = terrain::paintTargetToMaskChannel(brushParams.target);
+                maskParams.deltaTime = deltaTime;
+                maskParams.invert = invert;
+
+                const auto dirtyRect =
+                    terrain::SurfaceMaskBrushApplicator::apply(*surfaceMask, maskParams);
+                if (!dirtyRect.isEmpty())
+                {
+                    // Whole-image re-upload: the mask is one texture, and a partial vk::BufferImageCopy
+                    // would need its own staging slice per stroke for a 4 MB image that is only
+                    // touched while a human is dragging a brush. Revisit if profiling says otherwise.
+                    surfaceMaskPixelsDirty.store(true, std::memory_order_release);
+                }
+            }
+
+            events::paintBrush::PaintBrushAppliedNotification maskNotification;
+            maskNotification.position = worldPosition;
+            maskNotification.type = brushType;
+            dispatcher.publish(maskNotification);
+            return;
+        }
 
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();

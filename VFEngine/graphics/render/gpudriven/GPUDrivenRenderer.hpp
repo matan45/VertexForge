@@ -674,6 +674,24 @@ namespace render::gpudriven
         // Safe to call before init.
         void setTerrainDetailMaps(bool allowed);
 
+        // VK-1614 world-anchored wetness/snow mask.
+        //
+        // `rgba` is the full mask image (R = wetness, G = snow); `worldRect` is (minX, minZ, maxX,
+        // maxZ) and is AUTHORED — snapshotted when the mask was created and never derived from live
+        // grid bounds, because the tile map is sparse, signed and mutable at runtime, so a derived
+        // rect would slide every painted puddle when a tile appeared at a negative coord.
+        //
+        // Assigning enables TERRAIN_WEATHER_MASK (one pipeline recreate, no RVT re-bake — the mask is
+        // applied after the composite join, so no baked page is affected).
+        void setTerrainSurfaceMask(uint32_t width, uint32_t height, const std::vector<uint8_t>& rgba,
+                                   const glm::vec4& worldRect, float wetnessScale, float snowScale);
+        // Re-uploads the pixels of the already-assigned mask; no pipeline work. This is the paint-stroke
+        // path, so it must stay cheap.
+        void updateTerrainSurfaceMaskPixels(const std::vector<uint8_t>& rgba);
+        void clearTerrainSurfaceMask();
+        // Records the pending mask copy. MUST be called outside any render pass.
+        void flushTerrainSurfaceMaskUploads(const vk::CommandBuffer& cmd);
+
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
         // knobs (pagesPerFrame, evictionAge, enable toggles) forward to the managers.

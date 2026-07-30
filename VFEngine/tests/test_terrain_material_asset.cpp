@@ -118,6 +118,67 @@ TEST_SUITE("TerrainMaterialAsset")
         fs::remove(path);
     }
 
+    TEST_CASE("VK-1614 per-layer weather response round-trips")
+    {
+        terrain::TerrainMaterialData mat;
+        mat.activeLayerCount = 2;
+        mat.layers[0].name = "Rock";
+        mat.layers[0].materialRef = makeRef();
+        mat.layers[0].weatherResponse = true;
+        mat.layers[0].porosity = 0.12f;
+        mat.layers[0].snowRetention = 0.3f;
+        mat.layers[1].name = "Sand"; // left opted out on purpose
+
+        const auto path = tempPath("vf_test_terrainmat_weather.vfterrainmat");
+        REQUIRE(terrain::TerrainMaterialAsset::save(path.string(), mat));
+
+        auto loaded = terrain::TerrainMaterialAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+
+        CHECK(loaded->layers[0].weatherResponse == true);
+        CHECK(loaded->layers[0].porosity == doctest::Approx(0.12f));
+        CHECK(loaded->layers[0].snowRetention == doctest::Approx(0.3f));
+
+        // An untouched layer must come back at the neutral defaults, not at zero — the whole
+        // sentinel scheme depends on "did not opt in" being distinguishable from "authored 0".
+        CHECK(loaded->layers[1].weatherResponse == false);
+        CHECK(loaded->layers[1].porosity == doctest::Approx(terrain::DEFAULT_LAYER_POROSITY));
+        CHECK(loaded->layers[1].snowRetention == doctest::Approx(terrain::DEFAULT_LAYER_SNOW_RETENTION));
+
+        fs::remove(path);
+    }
+
+    TEST_CASE("a .vfterrainmat written before VK-1614 loads with the response off")
+    {
+        // The additive-key claim, as an executable check: absent keys must read as "no weather
+        // response", which is what keeps the permutation uncompiled and the shader bit-exact for
+        // every material already on disk.
+        const auto path = tempPath("vf_test_terrainmat_pre1614.vfterrainmat");
+        {
+            nlohmann::json j;
+            j["version"] = terrain::TERRAIN_MATERIAL_FORMAT_VERSION;
+            j["name"] = "Legacy";
+            j["activeLayerCount"] = 1;
+            nlohmann::json layer;
+            layer["name"] = "Ground";
+            layer["tilingScale"] = 1.0f;
+            j["layers"] = nlohmann::json::array({layer});
+            std::ofstream f(path);
+            f << j.dump(2);
+        }
+
+        auto loaded = terrain::TerrainMaterialAsset::load(path.string());
+        REQUIRE(loaded.has_value());
+        CHECK(loaded->layers[0].weatherResponse == false);
+
+        const auto resolved = render::gpudriven::resolveTerrainLayerPBR(loaded->layers[0], nullptr);
+        CHECK(resolved.porosity == 0.0f);
+        CHECK(resolved.snowRetention == 0.0f);
+        CHECK_FALSE(render::gpudriven::terrainMaterialWantsWeatherResponse({resolved}));
+
+        fs::remove(path);
+    }
+
     TEST_CASE("out-of-range anti-tiling values are clamped on load, not passed through")
     {
         // The load path clamps as well as the resolver, so a hand-edited file cannot put an
@@ -256,6 +317,10 @@ TEST_SUITE("TerrainMaterialAsset")
         CHECK(layer0.contains("hexCellScale"));
         CHECK(layer0.contains("hexContrast"));
         CHECK(layer0.contains("hexRotation"));
+        // VK-1614 per-layer keys.
+        CHECK(layer0.contains("weatherResponse"));
+        CHECK(layer0.contains("porosity"));
+        CHECK(layer0.contains("snowRetention"));
         // VK-1611 material-global block.
         REQUIRE(j.contains("antiTiling"));
         CHECK(j["antiTiling"].contains("macroVariationStrength"));

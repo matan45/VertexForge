@@ -1227,6 +1227,37 @@ namespace services
                 return loadWeightMaps(cmd.terrainEntity.id, cmd.path);
             });
 
+        // VK-1614 surface mask lifecycle (impl in TerrainSurfaceMaskOps.cpp).
+        dispatcher.registerCommandHandler<events::terrain::CreateSurfaceMaskCommand>(
+            [this](const events::terrain::CreateSurfaceMaskCommand& cmd)
+            {
+                return createSurfaceMask(cmd.terrainEntity.id, cmd.resolution);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::LoadSurfaceMaskCommand>(
+            [this](const events::terrain::LoadSurfaceMaskCommand& cmd)
+            {
+                return loadSurfaceMask(cmd.terrainEntity.id, cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::SaveSurfaceMaskCommand>(
+            [this](const events::terrain::SaveSurfaceMaskCommand& cmd)
+            {
+                return saveSurfaceMask(cmd.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::ClearSurfaceMaskCommand>(
+            [this](const events::terrain::ClearSurfaceMaskCommand&)
+            {
+                clearSurfaceMask();
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::HasSurfaceMaskQuery>(
+            [this](const events::terrain::HasSurfaceMaskQuery&)
+            {
+                return surfaceMask != nullptr && surfaceMask->isValid();
+            });
+
         dispatcher.registerCommandHandler<events::terrain::PrepareTerrainSaveCommand>(
             [this](const events::terrain::PrepareTerrainSaveCommand& cmd)
             {

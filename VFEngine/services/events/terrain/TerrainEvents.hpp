@@ -107,6 +107,42 @@ namespace events::terrain
         std::string_view getName() const override { return "LoadWeightMaps"; }
     };
 
+    // VK-1614 world-anchored wetness/snow mask (R = wetness, G = snow), stored as a `.vfImage`.
+    // Create snapshots the terrain's current world bounds into the mask's AUTHORED rect, once.
+    struct CreateSurfaceMaskCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        uint32_t resolution = 1024;
+
+        std::string_view getName() const override { return "CreateSurfaceMask"; }
+    };
+
+    struct LoadSurfaceMaskCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "LoadSurfaceMask"; }
+    };
+
+    struct SaveSurfaceMaskCommand : ICommand<bool>
+    {
+        std::string path;
+
+        std::string_view getName() const override { return "SaveSurfaceMask"; }
+    };
+
+    struct ClearSurfaceMaskCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "ClearSurfaceMask"; }
+    };
+
+    // Has a mask been created/loaded this session? Drives the editor's paint-target availability.
+    struct HasSurfaceMaskQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "HasSurfaceMask"; }
+    };
+
     struct SaveTerrainCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;

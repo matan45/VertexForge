@@ -495,6 +495,20 @@ TEST_SUITE("TerrainAntiTiling")
             {"RVT_ENABLED", "TERRAIN_MACRO_VARIATION"},
             {"RVT_ENABLED", "TERRAIN_DETAIL_MAPS", "TERRAIN_HEIGHT_BLEND",
              "TERRAIN_DISTANCE_RESCALE", "TERRAIN_HEX_TILING", "TERRAIN_MACRO_VARIATION"},
+            // VK-1614 local weather. These are LIVE-ONLY macros — they gate code after the
+            // RVT-resolve / live-composite join, so the bake never sees them and this shader is the
+            // only place they can break. Each alone (the weather block is a chain of independent
+            // #ifdefs, so a typo in one arm is invisible with the others on), then together, then
+            // crossed with RVT (the response gather runs in the resolved path too, which is the
+            // whole reason it is a separate loop rather than composite accumulators).
+            {"TERRAIN_WEATHER_RESPONSE"},
+            {"TERRAIN_WEATHER_MASK"},
+            {"TERRAIN_PUDDLES"},
+            {"TERRAIN_WEATHER_RESPONSE", "TERRAIN_WEATHER_MASK", "TERRAIN_PUDDLES"},
+            {"RVT_ENABLED", "TERRAIN_WEATHER_RESPONSE", "TERRAIN_WEATHER_MASK", "TERRAIN_PUDDLES"},
+            {"RVT_ENABLED", "TERRAIN_DETAIL_MAPS", "TERRAIN_HEIGHT_BLEND",
+             "TERRAIN_DISTANCE_RESCALE", "TERRAIN_HEX_TILING", "TERRAIN_MACRO_VARIATION",
+             "TERRAIN_WEATHER_RESPONSE", "TERRAIN_WEATHER_MASK", "TERRAIN_PUDDLES"},
         };
 
         bool sawFragment = false;

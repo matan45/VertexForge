@@ -83,6 +83,17 @@ namespace services
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
 
+        // VK-1614 world-anchored wetness/snow mask. ONE mask, not one per terrain entity: it is
+        // world-anchored by definition, the graphics side has a single binding for it, and scenes
+        // with two terrains sharing a world are not a case the renderer models today.
+        // The service owns the paintable master copy; graphics keeps its own GPU copy and pulls.
+        std::shared_ptr<terrain::TerrainSurfaceMaskData> surfaceMask;
+        glm::vec4 surfaceMaskWorldRect{0.0f}; // AUTHORED rect, never derived from live grid bounds
+        std::string surfaceMaskPath;
+        uint64_t surfaceMaskOwner = 0; // terrain entity id the mask belongs to
+        std::atomic<bool> surfaceMaskAssignDirty{false};
+        std::atomic<bool> surfaceMaskPixelsDirty{false};
+
         // Cave brush undo: per-tile SDF + hole-mask captured before the current stroke
         // first modifies that tile; drained into an undo command when the stroke finalizes.
         struct CaveStrokeTileBefore
@@ -195,6 +206,19 @@ namespace services
 
         bool saveWeightMaps(uint64_t terrainEntityId, const std::string& path);
         bool loadWeightMaps(uint64_t terrainEntityId, const std::string& path);
+
+        // VK-1614 surface mask lifecycle. Implemented in TerrainSurfaceMaskOps.cpp.
+        // createSurfaceMask snapshots the CURRENT terrain world bounds into the authored rect once;
+        // nothing recomputes it afterwards, so grid expansion cannot slide painted content.
+        bool createSurfaceMask(uint64_t terrainEntityId, uint32_t resolution);
+        bool loadSurfaceMask(uint64_t terrainEntityId, const std::string& path);
+        bool saveSurfaceMask(const std::string& path);
+        void clearSurfaceMask();
+        [[nodiscard]] const terrain::TerrainSurfaceMaskData* getSurfaceMask() const { return surfaceMask.get(); }
+        [[nodiscard]] glm::vec4 getSurfaceMaskWorldRect() const { return surfaceMaskWorldRect; }
+        [[nodiscard]] const std::string& getSurfaceMaskPath() const { return surfaceMaskPath; }
+        [[nodiscard]] bool consumeSurfaceMaskAssignDirty() { return surfaceMaskAssignDirty.exchange(false); }
+        [[nodiscard]] bool consumeSurfaceMaskPixelsDirty() { return surfaceMaskPixelsDirty.exchange(false); }
 
         bool prepareSave(uint64_t terrainEntityId);
         bool prepareSaveIncremental(uint64_t terrainEntityId);

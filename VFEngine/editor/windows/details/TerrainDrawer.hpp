@@ -17,6 +17,7 @@ namespace windows::details {
         void drawSaveLoad(services::EntityHandle handle, const services::TerrainData& terrain);
         void drawGridExpansion(services::EntityHandle handle);
         void drawStreaming(services::EntityHandle handle);
+        void drawSurfaceMask(services::EntityHandle handle); // VK-1614
         void drawPhysics(services::EntityHandle handle, const services::TerrainData& terrain);
         void startSave(services::EntityHandle handle, const std::string& path);
         void startSaveAs(services::EntityHandle handle);
@@ -31,6 +32,10 @@ namespace windows::details {
 
         int pendingTileX = 0;
         int pendingTileZ = 0;
+
+        // VK-1614: resolution for a newly created surface mask. Index into the labels in
+        // drawSurfaceMask, not a raw value, so the UI cannot request a non-power-of-two.
+        int surfaceMaskResIndex = 1;
     };
 
 }

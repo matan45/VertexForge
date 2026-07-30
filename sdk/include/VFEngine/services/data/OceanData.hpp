@@ -48,9 +48,8 @@ namespace services
         float shoreFoamRange = 0.0f;
         float shoreFoamIntensity = 0.8f;
         float shoreBreakingStrength = 0.8f;
+        // VK-1614: shoreWetDarkening / shoreWetRoughness retired — see components::OceanComponent.
         float shoreWetRange = 5.0f;
-        float shoreWetDarkening = 0.3f;
-        float shoreWetRoughness = 0.15f;
 
         // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
         bool ssrEnabled = false;
@@ -156,9 +155,8 @@ namespace services
         float shoreFoamRange = 0.0f;
         float shoreFoamIntensity = 0.8f;
         float shoreBreakingStrength = 0.8f;
+        // VK-1614: shoreWetDarkening / shoreWetRoughness retired — see components::OceanComponent.
         float shoreWetRange = 5.0f;
-        float shoreWetDarkening = 0.3f;
-        float shoreWetRoughness = 0.15f;
 
         // VK-1604 — mirrors components::OceanComponent; see that header for the rationale.
         bool ssrEnabled = false;

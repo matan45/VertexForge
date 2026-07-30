@@ -57,6 +57,7 @@ namespace windows::details {
             drawSaveLoad(handle, terrain);
             drawGridExpansion(handle);
             drawStreaming(handle);
+            drawSurfaceMask(handle);
             drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
@@ -507,6 +508,86 @@ namespace windows::details {
             cmd.incremental = useIncremental;
             return events::EventDispatcher::instance().execute(cmd);
         }, threading::JobPriority::LOW);
+    }
+
+    // VK-1614 world-anchored wetness/snow mask (R = wetness, G = snow).
+    //
+    // Lives on the terrain rather than on the terrain material: two terrains sharing a
+    // .vfTerrainMat must not share one puddle map. The world rect is snapshotted from the terrain's
+    // CURRENT bounds when the mask is created and never recomputed — see components::TerrainComponent
+    // for why deriving it live would slide every painted puddle on grid expansion.
+    void TerrainDrawer::drawSurfaceMask(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Spacing();
+        if (!ImGui::CollapsingHeader("Surface Mask"))
+            return;
+
+        const bool hasMask = dispatcher.query(events::terrain::HasSurfaceMaskQuery{});
+
+        static constexpr const char* resLabels[] = {"512", "1024", "2048", "4096"};
+        static constexpr uint32_t resValues[] = {512u, 1024u, 2048u, 4096u};
+
+        if (!hasMask)
+        {
+            ImGui::TextDisabled("No mask. Create one to paint local wetness and snow.");
+            ImGui::SetNextItemWidth(100.0f);
+            ImGui::Combo("Resolution", &surfaceMaskResIndex, resLabels,
+                         static_cast<int>(std::size(resLabels)));
+
+            if (ImGui::Button("Create Mask"))
+            {
+                events::terrain::CreateSurfaceMaskCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.resolution = resValues[surfaceMaskResIndex];
+                dispatcher.execute(cmd);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load..."))
+            {
+                // .vfImage only — the project rule for terrain image assets.
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Image (*.vfImage)", L"*.vfImage"}
+                };
+                std::string path = fileDialog.openFileDialog(fileTypes);
+                if (!path.empty())
+                {
+                    events::terrain::LoadSurfaceMaskCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.path = path;
+                    dispatcher.execute(cmd);
+                }
+            }
+            return;
+        }
+
+        ImGui::TextDisabled("R = wetness, G = snow. Paint it with the Paint tool.");
+
+        if (ImGui::Button("Save As..."))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Image (*.vfImage)", L"*.vfImage"}
+            };
+            std::string path = fileDialog.saveFileDialog(fileTypes, L"vfImage");
+            if (!path.empty())
+            {
+                events::terrain::SaveSurfaceMaskCommand cmd;
+                cmd.path = path;
+                dispatcher.execute(cmd);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Mask"))
+        {
+            // Discards unsaved paint; the mask is only persisted on an explicit Save As.
+            dispatcher.execute(events::terrain::ClearSurfaceMaskCommand{});
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Removes the mask from this terrain.\n"
+                              "Unsaved painting is lost — Save As first to keep it.");
+        }
     }
 
     void TerrainDrawer::startSaveAs(services::EntityHandle handle)
