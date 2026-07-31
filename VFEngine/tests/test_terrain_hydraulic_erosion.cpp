@@ -681,13 +681,19 @@ TEST_SUITE("TerrainHydraulicErosion")
         }
     }
 
-    TEST_CASE("erosion carves the slope and deposits in the basin, unlike thermal")
+    TEST_CASE("erosion both carves and deposits, unlike thermal")
     {
-        // The terrain is a ramp that levels off into a basin. That shape is deliberate: on a
-        // CONSTANT-gradient slope draining off the region edge, flow only ever accelerates, so
-        // capacity (Kc * sin(alpha) * |v|) rises all the way down and the sediment leaves through
-        // the absorbing rim without ever settling. Deposition needs flow that SLOWS -- which is
-        // exactly what the flat does, as the gradient collapses to the sin(alpha) floor.
+        // The terrain is a ramp that levels off into a shelf, which reliably produces both erosion
+        // and deposition somewhere in the region.
+        //
+        // What this case deliberately does NOT assert is WHERE each happens. Two intuitive guesses
+        // are both wrong here: the downslope half of a uniform ramp erodes MORE than the upslope
+        // half (flow accelerates the whole way and the load exits through the absorbing rim), and
+        // the flat shelf erodes more than the ramp (velocity is flux/DEPTH, so a thin sheet
+        // spreading over a flat runs fast, not slow -- "flat" does not mean "slow" in the pipe
+        // model). The spatial distribution falls out of the rim placement and the depth field and
+        // is not a stable property worth pinning. Both signs appearing IS the AC's "carves flow
+        // channels and deposits sediment".
         const terrain::HydraulicRegion region = makeRegion(48);
         const uint32_t flatFrom = 18;
         const terrain::HydraulicBrushShape brush = makeBrush(region, 18.0f, terrain::BrushFalloff::Constant);
@@ -705,27 +711,21 @@ TEST_SUITE("TerrainHydraulicErosion")
         int lowered = 0;
         int raised = 0;
         float maxChange = 0.0f;
-        double slopeDelta = 0.0;
-        double basinDelta = 0.0;
-        for (uint32_t z = 0; z < region.height; ++z)
+        for (uint32_t c = 0; c < region.cellCount(); ++c)
         {
-            for (uint32_t x = 0; x < region.width; ++x)
-            {
-                const uint32_t c = region.index(x, z);
-                const float delta = hydraulic.terrain[c] - original[c];
-                if (delta < -1e-5f) ++lowered;
-                if (delta > 1e-5f) ++raised;
-                maxChange = std::max(maxChange, std::abs(delta));
-                (x < flatFrom ? slopeDelta : basinDelta) += delta;
-            }
+            const float delta = hydraulic.terrain[c] - original[c];
+            if (delta < -1e-5f) ++lowered;
+            if (delta > 1e-5f) ++raised;
+            maxChange = std::max(maxChange, std::abs(delta));
         }
 
-        // Both signs must appear: ground is dissolved on the ramp and dropped again in the basin.
-        // That is the AC's "carves flow channels and deposits sediment", made executable.
-        CHECK(lowered > 0);
-        CHECK(raised > 0);
+        // Both signs, each over a meaningful share of the region rather than a lone outlier cell:
+        // ground is dissolved in some places and dropped in others, which is transport rather than
+        // a brush that merely lowers everything it touches.
+        const int meaningful = static_cast<int>(region.cellCount()) / 100;
+        CHECK(lowered > meaningful);
+        CHECK(raised > meaningful);
         CHECK(maxChange > 1e-4f);
-        CHECK(basinDelta > slopeDelta);
 
         // Thermal relaxation on the SAME terrain (same profile, or the comparison would only be
         // measuring the difference between two starting shapes). A 0.15/cell ramp is far below the
