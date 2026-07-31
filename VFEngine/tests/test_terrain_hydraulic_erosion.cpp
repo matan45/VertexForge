@@ -77,8 +77,10 @@ namespace
         return region;
     }
 
+    // Height drops with +X, so +X is downhill. `flatFrom` is the column where the ramp levels off
+    // into a basin; the default puts it past the far edge, giving a pure constant-gradient slope.
     void seedSlope(terrain::HydraulicState& state, const terrain::HydraulicRegion& region,
-                   float dropPerCell = 0.15f)
+                   float dropPerCell = 0.15f, uint32_t flatFrom = ~0u)
     {
         state.resize(region.cellCount());
         for (uint32_t z = 0; z < region.height; ++z)
@@ -87,7 +89,8 @@ namespace
             {
                 const uint32_t idx = region.index(x, z);
                 const float ripple = 0.05f * std::sin(static_cast<float>(z) * 0.7f);
-                const float height = 20.0f - dropPerCell * static_cast<float>(x) + ripple;
+                const float ramp = static_cast<float>(std::min(x, flatFrom));
+                const float height = 20.0f - dropPerCell * ramp + ripple;
                 state.terrain[idx] = height;
                 state.original[idx] = height;
                 state.valid[idx] = 1.0f;
@@ -678,9 +681,15 @@ TEST_SUITE("TerrainHydraulicErosion")
         }
     }
 
-    TEST_CASE("erosion carves and deposits, and does not merely smooth like thermal")
+    TEST_CASE("erosion carves the slope and deposits in the basin, unlike thermal")
     {
+        // The terrain is a ramp that levels off into a basin. That shape is deliberate: on a
+        // CONSTANT-gradient slope draining off the region edge, flow only ever accelerates, so
+        // capacity (Kc * sin(alpha) * |v|) rises all the way down and the sediment leaves through
+        // the absorbing rim without ever settling. Deposition needs flow that SLOWS -- which is
+        // exactly what the flat does, as the gradient collapses to the sin(alpha) floor.
         const terrain::HydraulicRegion region = makeRegion(48);
+        const uint32_t flatFrom = 18;
         const terrain::HydraulicBrushShape brush = makeBrush(region, 18.0f, terrain::BrushFalloff::Constant);
 
         terrain::HydraulicParams params = makeParams(1.0f, 48);
@@ -689,14 +698,15 @@ TEST_SUITE("TerrainHydraulicErosion")
         params.validate();
 
         terrain::HydraulicState hydraulic;
-        seedSlope(hydraulic, region);
+        seedSlope(hydraulic, region, 0.15f, flatFrom);
         const std::vector<float> original = hydraulic.terrain;
         terrain::simulateHydraulicErosion(hydraulic, region, params, brush, 1.0f, -1000.0f, 1000.0f);
 
         int lowered = 0;
+        int raised = 0;
         float maxChange = 0.0f;
-        double upslopeDelta = 0.0;
-        double downslopeDelta = 0.0;
+        double slopeDelta = 0.0;
+        double basinDelta = 0.0;
         for (uint32_t z = 0; z < region.height; ++z)
         {
             for (uint32_t x = 0; x < region.width; ++x)
@@ -704,25 +714,26 @@ TEST_SUITE("TerrainHydraulicErosion")
                 const uint32_t c = region.index(x, z);
                 const float delta = hydraulic.terrain[c] - original[c];
                 if (delta < -1e-5f) ++lowered;
+                if (delta > 1e-5f) ++raised;
                 maxChange = std::max(maxChange, std::abs(delta));
-                // seedSlope drops height with +X, so +X is downhill.
-                (x < region.width / 2 ? upslopeDelta : downslopeDelta) += delta;
+                (x < flatFrom ? slopeDelta : basinDelta) += delta;
             }
         }
 
+        // Both signs must appear: ground is dissolved on the ramp and dropped again in the basin.
+        // That is the AC's "carves flow channels and deposits sediment", made executable.
         CHECK(lowered > 0);
+        CHECK(raised > 0);
         CHECK(maxChange > 1e-4f);
+        CHECK(basinDelta > slopeDelta);
 
-        // Material is picked up upslope and carried downslope, so the downhill half must fare
-        // better than the uphill one. That directional transport is what separates this from a
-        // brush that merely lowers whatever it touches.
-        CHECK(downslopeDelta > upslopeDelta);
-
-        // Thermal relaxation on the same slope: a constant-gradient ramp is already talus-stable,
-        // so it does essentially nothing, while hydraulic erosion reshapes it. This is the AC's
-        // "visually distinct from thermal erosion on a test slope", made executable.
+        // Thermal relaxation on the SAME terrain (same profile, or the comparison would only be
+        // measuring the difference between two starting shapes). A 0.15/cell ramp is far below the
+        // 45-degree talus threshold, so thermal finds no violations and leaves it untouched, while
+        // hydraulic erosion reshapes it. This is the AC's "visually distinct from thermal erosion
+        // on a test slope", made executable.
         terrain::HydraulicState thermal;
-        seedSlope(thermal, region);
+        seedSlope(thermal, region, 0.15f, flatFrom);
         terrain::HydraulicParams thermalParams = params;
         thermalParams.smoothing = 1.0f;
         for (uint32_t i = 0; i < params.iterations; ++i)
