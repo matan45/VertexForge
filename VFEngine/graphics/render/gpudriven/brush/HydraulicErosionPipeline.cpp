@@ -8,6 +8,11 @@
 #include <array>
 #include <cstring>
 
+// Windows defines MemoryBarrier as a macro, which conflicts with vk::MemoryBarrier.
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
+
 namespace render::gpudriven
 {
     namespace
