@@ -332,7 +332,7 @@ namespace services
         // dispatch chain, and scatters the result back to every owning tile slot.
         void applyHydraulicErosion(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                    std::shared_ptr<terrain::TerrainFileCache> fileCache,
-                                   const glm::vec2& brushCenter, const terrain::BrushParams& params,
+                                   const glm::vec3& worldPosition, const terrain::BrushParams& params,
                                    float deltaTime, bool invert);
         void flushPendingStrokeColliders();
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);

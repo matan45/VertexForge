@@ -342,6 +342,12 @@ namespace terrain
 
             file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
             uint32_t heightCount = readLE<uint32_t>(file);
+            if (heightCount > MAX_TILE_HEIGHT_SAMPLES)
+            {
+                vfLogError("TerrainSerializer: Height sample count {} exceeds maximum {} for tile ({}, {})",
+                           heightCount, MAX_TILE_HEIGHT_SAMPLES, entry.coordX, entry.coordZ);
+                return false;
+            }
 
             compression::HeightQuantizationParams params;
             params.minH = readLE<float>(file);

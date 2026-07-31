@@ -9,6 +9,7 @@
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/SurfaceMaskBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
+#include "terrain/SegmentCorridor.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
@@ -663,7 +664,6 @@ namespace services
         if (segLength < 0.01f)
             return;
 
-        glm::vec2 segNorm = segDir / segLength;
         float halfWidth = params.rampWidth * 0.5f;
         float totalHalfWidth = halfWidth + params.rampFalloff;
 
@@ -710,28 +710,18 @@ namespace services
                 {
                     glm::vec2 vertPos = tileOrigin + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * vertSpacing;
 
-                    // Project vertex onto line segment
-                    glm::vec2 toVert = vertPos - start2D;
-                    float t = glm::dot(toVert, segNorm) / segLength;
-                    t = glm::clamp(t, 0.0f, 1.0f);
+                    terrain::SegmentProjection projection =
+                        terrain::projectOntoSegment(vertPos, start2D, end2D, segLength);
 
-                    // Closest point on segment
-                    glm::vec2 closestPoint = start2D + segDir * t;
-                    float perpDist = glm::length(vertPos - closestPoint);
-
-                    if (perpDist > totalHalfWidth)
+                    if (projection.distance > totalHalfWidth)
                         continue;
 
                     // Target height: linear interpolation along ramp
-                    float targetHeight = glm::mix(startPos.y, endPos.y, t);
+                    float targetHeight = glm::mix(startPos.y, endPos.y, projection.t);
 
                     // Blend factor based on perpendicular distance
-                    float blend = 1.0f;
-                    if (perpDist > halfWidth && params.rampFalloff > 0.0f)
-                    {
-                        float falloffT = (perpDist - halfWidth) / params.rampFalloff;
-                        blend = 1.0f - falloffT * falloffT * (3.0f - 2.0f * falloffT); // smoothstep
-                    }
+                    float blend = terrain::corridorBlend(
+                        projection.distance, halfWidth, params.rampFalloff);
 
                     uint32_t idx = z * vertCount + x;
                     float currentHeight = tile->heightData[idx];

@@ -36,13 +36,6 @@ namespace services
         void finalizeSpline();
         void deleteSpline(uint64_t id);
 
-        // Catmull-Rom evaluation
-        glm::vec3 evaluateCatmullRom(const glm::vec3& p0, const glm::vec3& p1,
-                                      const glm::vec3& p2, const glm::vec3& p3, float t) const;
-
-        std::vector<glm::vec3> sampleSplineCurve(const std::vector<terrain::SplineControlPoint>& points,
-                                                  float stepSize) const;
-
         void applySplineToTerrain(terrain::SplineData& spline);
         void restoreOriginalHeights(const terrain::SplineData& spline);
     };

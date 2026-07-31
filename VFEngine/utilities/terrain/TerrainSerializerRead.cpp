@@ -14,6 +14,8 @@ namespace terrain
     static constexpr uint32_t MAX_PATH_LENGTH = 4096;
     static constexpr uint32_t MAX_TILE_COUNT = 100000;
     static constexpr uint32_t MAX_VERTICES_PER_LOD = 1 << 20;   // ~1M vertices
+    static constexpr uint32_t MAX_INDICES_PER_LOD = MAX_VERTICES_PER_LOD * 6;
+    static constexpr uint32_t MAX_MESHLETS_PER_LOD = MAX_VERTICES_PER_LOD;
     static bool validateResolution(uint8_t res)
     {
         return res <= static_cast<uint8_t>(TileResolution::High);
@@ -149,6 +151,28 @@ namespace terrain
 
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
+            const auto& header = lodHeaders[lod];
+            if (header.meshletCount > MAX_MESHLETS_PER_LOD)
+            {
+                vfLogError("TerrainSerializer: Meshlet count {} exceeds maximum at LOD {}",
+                           header.meshletCount, lod);
+                return false;
+            }
+
+            const uint64_t maxMeshletVertices =
+                static_cast<uint64_t>(header.meshletCount) * resource::MAX_MESHLET_VERTICES;
+            const uint64_t maxMeshletPrimitives =
+                static_cast<uint64_t>(header.meshletCount) * resource::MAX_MESHLET_PRIMITIVES;
+            if (static_cast<uint64_t>(header.meshletVertexCount) > maxMeshletVertices ||
+                static_cast<uint64_t>(header.meshletPrimitiveCount) > maxMeshletPrimitives)
+            {
+                vfLogError("TerrainSerializer: Invalid aggregate meshlet counts at LOD {}", lod);
+                return false;
+            }
+        }
+
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
             uint32_t vertexCount = readLE<uint32_t>(file);
             if (vertexCount > MAX_VERTICES_PER_LOD)
             {
@@ -185,6 +209,11 @@ namespace terrain
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             uint32_t indexCount = readLE<uint32_t>(file);
+            if (indexCount > MAX_INDICES_PER_LOD)
+            {
+                vfLogError("TerrainSerializer: Index count {} exceeds maximum at LOD {}", indexCount, lod);
+                return false;
+            }
             readVectorLE(file, result.lodData[lod].indices, indexCount);
         }
 
@@ -289,6 +318,39 @@ namespace terrain
             {
                 vfLogError("TerrainSerializer: Failed to read index table");
                 return false;
+            }
+
+            const uint64_t fileSize = fs::file_size(filePath);
+            for (const auto& entry : outIndex)
+            {
+                if (entry.heightDataOffset == 0 || entry.heightDataOffset >= fileSize)
+                {
+                    vfLogError("TerrainSerializer: Invalid height data offset {} for tile ({}, {})",
+                               entry.heightDataOffset, entry.coordX, entry.coordZ);
+                    return false;
+                }
+                if (entry.heightDataSize > fileSize - entry.heightDataOffset)
+                {
+                    vfLogError("TerrainSerializer: Height data size {} exceeds file bounds for tile ({}, {})",
+                               entry.heightDataSize, entry.coordX, entry.coordZ);
+                    return false;
+                }
+
+                const std::array<uint64_t, 4> optionalOffsets = {
+                    entry.weightDataOffset,
+                    entry.meshletDataOffset,
+                    entry.holeMaskDataOffset,
+                    entry.caveSdfDataOffset
+                };
+                for (uint64_t offset : optionalOffsets)
+                {
+                    if (offset != 0 && offset >= fileSize)
+                    {
+                        vfLogError("TerrainSerializer: Optional data offset {} exceeds file bounds for tile ({}, {})",
+                                   offset, entry.coordX, entry.coordZ);
+                        return false;
+                    }
+                }
             }
 
             return true;
@@ -423,22 +485,29 @@ namespace terrain
 
             file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
             uint32_t totalVertices = readLE<uint32_t>(file);
-            uint32_t packedSize = (totalVertices + 7) / 8;
+            if (totalVertices > MAX_TILE_HOLE_QUADS)
+            {
+                vfLogError("TerrainSerializer: Hole count {} exceeds maximum {} for tile ({}, {})",
+                           totalVertices, MAX_TILE_HOLE_QUADS, entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            const size_t packedSize = (static_cast<size_t>(totalVertices) + 7u) / 8u;
             std::vector<uint8_t> packed(packedSize);
             file.read(reinterpret_cast<char*>(packed.data()),
                       static_cast<std::streamsize>(packedSize));
-
-            outHoleMask.resize(totalVertices, 0);
-            for (uint32_t i = 0; i < totalVertices; ++i)
-            {
-                outHoleMask[i] = (packed[i / 8] >> (i % 8)) & 1;
-            }
 
             if (!file.good())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {}) hole mask",
                            entry.coordX, entry.coordZ);
                 return false;
+            }
+
+            outHoleMask.resize(totalVertices, 0);
+            for (uint32_t i = 0; i < totalVertices; ++i)
+            {
+                outHoleMask[i] = (packed[i / 8] >> (i % 8)) & 1;
             }
 
             return true;

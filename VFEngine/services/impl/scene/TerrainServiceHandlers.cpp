@@ -30,6 +30,7 @@
 #include "terrain/TileHeightSampler.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/PaintBrushTypes.hpp"
+#include "terrain/SegmentCorridor.hpp"
 #include "vegetation/ScatterBaker.hpp"
 #include "foliage/FoliageScatterBaker.hpp"
 #include "../../data/VegetationUndoCommands.hpp"
@@ -460,27 +461,23 @@ namespace services
                             float minPerpDist = std::numeric_limits<float>::max();
                             float bestTargetHeight = 0.0f;
 
-                            for (size_t idx : relevantSegments)
+                            for (size_t segIdx : relevantSegments)
                             {
-                                glm::vec2 segStart(cmd.splineSamples[idx].x, cmd.splineSamples[idx].z);
-                                glm::vec2 segEnd(cmd.splineSamples[idx + 1].x, cmd.splineSamples[idx + 1].z);
+                                glm::vec2 segStart(cmd.splineSamples[segIdx].x, cmd.splineSamples[segIdx].z);
+                                glm::vec2 segEnd(cmd.splineSamples[segIdx + 1].x, cmd.splineSamples[segIdx + 1].z);
                                 glm::vec2 segDir = segEnd - segStart;
                                 float segLen = glm::length(segDir);
                                 if (segLen < 0.001f) continue;
 
-                                glm::vec2 segNorm = segDir / segLen;
-                                float t = glm::dot(vertPos - segStart, segNorm) / segLen;
-                                t = glm::clamp(t, 0.0f, 1.0f);
+                                terrain::SegmentProjection projection =
+                                    terrain::projectOntoSegment(vertPos, segStart, segEnd, segLen);
 
-                                glm::vec2 closest = segStart + segDir * t;
-                                float perpDist = glm::length(vertPos - closest);
-
-                                if (perpDist < minPerpDist)
+                                if (projection.distance < minPerpDist)
                                 {
-                                    minPerpDist = perpDist;
+                                    minPerpDist = projection.distance;
                                     bestTargetHeight = glm::mix(
-                                        cmd.splineSamples[idx].y,
-                                        cmd.splineSamples[idx + 1].y, t)
+                                        cmd.splineSamples[segIdx].y,
+                                        cmd.splineSamples[segIdx + 1].y, projection.t)
                                         + cmd.params.embankmentHeight;
                                 }
                             }
@@ -491,12 +488,8 @@ namespace services
                             uint32_t idx = z * vertCount + x;
                             float currentHeight = tile->heightData[idx];
 
-                            float blend = 1.0f;
-                            if (minPerpDist > halfCorridor && cmd.params.falloffWidth > 0.0f)
-                            {
-                                float falloffT = (minPerpDist - halfCorridor) / cmd.params.falloffWidth;
-                                blend = 1.0f - falloffT * falloffT * (3.0f - 2.0f * falloffT);
-                            }
+                            float blend = terrain::corridorBlend(
+                                minPerpDist, halfCorridor, cmd.params.falloffWidth);
 
                             tile->heightData[idx] = glm::mix(currentHeight, bestTargetHeight, blend);
                             tileModified = true;
@@ -682,25 +675,18 @@ namespace services
                                 float segLen = glm::length(segDir);
                                 if (segLen < 0.001f) continue;
 
-                                float t = glm::dot(texelPos - segStart, segDir / segLen) / segLen;
-                                t = glm::clamp(t, 0.0f, 1.0f);
+                                terrain::SegmentProjection projection =
+                                    terrain::projectOntoSegment(texelPos, segStart, segEnd, segLen);
 
-                                glm::vec2 closest = segStart + segDir * t;
-                                float perpDist = glm::length(texelPos - closest);
-
-                                if (perpDist < minPerpDist)
-                                    minPerpDist = perpDist;
+                                if (projection.distance < minPerpDist)
+                                    minPerpDist = projection.distance;
                             }
 
                             if (minPerpDist > totalHalfWidth)
                                 continue;
 
-                            float blend = 1.0f;
-                            if (minPerpDist > halfCorridor && cmd.params.falloffWidth > 0.0f)
-                            {
-                                float falloffT = (minPerpDist - halfCorridor) / cmd.params.falloffWidth;
-                                blend = 1.0f - falloffT * falloffT * (3.0f - 2.0f * falloffT);
-                            }
+                            float blend = terrain::corridorBlend(
+                                minPerpDist, halfCorridor, cmd.params.falloffWidth);
 
                             // Paint the target channel
                             float current = tile->weightMap.getWeight(targetChannel, x, z);

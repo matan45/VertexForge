@@ -21,6 +21,12 @@ namespace terrain
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 4;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
+    inline constexpr uint32_t MAX_TILE_HEIGHT_SAMPLES =
+        TILE_VERTEX_COUNTS[static_cast<size_t>(TileResolution::High)] *
+        TILE_VERTEX_COUNTS[static_cast<size_t>(TileResolution::High)];
+    inline constexpr uint32_t MAX_TILE_HOLE_QUADS =
+        TILE_QUAD_COUNTS[static_cast<size_t>(TileResolution::High)] *
+        TILE_QUAD_COUNTS[static_cast<size_t>(TileResolution::High)];
 
     enum class TerrainFormatFlags : uint32_t
     {
