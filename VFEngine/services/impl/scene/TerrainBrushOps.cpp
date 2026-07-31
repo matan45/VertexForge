@@ -5,6 +5,7 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/BrushSampler.hpp"
+#include "terrain/TerrainHydraulicErosion.hpp"
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/SurfaceMaskBrushApplicator.hpp"
 #include "terrain/HoleBrushApplicator.hpp"
@@ -20,6 +21,8 @@
 #include "../../events/render/DebugDrawEvents.hpp"
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
+
+#include <algorithm>
 
 namespace services
 {
@@ -139,6 +142,16 @@ namespace services
 
         auto cacheIt = fileCaches.find(targetEntity->id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+        // VK-1616: hydraulic erosion is not a per-tile dispatch -- water has to cross tile seams --
+        // so it owns the rest of the flow itself (gather, simulate, scatter, sync, notify). Placed
+        // after beginStroke above so it inherits the sculpt stroke's undo capture unchanged.
+        if (brushType == terrain::BrushType::Hydraulic)
+        {
+            applyHydraulicErosion(*targetEntity, grid, fileCache, brushCenter, brushParams,
+                                  deltaTime, invert);
+            return;
+        }
 
         std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
@@ -805,6 +818,211 @@ namespace services
                 neighborPZ->setAllLODsDirty();
             }
         }
+    }
+
+    // VK-1616 hydraulic erosion.
+    //
+    // Every other sculpt brush dispatches once per tile over that tile's own heightmap. That cannot
+    // work here: the pipe model moves water between neighbouring cells, so a per-tile dispatch would
+    // wall the flow off at every seam and pile a deposition ridge along it. Instead this gathers one
+    // rect in GLOBAL VERTEX space -- tiles duplicate their shared edge row/column, so tile-local
+    // (lx, lz) of tile (tx, tz) is simply global (tx*quads + lx, tz*quads + lz) -- simulates it in a
+    // single dispatch chain, and scatters back. Because the scatter loop is per tile, a seam vertex
+    // is written once per owning tile with the same value, so seams stay exact by construction and
+    // the syncBrushBoundaryHeights averaging below is a bit-identity no-op ((a + a) * 0.5 == a
+    // exactly in IEEE-754). It also covers the diagonal corner owner, which that helper has never
+    // handled.
+    void TerrainService::applyHydraulicErosion(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                               std::shared_ptr<terrain::TerrainFileCache> fileCache,
+                                               const glm::vec2& brushCenter,
+                                               const terrain::BrushParams& brushParams,
+                                               float deltaTime, bool invert)
+    {
+        if (!grid || !brushComputeProvider)
+            return;
+
+        const terrain::TerrainTileConfig& config = grid->getTileConfig();
+        const float spacing = config.getVertexSpacing();
+        const uint32_t vertexCount = config.getVertexCount();
+        const uint32_t quads = config.getQuadCount();
+        if (spacing <= 0.0f || quads == 0 || vertexCount == 0)
+            return;
+
+        const terrain::HydraulicRegion region =
+            terrain::computeHydraulicRegion(brushCenter, brushParams.radius, spacing);
+        if (!region.valid())
+            return;
+
+        // Derived from the region, not from BrushSampler: the two disagree by up to one vertex at
+        // the edges, and missing an owner would write one side of a seam and not the other.
+        const terrain::HydraulicTileSpan span = terrain::hydraulicTileSpan(region, quads);
+
+        std::vector<terrain::TileCoord> touched;
+        std::vector<terrain::TerrainTile*> tiles;
+        for (int32_t tz = span.minZ; tz <= span.maxZ; ++tz)
+        {
+            for (int32_t tx = span.minX; tx <= span.maxX; ++tx)
+            {
+                const terrain::TileCoord coord(tx, tz);
+                terrain::TerrainTile* tile = grid->getTile(coord);
+                if (!tile)
+                {
+                    if (fileCache && fileCache->hasCoord(coord))
+                    {
+                        streamInTile(targetEntity, coord.x, coord.z);
+                        tile = grid->getTile(coord);
+                    }
+                    if (!tile)
+                        continue;
+                }
+
+                if (fileCache && !tile->hasHeightData())
+                    fileCache->ensureHeightsLoaded(*tile);
+                if (!tile->hasHeightData())
+                    continue;
+
+                // The whole global-vertex mapping assumes one resolution and one tile size across
+                // the grid. TerrainGrid constructs every tile from its single config, so this only
+                // fires if that ever stops being true - in which case bailing beats writing a
+                // scrambled field.
+                if (tile->config.getVertexCount() != vertexCount ||
+                    tile->config.worldTileSize != config.worldTileSize)
+                {
+                    vfLogError("Hydraulic erosion: tile ({}, {}) config differs from the grid config",
+                               coord.x, coord.z);
+                    return;
+                }
+
+                if (fileCache)
+                    fileCache->markDirty(coord);
+
+                // Undo capture, exactly as the per-tile path does it: per-kind first touch, guarded
+                // by strokeActive, so this is a no-op on every dab after the first.
+                captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                                            ::events::terrain::StrokeDataKind::Heights));
+
+                touched.push_back(coord);
+                tiles.push_back(tile);
+            }
+        }
+
+        if (tiles.empty())
+            return;
+
+        // Gather. Seam vertices are written more than once, but every owner already holds the same
+        // value (that is the invariant syncBrushBoundaryHeights maintains), so the order is moot.
+        std::vector<float> field(region.cellCount(), 0.0f);
+        std::vector<uint32_t> validMask(region.cellCount(), 0u);
+
+        auto forEachRegionVertex = [&](const terrain::TileCoord& coord, auto&& fn)
+        {
+            for (uint32_t lz = 0; lz <= quads; ++lz)
+            {
+                const int32_t gz = terrain::globalVertexForTileLocal(coord.z, lz, quads);
+                if (gz < region.originZ || gz >= region.originZ + static_cast<int32_t>(region.height))
+                    continue;
+                for (uint32_t lx = 0; lx <= quads; ++lx)
+                {
+                    const int32_t gx = terrain::globalVertexForTileLocal(coord.x, lx, quads);
+                    if (gx < region.originX || gx >= region.originX + static_cast<int32_t>(region.width))
+                        continue;
+
+                    const uint32_t cell = region.index(static_cast<uint32_t>(gx - region.originX),
+                                                       static_cast<uint32_t>(gz - region.originZ));
+                    fn(cell, lz * vertexCount + lx);
+                }
+            }
+        };
+
+        for (size_t i = 0; i < tiles.size(); ++i)
+        {
+            const terrain::TerrainTile* tile = tiles[i];
+            forEachRegionVertex(touched[i], [&](uint32_t cell, uint32_t slot)
+            {
+                field[cell] = tile->heightData[slot];
+                validMask[cell] = 1u;
+            });
+        }
+
+        terrain::HydraulicParams params = terrain::makeHydraulicParams(brushParams, spacing);
+        params.depositBias = invert;
+
+        terrain::HydraulicBrushShape brush;
+        brush.center = brushCenter;
+        brush.radius = brushParams.radius;
+        brush.falloff = brushParams.falloff;
+        brush.shape = brushParams.shape;
+        brush.vertexSpacing = spacing;
+
+        const float strengthScale = terrain::hydraulicStrengthScale(brushParams.strength, deltaTime);
+        const terrain::HydraulicGPUParams gpuParams = terrain::makeHydraulicGPUParams(
+            region, params, brush, strengthScale, config.minHeight, config.maxHeight);
+
+        if (!brushComputeProvider->applyHydraulicErosionGPU(field, validMask, gpuParams))
+        {
+            vfLogError("Hydraulic erosion dispatch failed for region {}x{}",
+                       region.width, region.height);
+            return;
+        }
+
+        // Scatter. Per tile rather than per vertex, which writes every owning slot for free.
+        for (size_t i = 0; i < tiles.size(); ++i)
+        {
+            terrain::TerrainTile* tile = tiles[i];
+            forEachRegionVertex(touched[i], [&](uint32_t cell, uint32_t slot)
+            {
+                if (validMask[cell] != 0u)
+                    tile->heightData[slot] = field[cell];
+            });
+            tile->isDirty = true;
+            tile->setAllLODsDirty();
+        }
+
+        syncBrushBoundaryHeights(grid, touched);
+
+        events::brush::BrushAppliedNotification notification;
+        notification.position = glm::vec3(brushCenter.x, 0.0f, brushCenter.y);
+        notification.type = terrain::BrushType::Hydraulic;
+        dispatcher.publish(notification);
+
+        // Physics is owed a rebuild, but not this frame -- see strokeColliderPending in
+        // TerrainService.hpp for why the hydraulic brush is the one that cannot afford it per dab.
+        // saveDirty is still set now, because rebuildModifiedColliders is what normally sets it and
+        // a mid-drag stroke must not look saved.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(targetEntity);
+        if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            registry.get<components::TerrainComponent>(ent).saveDirty = true;
+
+        if (strokeColliderEntityId != targetEntity.id)
+        {
+            strokeColliderPending.clear();
+            strokeColliderEntityId = targetEntity.id;
+        }
+        for (const auto& coord : touched)
+        {
+            if (std::find(strokeColliderPending.begin(), strokeColliderPending.end(), coord) ==
+                strokeColliderPending.end())
+                strokeColliderPending.push_back(coord);
+        }
+    }
+
+    // Drained by finalizeTerrainStroke. Kept here next to the code that fills it.
+    void TerrainService::flushPendingStrokeColliders()
+    {
+        if (strokeColliderPending.empty())
+            return;
+
+        std::vector<terrain::TileCoord> pending;
+        pending.swap(strokeColliderPending);
+        const uint64_t entityId = strokeColliderEntityId;
+        strokeColliderEntityId = 0;
+
+        auto gridIt = terrainGrids.find(entityId);
+        if (gridIt == terrainGrids.end() || !gridIt->second)
+            return;
+
+        rebuildModifiedColliders(EntityHandle{entityId}, gridIt->second.get(), pending);
     }
 
     // Vegetation brush is now handled by VegetationBrushServiceImpl (instance-based placement)

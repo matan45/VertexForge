@@ -132,6 +132,17 @@ namespace services
         StrokeTool strokeTool = StrokeTool::None;
         bool strokeActive = false;
 
+        // VK-1616: tiles whose physics collider is owed a rebuild when the stroke closes. The
+        // hydraulic brush dabs every held frame over a multi-tile region, and
+        // rebuildModifiedColliders is synchronous and unbudgeted (unlike mesh regen, which
+        // TerrainGrid caps at MAX_TILE_REGEN per frame), so paying it per dab is the one hitch a
+        // large erosion brush would reliably produce. Deferring it leaves the collider stale for
+        // the duration of the drag, which is how every DCC sculpting mode behaves; the visual mesh
+        // still updates every frame. Only the hydraulic path uses this -- the other brushes keep
+        // their immediate rebuild.
+        std::vector<terrain::TileCoord> strokeColliderPending;
+        uint64_t strokeColliderEntityId = 0;
+
         // VK-1614 surface-mask stroke: the painted channel's plane captured once at stroke
         // start (one byte per texel), cropped to the union of the per-dab dirty rects when
         // the stroke finalizes. The transient plane is ~1 MB at the 1024^2 default; only
@@ -316,6 +327,14 @@ namespace services
         void applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                        const glm::vec3& startPos, const glm::vec3& endPos,
                        const terrain::BrushParams& params);
+        // VK-1616. Unlike every other sculpt brush this is not a per-tile dispatch: water has to
+        // cross tile seams, so it gathers one rect in global vertex space, simulates it in a single
+        // dispatch chain, and scatters the result back to every owning tile slot.
+        void applyHydraulicErosion(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                   std::shared_ptr<terrain::TerrainFileCache> fileCache,
+                                   const glm::vec2& brushCenter, const terrain::BrushParams& params,
+                                   float deltaTime, bool invert);
+        void flushPendingStrokeColliders();
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);

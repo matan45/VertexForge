@@ -5,6 +5,7 @@
 #include "../render/occlusion/CameraOcclusionManager.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
+#include "terrain/TerrainHydraulicErosion.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include "../render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
@@ -46,6 +47,7 @@ namespace render
 namespace render::gpudriven
 {
     class BrushComputePipeline;
+    class HydraulicErosionPipeline;
 }
 
 namespace services
@@ -274,6 +276,11 @@ namespace controllers
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params);
 
+        bool applyHydraulicErosionGPU(
+            std::vector<float>& field,
+            const std::vector<uint32_t>& validMask,
+            const terrain::HydraulicGPUParams& params);
+
         void setStampData(
             const std::vector<float>& heights,
             uint32_t width, uint32_t height);
@@ -329,6 +336,7 @@ namespace controllers
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;
+        std::unique_ptr<render::gpudriven::HydraulicErosionPipeline> hydraulicErosionPipeline;
         std::unique_ptr<core::AsyncComputeManager> asyncComputeManager;
         // Scene recording pools (separate from ShadowSystem's pools for VSM tiles)
         std::unique_ptr<core::ThreadCommandPoolManager> sceneThreadPoolManager;

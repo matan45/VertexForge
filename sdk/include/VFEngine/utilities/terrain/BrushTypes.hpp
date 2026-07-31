@@ -17,7 +17,12 @@ namespace terrain
         Stamp = 5,
         Erosion = 6,
         Terrace = 7,
-        Ramp = 8
+        Ramp = 8,
+        // VK-1616: hydraulic (water-flow) erosion. Unlike 0-7 this does NOT run through
+        // brush_compute.glsl's switch -- it has its own pipeline over a multi-tile region
+        // (see TerrainHydraulicErosion.hpp), so like Ramp it takes a branch of its own in
+        // TerrainService::applyBrush. Append only: the GLSL switch is a raw integer switch.
+        Hydraulic = 9
     };
 
     enum class BrushFalloff : uint8_t
@@ -54,12 +59,31 @@ namespace terrain
         float terraceSharpness = 0.5f;
         float rampWidth = 5.0f;
         float rampFalloff = 2.0f;
+
+        // VK-1616: hydraulic erosion (Mei/Decaudin/Hu virtual pipe model). The timestep, pipe
+        // constants and minimum tilt angle are deliberately NOT exposed -- dt is derived from the
+        // vertex spacing and CFL-clamped in HydraulicParams::validate(), because a user-settable dt
+        // is the documented way to make this solver explode. The thermal smoothing sub-pass reuses
+        // `talusAngle` above rather than adding a seventh control.
+        float hydraulicRainRate = 0.35f;
+        float hydraulicSedimentCapacity = 1.2f;
+        float hydraulicEvaporation = 0.015f;
+        float hydraulicHardness = 0.5f;
+        float hydraulicSmoothing = 0.2f;
+        uint32_t hydraulicIterations = 24;
+
         std::string stampImagePath;
 
         void validate()
         {
             radius = std::max(radius, 0.1f);
             strength = std::clamp(strength, 0.0f, 100.0f);
+            hydraulicRainRate = std::clamp(hydraulicRainRate, 0.0f, 2.0f);
+            hydraulicSedimentCapacity = std::clamp(hydraulicSedimentCapacity, 0.1f, 5.0f);
+            hydraulicEvaporation = std::clamp(hydraulicEvaporation, 0.0f, 0.2f);
+            hydraulicHardness = std::clamp(hydraulicHardness, 0.0f, 1.0f);
+            hydraulicSmoothing = std::clamp(hydraulicSmoothing, 0.0f, 1.0f);
+            hydraulicIterations = std::clamp(hydraulicIterations, 1u, 128u);
         }
     };
 

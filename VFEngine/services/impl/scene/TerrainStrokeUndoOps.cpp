@@ -171,6 +171,11 @@ namespace services
         const StrokeTool tool = strokeTool;
         strokeTool = StrokeTool::None;
 
+        // VK-1616: the hydraulic brush defers its collider rebuilds to the end of the stroke rather
+        // than paying a synchronous, unbudgeted rebuild on every held frame. Drained here, before
+        // any of the early-return paths below, so the physics body cannot be left stale.
+        flushPendingStrokeColliders();
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         if (tool == StrokeTool::SurfaceMask)

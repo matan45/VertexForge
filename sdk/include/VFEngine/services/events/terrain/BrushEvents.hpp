@@ -160,6 +160,51 @@ namespace events::brush
         std::string_view getName() const override { return "SetRampFalloff"; }
     };
 
+    // VK-1616 hydraulic erosion. The timestep, gravity and pipe constants are deliberately absent:
+    // dt is derived from the tile's vertex spacing and CFL-clamped in HydraulicParams::validate(),
+    // because a user-settable timestep is the documented way to make this solver blow up.
+    struct SetHydraulicRainRateCommand : ICommand<>
+    {
+        float rainRate = 0.35f;
+
+        std::string_view getName() const override { return "SetHydraulicRainRate"; }
+    };
+
+    struct SetHydraulicSedimentCapacityCommand : ICommand<>
+    {
+        float capacity = 1.2f;
+
+        std::string_view getName() const override { return "SetHydraulicSedimentCapacity"; }
+    };
+
+    struct SetHydraulicIterationsCommand : ICommand<>
+    {
+        uint32_t iterations = 24;
+
+        std::string_view getName() const override { return "SetHydraulicIterations"; }
+    };
+
+    struct SetHydraulicEvaporationCommand : ICommand<>
+    {
+        float evaporation = 0.015f;
+
+        std::string_view getName() const override { return "SetHydraulicEvaporation"; }
+    };
+
+    struct SetHydraulicHardnessCommand : ICommand<>
+    {
+        float hardness = 0.5f;
+
+        std::string_view getName() const override { return "SetHydraulicHardness"; }
+    };
+
+    struct SetHydraulicSmoothingCommand : ICommand<>
+    {
+        float smoothing = 0.2f;
+
+        std::string_view getName() const override { return "SetHydraulicSmoothing"; }
+    };
+
     struct ResetRampCommand : ICommand<>
     {
         std::string_view getName() const override { return "ResetRamp"; }

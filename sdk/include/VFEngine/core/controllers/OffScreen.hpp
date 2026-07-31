@@ -14,6 +14,7 @@
 #include "types/CameraTypes.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include "terrain/BrushTypes.hpp"
+#include "terrain/TerrainHydraulicErosion.hpp"
 #include "postprocess/PostProcessTypes.hpp"
 #include "../../graphics/render/gi/GITypes.hpp"
 #include "atmosphere/AtmosphereSettings.hpp"
@@ -232,6 +233,11 @@ namespace controllers
         bool applyBrushGPU(
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params);
+
+        bool applyHydraulicErosionGPU(
+            std::vector<float>& field,
+            const std::vector<uint32_t>& validMask,
+            const terrain::HydraulicGPUParams& params);
 
         void setStampData(
             const std::vector<float>& heights,
