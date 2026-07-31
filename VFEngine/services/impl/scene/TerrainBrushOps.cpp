@@ -148,7 +148,7 @@ namespace services
         // after beginStroke above so it inherits the sculpt stroke's undo capture unchanged.
         if (brushType == terrain::BrushType::Hydraulic)
         {
-            applyHydraulicErosion(*targetEntity, grid, fileCache, brushCenter, brushParams,
+            applyHydraulicErosion(*targetEntity, grid, fileCache, worldPosition, brushParams,
                                   deltaTime, invert);
             return;
         }
@@ -834,12 +834,14 @@ namespace services
     // handled.
     void TerrainService::applyHydraulicErosion(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                                                std::shared_ptr<terrain::TerrainFileCache> fileCache,
-                                               const glm::vec2& brushCenter,
+                                               const glm::vec3& worldPosition,
                                                const terrain::BrushParams& brushParams,
                                                float deltaTime, bool invert)
     {
         if (!grid || !brushComputeProvider)
             return;
+
+        const glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
 
         const terrain::TerrainTileConfig& config = grid->getTileConfig();
         const float spacing = config.getVertexSpacing();
@@ -981,9 +983,9 @@ namespace services
         syncBrushBoundaryHeights(grid, touched);
 
         events::brush::BrushAppliedNotification notification;
-        notification.position = glm::vec3(brushCenter.x, 0.0f, brushCenter.y);
+        notification.position = worldPosition;
         notification.type = terrain::BrushType::Hydraulic;
-        dispatcher.publish(notification);
+        events::EventDispatcher::instance().publish(notification);
 
         // Physics is owed a rebuild, but not this frame -- see strokeColliderPending in
         // TerrainService.hpp for why the hydraulic brush is the one that cannot afford it per dab.
