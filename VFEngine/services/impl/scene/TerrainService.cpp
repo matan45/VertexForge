@@ -5,6 +5,7 @@
 #include "terrain/TerrainGrid.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
+#include "terrain/TileHeightSampler.hpp"
 #include "resource/ResourceManager.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -16,7 +17,38 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <limits>
+
+namespace
+{
+    bool resolveTerrainSamplePosition(float worldX, float worldZ, float worldTileSize,
+                                      terrain::TileCoord& coord, float& localX, float& localZ)
+    {
+        if (!std::isfinite(worldX) || !std::isfinite(worldZ)
+            || !std::isfinite(worldTileSize) || worldTileSize <= 0.0f)
+            return false;
+
+        const double tileX = std::floor(static_cast<double>(worldX) / worldTileSize);
+        const double tileZ = std::floor(static_cast<double>(worldZ) / worldTileSize);
+        constexpr double minCoord = static_cast<double>(std::numeric_limits<int32_t>::min());
+        constexpr double maxCoord = static_cast<double>(std::numeric_limits<int32_t>::max());
+        if (!std::isfinite(tileX) || !std::isfinite(tileZ)
+            || tileX < minCoord || tileX > maxCoord || tileZ < minCoord || tileZ > maxCoord)
+            return false;
+
+        coord = {static_cast<int32_t>(tileX), static_cast<int32_t>(tileZ)};
+        const double localXd = static_cast<double>(worldX) - tileX * worldTileSize;
+        const double localZd = static_cast<double>(worldZ) - tileZ * worldTileSize;
+        if (!std::isfinite(localXd) || !std::isfinite(localZd))
+            return false;
+
+        localX = static_cast<float>(localXd);
+        localZ = static_cast<float>(localZd);
+        return std::isfinite(localX) && std::isfinite(localZ);
+    }
+}
 
 namespace services
 {
@@ -65,6 +97,8 @@ namespace services
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainBakeGeometryQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightfieldQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainHeightAtQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainLayerWeightsAtQuery>();
+        dispatcher.unregisterQueryHandler<events::terrain::GetTerrainLayerWeightsBatchQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainStreamingConfigQuery>();
         dispatcher.unregisterQueryHandler<events::terrain::IsTerrainStreamingEnabledQuery>();
         dispatcher.unregisterCommandHandler<events::physics::SetPhysicsColliderStreamConfigCommand>();
@@ -612,5 +646,86 @@ namespace services
         result.height = h;
         result.valid = true;
         return result;
+    }
+
+    terrain::TerrainLayerWeightsAtResult TerrainService::getTerrainLayerWeightsAt(float worldX,
+                                                                                    float worldZ)
+    {
+        terrain::TerrainLayerWeightsAtResult result;
+        if (terrainGrids.empty() || !terrainGrids.begin()->second)
+            return result;
+
+        // Terrain queries currently follow the engine's single-terrain-per-scene convention.
+        auto& grid = *terrainGrids.begin()->second;
+        const auto& config = grid.getTileConfig();
+        const float vertexSpacing = config.getVertexSpacing();
+        if (!std::isfinite(vertexSpacing) || vertexSpacing <= 0.0f)
+            return result;
+
+        terrain::TileCoord coord;
+        float localX = 0.0f;
+        float localZ = 0.0f;
+        if (!resolveTerrainSamplePosition(worldX, worldZ, config.worldTileSize,
+                                          coord, localX, localZ))
+            return result;
+
+        const terrain::TerrainTile* tile = grid.getTile(coord);
+        if (!tile || !tile->hasWeightMap())
+            return result;
+
+        terrain::sampleTileLayerWeightsBilinear(tile->weightMap, localX, localZ,
+                                                vertexSpacing, result);
+        terrain::compactLayerWeights(result, terrain::TERRAIN_LAYER_WEIGHT_EPSILON);
+        return result;
+    }
+
+    std::vector<terrain::TerrainLayerWeightsAtResult> TerrainService::getTerrainLayerWeightsBatch(
+        const std::vector<glm::vec2>& positions)
+    {
+        std::vector<terrain::TerrainLayerWeightsAtResult> results(positions.size());
+        if (positions.empty() || terrainGrids.empty() || !terrainGrids.begin()->second)
+            return results;
+
+        const auto& [entityId, gridPtr] = *terrainGrids.begin();
+        auto& grid = *gridPtr;
+        const auto& config = grid.getTileConfig();
+        const float vertexSpacing = config.getVertexSpacing();
+        if (!std::isfinite(vertexSpacing) || vertexSpacing <= 0.0f)
+            return results;
+
+        const auto cacheIt = fileCaches.find(entityId);
+        const std::shared_ptr<terrain::TerrainFileCache> fileCache =
+            cacheIt != fileCaches.end() ? cacheIt->second : nullptr;
+
+        bool memoInitialized = false;
+        terrain::TileCoord memoCoord{};
+        terrain::TerrainTile* memoTile = nullptr;
+
+        for (size_t i = 0; i < positions.size(); ++i)
+        {
+            terrain::TileCoord coord;
+            float localX = 0.0f;
+            float localZ = 0.0f;
+            if (!resolveTerrainSamplePosition(positions[i].x, positions[i].y,
+                                              config.worldTileSize, coord, localX, localZ))
+                continue;
+
+            if (!memoInitialized || coord.x != memoCoord.x || coord.z != memoCoord.z)
+            {
+                memoInitialized = true;
+                memoCoord = coord;
+                memoTile = grid.getTile(coord);
+                if (memoTile && !memoTile->hasWeightMap() && !memoTile->hasHeightData() && fileCache)
+                    fileCache->ensureHeightsLoaded(*memoTile);
+            }
+
+            if (!memoTile || !memoTile->hasWeightMap())
+                continue;
+
+            terrain::sampleTileLayerWeightsBilinear(memoTile->weightMap, localX, localZ,
+                                                    vertexSpacing, results[i]);
+            terrain::compactLayerWeights(results[i], terrain::TERRAIN_LAYER_WEIGHT_EPSILON);
+        }
+        return results;
     }
 }

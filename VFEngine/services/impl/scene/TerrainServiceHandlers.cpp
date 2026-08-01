@@ -197,6 +197,18 @@ namespace services
                 return getTerrainHeightAt(q.worldX, q.worldZ);
             });
 
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainLayerWeightsAtQuery>(
+            [this](const events::terrain::GetTerrainLayerWeightsAtQuery& q)
+            {
+                return getTerrainLayerWeightsAt(q.worldX, q.worldZ);
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetTerrainLayerWeightsBatchQuery>(
+            [this](const events::terrain::GetTerrainLayerWeightsBatchQuery& q)
+            {
+                return getTerrainLayerWeightsBatch(q.positions);
+            });
+
         dispatcher.registerCommandHandler<events::terrain::AddTerrainTileCommand>(
             [this](const events::terrain::AddTerrainTileCommand& cmd)
             {
@@ -1052,6 +1064,7 @@ namespace services
                         const float vertexSpacing = tile->config.getVertexSpacing();
                         const float eps = vertexSpacing * 0.5f;
                         const terrain::TileWeightMapData& wm = tile->weightMap;
+                        terrain::TileLayerWeightMemo layerMemo(wm, vertexSpacing);
 
                         auto result = vegetation::bakeScatterForTile(
                             cmd.profile, palette, cmd.seed,
@@ -1062,8 +1075,8 @@ namespace services
                             [heights, vpt, vertexSpacing, eps](float lx, float lz) {
                                 return terrain::sampleTileNormalCentralDiff(heights, vpt, vertexSpacing, lx, lz, eps);
                             },
-                            [&wm, vertexSpacing](uint8_t layer, float lx, float lz) {
-                                return terrain::sampleTileLayerWeightBilinear(wm, layer, lx, lz, vertexSpacing);
+                            [&layerMemo](uint8_t layer, float lx, float lz) {
+                                return layerMemo.sample(layer, lx, lz);
                             },
                             // Curvature uses a full-vertexSpacing stencil (NOT the normal's 0.5*eps):
                             // bilinear height is planar within a cell, so a narrower stencil reads ~0.
@@ -1306,6 +1319,7 @@ namespace services
                         const float vertexSpacing = tile->config.getVertexSpacing();
                         const float eps = vertexSpacing * 0.5f;
                         const terrain::TileWeightMapData& wm = tile->weightMap;
+                        terrain::TileLayerWeightMemo layerMemo(wm, vertexSpacing);
 
                         auto result = foliage::bakeFoliageScatterForTile(
                             cmd.profile, foliagePalette, cmd.seed,
@@ -1316,8 +1330,8 @@ namespace services
                             [heights, vpt, vertexSpacing, eps](float lx, float lz) {
                                 return terrain::sampleTileNormalCentralDiff(heights, vpt, vertexSpacing, lx, lz, eps);
                             },
-                            [&wm, vertexSpacing](uint8_t layer, float lx, float lz) {
-                                return terrain::sampleTileLayerWeightBilinear(wm, layer, lx, lz, vertexSpacing);
+                            [&layerMemo](uint8_t layer, float lx, float lz) {
+                                return layerMemo.sample(layer, lx, lz);
                             },
                             [heights, vpt, vertexSpacing](float lx, float lz) {
                                 return terrain::sampleTileCurvature(heights, vpt, vertexSpacing, lx, lz, vertexSpacing);

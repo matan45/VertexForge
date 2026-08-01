@@ -3,6 +3,7 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/TerrainData.hpp"
 #include "terrain/TerrainHeightAtResult.hpp"
+#include "terrain/TerrainLayerWeightResult.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -267,6 +268,21 @@ namespace events::terrain
         float worldX = 0.0f;
         float worldZ = 0.0f;
         std::string_view getName() const override { return "GetTerrainHeightAt"; }
+    };
+
+    struct GetTerrainLayerWeightsAtQuery : IQuery<::terrain::TerrainLayerWeightsAtResult>
+    {
+        float worldX = 0.0f;
+        float worldZ = 0.0f;
+        std::string_view getName() const override { return "GetTerrainLayerWeightsAt"; }
+    };
+
+    struct GetTerrainLayerWeightsBatchQuery
+        : IQuery<std::vector<::terrain::TerrainLayerWeightsAtResult>>
+    {
+        // World-space XZ positions. Results preserve this vector's size and order.
+        std::vector<glm::vec2> positions;
+        std::string_view getName() const override { return "GetTerrainLayerWeightsBatch"; }
     };
 
     struct TerrainGeometryResult

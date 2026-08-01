@@ -290,6 +290,9 @@ namespace services
         ::events::terrain::TerrainBakeGeometryResult getTerrainBakeGeometry();
         ::events::terrain::TerrainHeightfieldResult getTerrainHeightfield();
         ::terrain::TerrainHeightAtResult getTerrainHeightAt(float worldX, float worldZ);
+        ::terrain::TerrainLayerWeightsAtResult getTerrainLayerWeightsAt(float worldX, float worldZ);
+        std::vector<::terrain::TerrainLayerWeightsAtResult> getTerrainLayerWeightsBatch(
+            const std::vector<glm::vec2>& positions);
 
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
