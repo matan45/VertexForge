@@ -920,16 +920,71 @@ namespace windows
             return;
         }
 
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        if (draggedSplinePoint >= 0)
         {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                draggedSplinePoint = -1;
+                return;
+            }
+
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit)
             {
-                events::splineTerrain::AddSplinePointCommand cmd;
-                cmd.worldPosition = hitResult.position;
-                dispatcher.execute(cmd);
+                events::splineTerrain::SetSplinePointCommand moveCmd;
+                moveCmd.index = static_cast<uint32_t>(draggedSplinePoint);
+                moveCmd.position = hitResult.position;
+                dispatcher.query(moveCmd);
+            }
+            return;
+        }
+
+        if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            return;
+
+        auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+        if (!hitResult.hit)
+            return;
+
+        // Grab an existing point if the click landed on one, otherwise append. Picking against the
+        // TERRAIN HIT rather than screen space keeps this independent of the camera projection and
+        // gives a pick radius the author can reason about in metres.
+        const auto points = dispatcher.query(events::splineTerrain::GetActiveSplinePointsQuery{});
+        const auto params = dispatcher.query(events::splineTerrain::GetSplineParamsQuery{});
+        const float pickRadius = std::max(1.5f, params.corridorWidth * 0.5f);
+
+        int32_t nearest = -1;
+        float nearestDistanceSq = pickRadius * pickRadius;
+        for (size_t i = 0; i < points.size(); ++i)
+        {
+            const glm::vec3 delta = points[i].position - hitResult.position;
+            const float distanceSq = delta.x * delta.x + delta.z * delta.z;
+            if (distanceSq <= nearestDistanceSq)
+            {
+                nearestDistanceSq = distanceSq;
+                nearest = static_cast<int32_t>(i);
             }
         }
+
+        if (nearest >= 0)
+        {
+            // Alt-click removes a point outright; a plain click starts a drag.
+            if (ImGui::GetIO().KeyAlt)
+            {
+                events::splineTerrain::RemoveSplinePointCommand removeCmd;
+                removeCmd.index = static_cast<uint32_t>(nearest);
+                dispatcher.query(removeCmd);
+            }
+            else
+            {
+                draggedSplinePoint = nearest;
+            }
+            return;
+        }
+
+        events::splineTerrain::AddSplinePointCommand cmd;
+        cmd.worldPosition = hitResult.position;
+        dispatcher.execute(cmd);
     }
 
 }

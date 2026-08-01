@@ -220,6 +220,7 @@ namespace windows
             animationDebugWindow.draw();
             sculptToolPanel.draw();
             splineToolPanel.draw();
+            roadMeshGenerator.update();
             paintToolPanel.draw();
             holeToolPanel.draw();
             caveToolPanel.draw();

@@ -101,6 +101,8 @@ namespace serialization
             out["waterBody"] = serializeWaterBody(entity.getComponent<components::WaterBodyComponent>());
         if (entity.hasComponent<components::MeshBrushInstanceComponent>())
             out["meshBrushInstance"] = serializeMeshBrushInstance(entity.getComponent<components::MeshBrushInstanceComponent>());
+        if (entity.hasComponent<components::RoadSplineComponent>())   // VK-1621
+            out["roadSpline"] = serializeRoadSpline(entity.getComponent<components::RoadSplineComponent>());
     }
 
     void SceneSerialization::serializeUIStructuralComponents(scene::Entity& entity, json& out)

@@ -225,6 +225,11 @@ namespace serialization
             auto& brushComp = entity.addOrReplaceComponent<components::MeshBrushInstanceComponent>();
             deserializeMeshBrushInstance(c["meshBrushInstance"], brushComp);
         }
+        if (c.contains("roadSpline")) // VK-1621
+        {
+            auto& roadComp = entity.addOrReplaceComponent<components::RoadSplineComponent>();
+            deserializeRoadSpline(c["roadSpline"], roadComp);
+        }
     }
 
     void SceneSerialization::deserializeUIStructuralComponents(const json& c, scene::Entity& entity)

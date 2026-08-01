@@ -4,6 +4,7 @@
 #include "MeshTextureImport.hpp"
 #include "MeshLODGenerator.hpp"
 #include "MeshSerializer.hpp"
+#include "MeshFileLayout.hpp"
 #include "FractureProcessor.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
 #include "config/Config.hpp"
@@ -339,30 +340,17 @@ namespace
         }
     }
 
+    // The header layout itself now lives in MeshFileLayout.hpp so ProceduralMeshWriter (VK-1621)
+    // writes byte-identical files. These stay as thin forwarders to keep the call sites unchanged.
     void writeFileHeader(std::ofstream& outFile, uint32_t numMeshes)
     {
-        resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(outFile, Version::major);
-        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
-        resource::endian::writeLE<uint32_t>(outFile, numMeshes);
-        resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(resource::MeshCompressionFlags::ALL));
+        types::meshlayout::writeFileHeader(outFile, numMeshes);
     }
 
     void writeSubmeshHeader(std::ofstream& outFile, std::string_view meshName,
                             size_t vertexCount, size_t triangleCount)
     {
-        vfLogDebug("Processing submesh '{}' ({} vertices, {} triangles)...",
-                   meshName, vertexCount, triangleCount);
-
-        uint32_t nameLength = static_cast<uint32_t>(meshName.length());
-        resource::endian::writeLE<uint32_t>(outFile, nameLength);
-        if (nameLength > 0)
-        {
-            outFile.write(meshName.data(), nameLength);
-        }
-
-        resource::endian::writeLE<uint32_t>(outFile, resource::LOD_LEVEL_COUNT);
+        types::meshlayout::writeSubmeshHeader(outFile, meshName, vertexCount, triangleCount);
     }
 
     // Strips characters illegal in Windows file names and trims awkward

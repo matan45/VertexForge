@@ -12,6 +12,7 @@
 #include "IKComponent.hpp"
 #include "VegetationComponents.hpp"
 #include "MeshBrushComponents.hpp"
+#include "RoadComponents.hpp"
 #include "DecalComponents.hpp"
 #include "VolumetricComponents.hpp"
 #include "WeatherComponents.hpp"
@@ -49,6 +50,8 @@ namespace components
                                                NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, NavInvokerComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
+                                               // VK-1621
+                                               RoadSplineComponent,
                                                BehaviorTreeComponent, DecalComponent, ReverbZoneComponent,
                                                FogVolumeComponent, ReflectionProbeComponent,
                                                VolumetricNavVolumeComponent, VolumetricAgentComponent,

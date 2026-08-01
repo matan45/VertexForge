@@ -24,6 +24,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/terrain/SplineTerrainEvents.hpp"
+#include "../../events/terrain/SplineTerrainUndoEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
@@ -31,6 +32,8 @@
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/PaintBrushTypes.hpp"
 #include "terrain/SegmentCorridor.hpp"
+#include "terrain/RoadMeshBuilder.hpp"
+#include "terrain/TerrainRVTBudget.hpp"
 #include "vegetation/ScatterBaker.hpp"
 #include "foliage/FoliageScatterBaker.hpp"
 #include "../../data/VegetationUndoCommands.hpp"
@@ -374,6 +377,113 @@ namespace services
                 }
             });
 
+        // VK-1621: build the road ribbon for an applied spline. Runs AFTER the sculpt op, so the
+        // heights it samples are the flattened corridor rather than the original ground.
+        dispatcher.registerQueryHandler<events::splineTerrain::BuildSplineRoadMeshQuery>(
+            [this](const events::splineTerrain::BuildSplineRoadMeshQuery& q) -> terrain::RoadMeshData
+            {
+                terrain::RoadMeshData result;
+                if (terrainGrids.empty() || q.splineSamples.size() < 2 || q.profile.columns.size() < 2)
+                    return result;
+
+                auto& grid = terrainGrids.begin()->second;
+                const auto& allTiles = grid->getAllTiles();
+                if (allTiles.empty())
+                    return result;
+                const float worldTileSize = allTiles[0]->config.worldTileSize;
+
+                // Widest lateral reach of the profile, so the tiles we make resident are exactly
+                // the ones the sampler will touch.
+                float reach = 0.0f;
+                for (const auto& column : q.profile.columns)
+                    reach = std::max(reach, std::abs(column.offset));
+
+                auto cacheIt = fileCaches.find(terrainGrids.begin()->first);
+                auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+
+                std::unordered_map<terrain::TileCoord, bool, terrain::TileCoordHash> affectedSet;
+                for (size_t i = 0; i + 1 < q.splineSamples.size(); ++i)
+                {
+                    glm::vec2 s(q.splineSamples[i].x, q.splineSamples[i].z);
+                    glm::vec2 e(q.splineSamples[i + 1].x, q.splineSamples[i + 1].z);
+                    for (const auto& coord :
+                         terrain::BrushSampler::getAffectedTilesForSegment(s, e, reach, worldTileSize))
+                        affectedSet[coord] = true;
+                }
+
+                // Unlike GetTerrainHeightAtQuery, page streamed-out tiles back in first — a road
+                // crossing an unloaded tile would otherwise be conformed to height 0.
+                for (const auto& [coord, unused] : affectedSet)
+                {
+                    terrain::TerrainTile* tile = grid->getTile(coord);
+                    if (tile && fileCache && !tile->hasHeightData())
+                        fileCache->ensureHeightsLoaded(*tile);
+                }
+
+                // Sampling is per road vertex — thousands of calls — so resolve the tile through
+                // TerrainGrid's O(1) hash with a one-entry memo, not the linear scan over every
+                // tile that TerrainService::getTerrainHeightAt does per sample
+                // (TerrainService.cpp:560-567).
+                const terrain::TerrainTile* memoTile = nullptr;
+                terrain::TileCoord memoCoord{std::numeric_limits<int32_t>::min(),
+                                             std::numeric_limits<int32_t>::min()};
+                float lastValidHeight = 0.0f;
+                bool haveValidHeight = false;
+
+                const terrain::RoadHeightFn heightFn = [&](float worldX, float worldZ) -> float
+                {
+                    const terrain::TileCoord coord{
+                        static_cast<int32_t>(std::floor(worldX / worldTileSize)),
+                        static_cast<int32_t>(std::floor(worldZ / worldTileSize))};
+
+                    if (!memoTile || coord.x != memoCoord.x || coord.z != memoCoord.z)
+                    {
+                        memoTile = grid->getTile(coord);
+                        memoCoord = coord;
+                    }
+
+                    // Off the terrain, or a tile that would not load: hold the last good height so
+                    // the ribbon runs level off the edge instead of falling to y = 0.
+                    if (!memoTile || !memoTile->hasHeightData())
+                        return haveValidHeight ? lastValidHeight : 0.0f;
+
+                    const auto& config = memoTile->config;
+                    const uint32_t vpt = config.getVertexCount();
+                    const uint32_t quadCount = config.getQuadCount();
+                    const float spacing = config.getVertexSpacing();
+
+                    const float localX = worldX - static_cast<float>(coord.x) * worldTileSize;
+                    const float localZ = worldZ - static_cast<float>(coord.z) * worldTileSize;
+                    const float gx = std::clamp(localX / spacing, 0.0f, static_cast<float>(quadCount));
+                    const float gz = std::clamp(localZ / spacing, 0.0f, static_cast<float>(quadCount));
+                    const uint32_t ix = std::min(static_cast<uint32_t>(gx), quadCount - 1);
+                    const uint32_t iz = std::min(static_cast<uint32_t>(gz), quadCount - 1);
+
+                    const auto& heights = memoTile->heightData;
+                    const size_t row0 = static_cast<size_t>(iz) * vpt;
+                    const size_t row1 = static_cast<size_t>(iz + 1) * vpt;
+
+                    // terrainQuadHeight, NOT bilinear: terrain quads split on the anti-diagonal
+                    // (TerrainTileGenerator.cpp:274-286), and down that hinge bilinear is off by
+                    // the full ridge amplitude, which sinks the road into every crest.
+                    lastValidHeight = terrain::terrainQuadHeight(
+                        heights[row0 + ix], heights[row0 + ix + 1],
+                        heights[row1 + ix], heights[row1 + ix + 1],
+                        gx - static_cast<float>(ix), gz - static_cast<float>(iz));
+                    haveValidHeight = true;
+                    return lastValidHeight;
+                };
+
+                result = terrain::buildRoadMesh(q.splineSamples, q.profile, worldTileSize, heightFn);
+                if (result.valid)
+                {
+                    vfLogInfo("Road mesh built: {} chunk(s), {:.1f} m{}",
+                              result.chunks.size(), result.totalLength,
+                              result.clamped ? " (corners pinched)" : "");
+                }
+                return result;
+            });
+
         // Spline terrain deformation handlers
         dispatcher.registerQueryHandler<events::splineTerrain::ApplySplineDeformCommand>(
             [this](const events::splineTerrain::ApplySplineDeformCommand& cmd) -> bool
@@ -570,6 +680,63 @@ namespace services
                 }
 
                 syncBrushBoundaryHeights(grid.get(), modifiedTiles);
+            });
+
+        // VK-1621: the weight-map mirror of the height snapshot/restore pair above, so a painted
+        // spline can be reverted. Paint records the whole per-tile weight map (channels, palette
+        // indices and resolution together), because WeightBrushApplicator can evict a channel and
+        // renormalize the tile — the forward operation is not invertible from the params alone.
+        dispatcher.registerQueryHandler<events::splineTerrain::GetSplineOriginalWeightsQuery>(
+            [this](const events::splineTerrain::GetSplineOriginalWeightsQuery& query)
+            {
+                events::splineTerrain::SplineWeightSnapshot result;
+
+                if (terrainGrids.empty())
+                    return result;
+
+                auto& grid = terrainGrids.begin()->second;
+                float worldTileSize = 32.0f;
+                const auto& allTiles = grid->getAllTiles();
+                if (!allTiles.empty())
+                    worldTileSize = allTiles[0]->config.worldTileSize;
+
+                std::unordered_map<terrain::TileCoord, bool, terrain::TileCoordHash> affectedSet;
+                for (size_t i = 0; i + 1 < query.splineSamples.size(); ++i)
+                {
+                    glm::vec2 s(query.splineSamples[i].x, query.splineSamples[i].z);
+                    glm::vec2 e(query.splineSamples[i + 1].x, query.splineSamples[i + 1].z);
+                    for (const auto& coord : terrain::BrushSampler::getAffectedTilesForSegment(
+                             s, e, query.totalHalfWidth, worldTileSize))
+                        affectedSet[coord] = true;
+                }
+
+                for (const auto& [coord, unused] : affectedSet)
+                {
+                    terrain::TerrainTile* tile = grid->getTile(coord);
+                    if (tile && tile->hasWeightMap())
+                        result[coord] = tile->weightMap;
+                }
+
+                return result;
+            });
+
+        dispatcher.registerCommandHandler<events::splineTerrain::RestoreSplineWeightsCommand>(
+            [this](const events::splineTerrain::RestoreSplineWeightsCommand& cmd)
+            {
+                if (terrainGrids.empty())
+                    return;
+
+                auto& grid = terrainGrids.begin()->second;
+                for (const auto& [coord, weights] : cmd.originalWeights)
+                {
+                    terrain::TerrainTile* tile = grid->getTile(coord);
+                    if (!tile || !tile->hasWeightMap())
+                        continue;
+
+                    tile->weightMap = weights;
+                    tile->weightMapDirty = true;
+                    tile->weightMapGPUDirty = true;
+                }
             });
 
         dispatcher.registerQueryHandler<events::splineTerrain::ApplySplinePaintCommand>(

@@ -23,6 +23,10 @@ namespace services
         std::vector<terrain::SplineData> appliedSplines;
         uint64_t nextSplineId = 1;
 
+        // VK-1621: the road entity the active spline was loaded from, so applying replaces it
+        // rather than spawning a second road on top of the first. 0 = authoring a new spline.
+        uint64_t editingRoadEntityId = 0;
+
     public:
         SplineTerrainServiceImpl() = default;
         ~SplineTerrainServiceImpl() override = default;
@@ -32,11 +36,11 @@ namespace services
     private:
         void addPoint(const glm::vec3& pos);
         void removeLastPoint();
+        bool setPoint(uint32_t index, const glm::vec3& pos);
+        bool removePoint(uint32_t index);
+        void publishPointCount();
         void clearActiveSpline();
         void finalizeSpline();
         void deleteSpline(uint64_t id);
-
-        void applySplineToTerrain(terrain::SplineData& spline);
-        void restoreOriginalHeights(const terrain::SplineData& spline);
     };
 }
