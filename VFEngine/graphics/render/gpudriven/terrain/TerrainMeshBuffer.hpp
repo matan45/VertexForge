@@ -54,6 +54,19 @@ namespace render::gpudriven
         uint32_t weightMapSize = 0;     // Size in uint32 elements
         bool weightMapAllocated = false;
 
+        // VK-1620: the tile's terrain heights, as a (vertexCount x vertexCount) row-major float
+        // grid — the SAME grid the weight map uses (TerrainTile::initializeWeightMap sizes it from
+        // config.getVertexCount(), which is also heightData's stride), so one resolution serves
+        // both and the bake's height sample lands on exactly the texel its splat sample did.
+        //
+        // Deliberately NOT read out of the terrain vertex buffer, which would be free: only the
+        // COARSEST LOD is guaranteed resident (TerrainStreamManager::FALLBACK_LOD), and
+        // populateGPUTile writes lodNMeshletData for every LOD whether allocated or not, so a
+        // vertex read on a non-resident LOD 0 silently returns whatever tile owns vertex slot 0.
+        uint32_t heightFieldOffset = 0; // Offset in float elements
+        uint32_t heightFieldSize = 0;   // Size in float elements
+        bool heightFieldAllocated = false;
+
         bool hasAnyAllocation() const
         {
             for (const auto& lod : lods)
@@ -92,6 +105,10 @@ namespace render::gpudriven
         vk::Buffer weightMapBuffer_;
         core::VulkanAllocation weightMapBufferAllocation_;
 
+        // VK-1620 per-tile terrain heights. Null unless the world-height plane is enabled.
+        vk::Buffer heightFieldBuffer_;
+        core::VulkanAllocation heightFieldBufferAllocation_;
+
         uint32_t maxVertexCount_ = 0;
         uint32_t maxIndexCount_ = 0;
         uint32_t maxMeshletCount_ = 0;
@@ -100,6 +117,12 @@ namespace render::gpudriven
 
         uint32_t maxWeightMapElements_ = 0;     // In uint32 elements (4 bytes each)
         FreeListAllocator weightMapAllocator_;
+
+        // VK-1620. Half the weight arena's element count for the same tile capacity: a tile spends
+        // 8 bytes/texel on splat weights but only 4 on a height.
+        uint32_t maxHeightFieldElements_ = 0;   // In float elements (4 bytes each)
+        FreeListAllocator heightFieldAllocator_;
+        bool heightFieldEnabled_ = false;
 
         FreeListAllocator vertexAllocator_;
         FreeListAllocator indexAllocator_;
@@ -124,7 +147,13 @@ namespace render::gpudriven
         // Default: 15M vertices (~960MB), 60M indices (~240MB), 1.5M meshlets (~48MB)
         // Total ~1.5GB GPU memory - suitable for medium terrain scenes
         // Note: For very large terrains, per-LOD streaming should upload only needed LOD
-        void init(uint32_t maxVertices = 15000000,
+        //
+        // VK-1620: `worldHeightField` creates the per-tile heightfield arena the RVT bake samples
+        // to write its world-height plane. It is a separate 64 MB buffer and is only worth paying
+        // for when that plane exists, so it is a required argument rather than a default - the
+        // caller has already resolved the flag and there must be exactly one answer.
+        void init(bool worldHeightField,
+                  uint32_t maxVertices = 15000000,
                   uint32_t maxIndices = 60000000,
                   uint32_t maxMeshlets = 1500000,
                   uint32_t maxMeshletVertices = 30000000,
@@ -177,12 +206,19 @@ namespace render::gpudriven
         uint32_t allocateWeightMap(const std::string& tileKey, uint32_t sizeBytes);
         bool uploadWeightMapData(const std::string& tileKey, const void* data, uint32_t sizeBytes);
 
+        // VK-1620 heightfield buffer management. Both no-op and report failure when the world-height
+        // plane is off, so callers need no separate gate.
+        uint32_t allocateHeightField(const std::string& tileKey, uint32_t sizeBytes);
+        bool uploadHeightFieldData(const std::string& tileKey, const void* data, uint32_t sizeBytes);
+        bool isHeightFieldEnabled() const { return heightFieldEnabled_; }
+
         vk::Buffer getVertexBuffer() const { return vertexBuffer_; }
         vk::Buffer getIndexBuffer() const { return indexBuffer_; }
         vk::Buffer getMeshletBuffer() const { return meshletBuffer_; }
         vk::Buffer getMeshletVertexBuffer() const { return meshletVertexBuffer_; }
         vk::Buffer getMeshletPrimitiveBuffer() const { return meshletPrimitiveBuffer_; }
         vk::Buffer getWeightMapBuffer() const { return weightMapBuffer_; }
+        vk::Buffer getHeightFieldBuffer() const { return heightFieldBuffer_; } // VK-1620, null when off
 
         bool isInitialized() const { return initialized_; }
 
@@ -203,5 +239,12 @@ namespace render::gpudriven
                               const std::string& debugKey);
 
         void freeLODSpace(TerrainLODGeometry& lod);
+
+        // Release the per-tile arena regions (weight map + VK-1620 heightfield) that are NOT owned
+        // by any LOD. Factored out because there are three places a tile entry is destroyed and
+        // VK-1613 was exactly the bug of one of them forgetting: freeTileLOD erased the entry while
+        // the weight region was still marked allocated, leaking a tile's worth of the arena on every
+        // streaming evict/re-add cycle. One function means a future arena cannot repeat it.
+        void freeTileArenas(TerrainTileGeometry& tile);
     };
 }

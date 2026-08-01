@@ -279,6 +279,16 @@ namespace material
         {
             j["receiveWind"] = true;
         }
+        // Mesh-into-terrain blending (VK-1620) — same rule: nothing is written unless the material
+        // actually opted in, so every `.vfMat` that does not blend stays byte-identical and no
+        // format-version bump is needed. Clamped on the way out as well as on the way in, so a
+        // hand-edited file cannot round-trip an out-of-range value back into the project.
+        if (material.blendToTerrain)
+        {
+            j["blendToTerrain"] = true;
+            j["terrainBlendBand"] = clampTerrainBlendBand(material.terrainBlendBand);
+            j["terrainBlendContrast"] = clampTerrainBlendContrast(material.terrainBlendContrast);
+        }
         j["blendMode"] = blendModeToString(material.blendMode);
         j["opacity"] = material.opacity;
         j["alphaCutoff"] = material.alphaCutoff;

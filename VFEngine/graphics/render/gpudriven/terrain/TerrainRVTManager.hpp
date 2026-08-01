@@ -43,6 +43,10 @@ namespace render::gpudriven
             uint32_t pagesPerFrame = 32;
             uint32_t evictionAgeFrames = 60;
             bool detailMaps = false;
+            // VK-1620: append the R16_UNORM world-height plane. Must be the ALREADY-RESOLVED flag
+            // (GPUDrivenRenderer::syncTerrainRVTWorldHeight), not the raw render setting — the pool
+            // built here and the baker's MRT attachment count have to agree exactly.
+            bool worldHeight = false;
         };
 
         // A scheduled page bake: fill physical `tile` for virtual page `page`, whose world

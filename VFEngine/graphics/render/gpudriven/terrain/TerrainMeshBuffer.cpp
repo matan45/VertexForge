@@ -19,7 +19,8 @@ namespace render::gpudriven
         cleanup();
     }
 
-    void TerrainMeshBuffer::init(uint32_t maxVertices, uint32_t maxIndices,
+    void TerrainMeshBuffer::init(bool worldHeightField,
+                                  uint32_t maxVertices, uint32_t maxIndices,
                                   uint32_t maxMeshlets, uint32_t maxMeshletVertices,
                                   uint32_t maxMeshletPrimitives)
     {
@@ -37,12 +38,19 @@ namespace render::gpudriven
         // 32M uint32 elements = 128MB for weight maps
         maxWeightMapElements_ = 32 * 1024 * 1024;
 
+        // VK-1620: 16M float elements = 64MB, sized to hold heights for the same tile count the
+        // weight arena holds weights for (a tile spends 8 bytes/texel on splat weights, 4 on a
+        // height). Zero when the world-height plane is off, so nothing is allocated.
+        heightFieldEnabled_ = worldHeightField;
+        maxHeightFieldElements_ = worldHeightField ? (16 * 1024 * 1024) : 0;
+
         vertexAllocator_.reset(maxVertexCount_);
         indexAllocator_.reset(maxIndexCount_);
         meshletAllocator_.reset(maxMeshletCount_);
         meshletVertexAllocator_.reset(maxMeshletVertexCount_);
         meshletPrimitiveAllocator_.reset(maxMeshletPrimitiveCount_);
         weightMapAllocator_.reset(maxWeightMapElements_);
+        heightFieldAllocator_.reset(maxHeightFieldElements_);
 
         createBuffers();
 
@@ -131,6 +139,19 @@ namespace render::gpudriven
             request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
             core::BufferUtilities::createBuffer(request, weightMapBuffer_, weightMapBufferAllocation_, memManager);
         }
+
+        // VK-1620 per-tile terrain heights for the RVT world-height bake. Skipped entirely when the
+        // plane is off — this is the whole reason the arena is a separate buffer rather than extra
+        // room in the weight arena.
+        if (maxHeightFieldElements_ > 0)
+        {
+            core::BufferInfoRequest request(vkDevice, physicalDevice);
+            request.size = maxHeightFieldElements_ * sizeof(float);
+            request.usage = vk::BufferUsageFlagBits::eStorageBuffer |
+                            vk::BufferUsageFlagBits::eTransferDst;
+            request.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
+            core::BufferUtilities::createBuffer(request, heightFieldBuffer_, heightFieldBufferAllocation_, memManager);
+        }
     }
 
     void TerrainMeshBuffer::destroyBuffers()
@@ -138,6 +159,7 @@ namespace render::gpudriven
         vk::Device vkDevice = device_.getLogicalDevice();
         auto& memManager = device_.getMemoryManager();
 
+        core::BufferUtilities::destroyBuffer(vkDevice, heightFieldBuffer_, heightFieldBufferAllocation_, memManager);
         core::BufferUtilities::destroyBuffer(vkDevice, weightMapBuffer_, weightMapBufferAllocation_, memManager);
         core::BufferUtilities::destroyBuffer(vkDevice, meshletPrimitiveBuffer_, meshletPrimitiveBufferAllocation_, memManager);
         core::BufferUtilities::destroyBuffer(vkDevice, meshletVertexBuffer_, meshletVertexBufferAllocation_, memManager);
@@ -417,12 +439,23 @@ namespace render::gpudriven
             freeLODSpace(lod);
         }
 
-        if (it->second.weightMapAllocated && it->second.weightMapSize > 0)
-        {
-            weightMapAllocator_.free(it->second.weightMapOffset, it->second.weightMapSize);
-        }
+        freeTileArenas(it->second);
 
         tileAllocations_.erase(it);
+    }
+
+    void TerrainMeshBuffer::freeTileArenas(TerrainTileGeometry& tile)
+    {
+        if (tile.weightMapAllocated && tile.weightMapSize > 0)
+        {
+            weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
+            tile.weightMapAllocated = false;
+        }
+        if (tile.heightFieldAllocated && tile.heightFieldSize > 0)
+        {
+            heightFieldAllocator_.free(tile.heightFieldOffset, tile.heightFieldSize);
+            tile.heightFieldAllocated = false;
+        }
     }
 
     bool TerrainMeshBuffer::allocateTileLOD(const std::string& tileKey,
@@ -486,10 +519,9 @@ namespace render::gpudriven
             // tile's worth of the 128 MB weight arena (~1000 cycles at High/129² resolution).
             // Releasing it here is the same thing freeTile does, and it is safe for the same reason:
             // the entry is going away, so nothing can reference the region afterwards.
-            if (it->second.weightMapAllocated && it->second.weightMapSize > 0)
-            {
-                weightMapAllocator_.free(it->second.weightMapOffset, it->second.weightMapSize);
-            }
+            // VK-1620 added a second arena, so both now go through one helper rather than being
+            // re-listed at each of the three erase sites.
+            freeTileArenas(it->second);
             tileAllocations_.erase(it);
         }
     }
@@ -516,10 +548,7 @@ namespace render::gpudriven
             {
                 freeLODSpace(lod);
             }
-            if (tile.weightMapAllocated && tile.weightMapSize > 0)
-            {
-                weightMapAllocator_.free(tile.weightMapOffset, tile.weightMapSize);
-            }
+            freeTileArenas(tile);
         }
         tileAllocations_.clear();
     }
@@ -568,6 +597,56 @@ namespace render::gpudriven
 
         vk::DeviceSize byteOffset = static_cast<vk::DeviceSize>(it->second.weightMapOffset) * sizeof(uint32_t);
         transferManager_->copyToBufferAsync(weightMapBuffer_, data, sizeBytes, byteOffset);
+        return true;
+    }
+
+    // VK-1620 heightfield arena. A deliberate clone of the weight-map pair above rather than a
+    // shared template: the two differ in element type and in the "feature off" early-out, and the
+    // weight-map versions are load-bearing enough that folding them together to save a dozen lines
+    // would put the splat upload at risk for no benefit.
+    uint32_t TerrainMeshBuffer::allocateHeightField(const std::string& tileKey, uint32_t sizeBytes)
+    {
+        if (!initialized_ || !heightFieldEnabled_) return FreeListAllocator::ALLOCATION_FAILED;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end()) return FreeListAllocator::ALLOCATION_FAILED;
+
+        auto& tile = it->second;
+
+        uint32_t elementCount = (sizeBytes + 3) / 4; // Round up to float alignment
+        if (tile.heightFieldAllocated)
+        {
+            if (tile.heightFieldSize == elementCount)
+            {
+                return tile.heightFieldOffset;
+            }
+            heightFieldAllocator_.free(tile.heightFieldOffset, tile.heightFieldSize);
+            tile.heightFieldAllocated = false;
+        }
+
+        uint32_t offset = heightFieldAllocator_.allocate(elementCount);
+        if (offset == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            vfLogError("TerrainMeshBuffer: Failed to allocate {} bytes height field for {}", sizeBytes, tileKey);
+            return FreeListAllocator::ALLOCATION_FAILED;
+        }
+
+        tile.heightFieldOffset = offset;
+        tile.heightFieldSize = elementCount;
+        tile.heightFieldAllocated = true;
+
+        return offset;
+    }
+
+    bool TerrainMeshBuffer::uploadHeightFieldData(const std::string& tileKey, const void* data, uint32_t sizeBytes)
+    {
+        if (!initialized_ || !heightFieldEnabled_) return false;
+
+        auto it = tileAllocations_.find(tileKey);
+        if (it == tileAllocations_.end() || !it->second.heightFieldAllocated) return false;
+
+        vk::DeviceSize byteOffset = static_cast<vk::DeviceSize>(it->second.heightFieldOffset) * sizeof(float);
+        transferManager_->copyToBufferAsync(heightFieldBuffer_, data, sizeBytes, byteOffset);
         return true;
     }
 

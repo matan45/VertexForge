@@ -103,27 +103,27 @@ namespace render::gpudriven
         // it this very same vk::DescriptorSet object. Anything the shared generated composite
         // reads has to be reachable from both pipelines or the baked pages and the live fallback
         // composite differently.
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[2].binding = 2;
-        bindings[2].descriptorType = vk::DescriptorType::eStorageBuffer;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        // VK-1620 adds binding 3 (per-tile terrain heights) for exactly the same reason: the RVT
+        // bake writes the world-height plane from it, and this is the only set the bake pipeline
+        // can reach. The binding is declared unconditionally so the layout does not fork, but the
+        // bake shader only *uses* it under TERRAIN_RVT_WORLD_HEIGHT, and when the plane is off the
+        // buffer written here is the weight-map buffer as a harmless stand-in (see
+        // updateWeightMapDescriptor) — an unused-but-bound descriptor, which is legal, rather than
+        // a statically-used binding pointing at nothing, which is not.
+        std::array<vk::DescriptorSetLayoutBinding, 4> bindings{};
+        for (uint32_t i = 0; i < bindings.size(); ++i)
+        {
+            bindings[i].binding = i;
+            bindings[i].descriptorType = vk::DescriptorType::eStorageBuffer;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags = vk::ShaderStageFlagBits::eFragment;
+        }
 
         weightMapLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         vk::DescriptorPoolSize poolSize{};
         poolSize.type = vk::DescriptorType::eStorageBuffer;
-        poolSize.descriptorCount = 3;
+        poolSize.descriptorCount = static_cast<uint32_t>(bindings.size());
 
         weightMapPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, &poolSize, 1);
 

@@ -255,7 +255,9 @@ namespace render::gpudriven
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
 
-        void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
+        // VK-1620: `heightFieldBuffer` may be null when the world-height plane is off — binding 3
+        // then takes the weight-map buffer as a bound-but-unread stand-in.
+        void updateWeightMapDescriptor(vk::Buffer weightMapBuffer, vk::Buffer heightFieldBuffer);
 
         void updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers);
         // VK-1611. Host-coherent mapped write, same as updateTerrainLayerInfo — the buffer is 32

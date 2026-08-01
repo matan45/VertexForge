@@ -315,6 +315,51 @@ layout(std430, set = 1, binding = 5) readonly buffer SVTImageInfoBuffer { VTImag
 const uint SVT_TAG_BIT = 0x80000000u;
 #endif
 
+#ifdef RVT_TERRAIN_BLEND_ENABLED
+// VK-1620 mesh-into-terrain blending. UE5's flagship RVT feature: a prop samples the terrain's
+// runtime virtual texture at its own world XZ and fades its surface toward the terrain's within a
+// height band above the ground, so rocks and cliffs melt into the terrain instead of meeting it at
+// a hard contact line.
+//
+// This is the SECOND virtual texture instance in this shader — material SVT above is the first —
+// which is why vt_sampling.glsl was split: its include guard and fixed function names allowed only
+// one. The include below is a no-op when SVT already pulled it, and emits the stateless helpers
+// when it did not; vt_lookup_impl.glsl is then instantiated under a distinct name against the
+// terrain's page table.
+//
+// Only the page table and params ride a descriptor (set 1, bindings 8/9). The atlas planes come
+// through the bindless heap — their slots travel in the image info's padding, exactly as SVT
+// carries its BC7 atlas slot — so this adds no descriptor set to a pipeline already at the
+// 16-bound-set ceiling. There is deliberately NO feedback binding: see updateRVTBlendResources.
+#include "../common/vt_sampling.glsl"
+layout(std430, set = 1, binding = 8) readonly buffer RVTBlendPageTable { uint rvtPageTable[]; };
+layout(std430, set = 1, binding = 9) readonly buffer RVTBlendParams {
+    VTImageInfo img;      // pad0/pad1/pad2 = bindless slots for the albedo / ORM / height planes
+    vec2 worldMin;        // terrain XZ origin
+    vec2 invWorldExtent;  // 1 / (worldMax - worldMin)
+    float virtualResTexels;
+    float heightMin;      // world-height plane decode range (the terrain's AUTHORED min/max)
+    float heightRange;
+    float pad;
+} rvt;
+#undef VT_PAGE_TABLE
+#define VT_PAGE_TABLE rvtPageTable
+#undef VT_FEEDBACK        // this instance never writes feedback
+#define VT_LOOKUP_FN vtLookupRVT
+#include "../common/vt_lookup_impl.glsl"
+
+const uint FLAG_BLEND_TO_TERRAIN = 1u << 0; // ObjectFlags::BlendToTerrain (GPUDrivenTypes.hpp)
+
+// How much terrain to mix in, `d` metres above the terrain surface. MUST stay equivalent to
+// material::terrainBlendAlpha() in utilities/material/TerrainBlendCurve.hpp, which is what the CPU
+// test pins. d <= 0 gives 1 and d >= band gives 0 straight out of the clamped smoothstep — neither
+// is a special case, and adding a branch for them would be the thing that lets the two drift.
+float terrainBlendAlpha(float d, float band, float contrast)
+{
+    return pow(1.0 - smoothstep(0.0, band, d), contrast);
+}
+#endif
+
 layout(push_constant) uniform PushConstants {
     uint baseDrawIndex;
     uint viewMode;
@@ -718,6 +763,87 @@ void main() {
         vec3 tangentNormal = sampleMaterialTex(normalIdx, texCoords, texDx, texDy).rgb * 2.0 - 1.0;
         N = normalize(TBN * tangentNormal);
     }
+
+#ifdef RVT_TERRAIN_BLEND_ENABLED
+    // VK-1620 mesh-into-terrain blending. Placed HERE — after the normal map has resolved N and the
+    // ORM sample is final, before the weather stack — so a blended base picks up the same wetness
+    // and snow the terrain beside it does, rather than being painted over them.
+    if ((drawData.flags & FLAG_BLEND_TO_TERRAIN) != 0u)
+    {
+        // Explicit in-bounds test on the UNCLAMPED uv. mesh_terrain.glsl can clamp because a
+        // terrain fragment is by definition inside the RVT footprint; a prop is not, and clamping
+        // alone would make one sitting off the terrain blend to whatever the edge column holds.
+        vec2 uvRaw = (fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent;
+        if (all(greaterThanEqual(uvRaw, vec2(0.0))) && all(lessThan(uvRaw, vec2(1.0))))
+        {
+            uint desiredMip = uint(max(vtDesiredMip(uvRaw, rvt.virtualResTexels), 0.0));
+            VTSample s = vtLookupRVT(rvt.img, uvRaw, desiredMip);
+
+            // A page-table hit is not enough: vtLookupRVT stops at the first VALID entry, and a
+            // page that is mapped but not yet baked reads alpha 0. The terrain survives that by
+            // falling back to its live 8-layer composite; a prop has no such fallback, so retry at
+            // the pinned coarsest mip, which is always baked. That retry IS the graceful
+            // degradation - the base reads blurry-but-plausible instead of not blending at all.
+            vec4 orm = s.valid ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad1)], s.uv) : vec4(0.0);
+            if (orm.a < 0.5 && rvt.img.mipCount > 0u)
+            {
+                s = vtLookupRVT(rvt.img, uvRaw, rvt.img.mipCount - 1u);
+                orm = s.valid ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad1)], s.uv) : vec4(0.0);
+            }
+
+            if (s.valid && orm.a >= 0.5)
+            {
+                // Coverage renormalization, on EVERY plane including height. orm.a is the filtered
+                // per-texel "baked with real content" bit, so a bilinear tap straddling covered and
+                // cleared texels returns each channel pre-scaled by it. Skipping it on the height
+                // plane would read the terrain as falsely LOW at every bake-quad seam and page
+                // border, ringing the prop with un-blended geometry.
+                float cov = orm.a;
+                float hN = texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], s.uv).r / cov;
+                float terrainY = rvt.heightMin + hN * rvt.heightRange;
+
+                // instanceData.z holds {band, contrast} as two halfs — see
+                // material::packTerrainBlendParams. Already clamped into range on the CPU, so this
+                // does not re-clamp.
+                vec2 bandContrast = unpackHalf2x16(drawData.instanceData.z);
+                float a = terrainBlendAlpha(fragWorldPos.y - terrainY, bandContrast.x, bandContrast.y);
+
+                if (a > 0.0)
+                {
+                    vec3 rvtAlbedo = texture(bindlessTextures[nonuniformEXT(rvt.img.pad0)], s.uv).rgb / cov;
+
+                    // Terrain surface normal from the height plane's GRADIENT rather than from the
+                    // RVT's tangent-normal plane: that plane exists only under the detail layout,
+                    // and a terrain tangent frame (built against top-down XZ UVs) is meaningless on
+                    // an arbitrary prop surface. Two forward differences at the resident page's
+                    // texel size — the same world step mesh_terrain.glsl derives for its footprint.
+                    float texelWorld = 1.0 / max(rvt.invWorldExtent.x * rvt.virtualResTexels, 1e-20);
+                    float stepWorld = texelWorld * exp2(float(s.residentMip)); // not `step`: GLSL builtin
+                    vec2 duv = vec2(stepWorld, stepWorld) * rvt.invWorldExtent;
+
+                    VTSample sx = vtLookupRVT(rvt.img, uvRaw + vec2(duv.x, 0.0), s.residentMip);
+                    VTSample sz = vtLookupRVT(rvt.img, uvRaw + vec2(0.0, duv.y), s.residentMip);
+                    float hx = sx.valid
+                        ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sx.uv).r * rvt.heightRange + rvt.heightMin
+                        : terrainY;
+                    float hz = sz.valid
+                        ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sz.uv).r * rvt.heightRange + rvt.heightMin
+                        : terrainY;
+                    vec3 terrainN = normalize(vec3(terrainY - hx, stepWorld, terrainY - hz));
+
+                    albedo = mix(albedo, rvtAlbedo, a);
+                    ao        = mix(ao,        orm.r / cov, a);
+                    roughness = mix(roughness, orm.g / cov, a);
+                    metallic  = mix(metallic,  orm.b / cov, a);
+                    N = normalize(mix(N, terrainN, a));
+                    // Deliberately NOT blended: opacity and emission. A translucent or glowing
+                    // prop's are its own, and mixing them toward opaque unlit terrain would read
+                    // as the prop losing its material rather than meeting the ground.
+                }
+            }
+        }
+    }
+#endif
 
     // Weather surface effects (wetness first, then snow on top)
     applyWetness(camera.wetness, albedo, roughness, metallic, N);

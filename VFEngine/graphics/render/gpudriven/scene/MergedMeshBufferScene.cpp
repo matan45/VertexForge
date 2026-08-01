@@ -6,6 +6,7 @@
 #include "threading/JobSystem.hpp"
 #include <material/MaterialInstanceTypes.hpp>
 #include <material/MaterialParameterSet.hpp>
+#include <material/TerrainBlendCurve.hpp> // VK-1620: packTerrainBlendParams
 
 #include <cmath>
 #include <cstring>
@@ -305,6 +306,36 @@ namespace render::gpudriven
                                    ? resolvers.shaderGroupResolver(materialPath) : 0;
 
         obj.instanceData = glm::uvec4(INVALID_TEXTURE_INDEX, 0, 0, 0);
+
+        // VK-1620: mesh-into-terrain blending. Same pre-resolved read as the wind gate above, but
+        // this one also carries parameters, packed as two halfs into instanceData.z — which is why
+        // it must come AFTER the reset on the line above, not before it.
+        {
+            bool blendToTerrain = false;
+            float band = material::DEFAULT_TERRAIN_BLEND_BAND;
+            float contrast = material::DEFAULT_TERRAIN_BLEND_CONTRAST;
+            if (subMat)
+            {
+                blendToTerrain = subMat->blendToTerrain;
+                band = subMat->terrainBlendBand;
+                contrast = subMat->terrainBlendContrast;
+            }
+            else if (!materialPath.empty())
+            {
+                auto it = pbrCache.find(materialPath);
+                if (it != pbrCache.end())
+                {
+                    blendToTerrain = it->second.blendToTerrain;
+                    band = it->second.terrainBlendBand;
+                    contrast = it->second.terrainBlendContrast;
+                }
+            }
+            if (blendToTerrain)
+            {
+                obj.flags |= ObjectFlags::BlendToTerrain;
+                obj.instanceData.z = material::packTerrainBlendParams(band, contrast);
+            }
+        }
     }
 
     void MergedMeshBuffer::updateObjectsSequential(const std::vector<mesh::MeshRenderData>& renderData,

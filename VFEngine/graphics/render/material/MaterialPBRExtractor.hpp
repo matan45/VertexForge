@@ -47,6 +47,22 @@ namespace render::mesh
         bool usesORM() const { return !ormTexturePath.empty(); }
 
         std::string materialPath;
+
+        // VK-1620 mesh-into-terrain blending. Unlike wind, this one DOES carry per-material
+        // parameters — band in world metres and the falloff exponent — because a pebble and a
+        // cliff base want very different transition depths.
+        //
+        // APPENDED AT THE END ON PURPOSE. This struct crosses several separately-archived static
+        // libs (Graphics, VFX, Tests), and inserting a member mid-struct shifts every following
+        // member's offset — so a consumer built before the change reads garbage rather than failing
+        // to link. That is not hypothetical: VFXMeshMaterialResolver read the texture-path strings
+        // at stale offsets and got empty strings while the scalars ahead of the insertion still
+        // looked correct, which is a nasty way to spend an afternoon. Growing the struct still
+        // requires a full rebuild; appending just makes a missed one degrade visibly instead of
+        // silently. Keep new fields here.
+        bool blendToTerrain = false;
+        float terrainBlendBand = material::DEFAULT_TERRAIN_BLEND_BAND;
+        float terrainBlendContrast = material::DEFAULT_TERRAIN_BLEND_CONTRAST;
     };
 
 

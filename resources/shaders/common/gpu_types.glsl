@@ -116,7 +116,9 @@ struct TerrainTileGPUData {
     int coordZ;
     uint flags;
     uint weightMapOffset;       // Byte offset into weight map SSBO
-    uvec4 caveMeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
+    // .w (VK-1620) = heightFieldOffset + 1 into TerrainHeightBuffer, 0 = no height data for this
+    // tile. Biased so 0 is distinguishable from a legitimate offset of 0.
+    uvec4 caveMeshletData;      // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = heightFieldOffset + 1
 };
 
 // Must match TerrainLayerGPUData in GPUDrivenTypes.hpp (64 bytes)

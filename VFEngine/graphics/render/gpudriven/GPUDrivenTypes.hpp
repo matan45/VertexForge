@@ -164,6 +164,18 @@ namespace render::gpudriven
         // so no PerDrawData change is needed. Must match FLAG_FOLIAGE_WIND in
         // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
         constexpr uint32_t FoliageWind = 1 << 8;
+
+        // VK-1620: mesh-into-terrain blending. Bits 0-3 were the last unclaimed region — every
+        // named constant above starts at 1<<4, and nothing (cull shader, draw packer, task/mesh
+        // stages) reads below bit 4. Does NOT collide with blend (4-12), Instanced (15), Category
+        // (13-16), ShadowStatic (17), Layer (18-22), ShadingModel (23-24), ProfileIndex (25-31) or
+        // FoliageWind (8). `makePerDrawData` copies flags verbatim, so no PerDrawData change is
+        // needed. Must match FLAG_BLEND_TO_TERRAIN in
+        // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
+        //
+        // Unlike FoliageWind this flag has PARAMETERS: band and contrast ride
+        // GPUObjectData::instanceData.z as two halfs (see material/TerrainBlendCurve.hpp).
+        constexpr uint32_t BlendToTerrain = 1 << 0;
     }
 
     namespace ObjectCategory
@@ -191,7 +203,10 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
-        glm::uvec4 caveMeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
+        // .w (VK-1620) = heightFieldOffset + 1 into the terrain heightfield SSBO, 0 = this tile has
+        // no height data. Biased because offset 0 is a legal allocation. Set independently of the
+        // cave fields — a tile with no cave still has heights.
+        glm::uvec4 caveMeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = heightFieldOffset + 1
     };
     static_assert(sizeof(TerrainTileGPUData) == 272);
 

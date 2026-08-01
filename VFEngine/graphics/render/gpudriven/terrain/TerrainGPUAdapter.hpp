@@ -81,6 +81,13 @@ namespace render::gpudriven
         // another tile's weights, and retrying is the only way it recovers.
         bool weightMapAllocFailed = false;
 
+        // VK-1620: element (float) offset into the heightfield SSBO, published to the GPU as
+        // caveMeshletData.w + 1 so that 0 can mean "this tile has no height data" — offset 0 is a
+        // perfectly legal allocation and could not otherwise be distinguished from absent.
+        uint32_t heightFieldOffset = 0;
+        bool heightFieldUploaded = false;
+        bool heightFieldAllocFailed = false;
+
         bool isUploaded = false;
 
         bool hasAnyAllocation() const
@@ -145,6 +152,13 @@ namespace render::gpudriven
         // Single decision point for "does this tile's weight map need to go to the GPU": the
         // caller's dirty flag, a tile that has no upload yet, or one packed for an older mask.
         [[nodiscard]] bool needsWeightMapUpload(const terrain::TerrainTile& tile) const;
+
+        // VK-1620: the same pair for the RVT world-height plane's source data. Rides the terrain's
+        // existing dirty flag rather than inventing one — a sculpt is what changes heights, and it
+        // already marks the tile dirty for the geometry re-upload. Both no-op when the world-height
+        // plane is off (TerrainMeshBuffer never created the arena).
+        bool uploadHeightField(const terrain::TerrainTile& tile);
+        [[nodiscard]] bool needsHeightFieldUpload(const terrain::TerrainTile& tile) const;
         bool uploadCaveMesh(const terrain::TerrainTile& tile);
         // Frees a tile's GPU cave allocation (when a cave is filled/undone away). The
         // next buildGPUTileData zeroes caveMeshletData so the cave stops rendering.

@@ -247,6 +247,13 @@ namespace types
     {
         bool rvtEnabled = false;          // terrain runtime virtual texture
         bool svtEnabled = false;          // streamed material virtual textures
+        // VK-1620: bake the terrain's world-height into a 5th RVT plane, which is what lets scene
+        // meshes flagged "Blend To Terrain" melt into the ground. Costs +2 B/texel, and because the
+        // pool is sized by AREA that is a bigger cut than it sounds: at the 128 MB default it takes
+        // resident pages from 1024 to 784 (legacy layout) or 400 to 361 (detail layout). Off by
+        // default so projects that never blend a prop do not pay it. Restart-scoped, like the pool
+        // budget below — it changes the atlas's plane count, and Vulkan images don't resize.
+        bool rvtWorldHeight = false;
         uint32_t rvtPoolBudgetMB = 128;   // terrain RVT atlas budget (restart to apply)
         // VK-1480: a hardware-safe BC7 atlas caps at 256 MiB per pool (VT_MAX_POOL_DIM); with two
         // pools (sRGB + Unorm) the 256 default splits 128/128 and the tail-only fallback path means

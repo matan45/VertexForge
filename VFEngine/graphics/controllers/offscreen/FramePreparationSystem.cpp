@@ -119,6 +119,9 @@ namespace controllers::offscreen
             matInfo.shadingModel = pbrValues->shadingModel;
             matInfo.toonProfileIndex = pbrValues->toonProfileIndex;
             matInfo.receiveWind = pbrValues->receiveWind;  // VK-1580
+            matInfo.blendToTerrain = pbrValues->blendToTerrain;              // VK-1620
+            matInfo.terrainBlendBand = pbrValues->terrainBlendBand;
+            matInfo.terrainBlendContrast = pbrValues->terrainBlendContrast;
         }
     }
 

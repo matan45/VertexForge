@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../../core/BufferUtilities.hpp" // VK-1620: destroy the RVT blend params buffer
 #include "SelectionMaskPipeline.hpp" // VK-1490: complete type for the unique_ptr deleter
 #include "../occlusion/DepthPrepass.hpp"
 #include "../occlusion/DepthPrepassPipeline.hpp"
@@ -401,6 +402,14 @@ namespace render::gpudriven
         terrain.adapter.reset();
         terrain.pipeline.reset();
         terrain.meshBuffer.reset();
+        // VK-1620: the scene mesh pipelines' RVT blend params (set 1, binding 9).
+        if (rvtBlendParamsBuffer)
+        {
+            core::BufferUtilities::destroyBuffer(vkDevice, rvtBlendParamsBuffer,
+                                                 rvtBlendParamsAllocation, device.getMemoryManager());
+            rvtBlendParamsBuffer = nullptr;
+            rvtBlendParamsMapped = nullptr;
+        }
         for (auto& band : water.oceanBands) band.reset();
         // Cleanup composite descriptor resources
         if (water.multiBandOceanPool) { vkDevice.destroyDescriptorPool(water.multiBandOceanPool); water.multiBandOceanPool = nullptr; }

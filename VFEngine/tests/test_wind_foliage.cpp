@@ -22,10 +22,12 @@ TEST_CASE("FoliageWind is bit 8 and collides with no other packed field") {
     const uint32_t layerField   = F::LayerMask << F::LayerShift;                // bits 18-22
     const uint32_t shadingField = F::ShadingModelMask << F::ShadingModelShift;  // bits 23-24
     const uint32_t profileField = F::ProfileIndexMask << F::ProfileIndexShift;  // bits 25-31
+    // VK-1620 added BlendToTerrain at bit 0; listing it here is what makes the NEXT flag get
+    // checked against it too.
     const uint32_t namedBits = F::AlphaMask | F::Translucent | F::NoCull | F::NoOcclude |
                                F::UniformScale | F::AdditiveBlend | F::MultiplyBlend |
                                F::TerrainTile | F::Selected | F::Billboard | F::Instanced |
-                               F::ShadowStatic;
+                               F::ShadowStatic | F::BlendToTerrain;
 
     CHECK((F::FoliageWind & categoryMask) == 0u);
     CHECK((F::FoliageWind & layerField)   == 0u);

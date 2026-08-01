@@ -362,6 +362,14 @@ namespace render::mesh
         // table to resolve. The merged-scene packer turns it into the FoliageWind flag bit.
         pbr.receiveWind = matData.receiveWind;
 
+        // VK-1620: mesh-into-terrain blending. Also a pure copy — the terrain side of the blend is
+        // resolved entirely on the GPU from the RVT, so nothing here needs a table lookup. Clamped
+        // because this is the last point before the values are packed into halfs and the shader
+        // trusts them without re-clamping.
+        pbr.blendToTerrain = matData.blendToTerrain;
+        pbr.terrainBlendBand = material::clampTerrainBlendBand(matData.terrainBlendBand);
+        pbr.terrainBlendContrast = material::clampTerrainBlendContrast(matData.terrainBlendContrast);
+
         return pbr;
     }
 

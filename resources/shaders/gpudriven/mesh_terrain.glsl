@@ -340,7 +340,11 @@ layout(set = 5, binding = 4) uniform RVTParams {
     vec2 worldMin;        // terrain XZ origin
     vec2 invWorldExtent;  // 1 / (worldMax - worldMin)
     float virtualResTexels;
-    float pad0; float pad1; float pad2;
+    // VK-1620: the world-height plane's decode range. The terrain pipeline does not sample that
+    // plane — these are here because the scene mesh pipeline reads THIS SAME struct (it is uploaded
+    // once and consumed by both) and needs them to turn a normalized height back into a world Y.
+    float heightMin; float heightRange;
+    float pad2;
 } rvt;
 #ifdef TERRAIN_DETAIL_MAPS
 layout(set = 5, binding = 5) uniform sampler2D rvtNormalAtlas;

@@ -158,6 +158,11 @@ namespace render::mesh
         uint8_t shadingModel = 0;      // VK-1493: material::ShadingModel (2 = Toon)
         uint8_t toonProfileIndex = 0;  // VK-1493: resolved toon profile GPU slot (0-127)
         bool receiveWind = false;      // VK-1580: foliage-wind gate (global wind params)
+        // VK-1620: mesh-into-terrain blending. The two scalars are packed into
+        // PerDrawData.instanceData.z at upload; the gate becomes ObjectFlags::BlendToTerrain.
+        bool blendToTerrain = false;
+        float terrainBlendBand = 0.35f;
+        float terrainBlendContrast = 2.0f;
     };
 
     struct MeshRenderData

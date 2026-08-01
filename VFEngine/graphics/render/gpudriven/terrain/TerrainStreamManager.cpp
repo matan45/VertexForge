@@ -186,6 +186,16 @@ namespace render::gpudriven
             if (adapter.uploadWeightMap(*tile))
                 tile->weightMapGPUDirty = false;
         }
+        // VK-1620: the RVT world-height plane's source data, on the same visible-tile cadence as
+        // the weight map. Both predicates no-op when the plane is off, so this costs one branch per
+        // visible tile in the default configuration. It runs AFTER updateGPUDirtyLODs so a sculpt
+        // that re-uploaded geometry this frame gets its heights re-uploaded in the same frame.
+        for (auto* tile : visibleTiles)
+        {
+            if (!tile || !adapter.needsHeightFieldUpload(*tile)) continue;
+            if (adapter.uploadHeightField(*tile))
+                tile->heightFieldGPUDirty = false;
+        }
         for (auto* tile : visibleTiles)
         {
             if (!tile || !tile->caveGPUDirty) continue;

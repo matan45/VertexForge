@@ -415,8 +415,12 @@ namespace windows
                     // the terrain MATERIAL (detail planes exist only when a layer has normal/emission
                     // maps), which this window cannot know; the Task Graph Profiler's Terrain RVT
                     // section reports the pool that actually got built.
-                    const auto plain = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, false);
-                    const auto detail = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, true);
+                    // VK-1620: the world-height plane is the one axis this window DOES control, so
+                    // the readout follows the checkbox rather than showing all four combinations.
+                    const auto plain = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, false,
+                                                                         vt.rvtWorldHeight);
+                    const auto detail = ::terrain::terrainRVTPoolGeometry(vt.rvtPoolBudgetMB, true,
+                                                                          vt.rvtWorldHeight);
                     ImGui::TextDisabled("  albedo+ORM: %ux%u, %u pages @ %u B/texel",
                                         plain.poolDim, plain.poolDim, plain.capacityPages, plain.bytesPerTexel);
                     ImGui::TextDisabled("  +detail maps: %ux%u, %u pages @ %u B/texel",
@@ -426,6 +430,20 @@ namespace windows
                         ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
                                            "  Detail terrain would get few resident pages here -\n"
                                            "  expect re-bakes as the camera moves. Raise the budget.");
+                    }
+
+                    // VK-1620: the opt-in for mesh-into-terrain blending. Costs a plane, and the
+                    // page-count lines above update as it is toggled so the price is visible at the
+                    // moment of the decision rather than in a profiler later.
+                    if (ImGui::Checkbox("World Height Plane (mesh-into-terrain blending)", &vt.rvtWorldHeight))
+                        markDirty();
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip(
+                            "Bake the terrain's surface height into a 5th RVT plane so scene meshes\n"
+                            "with a \"Blend To Terrain\" material melt into the ground at their base.\n"
+                            "Costs +2 bytes/texel of RVT pool - see the page counts above.\n"
+                            "Applies after restart.");
                     }
                 }
                 int svtMB = static_cast<int>(vt.svtPoolBudgetMB);

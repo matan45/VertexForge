@@ -39,10 +39,15 @@ namespace render::gpudriven
             float tileWorldSize = 1.0f;
             uint32_t fragTileIndex = 0;      // terrain tile GPU index
             float textureScale = 0.1f;
-            float pad0 = 0.0f;
-            float pad1 = 0.0f;
+            // VK-1620: the world-height plane's normalization range, from the terrain's AUTHORED
+            // TerrainTileConfig::minHeight/maxHeight rather than from loaded tile bounds — pages
+            // bake once and outlive the streaming state that produced them. Took two of the three
+            // spare floats, so the 64-byte block did not grow.
+            float heightMin = 0.0f;
+            float invHeightRange = 0.0f;
             float pad2 = 0.0f;
         };
+        static_assert(sizeof(TilePush) == 64, "TilePush must match BakePC in terrain_rvt_bake.glsl");
 
         explicit TerrainRVTBaker(core::Device& device);
         ~TerrainRVTBaker();

@@ -469,6 +469,95 @@ namespace render::gpudriven
         return !it->second.weightMapUploaded || it->second.weightMaskVersion != maskVersion_;
     }
 
+    // VK-1620 --- terrain heights for the RVT world-height plane -------------------------------
+    //
+    // The bake needs the terrain surface at each page texel. It cannot read the terrain VERTEX
+    // buffer for that: TerrainStreamManager pins only the COARSEST LOD, and populateGPUTile writes
+    // lodNMeshletData for every LOD whether allocated or not, so a LOD-0 vertex read on a tile that
+    // only has its fallback resident returns whatever tile owns vertex slot 0 — wrong heights, no
+    // validation error. This is a straight copy of the CPU heightData grid instead, which is
+    // authoritative and LOD-independent, and lands on the SAME grid as the splat weights
+    // (TerrainTile::initializeWeightMap sizes the weight map from config.getVertexCount(), which is
+    // also heightData's stride) so the bake's two samples are co-located by construction.
+    bool TerrainGPUAdapter::needsHeightFieldUpload(const terrain::TerrainTile& tile) const
+    {
+        if (!terrainBuffer_.isHeightFieldEnabled() || !tile.hasHeightData())
+        {
+            // Same guard as the weight map's: without it, a tile whose CPU heights were evicted
+            // would fail upload every frame forever because neither flag below can clear.
+            return false;
+        }
+
+        if (tile.heightFieldGPUDirty)
+            return true;
+
+        auto it = allocations_.find(TerrainTileKey{tile.coord.x, tile.coord.z});
+        if (it == allocations_.end())
+            return false;
+
+        // !heightFieldUploaded is a disjunct, not a precondition, for the same reason it is on the
+        // weight map: removeTileLOD erases the allocation when the last LOD goes while the arena
+        // region survives, so a re-added tile arrives uploaded == false with nobody having set the
+        // dirty flag, and would otherwise publish offset 0 and read another tile's heights.
+        return !it->second.heightFieldUploaded;
+    }
+
+    bool TerrainGPUAdapter::uploadHeightField(const terrain::TerrainTile& tile)
+    {
+        if (!terrainBuffer_.isHeightFieldEnabled() || !tile.hasHeightData())
+            return false;
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+        auto it = allocations_.find(key);
+        if (it == allocations_.end())
+            return false;
+
+        auto& alloc = it->second;
+
+        const uint32_t vertexCount = tile.config.getVertexCount();
+        const uint32_t totalBytes = vertexCount * vertexCount * static_cast<uint32_t>(sizeof(float));
+        if (tile.heightData.size() != static_cast<size_t>(vertexCount) * vertexCount)
+        {
+            vfLogError("TerrainGPUAdapter: tile ({}, {}) height data is {} floats, expected {} — "
+                       "skipping world-height upload",
+                       key.coordX, key.coordZ, tile.heightData.size(),
+                       static_cast<size_t>(vertexCount) * vertexCount);
+            return false;
+        }
+
+        const std::string tileKey = alloc.getMeshPath();
+        const uint32_t offsetElements = terrainBuffer_.allocateHeightField(tileKey, totalBytes);
+        if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            // Gated to once per tile per failure episode, exactly like the weight arena's: the
+            // needs-upload predicate keeps returning true for a tile that never uploaded, so an
+            // ungated error would spam every frame while the arena stays full.
+            if (!alloc.heightFieldAllocFailed)
+            {
+                alloc.heightFieldAllocFailed = true;
+                vfLogError("TerrainGPUAdapter: Failed to allocate height field for tile ({}, {}) — "
+                           "height arena is full; props over this tile will not blend into it",
+                           key.coordX, key.coordZ);
+            }
+            return false;
+        }
+        alloc.heightFieldAllocFailed = false;
+
+        // heightData is already the exact row-major float grid the bake indexes, so there is no
+        // repacking step here — unlike the weight map, which has to interleave 8 channels per texel.
+        if (!terrainBuffer_.uploadHeightFieldData(tileKey, tile.heightData.data(), totalBytes))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to upload height field for tile ({}, {})",
+                       key.coordX, key.coordZ);
+            return false;
+        }
+
+        alloc.heightFieldOffset = offsetElements;
+        alloc.heightFieldUploaded = true;
+        gpuTileDataDirty_ = true;
+        return true;
+    }
+
     bool TerrainGPUAdapter::uploadCaveMesh(const terrain::TerrainTile& tile)
     {
         if (!tile.hasCaveGeometry())
@@ -650,6 +739,13 @@ namespace render::gpudriven
             gpuTile.flags |= ObjectFlags::Selected;
         gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
+        // VK-1620: the heightfield element offset rides caveMeshletData.w, which was reserved and
+        // unused. Biased by +1 so 0 means "no height data for this tile" — offset 0 is a legal
+        // allocation and could not otherwise be told apart from absent, which would make the first
+        // tile in the arena the fallback for every tile that has none.
+        const uint32_t heightFieldSlot =
+            alloc.heightFieldUploaded ? (alloc.heightFieldOffset + 1u) : 0u;
+
         // Cave meshlet data
         if (alloc.caveAlloc.isAllocated)
         {
@@ -657,11 +753,13 @@ namespace render::gpudriven
                 alloc.caveAlloc.meshletOffset,
                 alloc.caveAlloc.meshletCount,
                 alloc.caveAlloc.vertexOffset,
-                0u);
+                heightFieldSlot);
         }
         else
         {
-            gpuTile.caveMeshletData = glm::uvec4(0u);
+            // .w must survive the no-cave case: a tile without a cave still has heights, and
+            // zeroing the whole vector here would silently disable blending on flat terrain.
+            gpuTile.caveMeshletData = glm::uvec4(0u, 0u, 0u, heightFieldSlot);
         }
     }
 

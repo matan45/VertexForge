@@ -96,6 +96,13 @@ namespace render::gpudriven
         // BC7 atlas is sampled via the bindless heap, so no new descriptor set is added anywhere.
         bool svtSampleEnabled = false;
 
+        // VK-1620: mesh-into-terrain blending. When enabled, set 1 (perDrawData) gains 2 SSBO
+        // bindings (8 = terrain RVT page table, 9 = RVT params incl. the bindless atlas slots) and
+        // RVT_TERRAIN_BLEND_ENABLED is compiled in — the atlas planes are sampled via the bindless
+        // heap, so no new descriptor set is added anywhere. Same shape as SVT above, and for the
+        // same reason: this pipeline is already at the 16-bound-set ceiling.
+        bool rvtBlendEnabled = false;
+
         vk::DescriptorSetLayout meshletDataLayout;
         vk::DescriptorPool meshletDataPool;
         vk::DescriptorSet meshletDataDescriptorSet;
@@ -170,6 +177,14 @@ namespace render::gpudriven
         void setSVTSampleEnabled(bool enabled) { svtSampleEnabled = enabled; }
         bool isSVTSampleEnabled() const { return svtSampleEnabled; }
         void updateSVTResources(vk::Buffer pageTableBuffer, vk::Buffer feedbackBuffer, vk::Buffer imageInfoBuffer);
+
+        // VK-1620: enable the terrain-RVT blend path (set-1 bindings 8/9 + RVT_TERRAIN_BLEND_ENABLED).
+        // Takes effect on the next (re)create, so every terrainRVT create/reset edge must recreate
+        // these pipelines — the bindings are statically used once the macro is compiled in, and
+        // would otherwise point at buffers the manager has already destroyed.
+        void setRVTBlendEnabled(bool enabled) { rvtBlendEnabled = enabled; }
+        bool isRVTBlendEnabled() const { return rvtBlendEnabled; }
+        void updateRVTBlendResources(vk::Buffer pageTableBuffer, vk::Buffer paramsBuffer);
         void updateInstanceTransformDescriptor(vk::Buffer instanceTransformBuffer);
         void updateObjectBufferDescriptor(vk::Buffer objectBuffer);
         // VK-1493: bind the toon profile table SSBO to set-1 binding 6. The buffer

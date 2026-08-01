@@ -55,8 +55,8 @@ namespace render::gpudriven
         imageId = 0;
 
         // Budget the heterogeneous plane set by its aggregate bytes/texel (8 B legacy,
-        // 20 B with RGBA8 normal + RGBA16F emission).
-        const TerrainRVTLayout layout = terrainRVTLayout(config.detailMaps);
+        // 20 B with RGBA8 normal + RGBA16F emission, +2 B with the VK-1620 world-height plane).
+        const TerrainRVTLayout layout = terrainRVTLayout(config.detailMaps, config.worldHeight);
         const uint32_t poolDim = vtPoolDimForBudget(
             config.poolBudgetMB, /*planes*/ 1, layout.bytesPerTexel);
         VTPoolDesc poolDesc;

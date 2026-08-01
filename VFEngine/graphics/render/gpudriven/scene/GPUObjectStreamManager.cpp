@@ -4,6 +4,7 @@
 #include "components/CoreComponents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "print/Log.hpp"
+#include <material/TerrainBlendCurve.hpp> // VK-1620: packTerrainBlendParams
 #include <algorithm>
 #include <cstring>
 
@@ -462,6 +463,22 @@ namespace render::gpudriven
                             toonProfileIndex = shading.second;
                         }
                         ObjectFlags::packShadingFlags(obj.flags, shadingModel, toonProfileIndex);
+                    }
+
+                    // VK-1620: mesh-into-terrain blending, packed HERE as well as in the edit-mode
+                    // path. That symmetry is the whole point — VK-1580's FoliageWind bit is set
+                    // only in MergedMeshBuffer::populateObjectData, so foliage wind silently does
+                    // nothing in play mode. Blending must not inherit that.
+                    //
+                    // Reads the per-submesh material only: unlike toon there is no resolver for
+                    // defaultMaterialPath, so a blend authored on a default material rather than on
+                    // the mesh's own would not apply. Worth a resolver if that case ever comes up;
+                    // props that blend into terrain carry their own material in practice.
+                    if (subMat && subMat->blendToTerrain)
+                    {
+                        obj.flags |= ObjectFlags::BlendToTerrain;
+                        obj.instanceData.z = material::packTerrainBlendParams(
+                            subMat->terrainBlendBand, subMat->terrainBlendContrast);
                     }
 
                     buffer.updateObjectAtSlot(slot, obj);

@@ -90,6 +90,12 @@ namespace render::gpudriven::detail
         // (20 B/texel instead of 8, i.e. 400 resident pages instead of 1024) for nothing.
         bool detailMapsAllowed = true;
         bool detailMaps = false;
+        // VK-1620: whether the RVT pool that is currently built carries the world-height plane.
+        // Same "effective, not requested" role detailMaps plays above — the setting lives in
+        // VTCache::rvtWorldHeight and this is `setting && the device supports R16_UNORM as a
+        // colour attachment`. Every terrainRVTLayout() call must read THIS, or the baker's MRT
+        // count and the pool's plane count silently disagree.
+        bool rvtWorldHeight = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
         // VK-1611: the material-global anti-tiling scalars last uploaded to the weight-map set's

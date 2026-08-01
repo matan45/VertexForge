@@ -1,4 +1,5 @@
 #include "GPUDrivenRenderer.hpp"
+#include "../../core/Device.hpp" // VK-1620: getPhysicalDevice() for the world-height format check
 #include "terrain/TerrainRVTManager.hpp"
 #include "../virtualtexture/svt/SVTManager.hpp" // VK-1209: complete type for svtManager->setResidencyBudget
 #include "terrain/TerrainRVTBaker.hpp"
@@ -29,8 +30,13 @@ namespace render::gpudriven
     void GPUDrivenRenderer::initTerrainSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                                     const std::vector<vk::Format>& colorFormats, vk::Format depthFormat)
     {
+        // VK-1620: resolve the world-height plane FIRST — the mesh buffer decides here whether to
+        // create the 64 MB heightfield arena at all, and the baker/pool below must be built from the
+        // same already-checked answer.
+        syncTerrainRVTWorldHeight();
+
         terrain.meshBuffer = std::make_unique<TerrainMeshBuffer>(device);
-        terrain.meshBuffer->init();
+        terrain.meshBuffer->init(terrain.rvtWorldHeight);
 
         terrain.adapter = std::make_unique<TerrainGPUAdapter>(*terrain.meshBuffer);
         terrain.streamManager = std::make_unique<TerrainStreamManager>(*terrain.meshBuffer, *terrain.adapter);
@@ -79,7 +85,7 @@ namespace render::gpudriven
         // VK-1209: the RVT bake pipeline (self-contained; binds the terrain pipeline's own sets).
         if (vtCache.rvtEnabled)
         {
-            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
+            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps, terrain.rvtWorldHeight);
             terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
             terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                   bindlessTextures->getDescriptorSetLayout(),
@@ -96,6 +102,7 @@ namespace render::gpudriven
 
         vtCache.rvtEnabled = settings.rvtEnabled;
         vtCache.svtEnabled = settings.svtEnabled;
+        vtCache.rvtWorldHeight = settings.rvtWorldHeight;
         vtCache.rvtPoolBudgetMB = settings.rvtPoolBudgetMB;
         vtCache.svtPoolBudgetMB = settings.svtPoolBudgetMB;
         vtCache.rvtTexelsPerMeter = settings.rvtTexelsPerMeter;
@@ -124,9 +131,12 @@ namespace render::gpudriven
 
             if (vtCache.rvtEnabled)
             {
+                // The RVT is being built fresh here, so this is a legitimate point to pick up a
+                // changed world-height setting even though it is otherwise restart-scoped.
+                syncTerrainRVTWorldHeight();
                 if (!terrainRVTBaker)
                 {
-                    const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
+                    const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps, terrain.rvtWorldHeight);
                     terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
                     terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                           bindlessTextures->getDescriptorSetLayout(),
@@ -140,6 +150,10 @@ namespace render::gpudriven
                 terrainRVT.reset();
                 terrainRVTBaker.reset();
             }
+            // VK-1620: the scene mesh pipelines hold the manager's page-table buffer in set-1
+            // binding 8. Turning RVT off destroys it, so they must be recompiled without the macro
+            // before anything records another draw.
+            applyRVTBlendToggle();
         }
 
         // Runtime SVT toggle: rebuild the scene mesh pipelines (set-1 SVT bindings + SVT_ENABLED)
@@ -258,7 +272,7 @@ namespace render::gpudriven
         // Guarded on `changed`, NOT on liveOnlyChanged: see the note above.
         if (changed && vtCache.rvtEnabled && terrainRVTBaker && bindlessTextures)
         {
-            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps);
+            const TerrainRVTLayout layout = terrainRVTLayout(terrain.detailMaps, terrain.rvtWorldHeight);
             terrainRVTBaker.reset();
             terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
             terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
@@ -315,7 +329,8 @@ namespace render::gpudriven
         // VK-1610: publish residency for the profiler. Read straight after updateResidency so the
         // counters describe the frame that was just planned, not a mix of two.
         const auto& cpu = terrainRVT->lastCpuStats();
-        const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, terrain.detailMaps);
+        const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, terrain.detailMaps,
+                                                           terrain.rvtWorldHeight);
         TerrainRVTFrameStats out;
         out.active = terrainRVT->isInitialized();
         out.poolDim = geo.poolDim;
@@ -395,6 +410,11 @@ namespace render::gpudriven
                         pc.tileWorldSize = glm::max(tMax.x - tMin.x, 1.0f);
                         pc.fragTileIndex = ti;
                         pc.textureScale = texScale;
+                        // VK-1620. Unconditional: the fields are ignored unless the bake compiled
+                        // TERRAIN_RVT_WORLD_HEIGHT, and branching here would only risk them going
+                        // stale when the plane is toggled.
+                        pc.heightMin = rvtHeightMin;
+                        pc.invHeightRange = 1.0f / rvtHeightRange;
                         baker->drawTile(c, pc);
                     }
                 }
@@ -522,6 +542,42 @@ namespace render::gpudriven
         terrain.pipeline->flushSurfaceMaskUploads(cmd);
     }
 
+    void GPUDrivenRenderer::syncTerrainRVTWorldHeight()
+    {
+        const bool requested = vtCache.rvtWorldHeight;
+        bool effective = requested;
+
+        // R16_UNORM is not one of Vulkan's mandatory colour-attachment formats. Every desktop GPU
+        // this engine targets supports it, but VTPhysicalPool creates its planes with no capability
+        // check, so an unsupported device would fail image creation deep inside pool init with no
+        // hint as to why. Fail the FEATURE instead, loudly, and leave the rest of the RVT working.
+        if (requested && !terrainRVTWorldHeightSupported(device.getPhysicalDevice()))
+        {
+            vfLogError("VK-1620 terrain RVT world-height plane requested, but this device cannot use "
+                       "R16_UNORM as a colour attachment - mesh-into-terrain blending is disabled.");
+            effective = false;
+        }
+
+        if (terrain.rvtWorldHeight == effective)
+            return;
+
+        terrain.rvtWorldHeight = effective;
+
+        // Same reasoning as the detail-maps log: the page count is what decides whether the camera
+        // thrashes, and this flag moves it without the MB budget changing.
+        const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, terrain.detailMaps,
+                                                           effective);
+        vfLogInfo("VK-1620 terrain RVT world-height plane: {}; RVT pool {}x{} = {} pages at {} B/texel "
+                  "from a {} MB budget",
+                  effective ? "ON" : "OFF", geo.poolDim, geo.poolDim, geo.capacityPages,
+                  geo.bytesPerTexel, vtCache.rvtPoolBudgetMB);
+
+        if (effective && geo.capacityPages < ::terrain::TERRAIN_RVT_MIN_HEALTHY_PAGES)
+            vfLogWarning("VK-1620: the world-height plane takes this RVT pool to {} pages, below the {} "
+                         "a camera needs to keep its footprint resident. Raise the RVT pool budget.",
+                         geo.capacityPages, ::terrain::TERRAIN_RVT_MIN_HEALTHY_PAGES);
+    }
+
     void GPUDrivenRenderer::syncTerrainDetailMapsPermutation(bool effective)
     {
         if (terrain.detailMaps == effective)
@@ -548,13 +604,17 @@ namespace render::gpudriven
             // terrain.detailMaps, which is why this assignment happens before any early return.
             terrainRVT.reset();
             terrainRVTBaker.reset();
+            // VK-1620: same hazard as the RVT toggle — the scene mesh pipelines are holding this
+            // manager's page table and its atlas views' bindless slots. updateTerrain re-creates the
+            // manager next frame and re-wires them; this turns the macro off until it does.
+            applyRVTBlendToggle();
 
             // Deliberately NOT guarded on `bindlessTextures`: reaching here means `initialized`,
             // which cannot be true without it. A guard would look defensive but would leave the
             // baker permanently null, and syncTerrainHeightBlendPermutation's `terrainRVTBaker &&`
             // precondition would then never rebuild it - RVT would silently stop baking for the
             // rest of the session.
-            const TerrainRVTLayout layout = terrainRVTLayout(effective);
+            const TerrainRVTLayout layout = terrainRVTLayout(effective, terrain.rvtWorldHeight);
             terrainRVTBaker = std::make_unique<TerrainRVTBaker>(device);
             terrainRVTBaker->init(terrain.pipeline->getWeightMapLayout(),
                                   bindlessTextures->getDescriptorSetLayout(),
@@ -567,7 +627,8 @@ namespace render::gpudriven
 
             // The page count is what decides whether the camera thrashes, and it moves with the
             // plane layout even though the MB budget did not - so say it out loud.
-            const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, effective);
+            const auto geo = ::terrain::terrainRVTPoolGeometry(vtCache.rvtPoolBudgetMB, effective,
+                                                               terrain.rvtWorldHeight);
             vfLogInfo("VK-1610 terrain detail maps: {} (setting allows: {}); RVT pool {}x{} = {} pages "
                       "at {} B/texel from a {} MB budget",
                       effective ? "ON" : "OFF", terrain.detailMapsAllowed ? "yes" : "no",
@@ -901,6 +962,17 @@ namespace render::gpudriven
             const bool boundsValid = (rvtWorldMax.x > rvtWorldMin.x) && (rvtWorldMax.y > rvtWorldMin.y);
             if (boundsValid && !terrainRVT)
             {
+                // VK-1620: capture the AUTHORED vertical range once, here, alongside the world
+                // bounds — every tile in a terrain shares one TerrainTileConfig, so any visible
+                // tile answers for all of them. Reading it from tile AABBs instead would make the
+                // basis drift with streaming and silently corrupt every already-baked page.
+                if (terrain.rvtWorldHeight && !visibleTiles.empty() && visibleTiles.front())
+                {
+                    const auto& cfg = visibleTiles.front()->config;
+                    rvtHeightMin = cfg.minHeight;
+                    rvtHeightRange = glm::max(cfg.maxHeight - cfg.minHeight, 0.001f);
+                }
+
                 terrainRVT = std::make_unique<TerrainRVTManager>(device);
                 TerrainRVTManager::Config cfg;
                 cfg.poolBudgetMB = vtCache.rvtPoolBudgetMB;
@@ -908,6 +980,7 @@ namespace render::gpudriven
                 cfg.pagesPerFrame = vtCache.pagesPerFrame;
                 cfg.evictionAgeFrames = vtCache.evictionAgeFrames;
                 cfg.detailMaps = terrain.detailMaps;
+                cfg.worldHeight = terrain.rvtWorldHeight;
                 terrainRVT->init(cfg, rvtWorldMin, rvtWorldMax);
 
                 if (const auto* pool = terrainRVT->getPool())
@@ -918,7 +991,11 @@ namespace render::gpudriven
                         float worldMinX, worldMinZ;
                         float invExtentX, invExtentZ;
                         float virtualResTexels;
-                        float pad0, pad1, pad2;
+                        // VK-1620: took two of the three spare floats, so the block did not grow.
+                        // The scene-mesh blend decodes the world-height plane with these; the
+                        // terrain pipeline itself never reads them (it does not sample height).
+                        float heightMin, heightRange;
+                        float pad2;
                     } params{};
                     static_assert(sizeof(RVTParamsCPU) == 64, "RVTParams must match set-5 UBO (64 bytes)");
                     params.img = terrainRVT->getImageInfo();
@@ -928,6 +1005,8 @@ namespace render::gpudriven
                     params.invExtentX = 1.0f / extent.x;
                     params.invExtentZ = 1.0f / extent.y;
                     params.virtualResTexels = terrainRVT->virtualResTexelsX();
+                    params.heightMin = rvtHeightMin;
+                    params.heightRange = rvtHeightRange;
                     const vk::ImageView normalView = terrain.detailMaps && pool->planeCount() > 2
                         ? pool->planeView(2) : vk::ImageView{};
                     const vk::ImageView emissionView = terrain.detailMaps && pool->planeCount() > 3
@@ -937,6 +1016,11 @@ namespace render::gpudriven
                         normalView, emissionView, pool->getSampler(), terrainRVT->getFeedbackBuffer(),
                         &params, sizeof(params));
                 }
+
+                // VK-1620: the manager now exists, so the scene mesh pipelines can be compiled with
+                // the blend path and pointed at its page table + bindless atlas slots. This is the
+                // create edge that matches the two reset edges above.
+                applyRVTBlendToggle();
             }
             // Material change -> re-bake all resident fine pages.
             if (terrainRVT && rvtInvalidateAll)
