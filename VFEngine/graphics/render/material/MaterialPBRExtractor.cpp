@@ -206,6 +206,22 @@ namespace render::mesh
     {
         ExtractedPBRValues pbr;
 
+        // Render-time gates are copied BEFORE the graph is consulted, because they do not come from
+        // it. A material whose graph is missing or failed to load still has a well-defined answer
+        // for "does this sway in the wind" and "does this melt into the terrain" — the flags live on
+        // MaterialData, not on any node — and returning early used to drop them silently.
+        //
+        // VK-1580's receiveWind had this bug latent from the start; it went unnoticed because its
+        // test builds its material with MaterialAsset::createDefault(), which produces a graph WITH
+        // an output node, so the early return below was never taken. VK-1620's test used a bare
+        // MaterialData and surfaced it.
+        pbr.receiveWind = matData.receiveWind;
+        pbr.blendToTerrain = matData.blendToTerrain;
+        // Clamped here because this is the last stop before the values are packed into halfs, and
+        // the shader trusts them without re-clamping.
+        pbr.terrainBlendBand = material::clampTerrainBlendBand(matData.terrainBlendBand);
+        pbr.terrainBlendContrast = material::clampTerrainBlendContrast(matData.terrainBlendContrast);
+
         const auto* outputNode = matData.graph.findOutputNode();
         if (!outputNode)
         {
@@ -358,17 +374,9 @@ namespace render::mesh
             }
         }
 
-        // VK-1580: foliage-wind gate. Global wind params, so this is a pure copy — no GPU
-        // table to resolve. The merged-scene packer turns it into the FoliageWind flag bit.
-        pbr.receiveWind = matData.receiveWind;
-
-        // VK-1620: mesh-into-terrain blending. Also a pure copy — the terrain side of the blend is
-        // resolved entirely on the GPU from the RVT, so nothing here needs a table lookup. Clamped
-        // because this is the last point before the values are packed into halfs and the shader
-        // trusts them without re-clamping.
-        pbr.blendToTerrain = matData.blendToTerrain;
-        pbr.terrainBlendBand = material::clampTerrainBlendBand(matData.terrainBlendBand);
-        pbr.terrainBlendContrast = material::clampTerrainBlendContrast(matData.terrainBlendContrast);
+        // receiveWind (VK-1580) and the mesh-into-terrain blend (VK-1620) are copied at the TOP of
+        // this function, not here — they are graph-independent, and doing it here meant a material
+        // with no output node lost them.
 
         return pbr;
     }
