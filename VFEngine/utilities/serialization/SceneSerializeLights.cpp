@@ -132,7 +132,8 @@ namespace serialization
         }
     }
 
-    json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain)
+    json SceneSerialization::serializeTerrain(const components::TerrainComponent& terrain,
+                                               std::string_view sourceFilename)
     {
         json j;
         j["resolution"] = terrain.resolution;
@@ -187,18 +188,27 @@ namespace serialization
             j["surfaceMaskMaxZ"] = terrain.surfaceMaskWorldRect.w;
             j["surfaceMaskResolution"] = terrain.surfaceMaskResolution;
         }
-        if (!terrain.savePath.empty())
+        std::string terrainPath;
+        if (terrain.terrainRef.isValid())
         {
-            std::string cleanSavePath = terrain.savePath;
-            cleanNullTerminators(cleanSavePath);
-            j["savePath"] = cleanSavePath;
+            j["terrainRef"] = terrain.terrainRef.toHexString();
+            terrainPath = terrain.terrainRef.resolve();
+        }
+        if (terrainPath.empty())
+            terrainPath = terrain.savePath;
+        if (!terrainPath.empty())
+        {
+            cleanNullTerminators(terrainPath);
+            j["terrainRefPath"] = makeSettingsRefPath(sourceFilename,
+                                                       std::filesystem::path{terrainPath});
         }
         // State flags
         j["isActive"] = terrain.isActive;
         return j;
     }
 
-    void SceneSerialization::deserializeTerrain(const json& j, components::TerrainComponent& terrain)
+    void SceneSerialization::deserializeTerrain(const json& j, components::TerrainComponent& terrain,
+                                                 std::string_view sourceFilename)
     {
         if (auto it = j.find("resolution"); it != j.end() && it->is_number_unsigned())
             terrain.resolution = it->get<uint8_t>();
@@ -255,8 +265,26 @@ namespace serialization
             terrain.surfaceMaskWorldRect.w = it->get<float>();
         if (auto it = j.find("surfaceMaskResolution"); it != j.end() && it->is_number_unsigned())
             terrain.surfaceMaskResolution = it->get<uint32_t>();
-        if (auto it = j.find("savePath"); it != j.end() && it->is_string())
-            terrain.savePath = it->get<std::string>();
+        asset::AssetRef terrainRef = readAssetRef(j, "terrainRef");
+        std::string fallbackPath;
+        if (auto it = j.find("terrainRefPath"); it != j.end() && it->is_string())
+            fallbackPath = it->get<std::string>();
+        else if (auto it = j.find("savePath"); it != j.end() && it->is_string())
+            fallbackPath = it->get<std::string>();
+
+        if (!fallbackPath.empty())
+        {
+            fallbackPath = resolveSettingsRefPath(sourceFilename, fallbackPath).string();
+            if (terrainRef.isValid())
+                terrainRef = asset::AssetRef::fromGUIDAndPath(terrainRef.getGUID(), fallbackPath);
+            else
+                terrainRef = asset::AssetRef::fromPath(fallbackPath);
+        }
+
+        terrain.terrainRef = terrainRef;
+        terrain.savePath = terrainRef.isValid() && !terrainRef.resolve().empty()
+                               ? terrainRef.resolve()
+                               : fallbackPath;
         // State flags (with backward-compatible defaults)
         if (auto it = j.find("isActive"); it != j.end() && it->is_boolean())
             terrain.isActive = it->get<bool>();

@@ -40,6 +40,7 @@ namespace serialization
         SceneLoadProgressCallback progressCallback;
         size_t& entitiesLoaded;
         size_t totalEntities;
+        std::string_view sourceFilename;
     };
     #pragma warning(pop)
 
@@ -66,6 +67,7 @@ namespace serialization
         size_t totalEntities = 0;
         SceneLoadProgressCallback progressCallback;
         scene::SceneGraphSystem* sceneGraph = nullptr;
+        std::string sourceFilename;
         bool finished = false;
         bool success = false;
 
@@ -137,20 +139,23 @@ namespace serialization
         static void resolveRenderTextureSourceNames();
 
     private:
-        static json serializeRootEntity(scene::Entity& root);
+        static json serializeRootEntity(scene::Entity& root, std::string_view sourceFilename = {});
         // Shared serializer for serializeEntity (serial children) and serializeRootEntity
         // (parallelChildren=true: each top-level subtree serialized concurrently, collected
         // in child order for deterministic output).
-        static json serializeEntityImpl(scene::Entity& entity, bool parallelChildren);
-        static json serializeEntityComponents(scene::Entity& entity);
-        static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity);
+        static json serializeEntityImpl(scene::Entity& entity, bool parallelChildren,
+                                        std::string_view sourceFilename);
+        static json serializeEntityComponents(scene::Entity& entity, std::string_view sourceFilename);
+        static void deserializeEntityComponents(const json& componentsJson, scene::Entity& entity,
+                                                std::string_view sourceFilename);
 
         // Deserialize dispatch sub-helpers
         static void deserializeRenderComponents(const json& j, scene::Entity& entity);
         static void deserializeAudioComponents(const json& j, scene::Entity& entity);
         static void deserializePhysicsComponents(const json& j, scene::Entity& entity);
         static void deserializeLightComponents(const json& j, scene::Entity& entity);
-        static void deserializeEnvironmentComponents(const json& j, scene::Entity& entity);
+        static void deserializeEnvironmentComponents(const json& j, scene::Entity& entity,
+                                                     std::string_view sourceFilename);
         static void deserializeUIStructuralComponents(const json& j, scene::Entity& entity);
         static void deserializeUIInteractiveComponents(const json& j, scene::Entity& entity);
         static void deserializeMiscComponents(const json& j, scene::Entity& entity);
@@ -158,7 +163,8 @@ namespace serialization
         // Serialize dispatch sub-helpers
         static void serializeRenderComponents(scene::Entity& entity, json& out);
         static void serializeAudioPhysicsComponents(scene::Entity& entity, json& out);
-        static void serializeLightEnvironmentComponents(scene::Entity& entity, json& out);
+        static void serializeLightEnvironmentComponents(scene::Entity& entity, json& out,
+                                                        std::string_view sourceFilename);
         static void serializeUIStructuralComponents(scene::Entity& entity, json& out);
         static void serializeUIInteractiveComponents(scene::Entity& entity, json& out);
         static void serializeMiscComponents(scene::Entity& entity, json& out);
@@ -324,8 +330,10 @@ namespace serialization
         static std::string toneMappingModeToString(postprocess::ToneMappingMode mode);
         static postprocess::ToneMappingMode stringToToneMappingMode(const std::string& str);
 
-        static json serializeTerrain(const components::TerrainComponent& terrain);
-        static void deserializeTerrain(const json& j, components::TerrainComponent& terrain);
+        static json serializeTerrain(const components::TerrainComponent& terrain,
+                                     std::string_view sourceFilename);
+        static void deserializeTerrain(const json& j, components::TerrainComponent& terrain,
+                                       std::string_view sourceFilename);
 
         static json serializeTerrainTile(const components::TerrainTileComponent& tile);
         static void deserializeTerrainTile(const json& j, components::TerrainTileComponent& tile);

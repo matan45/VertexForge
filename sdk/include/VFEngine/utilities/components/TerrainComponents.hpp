@@ -45,6 +45,7 @@ namespace components
         uint32_t activeTileCount = 0;
         uint32_t visibleTileCount = 0;
 
+        asset::AssetRef terrainRef;
         std::string savePath;
         bool saveDirty = false;
     };

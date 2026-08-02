@@ -1,5 +1,6 @@
 #include "TerrainSerializer.hpp"
 #include "TerrainCompression.hpp"
+#include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
@@ -163,6 +164,12 @@ namespace terrain
 
     bool TerrainSerializer::saveIncremental(const TerrainIncrementalSaveParams& params)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainSerializer: incremental saves are disabled while reading from an archive");
+            return false;
+        }
+
         if (!params.dirtyCoords || params.dirtyCoords->empty())
             return true;
 
@@ -305,6 +312,12 @@ namespace terrain
 
     bool TerrainSerializer::save(const TerrainSaveParams& params)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainSerializer: saves are disabled while reading from an archive");
+            return false;
+        }
+
         if (!params.grid)
             return false;
 

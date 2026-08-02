@@ -4,6 +4,7 @@
 #include "../../data/TerrainData.hpp"
 #include "terrain/TerrainHeightAtResult.hpp"
 #include "terrain/TerrainLayerWeightResult.hpp"
+#include "asset/AssetRef.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -156,6 +157,7 @@ namespace events::terrain
     struct LoadTerrainCommand : ICommand<services::EntityHandle>
     {
         std::string path;
+        asset::AssetRef terrainRef;
 
         std::string_view getName() const override { return "LoadTerrain"; }
     };

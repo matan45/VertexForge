@@ -1,10 +1,10 @@
 #include "TerrainSurfaceMaskAsset.hpp"
+#include "TerrainFileAccess.hpp"
 
 #include "../config/Config.hpp"
 #include "../print/Log.hpp"
 #include "../resource/BC7Decoder.hpp"
 #include "../resource/EndianUtils.hpp"
-#include "../resource/VFSHelpers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -100,7 +100,7 @@ namespace terrain
 
     std::shared_ptr<TerrainSurfaceMaskData> TerrainSurfaceMaskAsset::load(const std::string& filePath)
     {
-        const auto rawData = resource::readFileBytes(filePath);
+        const auto rawData = readTerrainFileBytes(filePath);
         if (rawData.empty())
         {
             vfLogError("TerrainSurfaceMaskAsset: Failed to read file: {}", filePath);
@@ -213,6 +213,11 @@ namespace terrain
 
     bool TerrainSurfaceMaskAsset::save(const std::string& filePath, const TerrainSurfaceMaskData& data)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainSurfaceMaskAsset: Cannot save in archive mode");
+            return false;
+        }
         if (!data.isValid())
         {
             vfLogError("TerrainSurfaceMaskAsset: Refusing to save an invalid mask to {}", filePath);

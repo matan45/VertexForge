@@ -2,7 +2,7 @@
 #include "SceneSerialization.hpp"
 #include "../scene/SceneGraphSystem.hpp"
 #include "../print/Log.hpp"
-#include "../resource/VFSHelpers.hpp"
+#include "SerializationFileAccess.hpp"
 #include "../resource/EndianUtils.hpp"
 
 #include <fstream>
@@ -104,7 +104,7 @@ namespace serialization
 	bool BinarySceneSerialization::loadBinarySceneAdditive(const std::vector<uint8_t>& data,
 	                                                       scene::SceneGraphSystem& sceneGraph,
 	                                                       scene::Entity& containerParent,
-	                                                       std::string_view,
+	                                                       std::string_view filename,
 	                                                       SceneLoadProgressCallback progressCallback)
 	{
 		json snapshot = decodePayload(data);
@@ -127,7 +127,7 @@ namespace serialization
 
 				size_t entitiesLoaded = 0;
 				DeserializeEntityContext ctx{sceneGraph, false, progressCallback,
-				                             entitiesLoaded, totalEntities};
+				                             entitiesLoaded, totalEntities, filename};
 
 				for (const auto& childJson : rootJson["children"])
 				{
@@ -149,7 +149,8 @@ namespace serialization
 
 			if (rootJson.contains("components"))
 			{
-				SceneSerialization::deserializeEntityComponents(rootJson["components"], containerParent);
+				SceneSerialization::deserializeEntityComponents(rootJson["components"], containerParent,
+				                                                    filename);
 			}
 
 			return true;
@@ -166,7 +167,7 @@ namespace serialization
 	{
 		try
 		{
-			auto jsonData = resource::readFileBytes(std::string(jsonPath));
+			auto jsonData = readSerializationFileBytes(std::string(jsonPath));
 			if (jsonData.empty())
 			{
 				vfLogError("BinaryScene: Failed to read JSON scene: {}", jsonPath);

@@ -4,6 +4,19 @@
 
 namespace resource
 {
+	namespace
+	{
+		std::string normalizeArchivePath(const std::string& path)
+		{
+			std::string normalized = path;
+			for (char& c : normalized)
+			{
+				if (c == '\\') c = '/';
+			}
+			return normalized;
+		}
+	}
+
 	VirtualFileSystem& VirtualFileSystem::instance()
 	{
 		static VirtualFileSystem vfs;
@@ -45,17 +58,18 @@ namespace resource
 		archiveMode = false;
 	}
 
+	bool VirtualFileSystem::isArchiveMode() const
+	{
+		std::shared_lock lock(vfsMutex);
+		return archiveMode;
+	}
+
 	std::vector<uint8_t> VirtualFileSystem::readFile(const std::string& path) const
 	{
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			// Normalize path separators
-			std::string normalized = path;
-			for (char& c : normalized)
-			{
-				if (c == '\\') c = '/';
-			}
+			const std::string normalized = normalizeArchivePath(path);
 
 			if (archive->contains(normalized))
 			{
@@ -84,11 +98,7 @@ namespace resource
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			std::string normalized = path;
-			for (char& c : normalized)
-			{
-				if (c == '\\') c = '/';
-			}
+			const std::string normalized = normalizeArchivePath(path);
 
 			auto location = archive->getEntryLocation(normalized);
 			if (location)
@@ -123,16 +133,42 @@ namespace resource
 		return region;
 	}
 
+	std::optional<PhysicalLocation> VirtualFileSystem::locate(const std::string& path) const
+	{
+		std::shared_lock lock(vfsMutex);
+		if (archiveMode && archive)
+		{
+			const std::string normalized = normalizeArchivePath(path);
+			if (archive->contains(normalized))
+			{
+				auto location = archive->getEntryLocation(normalized);
+				if (!location)
+				{
+					// The logical key exists but is compressed. Never shadow it with
+					// a same-named loose file because those bytes are not equivalent.
+					return std::nullopt;
+				}
+
+				return PhysicalLocation{
+					archive->getArchivePath().string(), location->offset, location->size};
+			}
+		}
+
+		std::error_code ec;
+		const uint64_t size = std::filesystem::file_size(path, ec);
+		if (ec)
+		{
+			return std::nullopt;
+		}
+		return PhysicalLocation{path, 0, size};
+	}
+
 	bool VirtualFileSystem::exists(const std::string& path) const
 	{
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			std::string normalized = path;
-			for (char& c : normalized)
-			{
-				if (c == '\\') c = '/';
-			}
+			const std::string normalized = normalizeArchivePath(path);
 
 			if (archive->contains(normalized))
 			{

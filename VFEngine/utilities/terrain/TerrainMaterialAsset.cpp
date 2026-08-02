@@ -1,9 +1,9 @@
 #include "TerrainMaterialAsset.hpp"
+#include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../serialization/AssetRefSerializationHelper.hpp"
-#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -17,33 +17,30 @@ namespace terrain
 
     std::optional<TerrainMaterialData> TerrainMaterialAsset::load(std::string_view path)
     {
-        fs::path filePath(path);
-
-        if (!fs::exists(filePath))
+        if (!terrainFileExists(std::string(path)))
         {
             vfLogError("Terrain material file not found: {}", path);
             return std::nullopt;
         }
 
-        std::error_code ec;
-        auto fileSize = fs::file_size(filePath, ec);
-        if (ec)
+        const auto bytes = readTerrainFileBytes(std::string(path));
+        if (bytes.empty())
         {
-            vfLogError("Cannot read terrain material file size '{}': {}", path, ec.message());
+            vfLogError("Failed to open terrain material file: {}", path);
             return std::nullopt;
         }
         constexpr size_t MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB limit
-        if (fileSize > MAX_FILE_SIZE)
+        if (bytes.size() > MAX_FILE_SIZE)
         {
             vfLogError("Terrain material file '{}' is too large ({} bytes, max {} bytes)",
-                       path, fileSize, MAX_FILE_SIZE);
+                       path, bytes.size(), MAX_FILE_SIZE);
             return std::nullopt;
         }
 
         json j;
         try
         {
-            j = resource::readJsonFile(std::string(path));
+            j = json::parse(bytes.begin(), bytes.end());
         }
         catch (const json::parse_error& e)
         {
@@ -237,6 +234,11 @@ namespace terrain
 
     bool TerrainMaterialAsset::save(std::string_view path, const TerrainMaterialData& material)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainMaterialAsset: Cannot save in archive mode");
+            return false;
+        }
         json j;
 
         j["version"] = TERRAIN_MATERIAL_FORMAT_VERSION;

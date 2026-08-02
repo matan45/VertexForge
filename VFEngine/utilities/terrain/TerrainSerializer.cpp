@@ -1,4 +1,5 @@
 #include "TerrainSerializer.hpp"
+#include "TerrainFileStream.hpp"
 #include "TerrainCompression.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
@@ -333,14 +334,14 @@ namespace terrain
 
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.heightDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
+            auto& file = input->stream;
             uint32_t heightCount = readLE<uint32_t>(file);
             if (heightCount > MAX_TILE_HEIGHT_SAMPLES)
             {
@@ -356,7 +357,7 @@ namespace terrain
             readVectorLE(file, quantized, heightCount);
             outHeights = compression::dequantizeHeights(quantized, params);
 
-            if (!file.good())
+            if (!file.good() || !input->logicalPosition())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {})", entry.coordX, entry.coordZ);
                 return false;
@@ -432,11 +433,11 @@ namespace terrain
 
         try
         {
-            std::ifstream file(std::string(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.caveSdfDataOffset);
+            if (!input)
                 return false;
 
-            file.seekg(static_cast<std::streamoff>(entry.caveSdfDataOffset));
+            auto& file = input->stream;
 
             // Read SDF config
             outCaveData.config.resX = readLE<uint32_t>(file);
@@ -477,7 +478,7 @@ namespace terrain
                 }
             }
 
-            return file.good();
+            return file.good() && input->logicalPosition().has_value();
         }
         catch (const std::exception& e)
         {

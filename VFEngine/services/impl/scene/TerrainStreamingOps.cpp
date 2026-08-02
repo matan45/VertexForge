@@ -9,6 +9,7 @@
 #include "terrain/TerrainSerializer.hpp"
 #include "vegetation/VegetationSerializer.hpp"
 #include "foliage/FoliageSerializer.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -226,12 +227,11 @@ namespace services
                 const auto& tc = registry.get<components::TerrainComponent>(ent);
                 if (!tc.savePath.empty())
                 {
-                    namespace fs = std::filesystem;
                     std::string vegDir = getVegetationDirectory(tc.savePath);
 
                     std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
                         vegDir, tileX, tileZ);
-                    if (fs::exists(instancesPath))
+                    if (resource::VirtualFileSystem::instance().exists(instancesPath))
                     {
                         vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances);
                         tile->billboardInstancesDirty = true;
@@ -247,7 +247,7 @@ namespace services
                     std::string foliageDir = getFoliageDirectory(tc.savePath);
                     std::string foliagePath = std::format("{}/tile_{}_{}.vfFoliage",
                         foliageDir, tileX, tileZ);
-                    if (fs::exists(foliagePath))
+                    if (resource::VirtualFileSystem::instance().exists(foliagePath))
                     {
                         foliage::FoliageSerializer::loadFoliageInstances(foliagePath, tile->foliageInstances);
                         tile->foliageInstancesDirty = true;

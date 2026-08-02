@@ -37,6 +37,7 @@ namespace archive
 
 	private:
 		std::filesystem::path filePath;
+		uint64_t archiveSize = 0;
 		std::unordered_map<uint64_t, std::vector<size_t>> hashToIndices;
 		std::vector<VFPakEntry> entries;
 

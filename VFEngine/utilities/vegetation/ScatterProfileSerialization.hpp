@@ -12,6 +12,8 @@
 // the Serialization DLL, Utilities, Editor, and Tests with no cross-module link dependency.
 
 #include "VegetationScatterTypes.hpp"
+#include "../resource/VFSHelpers.hpp"
+#include "../resource/VirtualFileSystem.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <fstream>
@@ -195,6 +197,9 @@ namespace vegetation
     // Reads are missing-key tolerant, so older/newer files load with defaults for absent fields.
     inline bool saveScatterProfileFile(const std::string& path, const ScatterProfile& p)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         nlohmann::json j;
         j["version"] = kScatterProfileFileVersion;
         serializeScatterProfile(j, p);
@@ -207,13 +212,10 @@ namespace vegetation
 
     inline bool loadScatterProfileFile(const std::string& path, ScatterProfile& p)
     {
-        std::ifstream f(path);
-        if (!f.is_open())
-            return false;
         nlohmann::json j;
         try
         {
-            f >> j;
+            j = resource::readJsonFile(path);
             if (!j.is_object())
                 return false;
             // Inside the try: deserializeScatterProfile is now type-tolerant (readScatterField),

@@ -660,16 +660,26 @@ namespace services
             }
 
             {
-                std::vector<std::string> terrainPaths;
+                struct TerrainLoadRequest
+                {
+                    asset::AssetRef ref;
+                    std::string path;
+                };
+                std::vector<TerrainLoadRequest> terrainRequests;
                 std::vector<EntityHandle> terrainEntitiesToDelete;
 
                 auto terrainView = registry.view<components::TerrainComponent>();
                 for (auto entity : terrainView)
                 {
                     const auto& terrainComp = terrainView.get<components::TerrainComponent>(entity);
-                    if (!terrainComp.savePath.empty())
+                    std::string path = terrainComp.terrainRef.isValid()
+                                           ? terrainComp.terrainRef.resolve()
+                                           : std::string{};
+                    if (path.empty())
+                        path = terrainComp.savePath;
+                    if (!path.empty())
                     {
-                        terrainPaths.push_back(terrainComp.savePath);
+                        terrainRequests.push_back({terrainComp.terrainRef, std::move(path)});
                         terrainEntitiesToDelete.push_back(internal::toHandle(entity));
                     }
                 }
@@ -681,10 +691,11 @@ namespace services
                     dispatcher.execute(delCmd);
                 }
 
-                for (const auto& path : terrainPaths)
+                for (const auto& request : terrainRequests)
                 {
                     events::terrain::LoadTerrainCommand loadCmd;
-                    loadCmd.path = path;
+                    loadCmd.path = request.path;
+                    loadCmd.terrainRef = request.ref;
                     dispatcher.execute(loadCmd);
                 }
             }

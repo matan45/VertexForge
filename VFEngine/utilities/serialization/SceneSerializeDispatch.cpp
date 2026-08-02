@@ -6,7 +6,7 @@
 #include "../asset/AssetRef.hpp"
 #include "../asset/AssetMetadataSerializer.hpp"
 #include "../print/Log.hpp"
-#include "../resource/VFSHelpers.hpp"
+#include "SerializationFileAccess.hpp"
 #include <chrono>
 #include <iomanip>
 #include <fstream>
@@ -81,7 +81,8 @@ namespace serialization
             out["vfxSequence"] = serializeVFXSequence(entity.getComponent<components::VFXSequenceComponent>());
     }
 
-    void SceneSerialization::serializeLightEnvironmentComponents(scene::Entity& entity, json& out)
+    void SceneSerialization::serializeLightEnvironmentComponents(scene::Entity& entity, json& out,
+                                                                  std::string_view sourceFilename)
     {
         if (entity.hasComponent<components::DirectionalLightComponent>())
             out["directionalLight"] = serializeDirectionalLight(entity.getComponent<components::DirectionalLightComponent>());
@@ -90,7 +91,8 @@ namespace serialization
         if (entity.hasComponent<components::SpotLightComponent>())
             out["spotLight"] = serializeSpotLight(entity.getComponent<components::SpotLightComponent>());
         if (entity.hasComponent<components::TerrainComponent>())
-            out["terrain"] = serializeTerrain(entity.getComponent<components::TerrainComponent>());
+            out["terrain"] = serializeTerrain(entity.getComponent<components::TerrainComponent>(),
+                                              sourceFilename);
         if (entity.hasComponent<components::TerrainTileComponent>())
             out["terrainTile"] = serializeTerrainTile(entity.getComponent<components::TerrainTileComponent>());
         if (entity.hasComponent<components::GrassComponent>())
@@ -193,13 +195,14 @@ namespace serialization
             };
     }
 
-    json SceneSerialization::serializeEntityComponents(scene::Entity& entity)
+    json SceneSerialization::serializeEntityComponents(scene::Entity& entity,
+                                                        std::string_view sourceFilename)
     {
         json componentsJson = json::object();
 
         serializeRenderComponents(entity, componentsJson);
         serializeAudioPhysicsComponents(entity, componentsJson);
-        serializeLightEnvironmentComponents(entity, componentsJson);
+        serializeLightEnvironmentComponents(entity, componentsJson, sourceFilename);
         serializeUIStructuralComponents(entity, componentsJson);
         serializeUIInteractiveComponents(entity, componentsJson);
         serializeMiscComponents(entity, componentsJson);
@@ -395,7 +398,7 @@ namespace serialization
             settingsPathString = resolveSettingsRefPath(
                 sceneFilename, sceneJson["settingsRefPath"].get<std::string>()).string();
 
-            if (settingsRef.isValid() && std::filesystem::exists(settingsPathString))
+            if (settingsRef.isValid() && serializationFileExists(settingsPathString))
             {
                 asset::AssetDatabase::instance().registerAssetWithGUID(
                     settingsRef.getGUID(), settingsPathString, resource::AssetType::Scene);
@@ -411,7 +414,7 @@ namespace serialization
 
         try
         {
-            auto rawData = resource::readFileBytes(settingsPathString);
+            auto rawData = readSerializationFileBytes(settingsPathString);
             if (rawData.empty())
             {
                 vfLogError("Failed to read linked scene settings: {}", settingsPathString);

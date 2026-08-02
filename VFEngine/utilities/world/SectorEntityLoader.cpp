@@ -126,7 +126,7 @@ namespace world
                 size_t entitiesLoaded = 0;
                 size_t totalEntities = 1;
                 serialization::DeserializeEntityContext ctx{sceneGraph, false, nullptr,
-                                                            entitiesLoaded, totalEntities};
+                                                            entitiesLoaded, totalEntities, {}};
                 serialization::SceneSerialization::deserializeEntity(
                     entityJson, newEntity, ctx);
 

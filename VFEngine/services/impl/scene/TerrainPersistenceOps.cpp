@@ -373,6 +373,7 @@ namespace services
                 {
                     db.registerAssetWithGUID(metadata.guid, path, resource::AssetType::Terrain);
                 }
+                mutableComp.terrainRef = asset::AssetRef::fromGUIDAndPath(metadata.guid, path);
             }
 
             events::terrain::TerrainSavedNotification savedNotification;
@@ -386,7 +387,7 @@ namespace services
         return result;
     }
 
-    EntityHandle TerrainService::loadTerrain(const std::string& path)
+    EntityHandle TerrainService::loadTerrain(const std::string& path, const asset::AssetRef& terrainRef)
     {
         terrain::TerrainFileHeader header;
         std::vector<terrain::TileIndexEntry> index;
@@ -398,7 +399,7 @@ namespace services
             return {};
         }
 
-        return finishLoadTerrain(header, index, path, indexTableOffset);
+        return finishLoadTerrain(header, index, path, indexTableOffset, terrainRef);
     }
 
     void TerrainService::loadInitialTiles(
@@ -431,7 +432,8 @@ namespace services
         components::TerrainComponent& comp,
         const terrain::TerrainFileHeader& header,
         const std::string& path,
-        uint32_t activeTileCount)
+        uint32_t activeTileCount,
+        const asset::AssetRef& terrainRef)
     {
         comp.resolution = header.resolution;
         comp.worldTileSize = header.worldTileSize;
@@ -446,6 +448,7 @@ namespace services
         comp.isDirty = false;
         comp.activeTileCount = activeTileCount;
         comp.visibleTileCount = 0;
+        comp.terrainRef = terrainRef.isValid() ? terrainRef : asset::AssetRef::fromPath(path);
         comp.savePath = path;
         comp.saveDirty = false;
     }
@@ -468,7 +471,8 @@ namespace services
         terrain::TerrainFileHeader& header,
         std::vector<terrain::TileIndexEntry>& index,
         const std::string& path,
-        uint64_t indexTableOffset)
+        uint64_t indexTableOffset,
+        const asset::AssetRef& terrainRef)
     {
         terrain::TerrainTileConfig tileConfig;
         tileConfig.resolution = static_cast<terrain::TileResolution>(header.resolution);
@@ -486,7 +490,8 @@ namespace services
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
 
         auto& terrainComp = parentEntity.addComponent<components::TerrainComponent>();
-        initTerrainComponent(terrainComp, header, path, static_cast<uint32_t>(grid->getTileCount()));
+        initTerrainComponent(terrainComp, header, path, static_cast<uint32_t>(grid->getTileCount()),
+                             terrainRef);
 
         EntityHandle parentHandle = internal::toHandle(parentEntity.getHandle());
         createTileEntities(parentHandle, *grid);

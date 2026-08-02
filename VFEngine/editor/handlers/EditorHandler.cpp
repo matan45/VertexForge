@@ -17,6 +17,7 @@
 #include "impl/render/EditorRenderServiceImpl.hpp"
 #include "../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
+#include "impl/common/VfsBridge.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
@@ -41,6 +42,7 @@ namespace handlers
     void EditorHandler::init()
     {
         resource::PathResolver::initialize();
+        services::configureVfsBridges();
 
         editor::SplashScreen::instance().setStatus("Initializing graphics...");
         bootstrap->init();

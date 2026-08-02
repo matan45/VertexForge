@@ -1,5 +1,6 @@
 #include "TerrainSerializer.hpp"
 #include "TerrainCompression.hpp"
+#include "TerrainFileStream.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
@@ -8,7 +9,6 @@
 
 namespace terrain
 {
-    namespace fs = std::filesystem;
     using namespace resource::endian;
 
     static constexpr uint32_t MAX_PATH_LENGTH = 4096;
@@ -292,8 +292,8 @@ namespace terrain
         std::vector<TileIndexEntry>& outIndex,
         uint64_t* outIndexTableOffset)
     {
-        fs::path filePath(path);
-        if (!fs::exists(filePath))
+        auto input = detail::openTerrainInputFile(std::string(path), 0);
+        if (!input)
         {
             vfLogError("TerrainSerializer: File not found: {}", path);
             return false;
@@ -301,18 +301,26 @@ namespace terrain
 
         try
         {
-            std::ifstream file(filePath, std::ios::binary);
-            if (!file.is_open())
-            {
-                vfLogError("TerrainSerializer: Failed to open file: {}", path);
-                return false;
-            }
+            auto& file = input->stream;
 
             if (!parseHeader(file, outHeader))
                 return false;
 
+            const auto indexTableOffset = input->logicalPosition();
+            if (!indexTableOffset)
+                return false;
             if (outIndexTableOffset)
-                *outIndexTableOffset = static_cast<uint64_t>(file.tellg());
+                *outIndexTableOffset = *indexTableOffset;
+
+            constexpr uint64_t SERIALIZED_INDEX_ENTRY_SIZE = 52;
+            const uint64_t indexBytes = static_cast<uint64_t>(outHeader.tileCount) *
+                                        SERIALIZED_INDEX_ENTRY_SIZE;
+            if (*indexTableOffset > input->location.size ||
+                indexBytes > input->location.size - *indexTableOffset)
+            {
+                vfLogError("TerrainSerializer: Index table exceeds terrain file bounds");
+                return false;
+            }
 
             if (!parseIndexTable(file, outHeader.tileCount, outIndex))
             {
@@ -320,7 +328,13 @@ namespace terrain
                 return false;
             }
 
-            const uint64_t fileSize = fs::file_size(filePath);
+            if (!input->logicalPosition())
+            {
+                vfLogError("TerrainSerializer: Index table crossed terrain file bounds");
+                return false;
+            }
+
+            const uint64_t fileSize = input->location.size;
             for (const auto& entry : outIndex)
             {
                 if (entry.heightDataOffset == 0 || entry.heightDataOffset >= fileSize)
@@ -375,14 +389,14 @@ namespace terrain
 
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.weightDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
+            auto& file = input->stream;
 
             for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
                 outWeights.layerIndices[li] = readLE<uint8_t>(file);
@@ -406,7 +420,7 @@ namespace terrain
                 outWeights.layerWeights[ch] = compression::dequantizeWeights(quantized);
             }
 
-            if (!file.good())
+            if (!file.good() || !input->logicalPosition())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {}) weights",
                            entry.coordX, entry.coordZ);
@@ -435,20 +449,26 @@ namespace terrain
 
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.meshletDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.meshletDataOffset));
+            auto& file = input->stream;
 
             TileLoadResult tempResult;
             if (!parseTileMeshletData(file, tempResult))
             {
                 vfLogError("TerrainSerializer: Failed to read LOD data for tile ({}, {})",
                            entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            if (!input->logicalPosition())
+            {
+                vfLogError("TerrainSerializer: LOD data crossed terrain file bounds");
                 return false;
             }
 
@@ -476,14 +496,14 @@ namespace terrain
 
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.holeMaskDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
+            auto& file = input->stream;
             uint32_t totalVertices = readLE<uint32_t>(file);
             if (totalVertices > MAX_TILE_HOLE_QUADS)
             {
@@ -497,7 +517,7 @@ namespace terrain
             file.read(reinterpret_cast<char*>(packed.data()),
                       static_cast<std::streamsize>(packedSize));
 
-            if (!file.good())
+            if (!file.good() || !input->logicalPosition())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {}) hole mask",
                            entry.coordX, entry.coordZ);

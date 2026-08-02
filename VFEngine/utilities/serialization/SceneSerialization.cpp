@@ -5,7 +5,7 @@
 #include "../scene/SceneGraphSystem.hpp"
 #include "../components/Components.hpp"
 #include "../threading/JobSystem.hpp"
-#include "../resource/VFSHelpers.hpp"
+#include "SerializationFileAccess.hpp"
 #include <fstream>
 #include <algorithm>
 
@@ -13,10 +13,11 @@ namespace serialization
 {
     json SceneSerialization::serializeEntity(scene::Entity& entity)
     {
-        return serializeEntityImpl(entity, false);
+        return serializeEntityImpl(entity, false, {});
     }
 
-    json SceneSerialization::serializeEntityImpl(scene::Entity& entity, bool parallelChildren)
+    json SceneSerialization::serializeEntityImpl(scene::Entity& entity, bool parallelChildren,
+                                                 std::string_view sourceFilename)
     {
         json entityJson;
 
@@ -33,7 +34,7 @@ namespace serialization
             entityJson["transform"] = serializeTransform(entity.getComponent<components::TransformComponent>());
         }
 
-        entityJson["components"] = serializeEntityComponents(entity);
+        entityJson["components"] = serializeEntityComponents(entity, sourceFilename);
 
         auto children = entity.getChildren();
         json childrenJson = json::array();
@@ -58,7 +59,9 @@ namespace serialization
                     child.hasComponent<components::PreviewSandboxTagComponent>())
                     continue;
                 futures.push_back(threading::JobSystem::instance().submit(
-                    [child]() mutable -> json { return serializeEntity(child); },
+                    [child, sourceFilename]() mutable -> json {
+                        return serializeEntityImpl(child, false, sourceFilename);
+                    },
                     threading::JobPriority::NORMAL));
             }
             for (auto& f : futures)
@@ -75,7 +78,7 @@ namespace serialization
                 if (child.hasComponent<components::UIPreviewTagComponent>() ||
                     child.hasComponent<components::PreviewSandboxTagComponent>())
                     continue;
-                childrenJson.push_back(serializeEntity(child));
+                childrenJson.push_back(serializeEntityImpl(child, false, sourceFilename));
             }
         }
 
@@ -114,7 +117,7 @@ namespace serialization
             ctx.sceneGraph.addChild(parent, child);
 
             DeserializeEntityContext childCtx{ctx.sceneGraph, false, ctx.progressCallback,
-                                              ctx.entitiesLoaded, ctx.totalEntities};
+                                              ctx.entitiesLoaded, ctx.totalEntities, ctx.sourceFilename};
             deserializeEntity(childJson, child, childCtx);
         }
     }
@@ -157,7 +160,7 @@ namespace serialization
 
         if (entityJson.contains("components"))
         {
-            deserializeEntityComponents(entityJson["components"], entity);
+            deserializeEntityComponents(entityJson["components"], entity, ctx.sourceFilename);
         }
     }
 
@@ -196,7 +199,7 @@ namespace serialization
                                            SceneLoadProgressCallback progressCallback)
     {
         // Auto-detect binary scene format
-        auto rawData = resource::readFileBytes(std::string(filename));
+        auto rawData = readSerializationFileBytes(std::string(filename));
         if (BinarySceneSerialization::isBinaryScene(rawData))
         {
             return BinarySceneSerialization::loadBinarySceneInto(rawData, sceneGraph, filename, progressCallback);
@@ -260,7 +263,8 @@ namespace serialization
             }
 
             scene::Entity& root = sceneGraph.GetRoot();
-            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded,
+                                         totalEntities, filename};
             deserializeEntity(sceneJson["root"], root, ctx);
 
             resolveRenderTextureSourceNames();
@@ -302,8 +306,9 @@ namespace serialization
         state = IncrementalLoadState{};
         state.sceneGraph = &sceneGraph;
         state.progressCallback = progressCallback;
+        state.sourceFilename = filename;
 
-        auto rawData = resource::readFileBytes(std::string(filename));
+        auto rawData = readSerializationFileBytes(std::string(filename));
 
         json settingsJson;
         try
@@ -358,7 +363,8 @@ namespace serialization
             const json& rootJson = state.sceneJson["root"];
             scene::Entity& root = sceneGraph.GetRoot();
             DeserializeEntityContext ctx{sceneGraph, true, progressCallback,
-                                         state.entitiesLoaded, state.totalEntities};
+                                         state.entitiesLoaded, state.totalEntities,
+                                         state.sourceFilename};
             deserializeEntitySelf(rootJson, root, ctx);
 
             pushChildrenReversed(state, root, rootJson);
@@ -423,7 +429,8 @@ namespace serialization
                 state.sceneGraph->addChild(parent, child);
 
                 DeserializeEntityContext ctx{*state.sceneGraph, false, state.progressCallback,
-                                             state.entitiesLoaded, state.totalEntities};
+                                             state.entitiesLoaded, state.totalEntities,
+                                             state.sourceFilename};
                 deserializeEntitySelf(childJson, child, ctx);
 
                 pushChildrenReversed(state, child, childJson);
@@ -456,7 +463,7 @@ namespace serialization
                                               SceneLoadProgressCallback progressCallback)
     {
         // Auto-detect binary scene format
-        auto rawData = resource::readFileBytes(std::string(filename));
+        auto rawData = readSerializationFileBytes(std::string(filename));
         if (BinarySceneSerialization::isBinaryScene(rawData))
         {
             return BinarySceneSerialization::loadBinarySceneAdditive(rawData, sceneGraph, containerParent,
@@ -518,7 +525,7 @@ namespace serialization
 
                 size_t entitiesLoaded = 0;
                 DeserializeEntityContext ctx{sceneGraph, false, progressCallback,
-                                             entitiesLoaded, totalEntities};
+                                             entitiesLoaded, totalEntities, filename};
 
                 for (const auto& childJson : rootJson["children"])
                 {
@@ -542,7 +549,7 @@ namespace serialization
             // if the source scene root had them
             if (rootJson.contains("components"))
             {
-                deserializeEntityComponents(rootJson["components"], containerParent);
+                deserializeEntityComponents(rootJson["components"], containerParent, filename);
             }
 
             resolveRenderTextureSourceNames();
@@ -556,10 +563,10 @@ namespace serialization
         }
     }
 
-    json SceneSerialization::serializeRootEntity(scene::Entity& root)
+    json SceneSerialization::serializeRootEntity(scene::Entity& root, std::string_view sourceFilename)
     {
         // Parallelize across the root's direct children (the top-level scene entities).
-        return serializeEntityImpl(root, true);
+        return serializeEntityImpl(root, true, sourceFilename);
     }
 
     bool SceneSerialization::saveScene(scene::SceneGraphSystem& sceneGraph, std::string_view filename)
@@ -578,7 +585,7 @@ namespace serialization
             {
                 return false;
             }
-            sceneJson["root"] = serializeRootEntity(sceneGraph.GetRoot());
+            sceneJson["root"] = serializeRootEntity(sceneGraph.GetRoot(), filename);
 
             std::string filePath{filename};
             std::ofstream file{filePath};
@@ -643,7 +650,7 @@ namespace serialization
             {
                 return json();
             }
-            snapshot["root"] = serializeRootEntity(sceneGraph.GetRoot());
+            snapshot["root"] = serializeRootEntity(sceneGraph.GetRoot(), filename);
 
             return snapshot;
         }
@@ -682,7 +689,8 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
-            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded,
+                                         totalEntities, {}};
             deserializeEntity(snapshot["root"], root, ctx);
 
             resolveRenderTextureSourceNames();
@@ -733,7 +741,8 @@ namespace serialization
             scene::Entity& root = sceneGraph.GetRoot();
             size_t entitiesLoaded = 0;
             size_t totalEntities = countEntities(snapshot["root"]);
-            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded, totalEntities};
+            DeserializeEntityContext ctx{sceneGraph, true, progressCallback, entitiesLoaded,
+                                         totalEntities, filename};
             deserializeEntity(snapshot["root"], root, ctx);
 
             resolveRenderTextureSourceNames();

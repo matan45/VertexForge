@@ -1,7 +1,7 @@
 #include "ProjectSerialization.hpp"
 #include "../print/Log.hpp"
 #include "../config/Config.hpp"
-#include "../resource/VFSHelpers.hpp"
+#include "SerializationFileAccess.hpp"
 #include <fstream>
 #include <algorithm>
 #include <chrono>
@@ -19,7 +19,7 @@ namespace serialization
             json projectJson;
             try
             {
-                projectJson = resource::readJsonFile(filePath);
+                projectJson = readSerializationJsonFile(filePath);
             }
             catch (const json::parse_error& e)
             {
@@ -198,7 +198,7 @@ namespace serialization
         try
         {
             std::string filePath{filename};
-            json projectJson = resource::readJsonFile(filePath);
+            json projectJson = readSerializationJsonFile(filePath);
             if (projectJson.is_null())
             {
                 return false;

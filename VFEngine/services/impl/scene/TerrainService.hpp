@@ -273,7 +273,8 @@ namespace services
         bool prepareSaveIncremental(uint64_t terrainEntityId);
         bool saveTerrain(uint64_t terrainEntityId, const std::string& path);
         bool saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path);
-        EntityHandle loadTerrain(const std::string& path);
+        EntityHandle loadTerrain(const std::string& path,
+                                 const asset::AssetRef& terrainRef = asset::AssetRef::invalid());
 
         bool addTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
         bool removeTile(EntityHandle terrainEntity, int32_t tileX, int32_t tileZ);
@@ -308,14 +309,16 @@ namespace services
         EntityHandle finishLoadTerrain(terrain::TerrainFileHeader& header,
                                        std::vector<terrain::TileIndexEntry>& index,
                                        const std::string& path,
-                                       uint64_t indexTableOffset = 0);
+                                       uint64_t indexTableOffset = 0,
+                                       const asset::AssetRef& terrainRef = asset::AssetRef::invalid());
         void loadInitialTiles(terrain::TerrainGrid& grid,
                               const terrain::TerrainFileHeader& header,
                               const std::vector<terrain::TileIndexEntry>& index);
         void initTerrainComponent(components::TerrainComponent& comp,
                                   const terrain::TerrainFileHeader& header,
                                   const std::string& path,
-                                  uint32_t activeTileCount);
+                                  uint32_t activeTileCount,
+                                  const asset::AssetRef& terrainRef);
         void publishTerrainCreated(EntityHandle handle, const terrain::TerrainFileHeader& header);
 
         void createTileEntity(EntityHandle parentEntity, terrain::TerrainTile* tile, int32_t tileX, int32_t tileZ);

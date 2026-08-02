@@ -1488,7 +1488,7 @@ namespace services
         dispatcher.registerCommandHandler<events::terrain::LoadTerrainCommand>(
             [this](const events::terrain::LoadTerrainCommand& cmd)
             {
-                return loadTerrain(cmd.path);
+                return loadTerrain(cmd.path, cmd.terrainRef);
             });
 
         dispatcher.registerCommandHandler<events::terrain::SetTerrainSaveLockCommand>(
