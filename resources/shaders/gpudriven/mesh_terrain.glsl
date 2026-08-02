@@ -257,6 +257,24 @@ layout(set = 11, binding = 6) uniform TerrainWeatherMaskUBO {
 } weatherMask;
 #endif
 
+#ifdef TERRAIN_PARALLAX
+// VK-1625 POM-lite parameters. Binding 7 of set 11, continuing the plugin world mask at 3/4 and the
+// VK-1614 weather mask at 5/6 — and on this set for the same reason they are: set 11 does not exist
+// in the RVT bake pipeline (TerrainRVTBaker binds {weightMap, bindless, terrainData} and its shader
+// declares only binding 0 of the last one), so a view-dependent parameter cannot reach the bake even
+// by accident. The offset these drive is applied at final shading to BOTH sampling paths instead.
+layout(set = 11, binding = 7) uniform TerrainParallaxUBO {
+    float depthMetres;         // displacement volume depth; 0 = off (the permutation is then not compiled)
+    float fadeStart;           // metres from the camera
+    float fadeEnd;             // metres; kept strictly past fadeStart, smoothstep with equal edges is undefined
+    float invReferenceHeight;  // 1 / referenceHeight, inverted on upload; exactly 1.0 at the default
+    uint  steps;               // uniform loop bound, clamped to [1,32] on upload
+    uint  _flagsTP;            // reserved
+    float _pad0TP;
+    float _pad1TP;
+} parallax;
+#endif
+
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -324,6 +342,15 @@ layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
 // Must follow tiles[] / weightMapData[] / sampleTileWeight / terrainLayers[] — the splat gather reads
 // them directly rather than taking parameters, same contract as hex_tiling_terrain.glsl above.
 #include "../common/terrain_weather.glsl"
+#endif
+
+#ifdef TERRAIN_PARALLAX
+// VK-1625. Same includer contract as the two above: it reads tiles[] / terrainLayers[] /
+// bindlessTextures[] / sampleTileWeight directly, so it must follow all four. Also absent from
+// terrain_rvt_bake.glsl, but for the opposite reason to terrain_weather.glsl — weather runs AFTER the
+// RVT-resolve join and so cannot reach the bake, whereas parallax runs BEFORE it and steers both
+// sampling paths from one offset. Either way the bake stays view-independent.
+#include "../common/terrain_parallax.glsl"
 #endif
 
 #ifdef RVT_ENABLED
@@ -568,6 +595,69 @@ void main() {
     float terrainFootprintLog2 = 0.5 * log2(max(max(dot(triplanarWorldUVdx, triplanarWorldUVdx),
                                                     dot(triplanarWorldUVdy, triplanarWorldUVdy)), 1e-30));
 
+#ifdef TERRAIN_PARALLAX
+    // VK-1625 POM-lite. ONE march, placed here — after the base UV and its uniform-control-flow
+    // gradients exist, and before anything consumes a surface position — so the single world offset it
+    // produces can steer BOTH the RVT lookup below and the live composite's base UV. That is what
+    // resolves the story's RVT acceptance criterion without the bake changing at all: resolved and
+    // fallback fragments are displaced identically, so no seam can crawl along a page-residency
+    // boundary, and terrain_rvt_bake.glsl stays view-independent because it never sees any of this.
+    //
+    // Caves are NOT excluded. The offset is projected through whichever UV construction ran above, and
+    // that construction is affine in world position in both arms, so the mapping is exact for the
+    // triplanar blend too.
+    //
+    // Declared outside the block below because the RVT lookup consumes it further down; it stays
+    // vec2(0) for every fragment the fade or the grazing guard switched off.
+    vec2 tpWorldOffsetXZ = vec2(0.0);
+    {
+        float tpNdotV = dot(V, N);
+        float tpDepth = parallax.depthMetres
+                      * terrainParallaxDistanceFade(distance(camera.cameraPos, fragWorldPos),
+                                                    parallax.fadeStart, parallax.fadeEnd)
+                      * terrainParallaxGrazeFade(tpNdotV);
+        // Fading the DEPTH rather than the finished offset shrinks the search volume continuously to
+        // nothing, so this branch cannot draw an edge: at the far side of the fade the solved depth is
+        // 0 and the offset is bitwise zero either way. The branch is wave-coherent and legal because
+        // every fetch inside carries explicit gradients.
+        if (tpDepth > 0.0)
+        {
+            // The UV is affine in world position, so the projection is linear and hoists out of the
+            // march entirely: the base UV at ray depth z is exactly baseUV + tpUVStep * z. This mirrors
+            // the uvXZ / blended selection above, term for term.
+            vec3 tpRayStep = terrainParallaxRayStep(V, N);
+#if defined(RVT_ENABLED) && defined(TERRAIN_DETAIL_MAPS)
+            vec2 tpProjected = (fragIsCave == 0u)
+                ? tpRayStep.xz
+                : (tpRayStep.xz * blendWeights.y + tpRayStep.xy * blendWeights.z + tpRayStep.yz * blendWeights.x);
+#else
+            vec2 tpProjected = tpRayStep.xz * blendWeights.y
+                             + tpRayStep.xy * blendWeights.z
+                             + tpRayStep.yz * blendWeights.x;
+#endif
+            vec2 tpUVStep = tpProjected * textureScale;
+
+            TerrainParallaxField tpField = terrainParallaxGather(fragTileIndex, fragTexCoord);
+            float tpZ = terrainParallaxSolveDepth(tpField, triplanarWorldUV,
+                                                  triplanarWorldUVdx, triplanarWorldUVdy,
+                                                  tpUVStep, tpDepth, parallax.steps,
+                                                  parallax.invReferenceHeight);
+            triplanarWorldUV += tpUVStep * tpZ;
+            tpWorldOffsetXZ = tpRayStep.xz * tpZ;
+        }
+    }
+    // fragTexCoord (the splat weights) and terrainWorldXZ (macro variation) are deliberately NOT
+    // offset. The weights were frozen for the march, so shifting them afterwards would shade with a
+    // coverage the height field never saw; macro variation is world-anchored and shared with the bake,
+    // and a centimetre shift is far below its metre-scale frequencies anyway.
+    //
+    // terrainFootprintLog2 is likewise untouched: the gradients are unchanged by a translation, so the
+    // footprint at the offset UV is the same value.
+#define TERRAIN_PARALLAX_WORLD_XZ (fragWorldPos.xz + tpWorldOffsetXZ)
+#else
+#define TERRAIN_PARALLAX_WORLD_XZ fragWorldPos.xz
+#endif
+
 #ifdef RVT_ENABLED
     // Sample the baked terrain RVT atlas (2 or 4 planes) instead of the live 8-layer composite.
     // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
@@ -583,7 +673,12 @@ void main() {
 #ifdef TERRAIN_DETAIL_MAPS
     vec3 mat_normalTS;
 #endif
-    vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
+    // VK-1625: TERRAIN_PARALLAX_WORLD_XZ is fragWorldPos.xz verbatim when parallax is not compiled, so
+    // this line's token stream is unchanged and the OFF build's SPIR-V is byte-identical by
+    // construction rather than by trusting the optimizer to fold a copy. With parallax on it carries
+    // the offset, so the resolved branch reads the parallaxed texel from ONE lookup — no second
+    // page-table walk — and the feedback write below requests the page actually sampled.
+    vec2 rvtUV = clamp((TERRAIN_PARALLAX_WORLD_XZ - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
     uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
 #ifdef TERRAIN_DETAIL_MAPS
     bool rvtSurfaceEligible = fragIsCave == 0u;

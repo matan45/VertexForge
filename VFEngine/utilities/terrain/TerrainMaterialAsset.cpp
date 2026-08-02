@@ -211,6 +211,27 @@ namespace terrain
                     DISTANCE_RESCALE_MIN_WIDTH, DISTANCE_RESCALE_MAX_WIDTH);
             }
 
+            // VK-1625. Additive in the same way: a file written before this story has no "parallax"
+            // object, so depthMetres takes its 0.0f default and the feature reads as OFF — which is
+            // also the state in which its shader permutation is never compiled. No format bump.
+            if (j.contains("parallax") && j["parallax"].is_object())
+            {
+                const auto& px = j["parallax"];
+                auto& dst = material.parallax;
+                dst.depthMetres = std::clamp(px.value("depthMetres", 0.0f), 0.0f, PARALLAX_MAX_DEPTH);
+                dst.fadeStart = std::clamp(px.value("fadeStart", PARALLAX_DEFAULT_FADE_START),
+                                           0.0f, PARALLAX_MAX_FADE_DISTANCE);
+                // Kept strictly past fadeStart: the shader hands both straight to smoothstep, whose
+                // behaviour with equal edges is undefined.
+                dst.fadeEnd = std::clamp(px.value("fadeEnd", PARALLAX_DEFAULT_FADE_END),
+                                         dst.fadeStart + PARALLAX_MIN_FADE_SPAN,
+                                         PARALLAX_MAX_FADE_DISTANCE + PARALLAX_MIN_FADE_SPAN);
+                dst.referenceHeight = std::clamp(px.value("referenceHeight", PARALLAX_DEFAULT_REFERENCE_HEIGHT),
+                                                 PARALLAX_MIN_REFERENCE_HEIGHT, PARALLAX_MAX_REFERENCE_HEIGHT);
+                dst.steps = std::clamp(px.value("steps", PARALLAX_DEFAULT_STEPS),
+                                       PARALLAX_MIN_STEPS, PARALLAX_MAX_STEPS);
+            }
+
             material.cachedMaterialSnippet = j.value("cachedMaterialSnippet", "");
             material.needsRecompile = material.cachedMaterialSnippet.empty();
 
@@ -280,6 +301,17 @@ namespace terrain
             at["distanceRescaleKnee"] = material.antiTiling.distanceRescaleKnee;
             at["distanceRescaleWidth"] = material.antiTiling.distanceRescaleWidth;
             j["antiTiling"] = at;
+        }
+
+        // VK-1625 material-global parallax.
+        {
+            json px;
+            px["depthMetres"] = material.parallax.depthMetres;
+            px["fadeStart"] = material.parallax.fadeStart;
+            px["fadeEnd"] = material.parallax.fadeEnd;
+            px["referenceHeight"] = material.parallax.referenceHeight;
+            px["steps"] = material.parallax.steps;
+            j["parallax"] = px;
         }
 
         if (!material.cachedMaterialSnippet.empty())

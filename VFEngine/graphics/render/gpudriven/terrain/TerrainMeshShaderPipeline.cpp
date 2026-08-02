@@ -9,6 +9,7 @@
 #include "print/Log.hpp"
 #include "terrain/TerrainMaterialTypes.hpp"
 #include <array>
+#include <cstring>
 #include <string>
 
 namespace
@@ -329,6 +330,11 @@ namespace render::gpudriven
         core::BufferUtilities::destroyBuffer(vkDevice, terrainAntiTilingBuffer, terrainAntiTilingBufferAllocation, device.getMemoryManager());
         core::BufferUtilities::destroyBuffer(vkDevice, stampDummyBuffer, stampDummyAllocation, device.getMemoryManager());
 
+        // VK-1625 parallax params UBO (set 11, binding 7). Same ordering rule as the surface mask
+        // below: released before cleanupDescriptorResources so the set that references it outlives it.
+        core::BufferUtilities::destroyBuffer(vkDevice, parallaxParamsBuffer, parallaxParamsAllocation,
+                                             device.getMemoryManager());
+
         // VK-1614: mask image, dummy, sampler and params UBO. Before cleanupDescriptorResources so the
         // descriptor set that references them is torn down after, not before.
         surfaceMask.cleanup();
@@ -380,7 +386,7 @@ namespace render::gpudriven
     {
         vk::Device vkDevice = device.getLogicalDevice();
 
-        std::array<vk::DescriptorSetLayoutBinding, 7> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 8> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
         bindings[0].descriptorCount = 1;
@@ -429,6 +435,17 @@ namespace render::gpudriven
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
+        // Binding 7 (VK-1625): terrain parallax params UBO (fragment only). No sampler alongside it,
+        // unlike 3/4 and 5/6 — the height POM-lite marches comes from the layer ORM textures the
+        // composite already binds, so this is one binding rather than a pair. Written EAGERLY below
+        // for the same reason 5/6 are: createUpdateAfterBindLayout sets only eUpdateAfterBind and
+        // never ePartiallyBound, so a binding the compiled shader statically uses must always hold a
+        // valid descriptor.
+        bindings[7].binding = 7;
+        bindings[7].descriptorType = vk::DescriptorType::eUniformBuffer;
+        bindings[7].descriptorCount = 1;
+        bindings[7].stageFlags = vk::ShaderStageFlagBits::eFragment;
+
         terrainDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(vkDevice, bindings.data(), static_cast<uint32_t>(bindings.size()));
 
         // These counts are a SEPARATE site from the bindings array above and must be grown with it —
@@ -436,7 +453,7 @@ namespace render::gpudriven
         std::array<vk::DescriptorPoolSize, 3> poolSizes{};
         poolSizes[0] = {vk::DescriptorType::eStorageBuffer, 3};
         poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler, 2}; // b3 world mask, b5 surface mask
-        poolSizes[2] = {vk::DescriptorType::eUniformBuffer, 2};        // b4 world mask, b6 surface mask
+        poolSizes[2] = {vk::DescriptorType::eUniformBuffer, 3};        // b4 world mask, b6 surface mask, b7 parallax
 
         terrainDataPool = core::PipelineUtilities::createUpdateAfterBindPool(vkDevice, 1, poolSizes.data(),
                                                                              static_cast<uint32_t>(poolSizes.size()));
@@ -467,6 +484,43 @@ namespace render::gpudriven
                                    surfaceMask.getParamsBuffer(), surfaceMask.getParamsSize());
         // The descriptor now matches the resources, so clear the flag the write above satisfied.
         (void)surfaceMask.consumeDescriptorDirty();
+
+        // VK-1625: binding 7 on the same terms. Host-visible and coherent because the scalars change
+        // when an artist drags a slider, not per frame, and 32 bytes is far below any staging
+        // threshold. Its default-constructed contents have depthMetres == 0, so even if the shader is
+        // compiled with TERRAIN_PARALLAX before any material has resolved, the march is switched off
+        // rather than reading uninitialised memory.
+        core::BufferInfoRequest parallaxRequest(vkDevice, device.getPhysicalDevice());
+        parallaxRequest.size = sizeof(TerrainParallaxUBOData);
+        parallaxRequest.usage = vk::BufferUsageFlagBits::eUniformBuffer;
+        parallaxRequest.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                                     vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(parallaxRequest, parallaxParamsBuffer, parallaxParamsAllocation,
+                                            device.getMemoryManager());
+        if (parallaxParamsAllocation.mappedPtr)
+            std::memcpy(parallaxParamsAllocation.mappedPtr, &parallaxParams, sizeof(parallaxParams));
+
+        vk::DescriptorBufferInfo parallaxInfo{};
+        parallaxInfo.buffer = parallaxParamsBuffer;
+        parallaxInfo.range = sizeof(TerrainParallaxUBOData);
+        vk::WriteDescriptorSet parallaxWrite{};
+        parallaxWrite.dstSet = terrainDataDescriptorSet;
+        parallaxWrite.dstBinding = 7;
+        parallaxWrite.descriptorCount = 1;
+        parallaxWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+        parallaxWrite.pBufferInfo = &parallaxInfo;
+        vkDevice.updateDescriptorSets(1, &parallaxWrite, 0, nullptr);
+    }
+
+    void TerrainMeshShaderPipeline::setParallaxParams(const TerrainParallaxUBOData& params)
+    {
+        // Byte comparison rather than a field-by-field one: the struct is a POD of 4-byte scalars with
+        // no padding holes (its 32-byte size is asserted), so this cannot read an indeterminate gap.
+        if (std::memcmp(&parallaxParams, &params, sizeof(params)) == 0)
+            return;
+        parallaxParams = params;
+        if (parallaxParamsAllocation.mappedPtr)
+            std::memcpy(parallaxParamsAllocation.mappedPtr, &parallaxParams, sizeof(parallaxParams));
     }
 
     void TerrainMeshShaderPipeline::updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
@@ -652,6 +706,16 @@ namespace render::gpudriven
         if (puddlesEnabled)
         {
             terrainShader->addMacroDefinition("TERRAIN_PUDDLES");
+        }
+        // VK-1625 POM-lite. Live-only for the same reason, reached from the other side: the offset it
+        // computes runs BEFORE the RVT-resolve join and steers both sampling paths, so the bake shader
+        // still writes what it always wrote (verified: all 16 bake arms byte-identical) while resolved
+        // and fallback fragments are displaced identically and no seam can form at a page boundary.
+        // Keeping it out of applyTerrainCompositeMacros is what makes that true by construction —
+        // TerrainCompositePermutation is handed to TerrainRVTBaker::init.
+        if (parallaxEnabled)
+        {
+            terrainShader->addMacroDefinition("TERRAIN_PARALLAX");
         }
         if (rvtSampleEnabled)
         {

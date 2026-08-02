@@ -130,6 +130,7 @@ namespace windows
             {
                 drawToolbar();
                 drawAntiTilingProperties();
+                drawParallaxProperties();
                 drawLayerProperties();
             }
         }
@@ -292,6 +293,116 @@ namespace windows
         {
             onChanged();
         }
+        ImGui::EndDisabled();
+
+        ImGui::Unindent(8.0f);
+        ImGui::Spacing();
+        ImGui::Separator();
+    }
+
+    // VK-1625. Material-global for the same reason anti-tiling is, and more strictly so: the parallax
+    // offset is applied ONCE to the shared base UV that every layer derives from, so a per-layer
+    // amplitude is not expressible without running the composite more than once.
+    void TerrainMaterialEditorWindow::drawParallaxProperties()
+    {
+        if (!materialData) return;
+
+        if (!ImGui::CollapsingHeader("Parallax (POM-lite)"))
+            return;
+
+        auto& px = materialData->parallax;
+        ImGui::Indent(8.0f);
+
+        ImGui::TextDisabled("Shifts the layer textures along the view ray using the height packed\n"
+                            "in ORM alpha, so gravel and rock read as relief instead of as a decal.");
+        if (ImGui::DragFloat("Depth (m)##Parallax", &px.depthMetres, 0.001f,
+                             0.0f, terrain::PARALLAX_MAX_DEPTH, "%.3f"))
+        {
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(!)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("0 disables it exactly: the whole march, its splat gather and its\n"
+                              "parameter buffer are not compiled into the shader at all, and the\n"
+                              "SPIR-V is byte-identical to a build without this feature.\n\n"
+                              "This is the most expensive terrain shading option. Each step costs\n"
+                              "one ORM fetch per layer painted on the fragment, on top of what the\n"
+                              "composite already samples. Measure before shipping it on.\n\n"
+                              "Geometry does not move: silhouettes, depth and shadows are unchanged.");
+        }
+
+        ImGui::BeginDisabled(px.depthMetres <= 0.0f);
+
+        int steps = static_cast<int>(px.steps);
+        if (ImGui::DragInt("Steps##Parallax", &steps, 1.0f,
+                           static_cast<int>(terrain::PARALLAX_MIN_STEPS),
+                           static_cast<int>(terrain::PARALLAX_MAX_STEPS)))
+        {
+            px.steps = static_cast<uint32_t>(std::clamp(steps,
+                                                        static_cast<int>(terrain::PARALLAX_MIN_STEPS),
+                                                        static_cast<int>(terrain::PARALLAX_MAX_STEPS)));
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Search steps along the view ray. The count is uniform across the draw,\n"
+                              "so every fragment runs all of them — there is no early exit to make\n"
+                              "shallow ground cheaper. Cost is (steps + 1) fetches per painted layer.\n\n"
+                              "4 is usually enough for gravel; raise it only if you can see the\n"
+                              "stepping on a strong height map at a grazing angle.");
+        }
+
+        if (ImGui::DragFloat("Fade Start (m)##Parallax", &px.fadeStart, 0.5f,
+                             0.0f, terrain::PARALLAX_MAX_FADE_DISTANCE, "%.1f"))
+        {
+            if (px.fadeEnd < px.fadeStart + terrain::PARALLAX_MIN_FADE_SPAN)
+                px.fadeEnd = px.fadeStart + terrain::PARALLAX_MIN_FADE_SPAN;
+            onChanged();
+        }
+        if (ImGui::DragFloat("Fade End (m)##Parallax", &px.fadeEnd, 0.5f,
+                             px.fadeStart + terrain::PARALLAX_MIN_FADE_SPAN,
+                             terrain::PARALLAX_MAX_FADE_DISTANCE, "%.1f"))
+        {
+            onChanged();
+        }
+        ImGui::TextDisabled("Camera distance, in metres. Past the end nothing is marched at all.");
+        ImGui::SameLine();
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Distance, not the footprint the anti-tiling fades use. Those have to\n"
+                              "agree with the camera-less RVT bake; parallax never runs in the bake,\n"
+                              "so it can use the unit that means something to you.\n\n"
+                              "A top-down camera keeps the whole ground at roughly one distance, so\n"
+                              "the fade saves nothing there — the entire visible surface either pays\n"
+                              "or it does not.");
+        }
+
+        if (ImGui::DragFloat("Reference Height##Parallax", &px.referenceHeight, 0.01f,
+                             terrain::PARALLAX_MIN_REFERENCE_HEIGHT,
+                             terrain::PARALLAX_MAX_REFERENCE_HEIGHT, "%.2f"))
+        {
+            onChanged();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("(!)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Which ORM alpha value counts as the surface. 1.0 (the default) means\n"
+                              "white, which is what a height map should peak at.\n\n"
+                              "READ THIS IF THE GROUND SEEMS TO SWIM AS THE CAMERA TURNS. Packing an\n"
+                              "ORM without a height input fills alpha with a flat mid-grey (128), and\n"
+                              "a height field that never reaches the top sits uniformly below the\n"
+                              "surface — which parallax renders as a texture that slides with the\n"
+                              "view. Set this to 0.5 for such a material, or repack the ORM with a\n"
+                              "real height map. Height blending cannot see this, so a material can\n"
+                              "look correct until parallax is switched on.");
+        }
+
         ImGui::EndDisabled();
 
         ImGui::Unindent(8.0f);

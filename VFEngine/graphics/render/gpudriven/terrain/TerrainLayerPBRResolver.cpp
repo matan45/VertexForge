@@ -140,4 +140,36 @@ namespace render::gpudriven
     {
         return params.macroStrength > 0.0f;
     }
+
+    TerrainParallaxUBOData resolveTerrainParallax(const terrain::TerrainParallaxSettings& settings)
+    {
+        TerrainParallaxUBOData out{};
+
+        out.depthMetres = std::clamp(settings.depthMetres, 0.0f, terrain::PARALLAX_MAX_DEPTH);
+        out.fadeStart = std::clamp(settings.fadeStart, 0.0f, terrain::PARALLAX_MAX_FADE_DISTANCE);
+        // Held strictly past fadeStart. The shader hands both edges straight to smoothstep, and
+        // smoothstep(e, e, x) is undefined — the same class of correctness clamp as VK-1611's rescale
+        // width, not a matter of taste.
+        out.fadeEnd = std::clamp(settings.fadeEnd,
+                                 out.fadeStart + terrain::PARALLAX_MIN_FADE_SPAN,
+                                 terrain::PARALLAX_MAX_FADE_DISTANCE + terrain::PARALLAX_MIN_FADE_SPAN);
+        // parallaxInvReferenceHeight clamps away from zero before inverting, so the uploaded
+        // reciprocal is always finite and always >= 1. Both matter: an infinity would poison the
+        // clamp in the shader's remap, and a value below 1 would push authored heights off the top
+        // plane instead of onto it.
+        out.invReferenceHeight = terrain::parallaxInvReferenceHeight(settings.referenceHeight);
+        out.steps = std::clamp(settings.steps, terrain::PARALLAX_MIN_STEPS, terrain::PARALLAX_MAX_STEPS);
+
+        return out;
+    }
+
+    bool terrainMaterialWantsParallax(const TerrainParallaxUBOData& params)
+    {
+        // Reads the RESOLVED depth, so the clamp has already been applied and the sentinel is
+        // authoritative — the same rule the four gates above follow. Off means TERRAIN_PARALLAX is
+        // never defined, so the march, its splat gather and its UBO declaration are not compiled into
+        // the shader at all: measured with glslc -O, the feature costs ~6.8-7.0 KB of SPIR-V when on
+        // and is byte-identical to the pre-story shader when off.
+        return params.depthMetres > terrain::PARALLAX_AUTHORED_EPS;
+    }
 }

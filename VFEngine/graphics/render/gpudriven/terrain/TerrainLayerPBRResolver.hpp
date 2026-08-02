@@ -4,6 +4,7 @@
 #include <vector>
 #include "terrain/TerrainMaterialTypes.hpp"
 #include "../GPUDrivenTypes.hpp"
+#include "TerrainParallaxParams.hpp"
 
 namespace render::mesh
 {
@@ -123,4 +124,19 @@ namespace render::gpudriven
     // Reads the RESOLVED scalars, so the opt-in and the clamp are already applied and the sentinel
     // is authoritative.
     [[nodiscard]] bool terrainMaterialWantsWeatherResponse(const std::vector<ResolvedTerrainLayerPBR>& layers);
+
+    // VK-1625 - the material-global counterpart for POM-lite, and the one seam where authored parallax
+    // intent becomes GPU scalars. Every clamp lives here rather than at the use site, because two of
+    // them are correctness invariants and not taste:
+    //   * fadeEnd is forced strictly past fadeStart, since the shader feeds both to smoothstep;
+    //   * referenceHeight is clamped away from zero before being INVERTED, since the shader gets the
+    //     reciprocal and an infinity would poison the clamp its height remap relies on.
+    [[nodiscard]] TerrainParallaxUBOData resolveTerrainParallax(const terrain::TerrainParallaxSettings& settings);
+
+    // Does this material actually want parallax? Drives TERRAIN_PARALLAX, which is a LIVE-ONLY macro:
+    // it must never join TerrainCompositePermutation, because that type is shared with TerrainRVTBaker
+    // and a view-dependent offset in a camera-less, top-down bake is undefined. Flipping it therefore
+    // rides GPUDrivenRendererTerrain's `liveOnlyChanged` path, which recompiles the terrain pipeline
+    // without tearing down the baker or invalidating a single resident page.
+    [[nodiscard]] bool terrainMaterialWantsParallax(const TerrainParallaxUBOData& params);
 }

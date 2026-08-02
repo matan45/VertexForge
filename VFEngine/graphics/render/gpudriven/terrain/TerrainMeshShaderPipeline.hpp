@@ -8,6 +8,7 @@
 #include <array>
 #include "../GPUDrivenTypes.hpp"
 #include "TerrainCompositePermutation.hpp"
+#include "TerrainParallaxParams.hpp"
 #include "TerrainSurfaceMaskTexture.hpp"
 
 namespace core
@@ -166,6 +167,12 @@ namespace render::gpudriven
         bool surfaceMaskEnabled = false;
         bool weatherResponseEnabled = false;
         bool puddlesEnabled = false;
+        // VK-1625 POM-lite, a fourth live-only macro on the same terms. It gates code that runs
+        // BEFORE the RVT-resolve join rather than after — the offset it produces steers both sampling
+        // paths — but the conclusion is identical: the bake shader never sees it, so terrain_rvt_bake
+        // still writes exactly what it wrote before (measured: all 16 arms byte-identical), and no
+        // resident page is invalidated when an artist drags the depth slider.
+        bool parallaxEnabled = false;
 
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
@@ -208,6 +215,14 @@ namespace render::gpudriven
         float brushShape = 0.0f;
         float terrainMaxDrawDistSq = 0.0f;
         glm::mat4 viewProjection{1.0f};
+
+        // VK-1625 parallax params UBO (set 11, binding 7). Owned here rather than by a helper class
+        // because, unlike the weather block, it has no image and no dummy to manage — the height it
+        // marches comes from the layer ORM textures the composite already binds, so the whole feature
+        // is one 32-byte buffer.
+        vk::Buffer parallaxParamsBuffer;
+        core::VulkanAllocation parallaxParamsAllocation;
+        TerrainParallaxUBOData parallaxParams{};
 
         // Stamp overlay
         vk::Buffer stampDummyBuffer;
@@ -418,6 +433,22 @@ namespace render::gpudriven
             return true;
         }
         bool arePuddlesEnabled() const { return puddlesEnabled; }
+        bool setParallaxEnabled(bool enabled)
+        {
+            if (parallaxEnabled == enabled)
+                return false;
+            parallaxEnabled = enabled;
+            return true;
+        }
+        bool isParallaxEnabled() const { return parallaxEnabled; }
+
+        // VK-1625 - upload the resolved parallax scalars to set 11, binding 7. Cheap enough to call
+        // every frame: the buffer is host-visible/coherent and 32 bytes, and the write is skipped when
+        // nothing changed. The descriptor itself never needs rewriting — the buffer is created once
+        // and written eagerly at set creation, which this layout requires (createUpdateAfterBindLayout
+        // sets only eUpdateAfterBind, never ePartiallyBound, so a statically-used binding must always
+        // hold a valid descriptor).
+        void setParallaxParams(const TerrainParallaxUBOData& params);
 
         // VK-1614 surface-mask resource access. The pipeline owns the texture (it owns set 11), so
         // the renderer drives it through here rather than holding a second reference.

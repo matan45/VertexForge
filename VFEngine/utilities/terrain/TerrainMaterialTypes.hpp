@@ -6,6 +6,7 @@
 #include "TerrainAntiTiling.hpp"
 #include "TerrainHeightBlend.hpp"
 #include "TerrainHexTiling.hpp"
+#include "TerrainParallax.hpp"
 #include "TerrainWeatherResponse.hpp"
 
 namespace terrain
@@ -103,5 +104,16 @@ namespace terrain
 
         std::string cachedMaterialSnippet;
         bool needsRecompile = true;
+
+        // VK-1625, APPENDED AT THE END DELIBERATELY. This struct crosses a DLL boundary (Serialization
+        // includes it) and its size changes here, so a partial rebuild reads it at the wrong offsets.
+        // Members declared BEFORE an insertion point still read correctly while everything after it
+        // reads garbage — appending at the end means a missed rebuild breaks only the new field and
+        // shows up as "parallax settings come back as defaults" instead of corrupting the layer array.
+        // See VK-1620's note on ExtractedPBRValues / MaterialData for the diagnostic signature.
+        //
+        // Material-global rather than per-layer for the same reason antiTiling is: the parallax offset
+        // is applied ONCE to the shared base UV that every layer derives from.
+        TerrainParallaxSettings parallax;
     };
 }

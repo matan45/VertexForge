@@ -256,6 +256,13 @@ namespace render::gpudriven
             liveOnlyChanged = true;
         if (terrain.pipeline->setSurfaceMaskEnabled(terrain.surfaceMaskAssigned))
             liveOnlyChanged = true;
+        // VK-1625 POM-lite. Live-only on the same terms, and derived from the RESOLVED depth so a
+        // value the artist typed out of range cannot flip the permutation. It joins liveOnlyChanged
+        // rather than `changed` because the bake shader never sees TERRAIN_PARALLAX — the offset is
+        // applied at final shading to both sampling paths — so dragging the depth slider must not
+        // invalidate a single resident page.
+        if (terrain.pipeline->setParallaxEnabled(terrainMaterialWantsParallax(terrain.parallax)))
+            liveOnlyChanged = true;
 
         if (!changed && !liveOnlyChanged)
             return; // unchanged - no recompile
@@ -813,11 +820,17 @@ namespace render::gpudriven
         // per-layer loop. Uploaded before the permutation sync below, which derives the
         // distance-rescale macro from these same clamped values.
         terrain.antiTiling = resolveTerrainAntiTiling(materialData->antiTiling);
+        // VK-1625. Material-global on the same terms, and likewise resolved before the permutation
+        // sync below, which reads terrain.parallax.depthMetres to decide whether TERRAIN_PARALLAX is
+        // compiled at all. Note where it does NOT go: the anti-tiling scalars live on the weight-map
+        // set precisely so the RVT bake can read them, and these must never be reachable from there.
+        terrain.parallax = resolveTerrainParallax(materialData->parallax);
 
         if (terrain.pipeline)
         {
             terrain.pipeline->updateTerrainLayerInfo(terrain.layerData);
             terrain.pipeline->updateTerrainAntiTiling(terrain.antiTiling);
+            terrain.pipeline->setParallaxParams(terrain.parallax);
         }
 
         // VK-1613. Per-layer `enabled` is honoured on the WEIGHT side, not in TerrainLayerGPUData:
