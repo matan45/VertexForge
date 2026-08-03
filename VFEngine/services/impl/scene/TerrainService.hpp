@@ -22,6 +22,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -52,6 +53,13 @@ namespace events::terrain
 {
     struct StrokeTileState;
     struct RestoreSurfaceMaskRegionCommand;
+}
+
+namespace events::terrainEdit
+{
+    struct DeformTerrainCommand;
+    struct PaintTerrainLayerCommand;
+    struct SetTerrainHolesCommand;
 }
 
 namespace services
@@ -142,6 +150,39 @@ namespace services
         // their immediate rebuild.
         std::vector<terrain::TileCoord> strokeColliderPending;
         uint64_t strokeColliderEntityId = 0;
+
+        // VK-1624 runtime (script-driven) edits. Same shape and the same motivation as the VK-1616
+        // block above -- the collider rebuild is synchronous and unbudgeted -- but it defers the two
+        // seam helpers as well, because unlike the dirty flags they are NOT idempotent:
+        // syncBrushBoundaryHeights averages both sides of a seam and writes both, so running it once
+        // per edit walks the seam toward the running mean.
+        //
+        // Height and hole tiles are tracked apart because they need different seam helpers and
+        // different neighbour sets (+X/+Z vs all four). Weight edits appear in neither: weight maps
+        // have no seams and are not collider input.
+        struct RuntimeEditTiles
+        {
+            std::vector<terrain::TileCoord> heightTiles;
+            std::vector<terrain::TileCoord> holeTiles;
+        };
+        struct RuntimeEditBatch
+        {
+            // Keyed per terrain entity so a scene with two terrains cannot silently drop the
+            // second one's edits. Batching itself is a script-level notion, hence one `open` flag
+            // for the service rather than one per entity.
+            std::unordered_map<uint64_t, RuntimeEditTiles> pending;
+            bool open = false;      // Script called beginBatch and has not flushed yet
+            uint32_t openFrames = 0; // Safety net against a script that never flushes
+
+            [[nodiscard]] bool empty() const { return pending.empty(); }
+            void clear()
+            {
+                pending.clear();
+                open = false;
+                openFrames = 0;
+            }
+        };
+        RuntimeEditBatch runtimeEdit;
 
         // VK-1614 surface-mask stroke: the painted channel's plane captured once at stroke
         // start (one byte per texel), cropped to the union of the per-dab dirty rects when
@@ -295,6 +336,21 @@ namespace services
         std::vector<::terrain::TerrainLayerWeightsAtResult> getTerrainLayerWeightsBatch(
             const std::vector<glm::vec2>& positions);
 
+        // VK-1624 runtime script edits. Implemented in TerrainRuntimeEditOps.cpp.
+        //
+        // These run on the Scripts frame task, which is NOT pinned to the main thread. That is safe
+        // only because they mutate resident tiles in place and never touch grid structure: Render is
+        // transitively ordered after Scripts, and every insertion / removal / regeneration lives
+        // inside getRawVisibleTiles on the Render path. Do not add a streamInTile call here.
+        uint32_t deformTerrainRuntime(const ::events::terrainEdit::DeformTerrainCommand& cmd);
+        uint32_t paintTerrainLayerRuntime(const ::events::terrainEdit::PaintTerrainLayerCommand& cmd);
+        uint32_t setTerrainHolesRuntime(const ::events::terrainEdit::SetTerrainHolesCommand& cmd);
+        void beginRuntimeTerrainEditBatch();
+        uint32_t flushRuntimeTerrainEdits();
+        // Drained once per frame from getRawVisibleTiles: welds seams, submits colliders, notifies.
+        void drainRuntimeTerrainEdits(const glm::vec3& cameraPosition);
+        void discardRuntimeTerrainEdits();
+
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerBrushHandlers(::events::EventDispatcher& dispatcher);
@@ -341,6 +397,21 @@ namespace services
                                    const glm::vec3& worldPosition, const terrain::BrushParams& params,
                                    float deltaTime, bool invert);
         void flushPendingStrokeColliders();
+
+        // VK-1624 helpers, in TerrainRuntimeEditOps.cpp.
+        // Resolves the terrain whose grid owns the tile under a world XZ position. Unlike
+        // getTerrainHeightAt, which just takes terrainGrids.begin(), this is deterministic with more
+        // than one terrain in the scene -- and a runtime edit that picked the wrong grid would
+        // silently deform terrain the script never named.
+        terrain::TerrainGrid* resolveRuntimeEditGrid(const glm::vec2& worldXZ, uint64_t& entityIdOut);
+        static void addUniqueTile(std::vector<terrain::TileCoord>& tiles, const terrain::TileCoord& coord);
+        // True when paletteLayer already has a channel on this tile, or a genuinely free one exists.
+        // False means WeightBrushApplicator would call assignChannel, which evicts the least-used
+        // channel, zeroes it and renormalizes the WHOLE tile -- a mutation far outside the brush
+        // footprint that the editor only gets away with because VK-1615 snapshots the map first.
+        static bool canPaintWithoutEviction(const terrain::TileWeightMapData& weightMap,
+                                            uint8_t paletteLayer);
+
         void generateDebugWireframes(EntityHandle terrainEntity, terrain::TerrainGrid* grid);
         static bool applyHoleMaskToHeights(const terrain::TerrainTile& tile, std::vector<float>& physicsHeights);
         static bool isVertexAdjacentToHole(const terrain::TerrainTile& tile, uint32_t vx, uint32_t vz);

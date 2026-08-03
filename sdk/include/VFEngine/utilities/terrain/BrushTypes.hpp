@@ -45,6 +45,18 @@ namespace terrain
         Square = 1
     };
 
+    // VK-1624: how a runtime (script-driven) height edit combines with the existing surface.
+    //
+    // Deliberately two values rather than a mirror of BrushType above. Those ten are authoring
+    // tools driven by a held mouse button, so every one of them scales by deltaTime -- they express
+    // a *rate*. A script native fires once, so `amount` is the total displacement at the brush
+    // centre in world-Y metres and the result must not depend on framerate.
+    enum class HeightEditMode : uint8_t
+    {
+        Add = 0, // h += amount * influence        -- delta   (mirrors brush_compute.glsl Raise/Lower)
+        Set = 1  // h  = mix(h, amount, influence) -- absolute (mirrors brush_compute.glsl Flatten)
+    };
+
     struct BrushParams
     {
         float radius = 5.0f;

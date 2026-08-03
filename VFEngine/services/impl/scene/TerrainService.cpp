@@ -14,6 +14,7 @@
 #include "../../events/terrain/PaintBrushEvents.hpp"
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/terrain/TerrainStrokeEvents.hpp"
+#include "../../events/terrain/TerrainRuntimeEditEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -85,6 +86,11 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrain::FinalizeTerrainStrokeCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RestoreStrokeStateCommand>();
         dispatcher.unregisterCommandHandler<events::terrain::RestoreSurfaceMaskRegionCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainEdit::DeformTerrainCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainEdit::PaintTerrainLayerCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainEdit::SetTerrainHolesCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainEdit::BeginTerrainEditBatchCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainEdit::FlushTerrainEditsCommand>();
         dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
         dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();
@@ -323,6 +329,10 @@ namespace services
         // clears its stacks on the same SceneCleared notification, so a pushed entry would
         // be dropped anyway (or worse, outlive the grid).
         discardTerrainStroke();
+
+        // VK-1624: same reasoning for the runtime edit batch -- draining it would weld seams and
+        // submit colliders against tiles that are about to be destroyed.
+        discardRuntimeTerrainEdits();
 
         terrainGrids.clear();
         fileCaches.clear();

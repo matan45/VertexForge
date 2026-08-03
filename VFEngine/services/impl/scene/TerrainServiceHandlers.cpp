@@ -16,6 +16,7 @@
 #include "../../events/terrain/PaintModeEvents.hpp"
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/TerrainStrokeEvents.hpp"
+#include "../../events/terrain/TerrainRuntimeEditEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/foliage/FoliageEvents.hpp"
@@ -319,6 +320,40 @@ namespace services
             [this](const events::terrain::RestoreSurfaceMaskRegionCommand& cmd)
             {
                 restoreSurfaceMaskRegion(cmd);
+            });
+
+        // VK-1624 runtime script edits. Registered here alongside the brushes because they are the
+        // same kind of operation, but they share no handler with them: the three Apply*Commands
+        // above resolve their target and parameters from editor tool-mode services that the Runtime
+        // never constructs, so a script cannot go through them.
+        dispatcher.registerCommandHandler<events::terrainEdit::DeformTerrainCommand>(
+            [this](const events::terrainEdit::DeformTerrainCommand& cmd)
+            {
+                return deformTerrainRuntime(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainEdit::PaintTerrainLayerCommand>(
+            [this](const events::terrainEdit::PaintTerrainLayerCommand& cmd)
+            {
+                return paintTerrainLayerRuntime(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainEdit::SetTerrainHolesCommand>(
+            [this](const events::terrainEdit::SetTerrainHolesCommand& cmd)
+            {
+                return setTerrainHolesRuntime(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainEdit::BeginTerrainEditBatchCommand>(
+            [this](const events::terrainEdit::BeginTerrainEditBatchCommand&)
+            {
+                beginRuntimeTerrainEditBatch();
+            });
+
+        dispatcher.registerCommandHandler<events::terrainEdit::FlushTerrainEditsCommand>(
+            [this](const events::terrainEdit::FlushTerrainEditsCommand&)
+            {
+                return flushRuntimeTerrainEdits();
             });
 
         // Leaving paint or hole mode mid-drag must not silently drop the stroke's undo

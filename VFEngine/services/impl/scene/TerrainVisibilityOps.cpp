@@ -14,6 +14,15 @@ namespace services
     {
         std::vector<terrain::TerrainTile*> result;
 
+        // VK-1624: drain script-driven terrain edits first. This is the once-per-frame terrain tick
+        // and the only place the grid is mutated, so the seam weld and the collider submission the
+        // edits deferred belong here rather than on the Scripts task that issued them; it is also
+        // the only place the camera position exists, which the async collider path needs to pick a
+        // physics LOD. Deliberately BEFORE the streaming block below: streamOutTile evicts tile
+        // geometry, and it must not free heightData out from under a tile that still owes a
+        // collider rebuild.
+        drainRuntimeTerrainEdits(cameraPosition);
+
         // Process sector-driven terrain streaming (world mode) or standalone streaming
         if (worldModeActive)
         {
