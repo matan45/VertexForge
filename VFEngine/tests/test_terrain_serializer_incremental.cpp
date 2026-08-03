@@ -3,6 +3,7 @@
 #include "test_terrain_serializer_fixture.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <unordered_set>
@@ -27,7 +28,8 @@ namespace
         bool saveDirty(
             const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash>& dirty,
             const terrain::TerrainPhysicsConfig* physics = nullptr,
-            const terrain::TerrainStreamingConfig* streaming = nullptr)
+            const terrain::TerrainStreamingConfig* streaming = nullptr,
+            const std::string* material = nullptr)
         {
             terrain::TerrainIncrementalSaveParams params;
             params.path = file.string();
@@ -36,6 +38,9 @@ namespace
             params.currentHeader = snapshot.header;
             params.indexTableOffset = snapshot.indexTableOffset;
             params.currentIndexMap = &indexMap;
+            // materialPath is the value to persist, not a "leave alone" sentinel — default it to
+            // whatever is on disk so tests that are not about the material keep the header size.
+            params.materialPath = material ? *material : snapshot.header.materialPath;
             params.physicsConfig = physics ? *physics : snapshot.header.physicsConfig;
             params.streamingConfig = streaming ? *streaming : snapshot.header.streamingConfig;
             return terrain::TerrainSerializer::saveIncremental(params);
@@ -62,6 +67,8 @@ namespace
     {
         bool saveSucceeded = false;
         bool roundTripsCleanly = false;
+        bool fileUnchanged = false;
+        std::string persistedPath;
     };
 
     MaterialPathIncrementalResult terrainRoundTripsCleanlyWithMaterialPath(
@@ -84,27 +91,28 @@ namespace
             return result;
         auto indexMap = makeTerrainTestIndexMap(snapshot.index);
         const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {coords.front()};
+        const auto beforeBytes = readTerrainTestFileBytes(file.path());
 
         terrain::TerrainIncrementalSaveParams params;
         params.path = file.string();
         params.grid = grid.get();
         params.dirtyCoords = &dirty;
+        // currentHeader stays the on-disk truth; the requested path travels in its own field.
         params.currentHeader = snapshot.header;
-        params.currentHeader.materialPath = requestedPath;
+        params.materialPath = requestedPath;
         params.indexTableOffset = snapshot.indexTableOffset;
         params.currentIndexMap = &indexMap;
         params.physicsConfig = snapshot.header.physicsConfig;
         params.streamingConfig = snapshot.header.streamingConfig;
         result.saveSucceeded = terrain::TerrainSerializer::saveIncremental(params);
+        result.fileUnchanged = readTerrainTestFileBytes(file.path()) == beforeBytes;
         if (!result.saveSucceeded)
             return result;
 
         TerrainFileSnapshot reloaded;
-        if (!readTerrainTestSnapshot(file.string(), reloaded) ||
-            reloaded.header.materialPath != requestedPath)
-        {
+        if (!readTerrainTestSnapshot(file.string(), reloaded))
             return result;
-        }
+        result.persistedPath = reloaded.header.materialPath;
 
         const auto* entry = findTerrainTestEntry(reloaded.index, coords.front());
         std::vector<float> heights;
@@ -206,7 +214,7 @@ TEST_SUITE("TerrainSerializerIncremental")
         }
     }
 
-    TEST_CASE("material path length changes expose the current incremental header limitation")
+    TEST_CASE("material path persists in place at equal length and is refused at any other length")
     {
         const std::string originalPath = "materials/original.vfTerrainMat";
         const std::string sameLength(originalPath.size(), 's');
@@ -214,18 +222,104 @@ TEST_SUITE("TerrainSerializerIncremental")
         const auto unchanged = terrainRoundTripsCleanlyWithMaterialPath(originalPath);
         CHECK(unchanged.saveSucceeded);
         CHECK(unchanged.roundTripsCleanly);
+        CHECK(unchanged.persistedPath == originalPath);
 
+        // Equal length keeps the index table where it is, so the swap is safe in place.
         const auto equalLength = terrainRoundTripsCleanlyWithMaterialPath(sameLength);
         CHECK(equalLength.saveSucceeded);
         CHECK(equalLength.roundTripsCleanly);
+        CHECK(equalLength.persistedPath == sameLength);
 
+        // Any other length moves the index table. The save must be refused so the caller
+        // falls back to a full save, and the file must be left byte-for-byte untouched.
         for (const auto& changedLengthPath :
              {originalPath + "/longer", std::string("short.vfTerrainMat"), std::string()})
         {
             CAPTURE(changedLengthPath);
             const auto changed = terrainRoundTripsCleanlyWithMaterialPath(changedLengthPath);
-            CHECK(changed.saveSucceeded);
-            CHECK_FALSE(changed.roundTripsCleanly);
+            CHECK_FALSE(changed.saveSucceeded);
+            CHECK(changed.fileUnchanged);
+        }
+    }
+
+    TEST_CASE("serializedHeaderSize matches the index table offset the writer produces")
+    {
+        // saveIncremental() rewrites the header in place and then seeks to the cached index
+        // table offset, so serializedHeaderSize() must agree with writeHeader() exactly.
+        const auto config = makeTerrainTestConfig(terrain::TileResolution::Low);
+        const std::vector<terrain::TileCoord> coords = {{0, 0}};
+        auto grid = makePopulatedTerrainTestGrid(config, coords, true);
+
+        const std::array<std::string, 3> materialPaths = {
+            std::string(),
+            std::string("m.vfTerrainMat"),
+            std::string(200, 'p')
+        };
+
+        for (const bool withPhysics : {false, true})
+        {
+            for (const bool withStreaming : {false, true})
+            {
+                for (const auto& materialPath : materialPaths)
+                {
+                    CAPTURE(withPhysics);
+                    CAPTURE(withStreaming);
+                    CAPTURE(materialPath.size());
+
+                    ScopedTerrainTestFile file("header-size");
+                    auto params = makeTerrainTestSaveParams(file.string(), *grid, config, materialPath);
+                    params.physicsConfig.hasCollider = withPhysics;
+                    params.streamingConfig.enabled = withStreaming;
+                    REQUIRE(terrain::TerrainSerializer::save(params));
+
+                    TerrainFileSnapshot snapshot;
+                    REQUIRE(readTerrainTestSnapshot(file.string(), snapshot));
+                    CHECK(terrain::serializedHeaderSize(snapshot.header) == snapshot.indexTableOffset);
+                }
+            }
+        }
+    }
+
+    TEST_CASE("repeated equal-length material path changes keep the index table consistent")
+    {
+        IncrementalTerrainFixture fixture;
+        const std::string firstPath(fixture.materialPath.size(), 'a');
+        const std::string secondPath(fixture.materialPath.size(), 'b');
+
+        const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {
+            fixture.coords[1]
+        };
+
+        for (const auto& path : {firstPath, secondPath})
+        {
+            CAPTURE(path);
+            const auto beforeIndex = fixture.snapshot.index;
+            const auto beforeBytes = readTerrainTestFileBytes(fixture.file.path());
+
+            terrain::TerrainTile* dirtyTile = fixture.grid->getTile(fixture.coords[1]);
+            REQUIRE(dirtyTile != nullptr);
+            dirtyTile->heightData[0] += 0.125f;
+            REQUIRE(fixture.saveDirty(dirty, nullptr, nullptr, &path));
+
+            fixture.refresh();
+            CHECK(fixture.snapshot.header.materialPath == path);
+            CHECK(terrain::serializedHeaderSize(fixture.snapshot.header) ==
+                  fixture.snapshot.indexTableOffset);
+
+            // The untouched tiles must keep both their index entries and their payload bytes.
+            const auto afterBytes = readTerrainTestFileBytes(fixture.file.path());
+            for (const auto unchangedCoord : {fixture.coords[0], fixture.coords[2]})
+            {
+                CAPTURE(unchangedCoord.x);
+                CAPTURE(unchangedCoord.z);
+                const auto* before = findTerrainTestEntry(beforeIndex, unchangedCoord);
+                const auto* after = findTerrainTestEntry(fixture.snapshot.index, unchangedCoord);
+                REQUIRE(before != nullptr);
+                REQUIRE(after != nullptr);
+                CHECK(sameTerrainTestEntry(*before, *after));
+                CHECK(sameTerrainTestByteRange(
+                    beforeBytes, afterBytes, before->heightDataOffset, before->heightDataSize));
+            }
         }
     }
 
@@ -263,6 +357,9 @@ TEST_SUITE("TerrainSerializerIncremental")
         params.currentHeader = fixture.snapshot.header;
         params.indexTableOffset = fixture.snapshot.indexTableOffset;
         params.currentIndexMap = &fixture.indexMap;
+        // Keep the persisted material path identical so the toggle cases below isolate the
+        // flag change rather than failing on a header-size difference.
+        params.materialPath = fixture.snapshot.header.materialPath;
         params.physicsConfig = fixture.snapshot.header.physicsConfig;
         params.streamingConfig = fixture.snapshot.header.streamingConfig;
         CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));

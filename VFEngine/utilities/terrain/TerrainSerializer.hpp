@@ -51,6 +51,29 @@ namespace terrain
         return (static_cast<uint32_t>(flags) & static_cast<uint32_t>(flag)) != 0;
     }
 
+    // Byte offset of the uint32_t materialPath length prefix, i.e. the size of the
+    // fixed-width part of the header. Derived from the field sizes writeHeader() emits so it
+    // cannot silently rot the way a hardcoded literal would (TERRAIN_LOD_COUNT has grown before).
+    inline constexpr uint64_t TERRAIN_HEADER_PATH_LENGTH_OFFSET =
+        4 +                                     // magic 'VFTR'
+        3 * sizeof(uint32_t) +                  // versionMajor / versionMinor / versionPatch
+        sizeof(uint32_t) +                      // flags
+        sizeof(uint32_t) +                      // tileCount
+        sizeof(uint8_t) +                       // resolution
+        4 * sizeof(float) +                     // worldTileSize, maxHeight, minHeight, skirtDepth
+        TERRAIN_LOD_COUNT * sizeof(float) +     // lodDistances
+        4 * sizeof(int32_t);                    // gridMinX, gridMinZ, gridMaxX, gridMaxZ
+    static_assert(TERRAIN_HEADER_PATH_LENGTH_OFFSET == 81,
+                  "VFTR header prefix changed — update every reader that seeks past it");
+
+    // Optional trailing header blocks, written only when the matching flag is set.
+    inline constexpr uint64_t TERRAIN_HEADER_PHYSICS_BLOCK_SIZE =
+        sizeof(uint8_t) + sizeof(uint8_t) + sizeof(float) + sizeof(float);
+    inline constexpr uint64_t TERRAIN_HEADER_STREAMING_BLOCK_SIZE =
+        sizeof(uint8_t) + sizeof(float) + sizeof(float) + sizeof(int32_t) + sizeof(int32_t);
+    static_assert(TERRAIN_HEADER_PHYSICS_BLOCK_SIZE == 10 && TERRAIN_HEADER_STREAMING_BLOCK_SIZE == 17,
+                  "VFTR optional header blocks changed — update every reader that seeks past them");
+
     struct TerrainPhysicsConfig
     {
         bool hasCollider = false;
@@ -96,6 +119,21 @@ namespace terrain
         TerrainPhysicsConfig physicsConfig;
         TerrainStreamingConfig streamingConfig;
     };
+
+    // Serialized size of the header, which is also the index table offset: the format does not
+    // store that offset, readHeader() recovers it as the stream position after parseHeader().
+    // Because tile offsets in the index are absolute, an in-place header rewrite is safe only
+    // while this value is unchanged — see TerrainSerializer::saveIncremental().
+    inline uint64_t serializedHeaderSize(const TerrainFileHeader& header)
+    {
+        return TERRAIN_HEADER_PATH_LENGTH_OFFSET +
+               sizeof(uint32_t) +                                // materialPath length prefix
+               header.materialPath.size() +
+               (hasFlag(header.flags, TerrainFormatFlags::HAS_PHYSICS_DATA)
+                    ? TERRAIN_HEADER_PHYSICS_BLOCK_SIZE : 0) +
+               (hasFlag(header.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG)
+                    ? TERRAIN_HEADER_STREAMING_BLOCK_SIZE : 0);
+    }
 
     struct TileIndexEntry
     {
@@ -152,9 +190,14 @@ namespace terrain
         std::string_view path;
         const TerrainGrid* grid = nullptr;
         const std::unordered_set<TileCoord, TileCoordHash>* dirtyCoords = nullptr;
+        // The header as it currently sits on disk. indexTableOffset must match its
+        // serializedHeaderSize() — saveIncremental() verifies this before touching the file.
         TerrainFileHeader currentHeader;
         uint64_t indexTableOffset = 0;
         const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>* currentIndexMap = nullptr;
+        // The material path to persist. Only writable in place while its length matches the one
+        // in currentHeader; any other length moves the index table and forces a full save.
+        std::string materialPath;
         TerrainPhysicsConfig physicsConfig;
         TerrainStreamingConfig streamingConfig;
     };
@@ -232,8 +275,8 @@ namespace terrain
                                            const std::vector<const TerrainTile*>& tiles,
                                            TerrainFormatFlags flags);
 
-        static bool validateIncrementalFlags(TerrainFormatFlags currentFlags,
-                                              TerrainFormatFlags newFlags);
+        static bool validateIncrementalHeaderLayout(const TerrainFileHeader& updatedHeader,
+                                                     uint64_t indexTableOffset);
 
         static std::vector<TileIndexEntry> buildSortedIndex(
             const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& indexMap);

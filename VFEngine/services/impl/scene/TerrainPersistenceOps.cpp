@@ -7,18 +7,13 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainSerializer.hpp"
+#include "TerrainAssetMetadata.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include <asset/AssetRef.hpp>
 #include "threading/JobSystem.hpp"
-#include <asset/AssetDatabase.hpp>
-#include <asset/AssetMetadata.hpp>
-#include <asset/AssetMetadataSerializer.hpp>
 #include <algorithm>
-#include <chrono>
-#include <sstream>
-#include <iomanip>
 
 namespace services
 {
@@ -76,30 +71,52 @@ namespace services
         auto& cache = *cacheIt->second;
 
         // Detect conditions that force a full save BEFORE the background thread starts,
-        // because prepareSave() adds tiles to the grid (not thread-safe).
+        // because prepareSave() adds tiles to the grid (not thread-safe). Getting this wrong is
+        // not merely a slow path: saveTerrainIncremental() falls back to saveTerrain() on the
+        // background thread WITHOUT prepareSave(), and saveTerrain() writes only the tiles
+        // currently resident in the grid — so with streaming on, every unloaded tile would be
+        // silently dropped from the file.
         bool needsFullSave = cache.hasNewOrRemovedTiles();
 
-        // Check if header size would change (physics/streaming flags toggled).
-        // NOTE: TerrainSerializer::saveIncremental() has a matching guard as a safety net.
-        // Both must agree — if updating one, update the other.
+        // Nothing to write incrementally means saveTerrainIncremental() will full-save too.
+        if (cache.getDirtyCount() == 0)
+            needsFullSave = true;
+
+        // Check whether the header would change size (material path length, or the optional
+        // physics/streaming blocks toggling), which moves the index table.
+        // NOTE: TerrainSerializer::saveIncremental() has a matching guard as a safety net, built
+        // from the same terrain::serializedHeaderSize(). Both must agree — if updating one,
+        // update the other. This one may be more eager, never less.
         if (!needsFullSave)
         {
             auto& registry = scene::EntityRegistry::getRegistry();
             entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});
-            const auto& savedHeader = cache.getHeader();
 
-            bool hadPhysics = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_PHYSICS_DATA);
             bool hasPhysicsNow = false;
             if (registry.valid(ent) && registry.all_of<components::TerrainColliderComponent>(ent))
                 hasPhysicsNow = registry.get<components::TerrainColliderComponent>(ent).hasCollider;
 
-            bool hadStreaming = terrain::hasFlag(savedHeader.flags, terrain::TerrainFormatFlags::HAS_STREAMING_CONFIG);
             bool hasStreamingNow = false;
             auto streamerIt = worldStreamers.find(terrainEntityId);
             if (streamerIt != worldStreamers.end() && streamerIt->second)
                 hasStreamingNow = streamerIt->second->isEnabled();
 
-            if (hadPhysics != hasPhysicsNow || hadStreaming != hasStreamingNow)
+            // Mirror what TerrainSerializer::computeFlags() would derive from the same configs.
+            // Only these two flags affect header size, so the rest can stay as they were saved.
+            terrain::TerrainFileHeader candidate = cache.getHeader();
+            auto flagBits = static_cast<uint32_t>(candidate.flags);
+            constexpr auto physicsBit = static_cast<uint32_t>(terrain::TerrainFormatFlags::HAS_PHYSICS_DATA);
+            constexpr auto streamingBit = static_cast<uint32_t>(terrain::TerrainFormatFlags::HAS_STREAMING_CONFIG);
+            flagBits = hasPhysicsNow ? (flagBits | physicsBit) : (flagBits & ~physicsBit);
+            flagBits = hasStreamingNow ? (flagBits | streamingBit) : (flagBits & ~streamingBit);
+            candidate.flags = static_cast<terrain::TerrainFormatFlags>(flagBits);
+
+            // Resolving here also warms the AssetRef path cache on the main thread, so the
+            // background save reads back the identical string.
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+                candidate.materialPath = registry.get<components::TerrainComponent>(ent).terrainMaterialRef.resolve();
+
+            if (terrain::serializedHeaderSize(candidate) != cache.getIndexTableOffset())
                 needsFullSave = true;
         }
 
@@ -158,9 +175,9 @@ namespace services
 
         if (cache.getDirtyCount() == 0)
         {
-            // No dirty tiles — but prepareSaveIncremental() may have detected a header change
-            // (e.g. streaming/physics toggled) and called prepareSave() for a full save.
-            // Fall back to full save to persist those config changes.
+            // No dirty tiles, but config changes (material path, streaming/physics) still need
+            // persisting. prepareSaveIncremental() forces prepareSave() for this case, so the
+            // grid is fully resident and saveTerrain() cannot drop streamed-out tiles here.
             vfLogInfo("TerrainService: No dirty tiles, falling back to full save for config changes");
             return saveTerrain(terrainEntityId, path);
         }
@@ -197,6 +214,8 @@ namespace services
             streamingConfig.maxUnloadsPerFrame = cfg.maxUnloadsPerFrame;
         }
 
+        auto& comp = registry.get<components::TerrainComponent>(ent);
+
         terrain::TerrainIncrementalSaveParams incParams;
         incParams.path = path;
         incParams.grid = gridIt->second.get();
@@ -204,6 +223,8 @@ namespace services
         incParams.currentHeader = cache.getHeader();
         incParams.indexTableOffset = cache.getIndexTableOffset();
         incParams.currentIndexMap = &cache.getIndexMap();
+        // Same source as the full save — the live component, not the stale on-disk header.
+        incParams.materialPath = comp.terrainMaterialRef.resolve();
         incParams.physicsConfig = physicsConfig;
         incParams.streamingConfig = streamingConfig;
 
@@ -223,10 +244,14 @@ namespace services
         saveVegetation(terrainEntityId, path);
         saveFoliage(terrainEntityId, path);
 
-        auto& comp = registry.get<components::TerrainComponent>(ent);
         comp.saveDirty = false;
 
         cache.refreshIndex(path);
+
+        // Same metadata contract as the full save — see refreshTerrainSidecar().
+        const auto metaGuid = refreshTerrainSidecar(path);
+        if (metaGuid.isValid())
+            comp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
         events::terrain::TerrainSavedNotification savedNotification;
         savedNotification.terrainEntity = EntityHandle{terrainEntityId};
@@ -342,39 +367,9 @@ namespace services
             }
 
             // Create or update .vfmeta sidecar
-            {
-                auto& db = asset::AssetDatabase::instance();
-                auto metaPath = asset::AssetMetadataSerializer::getMetaPath(path);
-                auto existingMeta = asset::AssetMetadataSerializer::load(metaPath);
-
-                asset::AssetMetadata metadata;
-                if (existingMeta.has_value())
-                {
-                    metadata.guid = existingMeta->guid;
-                }
-                else
-                {
-                    metadata.guid = asset::AssetGUID::generate();
-                }
-                metadata.type = resource::AssetType::Terrain;
-                metadata.importSourcePath = path;
-                {
-                    auto now = std::chrono::system_clock::now();
-                    auto time = std::chrono::system_clock::to_time_t(now);
-                    std::tm tm{};
-                    localtime_s(&tm, &time);
-                    std::ostringstream oss;
-                    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-                    metadata.importTimestamp = oss.str();
-                }
-                asset::AssetMetadataSerializer::save(metadata, metaPath);
-
-                if (!db.getGUID(path).has_value())
-                {
-                    db.registerAssetWithGUID(metadata.guid, path, resource::AssetType::Terrain);
-                }
-                mutableComp.terrainRef = asset::AssetRef::fromGUIDAndPath(metadata.guid, path);
-            }
+            const auto metaGuid = refreshTerrainSidecar(path);
+            if (metaGuid.isValid())
+                mutableComp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
             events::terrain::TerrainSavedNotification savedNotification;
             savedNotification.terrainEntity = EntityHandle{terrainEntityId};

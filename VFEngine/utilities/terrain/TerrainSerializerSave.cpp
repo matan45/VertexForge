@@ -70,18 +70,18 @@ namespace terrain
         return flags;
     }
 
-    bool TerrainSerializer::validateIncrementalFlags(TerrainFormatFlags currentFlags,
-                                                      TerrainFormatFlags newFlags)
+    bool TerrainSerializer::validateIncrementalHeaderLayout(const TerrainFileHeader& updatedHeader,
+                                                             uint64_t indexTableOffset)
     {
-        // If optional header sections toggled, header size changed -- fall back to full save.
-        // NOTE: TerrainService::prepareSaveIncremental() has a matching guard on the main thread.
-        // Both must agree -- if updating one, update the other.
-        bool hadPhysics = hasFlag(currentFlags, TerrainFormatFlags::HAS_PHYSICS_DATA);
-        bool hasPhysicsNow = hasFlag(newFlags, TerrainFormatFlags::HAS_PHYSICS_DATA);
-        bool hadStreaming = hasFlag(currentFlags, TerrainFormatFlags::HAS_STREAMING_CONFIG);
-        bool hasStreamingNow = hasFlag(newFlags, TerrainFormatFlags::HAS_STREAMING_CONFIG);
-
-        if (hadPhysics != hasPhysicsNow || hadStreaming != hasStreamingNow)
+        // Incremental save rewrites the header in place and then seeks to the *cached* index
+        // table offset. That is only sound while the rewritten header occupies exactly the same
+        // bytes -- the material path is variable length and the physics/streaming blocks are
+        // optional, so any of them can move the index table.
+        // NOTE: TerrainService::prepareSaveIncremental() has a matching guard on the main thread
+        // built from the same serializedHeaderSize(). Both must agree -- if updating one, update
+        // the other. The main-thread guard may be more eager, never less: the background fallback
+        // to a full save runs without prepareSave() and would drop streamed-out tiles.
+        if (serializedHeaderSize(updatedHeader) != indexTableOffset)
         {
             vfLogWarning("TerrainSerializer: Header size changed, falling back to full save");
             return false;
@@ -185,9 +185,25 @@ namespace terrain
 
         try
         {
-            TerrainFormatFlags newFlags = computeFlags(*params.grid, params.physicsConfig, params.streamingConfig);
+            // Build the header we intend to write back and validate its layout *before* opening
+            // the file, so a refusal leaves the terrain bytes untouched.
+            TerrainFileHeader updatedHeader = params.currentHeader;
+            updatedHeader.flags = computeFlags(*params.grid, params.physicsConfig, params.streamingConfig);
+            updatedHeader.physicsConfig = params.physicsConfig;
+            updatedHeader.streamingConfig = params.streamingConfig;
+            updatedHeader.materialPath = params.materialPath;
 
-            if (!validateIncrementalFlags(params.currentHeader.flags, newFlags))
+            // The caller's cached offset must still describe the header on disk, otherwise the
+            // index table is not where we think it is and nothing below can be trusted.
+            if (serializedHeaderSize(params.currentHeader) != params.indexTableOffset)
+            {
+                vfLogWarning("TerrainSerializer: Cached index table offset {} does not match the "
+                             "on-disk header size {}, falling back to full save",
+                             params.indexTableOffset, serializedHeaderSize(params.currentHeader));
+                return false;
+            }
+
+            if (!validateIncrementalHeaderLayout(updatedHeader, params.indexTableOffset))
                 return false;
 
             std::fstream file(filePath, std::ios::binary | std::ios::in | std::ios::out);
@@ -201,13 +217,9 @@ namespace terrain
 
             file.seekp(0, std::ios::end);
 
-            if (!writeIncrementalTiles(file, *params.grid, *params.dirtyCoords, newFlags, indexEntries))
+            if (!writeIncrementalTiles(file, *params.grid, *params.dirtyCoords, updatedHeader.flags,
+                                       indexEntries))
                 return false;
-
-            TerrainFileHeader updatedHeader = params.currentHeader;
-            updatedHeader.flags = newFlags;
-            updatedHeader.physicsConfig = params.physicsConfig;
-            updatedHeader.streamingConfig = params.streamingConfig;
 
             if (!writeIncrementalHeaderAndIndex(file, updatedHeader, params.indexTableOffset, indexEntries))
                 return false;

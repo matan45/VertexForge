@@ -292,11 +292,10 @@ namespace asset
         uint32_t oldPathLen, const std::string& newPath)
     {
         size_t oldPathEnd = pathLenOffset + 4 + oldPathLen;
-        int32_t delta = static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
         uint32_t newPathLen = static_cast<uint32_t>(newPath.size());
 
         std::vector<char> newFileData;
-        newFileData.reserve(fileData.size() + delta);
+        newFileData.reserve(fileData.size() - oldPathLen + newPathLen);
         newFileData.insert(newFileData.end(), fileData.begin(), fileData.begin() + pathLenOffset);
 
         newFileData.push_back(static_cast<char>(newPathLen & 0xFF));
@@ -315,17 +314,22 @@ namespace asset
     {
         auto adjustOffset = [&](size_t pos, uint64_t originalValue) {
             if (originalValue == 0) return;
+            if (pos + 8 > newFileData.size()) return;
             uint64_t adjusted = static_cast<uint64_t>(static_cast<int64_t>(originalValue) + delta);
             for (int b = 0; b < 8; ++b)
                 newFileData[pos + b] = static_cast<char>((adjusted >> (b * 8)) & 0xFF);
         };
 
+        // Field offsets within the 52-byte serialized TileIndexEntry: coordX 0, coordZ 4,
+        // heightDataOffset 8, heightDataSize 16, weightDataOffset 20, meshletDataOffset 28,
+        // holeMaskDataOffset 36, caveSdfDataOffset 44. Sizes do not move, only offsets.
         for (size_t i = 0; i < index.size(); ++i) {
-            size_t entryOffset = indexTableOffset + i * 44;
+            size_t entryOffset = indexTableOffset + i * terrain::TILE_INDEX_ENTRY_SIZE;
             adjustOffset(entryOffset + 8, index[i].heightDataOffset);
             adjustOffset(entryOffset + 20, index[i].weightDataOffset);
             adjustOffset(entryOffset + 28, index[i].meshletDataOffset);
             adjustOffset(entryOffset + 36, index[i].holeMaskDataOffset);
+            adjustOffset(entryOffset + 44, index[i].caveSdfDataOffset);
         }
     }
 
@@ -352,20 +356,29 @@ namespace asset
             inFile.read(fileData.data(), fileSize);
             inFile.close();
 
-            constexpr size_t pathLenOffset = 4 + 12 + 4 + 4 + 1 + 16 + 16 + 16;
+            // Derive every offset from the serializer's own definitions — hand-rolled copies of
+            // this arithmetic went stale once already (lodDistances grew from 4 to 6 floats, the
+            // index entry from 44 to 52 bytes) and silently corrupted the files they rewrote.
+            constexpr size_t pathLenOffset = terrain::TERRAIN_HEADER_PATH_LENGTH_OFFSET;
             uint32_t oldPathLen = static_cast<uint32_t>(header.materialPath.size());
             int32_t delta = static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
+
+            if (pathLenOffset + 4 + oldPathLen > fileData.size())
+            {
+                vfLogError("Terrain file too small to hold its own material path: {}",
+                           filePath.string());
+                return false;
+            }
 
             auto newFileData = buildTerrainFileWithNewPath(fileData, pathLenOffset, oldPathLen, newPath);
 
             if (delta != 0 && !index.empty()) {
-                size_t physicsSize = 0;
-                if (terrain::hasFlag(header.flags, terrain::TerrainFormatFlags::HAS_PHYSICS_DATA))
-                    physicsSize = 1 + 1 + 4 + 4;
-
-                uint32_t newPathLen = static_cast<uint32_t>(newPath.size());
-                size_t indexTableOffset = pathLenOffset + 4 + newPathLen + physicsSize;
-                adjustTerrainIndexOffsets(newFileData, indexTableOffset, index, delta);
+                terrain::TerrainFileHeader newHeader = header;
+                newHeader.materialPath = newPath;
+                adjustTerrainIndexOffsets(
+                    newFileData,
+                    static_cast<size_t>(terrain::serializedHeaderSize(newHeader)),
+                    index, delta);
             }
 
             std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);

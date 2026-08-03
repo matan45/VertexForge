@@ -47,6 +47,11 @@ namespace
             terrain_test_fs::path tmpPath = filePath;
             tmpPath += ".tmp";
             terrain_test_fs::remove(tmpPath, ec);
+            // The sidecar a save may have written alongside it, otherwise the directory
+            // removal below fails and the temp dir leaks.
+            terrain_test_fs::path metaPath = filePath;
+            metaPath += ".vfmeta";
+            terrain_test_fs::remove(metaPath, ec);
             terrain_test_fs::remove(directory, ec);
         }
 
