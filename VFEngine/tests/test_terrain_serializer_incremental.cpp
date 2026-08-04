@@ -132,6 +132,8 @@ TEST_SUITE("TerrainSerializerIncremental")
         const uint32_t originalTileCount = fixture.snapshot.header.tileCount;
         const auto originalFlags = fixture.snapshot.header.flags;
         uint64_t previousSize = terrain_test_fs::file_size(fixture.file.path());
+        uint64_t previousObsolete =
+            terrainTestOccupancy(fixture.snapshot, previousSize).obsoleteBytes;
 
         for (uint32_t pass = 0; pass < 3; ++pass)
         {
@@ -146,11 +148,16 @@ TEST_SUITE("TerrainSerializerIncremental")
 
             const uint64_t newSize = terrain_test_fs::file_size(fixture.file.path());
             CHECK(newSize > previousSize);
-            // Growth is only unbounded below the compaction threshold. Assert the coupling rather
-            // than leave it accidental: three Low-resolution records are far under the 1 MiB floor,
-            // so nothing has compacted here and the monotonic-growth expectation above still holds.
-            CHECK_FALSE(terrain::shouldCompactTerrainFile(
-                terrainTestOccupancy(fixture.snapshot, newSize)));
+
+            // The serializer never compacts on its own — deciding that is the service's job, so
+            // growth here is unconditional. What must hold is that the superseded record is
+            // accounted for rather than lost track of: every save turns one live record into
+            // obsolete bytes, and the accounting stays internally consistent while it does.
+            const auto usage = terrainTestOccupancy(fixture.snapshot, newSize);
+            CHECK(usage.consistent);
+            CHECK(usage.obsoleteBytes > previousObsolete);
+            CHECK(usage.overheadBytes + usage.liveBytes + usage.obsoleteBytes == newSize);
+            previousObsolete = usage.obsoleteBytes;
             CHECK(fixture.snapshot.indexTableOffset == originalIndexOffset);
             CHECK(fixture.snapshot.header.tileCount == originalTileCount);
             CHECK(static_cast<uint32_t>(fixture.snapshot.header.flags) ==
