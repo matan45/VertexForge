@@ -33,6 +33,7 @@
 #include "terrain/WeightBrushApplicator.hpp"
 #include "terrain/PaintBrushTypes.hpp"
 #include "terrain/SegmentCorridor.hpp"
+#include "terrain/SplineCorridorDeform.hpp"
 #include "terrain/RoadMeshBuilder.hpp"
 #include "terrain/TerrainRVTBudget.hpp"
 #include "vegetation/ScatterBaker.hpp"
@@ -531,7 +532,15 @@ namespace services
                 return result;
             });
 
-        // Spline terrain deformation handlers
+        // VK-1645 spline terrain deformation. The corridor is no longer baked into the tile
+        // height plane: it is registered as a reserved height LAYER over each covered tile's
+        // authoritative base, and the tile's heightData becomes derived output recomputed from
+        // base + visible layers + a derived-only seam weld.
+        //
+        // Base blocks are seeded from the live plane BEFORE the layer is registered, and
+        // adoptBase is a one-shot, so a second spline over the same tile reuses the first
+        // spline's pre-deform ground instead of snapshotting an already-composited plane. That
+        // one property is what makes overlapping splines deletable in any order.
         dispatcher.registerQueryHandler<events::splineTerrain::ApplySplineDeformCommand>(
             [this](const events::splineTerrain::ApplySplineDeformCommand& cmd) -> bool
             {
@@ -544,189 +553,108 @@ namespace services
                 if (!allTiles.empty())
                     worldTileSize = allTiles[0]->config.worldTileSize;
 
-                float totalHalfWidth = cmd.params.corridorWidth + cmd.params.falloffWidth;
-                float halfCorridor = cmd.params.corridorWidth;
+                const float totalHalfWidth = cmd.params.corridorWidth + cmd.params.falloffWidth;
 
-                // Find all affected tiles across the entire spline
-                std::unordered_map<terrain::TileCoord, bool, terrain::TileCoordHash> affectedSet;
-                for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
-                {
-                    glm::vec2 s(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
-                    glm::vec2 e(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
-                    auto tiles = terrain::BrushSampler::getAffectedTilesForSegment(s, e, totalHalfWidth, worldTileSize);
-                    for (const auto& c : tiles)
-                        affectedSet[c] = true;
-                }
+                const std::vector<terrain::TileCoord> affected =
+                    terrain::splineCorridorAffectedTiles(cmd.splineSamples, totalHalfWidth, worldTileSize);
+                if (affected.empty())
+                    return false;
 
                 auto cacheIt = fileCaches.find(terrainGrids.begin()->first);
                 auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
-                std::vector<terrain::TileCoord> modifiedTiles;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
 
-                for (const auto& [coord, _] : affectedSet)
+                terrain::HeightLayerRecord record;
+                record.id = cmd.splineId;
+                record.visible = true;
+
+                terrain::SplineCorridorParams corridor;
+                corridor.corridorWidth = cmd.params.corridorWidth;
+                corridor.falloffWidth = cmd.params.falloffWidth;
+                corridor.embankmentHeight = cmd.params.embankmentHeight;
+
+                // The closure captures only plain data and calls a pure Terrain.dll function, so
+                // nothing inside the DLL ever reaches back into Services or the dispatcher.
+                record.eval = [samples = cmd.splineSamples, corridor](
+                    const terrain::TileCoord& coord, const terrain::TerrainTileConfig& config,
+                    const std::vector<float>& in, std::vector<float>& out)
+                {
+                    terrain::applySplineCorridorToTile(coord, config, samples, corridor, in, out);
+                };
+
+                std::vector<terrain::TileCoord> seeded;
+                for (const terrain::TileCoord& coord : affected)
                 {
                     terrain::TerrainTile* tile = grid->getTile(coord);
-                    if (!tile) continue;
+                    if (!tile)
+                        continue;
 
                     if (fileCache && !tile->hasHeightData())
                     {
                         if (!fileCache->ensureHeightsLoaded(*tile))
                             continue;
                     }
-                    if (fileCache)
-                        fileCache->markDirty(coord);
-
-                    uint32_t vertCount = tile->config.getVertexCount();
-                    float vertSpacing = tile->config.getVertexSpacing();
-                    glm::vec2 tileOrigin(
-                        static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
-                        static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
-
-                    bool tileModified = false;
-
-                    // Precompute tile AABB for segment culling
-                    float tileSize = tile->config.worldTileSize;
-                    glm::vec2 tileMin = tileOrigin - glm::vec2(totalHalfWidth);
-                    glm::vec2 tileMax = tileOrigin + glm::vec2(tileSize + totalHalfWidth);
-
-                    // Filter segments that overlap this tile's AABB
-                    std::vector<size_t> relevantSegments;
-                    for (size_t i = 0; i + 1 < cmd.splineSamples.size(); ++i)
-                    {
-                        glm::vec2 segStart(cmd.splineSamples[i].x, cmd.splineSamples[i].z);
-                        glm::vec2 segEnd(cmd.splineSamples[i + 1].x, cmd.splineSamples[i + 1].z);
-                        glm::vec2 segMin = glm::min(segStart, segEnd) - glm::vec2(totalHalfWidth);
-                        glm::vec2 segMax = glm::max(segStart, segEnd) + glm::vec2(totalHalfWidth);
-
-                        if (segMax.x >= tileOrigin.x && segMin.x <= tileOrigin.x + tileSize &&
-                            segMax.y >= tileOrigin.y && segMin.y <= tileOrigin.y + tileSize)
-                        {
-                            relevantSegments.push_back(i);
-                        }
-                    }
-
-                    if (relevantSegments.empty())
+                    if (!tile->hasHeightData())
                         continue;
 
-                    for (uint32_t z = 0; z < vertCount; ++z)
-                    {
-                        for (uint32_t x = 0; x < vertCount; ++x)
-                        {
-                            glm::vec2 vertPos = tileOrigin + glm::vec2(static_cast<float>(x), static_cast<float>(z)) * vertSpacing;
-
-                            // Find closest point on relevant spline segments
-                            float minPerpDist = std::numeric_limits<float>::max();
-                            float bestTargetHeight = 0.0f;
-
-                            for (size_t segIdx : relevantSegments)
-                            {
-                                glm::vec2 segStart(cmd.splineSamples[segIdx].x, cmd.splineSamples[segIdx].z);
-                                glm::vec2 segEnd(cmd.splineSamples[segIdx + 1].x, cmd.splineSamples[segIdx + 1].z);
-                                glm::vec2 segDir = segEnd - segStart;
-                                float segLen = glm::length(segDir);
-                                if (segLen < 0.001f) continue;
-
-                                terrain::SegmentProjection projection =
-                                    terrain::projectOntoSegment(vertPos, segStart, segEnd, segLen);
-
-                                if (projection.distance < minPerpDist)
-                                {
-                                    minPerpDist = projection.distance;
-                                    bestTargetHeight = glm::mix(
-                                        cmd.splineSamples[segIdx].y,
-                                        cmd.splineSamples[segIdx + 1].y, projection.t)
-                                        + cmd.params.embankmentHeight;
-                                }
-                            }
-
-                            if (minPerpDist > totalHalfWidth)
-                                continue;
-
-                            uint32_t idx = z * vertCount + x;
-                            float currentHeight = tile->heightData[idx];
-
-                            float blend = terrain::corridorBlend(
-                                minPerpDist, halfCorridor, cmd.params.falloffWidth);
-
-                            tile->heightData[idx] = glm::mix(currentHeight, bestTargetHeight, blend);
-                            tileModified = true;
-                        }
-                    }
-
-                    if (tileModified)
-                    {
-                        tile->isDirty = true;
-                        tile->setAllLODsDirty();
-                        modifiedTiles.push_back(coord);
-                    }
+                    store.adoptBase(coord, tile->heightData, tile->config.getVertexCount());
+                    record.affected.insert(coord);
+                    seeded.push_back(coord);
                 }
 
-                syncBrushBoundaryHeights(grid.get(), modifiedTiles);
-                return !modifiedTiles.empty();
+                if (seeded.empty())
+                    return false;
+
+                store.addLayer(std::move(record));
+
+                // Deliberately no syncBrushBoundaryHeights here. Seam welding for covered tiles
+                // is derived-only and belongs to the recompose, which knows which side of each
+                // seam is authoritative; the brush helper averages and writes BOTH sides, which
+                // would corrupt an uncovered neighbour's authoritative plane.
+                recomposeAfterAuthoritativeEdit(grid.get(), seeded);
+                return true;
             });
 
-        dispatcher.registerQueryHandler<events::splineTerrain::GetSplineOriginalHeightsQuery>(
-            [this](const events::splineTerrain::GetSplineOriginalHeightsQuery& query)
+        // Undo/redo of a spline apply: hide or show its layer, then recompose. Coverage is
+        // deliberately unaffected -- the tile's base stays authoritative while the layer is
+        // hidden, so a sculpt underneath still routes there.
+        dispatcher.registerQueryHandler<events::splineTerrain::SetSplineHeightLayerVisibleCommand>(
+            [this](const events::splineTerrain::SetSplineHeightLayerVisibleCommand& cmd) -> bool
             {
-                std::unordered_map<terrain::TileCoord, std::vector<float>, terrain::TileCoordHash> result;
-
                 if (terrainGrids.empty())
-                    return result;
+                    return false;
 
                 auto& grid = terrainGrids.begin()->second;
-                float worldTileSize = 32.0f;
-                const auto& allTiles = grid->getAllTiles();
-                if (!allTiles.empty())
-                    worldTileSize = allTiles[0]->config.worldTileSize;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
 
-                auto cacheIt = fileCaches.find(terrainGrids.begin()->first);
-                auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
+                // Marked stale while the record still exists -- afterwards there is nothing left
+                // to ask which tiles it covered.
+                invalidateHeightLayerTiles(*grid, cmd.splineId);
 
-                std::unordered_map<terrain::TileCoord, bool, terrain::TileCoordHash> affectedSet;
-                for (size_t i = 0; i + 1 < query.splineSamples.size(); ++i)
-                {
-                    glm::vec2 s(query.splineSamples[i].x, query.splineSamples[i].z);
-                    glm::vec2 e(query.splineSamples[i + 1].x, query.splineSamples[i + 1].z);
-                    auto tiles = terrain::BrushSampler::getAffectedTilesForSegment(s, e, query.totalHalfWidth, worldTileSize);
-                    for (const auto& c : tiles)
-                        affectedSet[c] = true;
-                }
+                if (!store.setLayerVisible(cmd.splineId, cmd.visible))
+                    return false;
 
-                for (const auto& [coord, _] : affectedSet)
-                {
-                    terrain::TerrainTile* tile = grid->getTile(coord);
-                    if (!tile) continue;
-                    if (fileCache && !tile->hasHeightData())
-                        fileCache->ensureHeightsLoaded(*tile);
-                    if (tile->hasHeightData())
-                        result[coord] = tile->heightData;
-                }
-
-                return result;
+                grid->recomposeDirtyDerived(0);
+                return true;
             });
 
-        dispatcher.registerCommandHandler<events::splineTerrain::RestoreSplineHeightsCommand>(
-            [this](const events::splineTerrain::RestoreSplineHeightsCommand& cmd)
+        // Permanent deletion. The base blocks the layer seeded are KEPT: they are authoritative
+        // artist data, and any ordinary sculpt made under this spline lives in them.
+        dispatcher.registerCommandHandler<events::splineTerrain::RemoveSplineHeightLayerCommand>(
+            [this](const events::splineTerrain::RemoveSplineHeightLayerCommand& cmd)
             {
                 if (terrainGrids.empty())
                     return;
 
                 auto& grid = terrainGrids.begin()->second;
-                std::vector<terrain::TileCoord> modifiedTiles;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
 
-                for (const auto& [coord, heights] : cmd.originalHeights)
-                {
-                    terrain::TerrainTile* tile = grid->getTile(coord);
-                    if (!tile || !tile->hasHeightData())
-                        continue;
-
-                    tile->heightData = heights;
-                    tile->isDirty = true;
-                    tile->setAllLODsDirty();
-                    modifiedTiles.push_back(coord);
-                }
-
-                syncBrushBoundaryHeights(grid.get(), modifiedTiles);
+                // Collect the coords BEFORE the record is erased -- afterwards there is nothing
+                // left to ask which tiles it covered.
+                invalidateHeightLayerTiles(*grid, cmd.splineId);
+                store.removeLayer(cmd.splineId);
+                grid->recomposeDirtyDerived(0);
             });
 
         // VK-1621: the weight-map mirror of the height snapshot/restore pair above, so a painted

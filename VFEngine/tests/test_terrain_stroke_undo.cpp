@@ -124,7 +124,7 @@ TEST_SUITE("TerrainStrokeUndo")
         // "before" is byte-identical to the live tile: the brush reported this tile as
         // affected but nothing actually moved (a corner dab, or a seam already welded).
         const bool added = command.addTile(0, 0, events::terrain::strokeKindBit(Kind::Heights),
-                                           heightsOf(tile), {}, {}, tile);
+                                           heightsOf(tile), {}, {}, {}, tile, nullptr);
 
         CHECK_FALSE(added);
         CHECK_FALSE(command.hasChanges());
@@ -141,7 +141,7 @@ TEST_SUITE("TerrainStrokeUndo")
 
         services::TerrainStrokeUndoCommand command(4, "Sculpt Terrain");
         REQUIRE(command.addTile(2, 3, events::terrain::strokeKindBit(Kind::Heights),
-                                before, {}, {}, tile));
+                                before, {}, {}, {}, tile, nullptr));
 
         command.undo();
         REQUIRE(log.count() == 1);
@@ -169,7 +169,7 @@ TEST_SUITE("TerrainStrokeUndo")
 
         services::TerrainStrokeUndoCommand command(11, "Sculpt Terrain");
         REQUIRE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::Heights),
-                                before, {}, {}, tile));
+                                before, {}, {}, {}, tile, nullptr));
 
         command.undo();
         REQUIRE(log.count() == 1);
@@ -200,7 +200,7 @@ TEST_SUITE("TerrainStrokeUndo")
 
         services::TerrainStrokeUndoCommand command(3, "Paint Terrain");
         REQUIRE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::Weights),
-                                {}, before, {}, tile));
+                                {}, {}, before, {}, tile, nullptr));
 
         command.undo();
         REQUIRE(log.count() == 1);
@@ -224,7 +224,7 @@ TEST_SUITE("TerrainStrokeUndo")
 
         services::TerrainStrokeUndoCommand command(3, "Paint Terrain");
         CHECK(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::Weights),
-                              {}, before, {}, tile));
+                              {}, {}, before, {}, tile, nullptr));
     }
 
     TEST_CASE("terrain_stroke_undo: an empty pre-stroke hole mask restores as empty")
@@ -240,7 +240,7 @@ TEST_SUITE("TerrainStrokeUndo")
 
         services::TerrainStrokeUndoCommand command(2, "Terrain Holes");
         REQUIRE(command.addTile(1, 1, events::terrain::strokeKindBit(Kind::Holes),
-                                {}, {}, before, tile));
+                                {}, {}, {}, before, tile, nullptr));
 
         command.undo();
         REQUIRE(log.count() == 1);
@@ -270,7 +270,7 @@ TEST_SUITE("TerrainStrokeUndo")
             const auto before = heightsOf(tile);
             tile.heightData.assign(tile.heightData.size(), 2.0f + static_cast<float>(i));
             REQUIRE(command.addTile(i, 0, events::terrain::strokeKindBit(Kind::Heights),
-                                    before, {}, {}, tile));
+                                    before, {}, {}, {}, tile, nullptr));
         }
         REQUIRE(command.getTileCount() == 3);
 
@@ -296,7 +296,7 @@ TEST_SUITE("TerrainStrokeUndo")
         REQUIRE(command.addTile(0, 0,
                                 static_cast<uint8_t>(events::terrain::strokeKindBit(Kind::Heights)
                                                      | events::terrain::strokeKindBit(Kind::Holes)),
-                                heightsBeforeA, {}, {}, tileA));
+                                heightsBeforeA, {}, {}, {}, tileA, nullptr));
 
         // Tile B: only the hole mask changed; its heights were reported but untouched.
         auto tileB = makeTile(1, 0, 1.0f);
@@ -306,7 +306,7 @@ TEST_SUITE("TerrainStrokeUndo")
         REQUIRE(command.addTile(1, 0,
                                 static_cast<uint8_t>(events::terrain::strokeKindBit(Kind::Heights)
                                                      | events::terrain::strokeKindBit(Kind::Holes)),
-                                heightsBeforeB, {}, {}, tileB));
+                                heightsBeforeB, {}, {}, {}, tileB, nullptr));
 
         command.undo();
         REQUIRE(log.count() == 1);
@@ -323,6 +323,109 @@ TEST_SUITE("TerrainStrokeUndo")
         CHECK(events::terrain::hasStrokeKind(stateB.kinds, Kind::Holes));
     }
 
+    // VK-1645. On a tile under a reserved height layer the brush edits the AUTHORITATIVE base,
+    // so that is what the snapshot must carry. Writing the derived composite back would put the
+    // bytes into regenerable data the next recompose erases -- an undo that appears to do nothing.
+    TEST_CASE("terrain_stroke_undo: a covered tile snapshots its base, not the composite")
+    {
+        RestoreLog log;
+        auto guard = installTileHandler(log);
+
+        auto tile = makeTile(0, 0, 1.0f);
+        const std::vector<float> baseBefore(tile.heightData.size(), 5.0f);
+        const std::vector<float> baseAfter(tile.heightData.size(), 8.0f);
+
+        services::TerrainStrokeUndoCommand command(1, "Sculpt Terrain");
+        REQUIRE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::BaseHeights),
+                                {}, baseBefore, {}, {}, tile, &baseAfter));
+
+        command.undo();
+        REQUIRE(log.count() == 1);
+        const auto& undone = log.last().tiles[0];
+        CHECK(events::terrain::hasStrokeKind(undone.kinds, Kind::BaseHeights));
+        // Heights is a distinct bit: a base snapshot must not be mistaken for a derived one.
+        CHECK_FALSE(events::terrain::hasStrokeKind(undone.kinds, Kind::Heights));
+        CHECK(undone.baseHeights == baseBefore);
+        CHECK(undone.heightData.empty());
+
+        command.execute();
+        REQUIRE(log.count() == 2);
+        CHECK(log.last().tiles[0].baseHeights == baseAfter);
+
+        SUBCASE("and five undo/redo cycles emit identical arrays every time")
+        {
+            for (int cycle = 0; cycle < 5; ++cycle)
+            {
+                command.undo();
+                CHECK(log.last().tiles[0].baseHeights == baseBefore);
+                command.execute();
+                CHECK(log.last().tiles[0].baseHeights == baseAfter);
+            }
+        }
+    }
+
+    TEST_CASE("terrain_stroke_undo: an unchanged base prunes the BaseHeights kind")
+    {
+        auto tile = makeTile(0, 0, 1.0f);
+        const std::vector<float> base(tile.heightData.size(), 5.0f);
+        const std::vector<float> sameBase = base;
+
+        services::TerrainStrokeUndoCommand command(1, "Sculpt Terrain");
+        CHECK_FALSE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::BaseHeights),
+                                    {}, base, {}, {}, tile, &sameBase));
+    }
+
+    TEST_CASE("terrain_stroke_undo: a lost base block drops the kind rather than storing an orphan")
+    {
+        // Coverage disappeared between capture and finalize, so there is no authoritative plane
+        // left to record. A null baseAfter is how finalizeTerrainStroke reports that.
+        auto tile = makeTile(0, 0, 1.0f);
+        const std::vector<float> base(tile.heightData.size(), 5.0f);
+
+        services::TerrainStrokeUndoCommand command(1, "Sculpt Terrain");
+        CHECK_FALSE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::BaseHeights),
+                                    {}, base, {}, {}, tile, nullptr));
+    }
+
+    // The case a bool beside Heights could not express: one stroke, one dispatch, and the two
+    // tiles disagree about which plane is authoritative. The brush wrote the covered tile's base
+    // while syncBrushBoundaryHeights wrote the uncovered seam neighbour's derived plane -- which
+    // for that tile IS the authority.
+    TEST_CASE("terrain_stroke_undo: one stroke carries base and derived tiles side by side")
+    {
+        RestoreLog log;
+        auto guard = installTileHandler(log);
+
+        services::TerrainStrokeUndoCommand command(4, "Sculpt Terrain");
+
+        auto coveredTile = makeTile(0, 0, 1.0f);
+        const std::vector<float> baseBefore(coveredTile.heightData.size(), 5.0f);
+        const std::vector<float> baseAfter(coveredTile.heightData.size(), 9.0f);
+        REQUIRE(command.addTile(0, 0, events::terrain::strokeKindBit(Kind::BaseHeights),
+                                {}, baseBefore, {}, {}, coveredTile, &baseAfter));
+
+        auto seamNeighbour = makeTile(1, 0, 1.0f);
+        const auto derivedBefore = heightsOf(seamNeighbour);
+        seamNeighbour.heightData.assign(seamNeighbour.heightData.size(), 2.0f);
+        REQUIRE(command.addTile(1, 0, events::terrain::strokeKindBit(Kind::Heights),
+                                derivedBefore, {}, {}, {}, seamNeighbour, nullptr));
+
+        command.undo();
+        REQUIRE(log.count() == 1);
+        REQUIRE(log.last().tiles.size() == 2);
+
+        const auto& covered = log.last().tiles[0];
+        CHECK(events::terrain::hasStrokeKind(covered.kinds, Kind::BaseHeights));
+        CHECK_FALSE(events::terrain::hasStrokeKind(covered.kinds, Kind::Heights));
+        CHECK(covered.baseHeights == baseBefore);
+
+        const auto& uncovered = log.last().tiles[1];
+        CHECK(events::terrain::hasStrokeKind(uncovered.kinds, Kind::Heights));
+        CHECK_FALSE(events::terrain::hasStrokeKind(uncovered.kinds, Kind::BaseHeights));
+        CHECK(uncovered.heightData == derivedBefore);
+        CHECK(uncovered.baseHeights.empty());
+    }
+
     TEST_CASE("terrain_stroke_undo: getMemoryFootprint scales with the snapshot")
     {
         services::TerrainStrokeUndoCommand small(1, "Sculpt Terrain");
@@ -331,7 +434,7 @@ TEST_SUITE("TerrainStrokeUndo")
             const auto before = heightsOf(tile);
             tile.heightData.assign(tile.heightData.size(), 2.0f);
             REQUIRE(small.addTile(0, 0, events::terrain::strokeKindBit(Kind::Heights),
-                                  before, {}, {}, tile));
+                                  before, {}, {}, {}, tile, nullptr));
         }
 
         services::TerrainStrokeUndoCommand large(1, "Paint Terrain");
@@ -341,7 +444,7 @@ TEST_SUITE("TerrainStrokeUndo")
             const auto before = makeWeights(resolution, 1.0f, 0);
             tile.weightMap = makeWeights(resolution, 0.5f, 0);
             REQUIRE(large.addTile(0, 0, events::terrain::strokeKindBit(Kind::Weights),
-                                  {}, before, {}, tile));
+                                  {}, {}, before, {}, tile, nullptr));
         }
 
         const size_t verts = 33u * 33u;

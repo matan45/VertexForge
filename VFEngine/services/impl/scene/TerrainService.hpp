@@ -35,6 +35,8 @@ namespace terrain
 {
     class TerrainGrid;
     class TerrainTile;
+    class TerrainHeightLayerStore; // VK-1645
+    struct BaseHeightBlock;
     struct CaveSDFData;
 }
 
@@ -132,6 +134,7 @@ namespace services
         {
             uint8_t kinds = 0;
             std::vector<float> heightData;
+            std::vector<float> baseHeights; // VK-1645, under the BaseHeights kind
             terrain::TileWeightMapData weightMap;
             std::vector<uint8_t> holeMask;
         };
@@ -150,6 +153,10 @@ namespace services
         // their immediate rebuild.
         std::vector<terrain::TileCoord> strokeColliderPending;
         uint64_t strokeColliderEntityId = 0;
+
+        // VK-1645: hydraulic erosion refuses to run over tiles under a reserved height layer.
+        // Latched so a held drag logs once instead of once per frame.
+        bool hydraulicCoveredWarned = false;
 
         // VK-1624 runtime (script-driven) edits. Same shape and the same motivation as the VK-1616
         // block above -- the collider rebuild is synchronous and unbudgeted -- but it defers the two
@@ -386,6 +393,38 @@ namespace services
                                       const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncHoleBoundaries(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
         void syncBrushBoundaryHeights(terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& modifiedTiles);
+
+        // --- VK-1645: authoritative base vs derived heights (TerrainBrushOps.cpp) ---
+
+        // The one place that decides which height plane an edit owns. Returns the tile's
+        // authoritative base block when a reserved height layer covers it, and the tile's own
+        // heightData otherwise -- for an uncovered tile the derived plane IS the authority.
+        //
+        // Static and store-taking on purpose: it is the routing policy for every sculpt path, and
+        // this shape lets a CPU-only test exercise it without constructing a TerrainService.
+        static std::vector<float>& authoritativeHeights(terrain::TerrainHeightLayerStore& store,
+                                                        terrain::TerrainTile& tile);
+
+        // Marks `coords` and their 4-neighbour ring derived-stale, then recomposes unbudgeted.
+        // Call after any edit that wrote an authoritative plane, BEFORE the seam sync, the
+        // collider rebuild and the undo "after" capture -- all three read derived output.
+        // No-op when nothing is covered, so an unlayered terrain pays one hash lookup per tile.
+        uint32_t recomposeAfterAuthoritativeEdit(terrain::TerrainGrid* grid,
+                                                 const std::vector<terrain::TileCoord>& coords);
+
+        // True when any of `coords` is covered. Used by the paths that refuse to run on covered
+        // tiles rather than produce a wrong answer (hydraulic erosion).
+        static bool anyTileCovered(terrain::TerrainGrid* grid,
+                                   const std::vector<terrain::TileCoord>& coords);
+
+        // Logs once per save when reserved height layers exist, because VK-1645 keeps them in RAM
+        // only -- VFTR persists the composite and the stack is lost on reload until VK-1646.
+        static void warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid);
+
+        // Marks every tile one layer covers, plus their rings, derived-stale. Does NOT recompose:
+        // callers that are about to mutate the stack must mark first, mutate, then recompose,
+        // because once the record is gone there is nothing left to ask which tiles it covered.
+        static void invalidateHeightLayerTiles(terrain::TerrainGrid& grid, uint64_t layerId);
         void applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                        const glm::vec3& startPos, const glm::vec3& endPos,
                        const terrain::BrushParams& params);
@@ -442,7 +481,11 @@ namespace services
 
         // VK-1615 stroke undo. Implemented in TerrainStrokeUndoOps.cpp.
         void beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication);
-        void captureStrokeTileBefore(const terrain::TerrainTile& tile, uint8_t kinds);
+        // VK-1645: takes the grid so ONE function decides whether a Heights request snapshots the
+        // tile's derived plane or its authoritative base. Every call site still passes
+        // StrokeDataKind::Heights; the routing lives here and nowhere else.
+        void captureStrokeTileBefore(const terrain::TerrainGrid* grid,
+                                     const terrain::TerrainTile& tile, uint8_t kinds);
         void beginSurfaceMaskStroke(uint64_t entityId, uint32_t channel, bool isFirstApplication);
         void accumulateStrokeMaskDirty(const terrain::SurfaceMaskBrushApplicator::DirtyRect& rect);
         void finalizeTerrainStroke();

@@ -5,14 +5,10 @@
 #include "../events/terrain/SplineTerrainUndoEvents.hpp"
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace services
 {
-    using SplineHeightSnapshot =
-        std::unordered_map<::terrain::TileCoord, std::vector<float>, ::terrain::TileCoordHash>;
-
     // VK-1621 — the terrain half of undoing one spline apply.
     //
     // Splines sit OUTSIDE the VK-1615 brush-stroke undo system on purpose: the strokeActive latch
@@ -22,28 +18,36 @@ namespace services
     // PushUndoableCommand instead, and the road-entity half is pushed separately by the Editor —
     // a BeginBatch/EndBatch pair around the apply is what collapses the two into one Ctrl+Z.
     //
-    // Both endpoints are stored, like TerrainStrokeUndoCommand: the forward operation is not
-    // invertible from its parameters (syncBrushBoundaryHeights averages across tile borders, and
-    // WeightBrushApplicator can evict a channel and renormalize), so redo has to replay a
-    // recorded result rather than re-derive one.
+    // VK-1645 split the two halves apart, because they now have genuinely different natures.
+    //
+    // HEIGHTS are parametric. The sculpt op registers a reserved layer over the tile's
+    // authoritative base, so undo is "hide that layer and recompose" and redo is "show it again".
+    // Nothing per-tile is stored, the result is independent of how many splines overlap or what
+    // order they are reverted in, and repeated cycles are bit-identical because compose always
+    // restarts from the base. The old form — snapshot the composited plane, write it back on
+    // undo — could not do any of that, and under base-vs-derived ownership it would additionally
+    // write DERIVED data that the next recompose silently discards.
+    //
+    // WEIGHTS still store both endpoints. Paint remains destructive in VK-1645 (edit layers are
+    // height-only), and the forward operation is not invertible from its parameters:
+    // WeightBrushApplicator can evict a channel and renormalize the whole tile.
     class SplineApplyUndoCommand : public IUndoableCommand
     {
     private:
         std::string description;
-        SplineHeightSnapshot heightsBefore;
-        SplineHeightSnapshot heightsAfter;
+        uint64_t splineId = 0;
+        bool hasHeightLayer = false;
         events::splineTerrain::SplineWeightSnapshot weightsBefore;
         events::splineTerrain::SplineWeightSnapshot weightsAfter;
 
     public:
-        SplineApplyUndoCommand(std::string desc,
-                               SplineHeightSnapshot beforeHeights, SplineHeightSnapshot afterHeights,
+        SplineApplyUndoCommand(std::string desc, uint64_t splineId, bool hasHeightLayer,
                                events::splineTerrain::SplineWeightSnapshot beforeWeights,
                                events::splineTerrain::SplineWeightSnapshot afterWeights);
 
         [[nodiscard]] bool hasSnapshots() const
         {
-            return !heightsBefore.empty() || !weightsBefore.empty();
+            return hasHeightLayer || !weightsBefore.empty();
         }
 
         void execute() override; // redo

@@ -23,7 +23,16 @@ namespace events::terrain
         None = 0,
         Heights = 1 << 0,
         Weights = 1 << 1,
-        Holes = 1 << 2
+        Holes = 1 << 2,
+        // VK-1645. The tile was covered by a reserved height layer when the snapshot was taken,
+        // so the payload is its AUTHORITATIVE BASE plane rather than the derived composite.
+        //
+        // A distinct bit, not a bool beside Heights, because one stroke genuinely needs both at
+        // once: the brush writes a covered tile's base while syncBrushBoundaryHeights writes an
+        // uncovered seam neighbour's derived plane, which for that tile IS the authority. Same
+        // command, same dispatch, different bit per tile. It also reuses the per-kind first-touch
+        // capture and the per-kind pruning in TerrainStrokeUndoCommand for free.
+        BaseHeights = 1 << 3
     };
 
     [[nodiscard]] inline constexpr uint8_t strokeKindBit(StrokeDataKind kind)
@@ -48,6 +57,8 @@ namespace events::terrain
         uint8_t kinds = 0;
 
         std::vector<float> heightData;
+        // VK-1645 authoritative base plane, carried under the BaseHeights bit.
+        std::vector<float> baseHeights;
         // Carries layerWeights + resolution + layerIndices. layerIndices is the per-tile
         // palette indirection, mutated by SetBaseLayer and by channel eviction inside
         // WeightBrushApplicator, so it has to travel with the weights.

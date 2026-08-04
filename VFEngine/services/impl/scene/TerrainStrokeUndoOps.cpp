@@ -64,7 +64,8 @@ namespace services
         }
     }
 
-    void TerrainService::captureStrokeTileBefore(const terrain::TerrainTile& tile, uint8_t kinds)
+    void TerrainService::captureStrokeTileBefore(const terrain::TerrainGrid* grid,
+                                                 const terrain::TerrainTile& tile, uint8_t kinds)
     {
         // No stroke open => no capture. This guard is what keeps the spline tool, which
         // shares syncBrushBoundaryHeights, from accumulating into a brush stroke's entry.
@@ -73,10 +74,24 @@ namespace services
 
         auto& entry = strokeBefore[tile.coord]; // default-constructs on first touch
 
+        // VK-1645: a Heights request snapshots whichever plane is AUTHORITATIVE for this tile.
+        // On a covered tile that is the base block, and the derived composite is worth nothing
+        // in an undo entry -- writing it back would be erased by the next recompose. On an
+        // uncovered tile the derived plane IS the authority, exactly as before.
+        const terrain::BaseHeightBlock* baseBlock = nullptr;
+        if (grid && grid->getHeightLayers().isCovered(tile.coord))
+            baseBlock = grid->getHeightLayers().base(tile.coord);
+
         // Per-KIND first touch, not per-tile: applyBrush captures Heights for tile T on
         // dab 1, then syncBrushBoundaryHeights captures Heights for T's +X neighbour on
         // the same dab. Neither is re-captured on later dabs, so "before" stays pre-stroke.
-        if (::events::terrain::hasStrokeKind(kinds, Kind::Heights)
+        if (::events::terrain::hasStrokeKind(kinds, Kind::Heights) && baseBlock != nullptr
+            && !::events::terrain::hasStrokeKind(entry.kinds, Kind::BaseHeights))
+        {
+            entry.baseHeights = baseBlock->heights;
+            entry.kinds |= ::events::terrain::strokeKindBit(Kind::BaseHeights);
+        }
+        else if (::events::terrain::hasStrokeKind(kinds, Kind::Heights) && baseBlock == nullptr
             && !::events::terrain::hasStrokeKind(entry.kinds, Kind::Heights))
         {
             entry.heightData = tile.heightData;
@@ -248,14 +263,20 @@ namespace services
             if (!tile)
                 continue; // streamed out mid-stroke: nothing left to restore into
 
+            // VK-1645: the post-stroke authoritative plane, or null when this tile is not under
+            // a reserved height layer. addTile drops the BaseHeights kind in the null case.
+            const terrain::BaseHeightBlock* baseBlock = grid->getHeightLayers().base(coord);
+            const std::vector<float>* baseAfter = baseBlock ? &baseBlock->heights : nullptr;
+
             // addTile drops any kind whose bytes did not actually change, which is what
             // bounds the snapshot: the affected-tile query and the seam helpers both
             // over-report.
             undoCmd->addTile(coord.x, coord.z, before.kinds,
                              std::move(before.heightData),
+                             std::move(before.baseHeights),
                              std::move(before.weightMap),
                              std::move(before.holeMask),
-                             *tile);
+                             *tile, baseAfter);
         }
 
         if (undoCmd->hasChanges())
@@ -284,6 +305,7 @@ namespace services
         // applyPaintBrush does not rebuild colliders either, so rebuilding on undo would be
         // asymmetric with the forward operation.
         std::vector<terrain::TileCoord> geometryTiles;
+        std::vector<terrain::TileCoord> recomposeTiles;
         bool anyTile = false;
 
         for (const auto& state : tiles)
@@ -296,7 +318,47 @@ namespace services
             anyTile = true;
             bool geometryChanged = false;
 
-            if (::events::terrain::hasStrokeKind(state.kinds, Kind::Heights))
+            // VK-1645. The kind bit records which plane was AUTHORITATIVE at capture time; the
+            // destination is resolved from CURRENT coverage. Base blocks are never destroyed
+            // within a session, so every combination lands correctly:
+            //
+            //  captured base, still covered      -> base, recompose. Normal path.
+            //  captured base, no longer covered  -> base, recompose with zero layers, so the
+            //                                       derived plane ends up equal to the base.
+            //  captured derived, now covered     -> base. Writing the derived plane would put
+            //                                       the bytes into regenerable data that the
+            //                                       next recompose silently erases, i.e. an
+            //                                       undo that appears to do nothing.
+            const bool capturedBase =
+                ::events::terrain::hasStrokeKind(state.kinds, Kind::BaseHeights);
+            const bool capturedDerived =
+                ::events::terrain::hasStrokeKind(state.kinds, Kind::Heights);
+            terrain::BaseHeightBlock* block = grid->getHeightLayers().base(coord);
+
+            if (capturedBase || (capturedDerived && block != nullptr))
+            {
+                const std::vector<float>& payload =
+                    capturedBase ? state.baseHeights : state.heightData;
+
+                // Same size guard as the derived branch: a mismatch means the tile was rebuilt
+                // at a different resolution and the snapshot no longer describes it.
+                if (block && block->heights.size() == payload.size() && !payload.empty())
+                {
+                    block->heights = payload;
+                    block->dirty = true;
+                    recomposeTiles.push_back(coord);
+                    geometryChanged = true;
+                }
+                else if (!block && !payload.empty()
+                    && (tile->heightData.empty() || tile->heightData.size() == payload.size()))
+                {
+                    // Captured as base but the block is gone. Equivalent, since with no base
+                    // there are no layers to compose either.
+                    tile->heightData = payload;
+                    geometryChanged = true;
+                }
+            }
+            else if (capturedDerived)
             {
                 // Size guard: if the tile resolution changed between snapshot and restore,
                 // writing the old array would resize it under the mesher and the
@@ -353,6 +415,16 @@ namespace services
         // seam-consistent by construction. Re-averaging a restored boundary against a
         // neighbour that is also being restored in the same pass would drift the seam a
         // little on every undo/redo cycle.
+        //
+        // VK-1645 does add a recompose for tiles whose AUTHORITATIVE base was restored, and that
+        // is not a contradiction: it is a different helper with different properties. It rebuilds
+        // derived output from the base and welds seams derived-only, which is mandatory here
+        // precisely because restoring the base leaves the derived plane stale and every seam it
+        // shares un-welded by construction. It cannot drift anything, because it never writes an
+        // authoritative plane and always restarts from the base. It runs BEFORE the collider
+        // rebuild below, which reads tile->heightData.
+        recomposeAfterAuthoritativeEdit(grid, recomposeTiles);
+
         EntityHandle entity{entityId};
         if (!geometryTiles.empty())
         {

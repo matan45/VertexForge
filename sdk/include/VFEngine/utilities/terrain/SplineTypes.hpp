@@ -5,7 +5,6 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 namespace terrain
 {
@@ -71,7 +70,10 @@ namespace terrain
         uint64_t id = 0;
         std::vector<SplineControlPoint> controlPoints;
         SplineParams params;
-        // Non-destructive: original heights per affected tile
-        std::unordered_map<TileCoord, std::vector<float>, TileCoordHash> originalHeights;
+        // VK-1645 removed `originalHeights`. It held a snapshot of the ALREADY-COMPOSITED tile
+        // plane, so spline B's copy contained spline A's deformation: deleting A then B
+        // resurrected A, and deleting B first wiped A. The height effect is a reserved layer
+        // over an authoritative base now, and reverting it means dropping the layer and
+        // recomposing -- parametric, order-independent, and with nothing per-spline to store.
     };
 }

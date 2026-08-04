@@ -247,6 +247,114 @@ been closed by VK-1643 and VK-1644. The current contract is:
   journal *before* the swap, never after: a journal describes the generation
   being replaced, and replaying it onto the new one would corrupt it.
 
+## 4b. VK-1645 as built
+
+VK-1645 implemented sections 3's ownership model. Four decisions were made during
+implementation that this document did not anticipate.
+
+### The store belongs to `TerrainGrid`, not to `TerrainTile`
+
+Section 3 says "one base block per affected tile" without saying where it lives.
+A `TerrainTile` member does not work: `TerrainGrid::removeTile` erases the owning
+`unique_ptr`, and `TerrainService::streamOutTile` calls it. Because the base is
+RAM-only until VK-1646, that destroys artist data silently.
+
+The dirty flag does not protect it either. All four unload paths gate on
+`TerrainFileCache::dirtyCoords`, and every save calls `refreshIndex`, which ends
+in `dirtyCoords.clear()`. So *sculpt → save → walk away → stream out* is an
+ordinary sequence that would lose the base with no error.
+
+`TerrainHeightLayerStore` is therefore held by `TerrainGrid` and keyed by
+`TileCoord`. Keying by coord also makes stream-in free: `addTileFromFile`
+recreates a tile at the same coord and it re-attaches with no reattachment step
+to forget. `TerrainFileCache` was rejected as owner because `fileCaches[...]` is
+populated only on load, save, or entity remap — a freshly created, never-saved
+terrain has no cache at all. Only `TerrainService::removeTile`, the deliberate
+deletion, erases a base block.
+
+`TerrainTile` is unchanged, deliberately: it is embedded across Graphics, the
+physics collider path, the serializer and the tests.
+
+### Mixed seams are welded ONE-SIDED
+
+Section 3 says seam adjustment must never reach `baseHeight`. That is necessary
+but not sufficient. Where a covered tile T neighbours an uncovered tile U, U's
+derived plane *is* its authoritative plane, so averaging both sides — what
+`syncBrushBoundaryHeights` does — mutates U's authority. And because T is rebuilt
+from its base on every recompose while U is not, the average converges:
+`(c+u)/2`, then `3c/4 + u/4`, then `7c/8 + u/8`. Hiding and re-showing a layer ten
+times measurably rewrites ground the user never edited.
+
+The rule is therefore conditional on coverage:
+
+| Seam | Rule |
+|---|---|
+| uncovered ↔ uncovered | average both — unchanged, still owned by `syncBrushBoundaryHeights` |
+| covered ↔ covered | average both derived planes |
+| covered ↔ uncovered | **one-sided: the covered side conforms to the uncovered side** |
+
+One-sided conformance satisfies both requirements at once, is geometrically
+right (the uncovered neighbour is ground truth), needs no undo capture, and costs
+nothing visually: a layer's affected set covers corridor **plus falloff**, so a
+mixed seam always sits where the layer contributes ~0.
+
+`syncBrushBoundaryHeights` now skips any pair where either side is covered, and
+`TerrainGrid::normalizeDerivedSeams` owns the rest.
+
+### The shared corner is the only non-idempotent seam vertex
+
+Straight seams are bit-exactly idempotent: `(m + m) * 0.5f == m` in IEEE-754.
+The corner is not. Within a single `syncBrushBoundaryHeights` call the `+X` pass
+writes tile T's NE corner and the `+Z` pass then reads and rewrites that same
+index, so one call leaves three different values at a 4-way corner and a second
+call moves them again.
+
+Recompose is byte-stable regardless, but only because of three rules that are now
+load-bearing rather than incidental: compose always restarts from the base;
+compose and seam welding are two strictly separated phases; and the seam pass
+walks a `(z, x)`-sorted list. `TerrainHeightLayerStore::staleSorted()` is the only
+accessor that hands out an ordering.
+
+One consequence deserves naming: `recomposeDirtyDerived` recomposes every
+**covered** member of the working ring, not only the stale seeds. Welding a
+freshly composed tile against a covered neighbour still holding last cycle's
+welded values would drift the shared corner on every pass. The budget therefore
+bounds the seeds, and the real work is at most 5× that.
+
+### Coverage is sticky
+
+Section 3 implies coverage follows the layer set. It cannot: deleting the last
+layer over a tile would hand authority back to the derived plane, and unless that
+exact moment also collapses `heightData` to the base, the deleted spline's
+corridor stays baked into derived forever.
+
+`isCovered` is therefore true once the tile owns a base block, layer or no layer.
+With an empty stack `composeTileHeights` yields `derived == base`, which is the
+right answer and needs no transition logic at all. Coverage also ignores
+`visible`, so hiding a layer cannot make the base stop being authoritative
+mid-session.
+
+### Scope actually shipped
+
+- Spline replay **is** in VK-1645. Identity composition has no safe base seed:
+  seeding post-spline bakes the corridor into the authority so VK-1647 would apply
+  it twice, and seeding pre-spline makes the first sculpt dab visibly un-flatten
+  the road. `SplineData::originalHeights` was removed outright.
+- Spline apply undo/redo is a **layer visibility flip**, not a snapshot restore.
+  Hiding rather than removing keeps coverage, so the tile's base stays
+  authoritative and a sculpt underneath still routes there.
+- Hydraulic erosion **refuses** to run on covered tiles. Its gather rests on
+  "every owner of a seam vertex already holds the same value", which base-vs-derived
+  breaks on a mixed rect. A delta-scatter formulation is filed as a follow-up.
+- Runtime script edits stay on **derived**, deliberately. They are transient by
+  design — no `markDirty`, no undo entry — so routing them to the base would let a
+  gameplay crater permanently rewrite authored data with no way back.
+- VFTR flag bit 6 is deliberately **left clear**: nothing writes a sidecar yet, and
+  setting it would drop every terrain saved by this build into VK-1646's recovery
+  path. `saveTerrain` logs a warning instead when the store is non-empty.
+- Byte-stability holds **within a session with no intervening save**. Across a save
+  the derived plane round-trips through uint16 quantization while the base does not.
+
 ## 5. Follow-up backlog
 
 VK-1619 already owns VFTR 2.4.0 round-trip coverage. It should be extended with

@@ -181,6 +181,12 @@ namespace services
             params.minHeight = tile->config.minHeight;
             params.maxHeight = tile->config.maxHeight;
 
+            // VK-1645: DERIVED, deliberately -- a runtime edit never touches the authoritative
+            // base, even on a tile under a reserved height layer. It has no undo entry and no
+            // markDirty below precisely because it is transient; routing it to the base would
+            // let a gameplay crater permanently rewrite authored data with no way back and no
+            // way to save it. The cost is that the next recompose of a covered tile wipes the
+            // crater, which is the right trade for transient state.
             if (!terrain::HeightBrushApplicator::apply(tile->heightData, params))
                 continue;
 

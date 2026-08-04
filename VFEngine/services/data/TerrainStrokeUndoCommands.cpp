@@ -42,9 +42,11 @@ namespace services
     bool TerrainStrokeUndoCommand::addTile(
         int32_t tileX, int32_t tileZ, uint8_t requestedKinds,
         std::vector<float> heightsBefore,
+        std::vector<float> baseBefore,
         ::terrain::TileWeightMapData weightsBefore,
         std::vector<uint8_t> holesBefore,
-        const ::terrain::TerrainTile& after)
+        const ::terrain::TerrainTile& after,
+        const std::vector<float>* baseAfter)
     {
         TileSnapshot snapshot;
         snapshot.tileX = tileX;
@@ -56,6 +58,17 @@ namespace services
             snapshot.heightsBefore = std::move(heightsBefore);
             snapshot.heightsAfter = after.heightData;
             snapshot.kinds |= ::events::terrain::strokeKindBit(Kind::Heights);
+        }
+
+        // VK-1645. A null baseAfter means the tile lost its coverage between capture and
+        // finalize, so there is no authoritative plane left to record -- drop the kind rather
+        // than store a payload with nowhere to go.
+        if (::events::terrain::hasStrokeKind(requestedKinds, Kind::BaseHeights)
+            && baseAfter != nullptr && baseBefore != *baseAfter)
+        {
+            snapshot.baseBefore = std::move(baseBefore);
+            snapshot.baseAfter = *baseAfter;
+            snapshot.kinds |= ::events::terrain::strokeKindBit(Kind::BaseHeights);
         }
 
         if (::events::terrain::hasStrokeKind(requestedKinds, Kind::Weights)
@@ -96,6 +109,8 @@ namespace services
 
             if (::events::terrain::hasStrokeKind(tile.kinds, Kind::Heights))
                 state.heightData = useAfter ? tile.heightsAfter : tile.heightsBefore;
+            if (::events::terrain::hasStrokeKind(tile.kinds, Kind::BaseHeights))
+                state.baseHeights = useAfter ? tile.baseAfter : tile.baseBefore;
             if (::events::terrain::hasStrokeKind(tile.kinds, Kind::Weights))
                 state.weightMap = useAfter ? tile.weightsAfter : tile.weightsBefore;
             if (::events::terrain::hasStrokeKind(tile.kinds, Kind::Holes))
@@ -124,6 +139,8 @@ namespace services
         {
             total += tile.heightsBefore.capacity() * sizeof(float);
             total += tile.heightsAfter.capacity() * sizeof(float);
+            total += tile.baseBefore.capacity() * sizeof(float);
+            total += tile.baseAfter.capacity() * sizeof(float);
             total += weightsBytes(tile.weightsBefore);
             total += weightsBytes(tile.weightsAfter);
             total += tile.holesBefore.capacity();

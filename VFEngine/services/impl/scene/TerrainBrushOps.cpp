@@ -27,6 +27,95 @@
 
 namespace services
 {
+    std::vector<float>& TerrainService::authoritativeHeights(
+        terrain::TerrainHeightLayerStore& store, terrain::TerrainTile& tile)
+    {
+        if (!store.isCovered(tile.coord))
+            return tile.heightData; // uncovered: the derived plane IS the authority
+
+        const uint32_t vertCount = tile.config.getVertexCount();
+        terrain::BaseHeightBlock* block = store.base(tile.coord);
+
+        // Defensive: coverage is created by the spline apply, which adopts the base first, so a
+        // covered tile without a block should be unreachable. Seeding from the live plane here
+        // is still the only answer that cannot lose the edit.
+        if (!block)
+            block = &store.adoptBase(tile.coord, tile.heightData, vertCount);
+
+        // A base outlives its tile, so it can outlive the tile's resolution. Refuse to hand a
+        // mis-sized plane to a brush rather than let it resize the array under the mesher.
+        if (block->vertexCount != vertCount
+            || block->heights.size() != static_cast<size_t>(vertCount) * vertCount)
+        {
+            return tile.heightData;
+        }
+
+        return block->heights;
+    }
+
+    uint32_t TerrainService::recomposeAfterAuthoritativeEdit(
+        terrain::TerrainGrid* grid, const std::vector<terrain::TileCoord>& coords)
+    {
+        if (!grid || coords.empty())
+            return 0;
+
+        terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+        if (store.empty())
+            return 0;
+
+        for (const terrain::TileCoord& coord : coords)
+        {
+            // The ring goes in too: a covered tile's seam values depend on its neighbours, and
+            // recomposing it un-welds every seam it shares.
+            store.markDerivedStale(coord);
+            for (uint8_t i = 0; i < 4; ++i)
+            {
+                store.markDerivedStale(
+                    coord + terrain::TileCoord::getNeighborOffset(static_cast<terrain::TileEdge>(i)));
+            }
+        }
+
+        // Unbudgeted: this is an explicit user action, and the collider rebuild plus the undo
+        // "after" capture that follow both read the derived plane in this same call.
+        return grid->recomposeDirtyDerived(0);
+    }
+
+    void TerrainService::invalidateHeightLayerTiles(terrain::TerrainGrid& grid, uint64_t layerId)
+    {
+        terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
+
+        for (const terrain::HeightLayerRecord& layer : store.layers())
+        {
+            if (layer.id != layerId)
+                continue;
+
+            for (const terrain::TileCoord& coord : layer.affected)
+            {
+                store.markDerivedStale(coord);
+                for (uint8_t i = 0; i < 4; ++i)
+                {
+                    store.markDerivedStale(
+                        coord + terrain::TileCoord::getNeighborOffset(static_cast<terrain::TileEdge>(i)));
+                }
+            }
+            return;
+        }
+    }
+
+    bool TerrainService::anyTileCovered(terrain::TerrainGrid* grid,
+                                        const std::vector<terrain::TileCoord>& coords)
+    {
+        if (!grid)
+            return false;
+
+        const terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+        if (store.empty())
+            return false;
+
+        return std::any_of(coords.begin(), coords.end(),
+                           [&store](const terrain::TileCoord& c) { return store.isCovered(c); });
+    }
+
     void TerrainService::applyBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
     {
         if (saveInProgress.load(std::memory_order_acquire))
@@ -211,14 +300,23 @@ namespace services
             }
 
             // VK-1615: snapshot the CPU height mirror BEFORE the first dispatch that
-            // touches this tile. applyBrushGPU takes heightData by non-const reference --
+            // touches this tile. applyBrushGPU takes the plane by non-const reference --
             // it uploads it, dispatches, blocks on a fence and memcpys the result back --
             // so the CPU array is authoritative here and fully resolved on return.
-            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+            captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                        ::events::terrain::StrokeDataKind::Heights));
 
-            if (brushComputeProvider->applyBrushGPU(tile->heightData, gpuParams))
+            // VK-1645: on a covered tile the brush edits the authoritative BASE, not the
+            // composite. applyBrushGPU takes a bare std::vector<float>& and sizes its dispatch
+            // from gpuParams.verticesPerSide, so re-pointing it is a pure substitution.
+            std::vector<float>& authoritative = authoritativeHeights(grid->getHeightLayers(), *tile);
+            const bool editingBase = (&authoritative != &tile->heightData);
+
+            if (brushComputeProvider->applyBrushGPU(authoritative, gpuParams))
             {
+                if (editingBase)
+                    grid->getHeightLayers().markBaseDirty(coord);
+
                 tile->isDirty = true;
                 tile->setAllLODsDirty();
                 modifiedTiles.push_back(coord);
@@ -228,6 +326,11 @@ namespace services
                 vfLogError("GPU brush application failed for tile ({}, {})", coord.x, coord.z);
             }
         }
+
+        // VK-1645: fold base edits back into derived output FIRST. The seam sync below, the
+        // collider rebuild at the end, and the stroke's "after" capture at finalize all read
+        // tile->heightData, so a deferred recompose would hand every one of them stale geometry.
+        recomposeAfterAuthoritativeEdit(grid, modifiedTiles);
 
         // Synchronize boundary heights between adjacent modified tiles
         syncBrushBoundaryHeights(grid, modifiedTiles);
@@ -353,7 +456,7 @@ namespace services
                 {
                     // VK-1615: initializeDefault wipes every channel of the whole tile, so
                     // the snapshot has to precede it.
-                    captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                    captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                                ::events::terrain::StrokeDataKind::Weights));
 
                     tile->weightMap.initializeDefault(tile->weightMap.resolution);
@@ -385,7 +488,7 @@ namespace services
             // channel and renormalises every texel of the tile -- a mutation well outside
             // the brush footprint -- so the whole weight map (including the layerIndices
             // palette) is snapshotted before the call.
-            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+            captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                        ::events::terrain::StrokeDataKind::Weights));
 
             if (terrain::WeightBrushApplicator::apply(tile->weightMap, applyParams))
@@ -468,7 +571,7 @@ namespace services
 
             // VK-1615: must precede initializeHoleMask() so a tile that had NO hole mask
             // before the stroke is captured as empty, and undo restores it to having none.
-            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+            captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                        ::events::terrain::StrokeDataKind::Holes));
 
             if (!tile->hasHoleMask())
@@ -541,13 +644,13 @@ namespace services
             // caller's modifiedTiles list. Capturing here is what makes a hole stroke's
             // undo cover the whole seam; captureStrokeTileBefore is a no-op when no stroke
             // is open, so the non-brush callers are unaffected.
-            captureStrokeTileBefore(*tile, holeKind);
+            captureStrokeTileBefore(grid, *tile, holeKind);
 
             // Sync +X neighbor: tile's last quad column == neighbor's first quad column
             terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
             if (neighborPX)
             {
-                captureStrokeTileBefore(*neighborPX, holeKind);
+                captureStrokeTileBefore(grid, *neighborPX, holeKind);
 
                 if (!neighborPX->hasHoleMask())
                     neighborPX->initializeHoleMask();
@@ -574,7 +677,7 @@ namespace services
             terrain::TerrainTile* neighborNX = grid->getTile({coord.x - 1, coord.z});
             if (neighborNX)
             {
-                captureStrokeTileBefore(*neighborNX, holeKind);
+                captureStrokeTileBefore(grid, *neighborNX, holeKind);
 
                 if (!neighborNX->hasHoleMask())
                     neighborNX->initializeHoleMask();
@@ -601,7 +704,7 @@ namespace services
             terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
             if (neighborPZ)
             {
-                captureStrokeTileBefore(*neighborPZ, holeKind);
+                captureStrokeTileBefore(grid, *neighborPZ, holeKind);
 
                 if (!neighborPZ->hasHoleMask())
                     neighborPZ->initializeHoleMask();
@@ -628,7 +731,7 @@ namespace services
             terrain::TerrainTile* neighborNZ = grid->getTile({coord.x, coord.z - 1});
             if (neighborNZ)
             {
-                captureStrokeTileBefore(*neighborNZ, holeKind);
+                captureStrokeTileBefore(grid, *neighborNZ, holeKind);
 
                 if (!neighborNZ->hasHoleMask())
                     neighborNZ->initializeHoleMask();
@@ -691,9 +794,9 @@ namespace services
             if (fileCache)
                 fileCache->markDirty(coord);
 
-            // VK-1615: ramp is the one CPU-side sculpt brush -- it writes heightData
+            // VK-1615: ramp is the one CPU-side sculpt brush -- it writes the height plane
             // directly in the loop below.
-            captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+            captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                        ::events::terrain::StrokeDataKind::Heights));
 
             uint32_t vertCount = tile->config.getVertexCount();
@@ -701,6 +804,11 @@ namespace services
             glm::vec2 tileOrigin(
                 static_cast<float>(tile->coord.x) * tile->config.worldTileSize,
                 static_cast<float>(tile->coord.z) * tile->config.worldTileSize);
+
+            // VK-1645: same routing as the GPU sculpt brush -- the base on a covered tile, the
+            // tile's own plane otherwise.
+            std::vector<float>& heights = authoritativeHeights(grid->getHeightLayers(), *tile);
+            const bool editingBase = (&heights != &tile->heightData);
 
             bool tileModified = false;
 
@@ -724,19 +832,26 @@ namespace services
                         projection.distance, halfWidth, params.rampFalloff);
 
                     uint32_t idx = z * vertCount + x;
-                    float currentHeight = tile->heightData[idx];
-                    tile->heightData[idx] = glm::mix(currentHeight, targetHeight, blend);
+                    float currentHeight = heights[idx];
+                    heights[idx] = glm::mix(currentHeight, targetHeight, blend);
                     tileModified = true;
                 }
             }
 
             if (tileModified)
             {
+                if (editingBase)
+                    grid->getHeightLayers().markBaseDirty(coord);
+
                 tile->isDirty = true;
                 tile->setAllLODsDirty();
                 modifiedTiles.push_back(coord);
             }
         }
+
+        // VK-1645: derived output first -- the seam sync and the collider rebuild below both
+        // read tile->heightData.
+        recomposeAfterAuthoritativeEdit(grid, modifiedTiles);
 
         syncBrushBoundaryHeights(grid, modifiedTiles);
 
@@ -756,6 +871,8 @@ namespace services
         constexpr uint8_t heightKind =
             ::events::terrain::strokeKindBit(::events::terrain::StrokeDataKind::Heights);
 
+        const terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+
         for (const auto& coord : modifiedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
@@ -765,6 +882,15 @@ namespace services
             uint32_t vertCount = tile->config.getVertexCount();
             uint32_t lastIdx = vertCount - 1;
 
+            // VK-1645: this helper owns UNCOVERED <-> UNCOVERED seams only. Where either side is
+            // covered by a reserved height layer, the seam is derived output and belongs to
+            // TerrainGrid::normalizeDerivedSeams, which knows which side is authoritative.
+            // Averaging here would write an uncovered neighbour's authoritative plane from a
+            // covered tile's derived value -- and because the covered tile is rebuilt from its
+            // base on every recompose while the neighbour is not, that drags the neighbour's edge
+            // halfway toward it on every single cycle.
+            const bool tileCovered = store.isCovered(coord);
+
             // VK-1615: the averaging below writes BOTH sides of each seam, so the +X/+Z
             // neighbours are mutated even though they are not in modifiedTiles. Capturing
             // them here is what stops an undo from leaving a visible seam.
@@ -772,13 +898,14 @@ namespace services
             // The strokeActive guard inside captureStrokeTileBefore is load-bearing: this
             // helper is also called by the spline-terrain handlers, which must not
             // accumulate into a brush stroke's snapshot.
-            captureStrokeTileBefore(*tile, heightKind);
+            captureStrokeTileBefore(grid, *tile, heightKind);
 
             // Sync +X boundary: tile's last column == neighbor's first column
             terrain::TerrainTile* neighborPX = grid->getTile({coord.x + 1, coord.z});
-            if (neighborPX && neighborPX->hasHeightData())
+            if (neighborPX && neighborPX->hasHeightData()
+                && !tileCovered && !store.isCovered(neighborPX->coord))
             {
-                captureStrokeTileBefore(*neighborPX, heightKind);
+                captureStrokeTileBefore(grid, *neighborPX, heightKind);
 
                 for (uint32_t z = 0; z < vertCount; ++z)
                 {
@@ -793,9 +920,10 @@ namespace services
 
             // Sync +Z boundary: tile's last row == neighbor's first row
             terrain::TerrainTile* neighborPZ = grid->getTile({coord.x, coord.z + 1});
-            if (neighborPZ && neighborPZ->hasHeightData())
+            if (neighborPZ && neighborPZ->hasHeightData()
+                && !tileCovered && !store.isCovered(neighborPZ->coord))
             {
-                captureStrokeTileBefore(*neighborPZ, heightKind);
+                captureStrokeTileBefore(grid, *neighborPZ, heightKind);
 
                 for (uint32_t x = 0; x < vertCount; ++x)
                 {
@@ -890,7 +1018,7 @@ namespace services
 
                 // Undo capture, exactly as the per-tile path does it: per-kind first touch, guarded
                 // by strokeActive, so this is a no-op on every dab after the first.
-                captureStrokeTileBefore(*tile, ::events::terrain::strokeKindBit(
+                captureStrokeTileBefore(grid, *tile, ::events::terrain::strokeKindBit(
                                             ::events::terrain::StrokeDataKind::Heights));
 
                 touched.push_back(coord);
@@ -900,6 +1028,26 @@ namespace services
 
         if (tiles.empty())
             return;
+
+        // VK-1645: refused on a covered rect rather than made subtly wrong.
+        //
+        // The gather below rests on the invariant stated above -- every owner of a seam vertex
+        // already holds the same value. Base-vs-derived ownership breaks exactly that: on a mixed
+        // rect a covered tile's base and an uncovered tile's derived plane legitimately differ at
+        // their shared vertex, so the scatter would either be last-owner-wins or would re-weld
+        // base across a seam, which is the one thing the layer model forbids. Getting it right
+        // means a delta formulation plus a deterministic gather-owner rule -- a real design
+        // problem in a multi-tile solver, filed as a follow-up rather than guessed at here.
+        if (anyTileCovered(grid, touched))
+        {
+            if (!hydraulicCoveredWarned)
+            {
+                hydraulicCoveredWarned = true;
+                vfLogWarning("Hydraulic erosion skipped: the brush covers tiles under a reserved "
+                             "height layer (spline). Delete or hide the layer to erode there.");
+            }
+            return;
+        }
 
         // Gather. Seam vertices are written more than once, but every owner already holds the same
         // value (that is the invariant syncBrushBoundaryHeights maintains), so the order is moot.

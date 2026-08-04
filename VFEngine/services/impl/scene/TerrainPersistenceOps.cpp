@@ -180,6 +180,27 @@ namespace services
         return true;
     }
 
+    // VK-1645: VFTR stores the DERIVED composite, which is correct -- it is the flattened runtime
+    // artifact. But the authoritative bases and the layer stack are RAM-only until the VK-1646
+    // sidecar lands, so a save-and-reload bakes the corridor and loses both. Say so out loud
+    // rather than let an artist discover it after closing the editor.
+    //
+    // VFTR flag bit 6 (HAS_EDIT_LAYER_SIDECAR) is deliberately NOT set here: nothing writes a
+    // sidecar yet, and the documented load rule is "marker set + sidecar missing => disable layer
+    // editing and offer recovery", which would drop every terrain saved by this build straight
+    // into VK-1646's recovery path.
+    void TerrainService::warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid)
+    {
+        const terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
+        if (store.empty())
+            return;
+
+        vfLogWarning("TerrainService: {} reserved height layer(s) over {} authoritative base "
+                     "block(s) are NOT persisted yet (VK-1646). The saved terrain keeps the "
+                     "composited heights; the layer stack is lost on reload.",
+                     store.layers().size(), store.baseCount());
+    }
+
     bool TerrainService::saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
@@ -193,8 +214,10 @@ namespace services
         if (cacheIt == fileCaches.end() || !cacheIt->second)
         {
             vfLogInfo("TerrainService: No file cache, falling back to full save");
-            return saveTerrain(terrainEntityId, path);
+            return saveTerrain(terrainEntityId, path); // warns about layers on its own path
         }
+
+        warnUnpersistedHeightLayers(*gridIt->second);
 
         auto& cache = *cacheIt->second;
 
@@ -325,6 +348,8 @@ namespace services
             vfLogError("TerrainService: No terrain grid for entity {}", terrainEntityId);
             return false;
         }
+
+        warnUnpersistedHeightLayers(*gridIt->second);
 
         auto& registry = scene::EntityRegistry::getRegistry();
         entt::entity ent = internal::fromHandle(EntityHandle{terrainEntityId});

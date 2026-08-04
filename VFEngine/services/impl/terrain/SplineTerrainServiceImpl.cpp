@@ -227,8 +227,7 @@ namespace services
         dispatcher.execute(beginBatch);
 
         bool anyApplied = false;
-        SplineHeightSnapshot originalHeights;
-        SplineHeightSnapshot appliedHeights;
+        bool heightLayerRegistered = false;
         events::splineTerrain::SplineWeightSnapshot originalWeights;
         events::splineTerrain::SplineWeightSnapshot appliedWeights;
 
@@ -236,20 +235,15 @@ namespace services
         // corridor is flattened, so running it later would drape the road over the old ground.
         if (wantsSculpt)
         {
-            events::splineTerrain::GetSplineOriginalHeightsQuery heightQuery;
-            heightQuery.splineSamples = samples;
-            heightQuery.totalHalfWidth = totalHalfWidth;
-            originalHeights = dispatcher.query(heightQuery);
-
+            // VK-1645: no before/after height snapshots any more. The deform registers a reserved
+            // layer over each covered tile's authoritative base, so undo/redo is a visibility
+            // flip on that layer and the result is recomputed rather than replayed from bytes.
             events::splineTerrain::ApplySplineDeformCommand deformCmd;
             deformCmd.splineSamples = samples;
             deformCmd.params = currentParams;
             deformCmd.splineId = splineId;
-            anyApplied |= dispatcher.query(deformCmd);
-
-            // Recapture for redo. syncBrushBoundaryHeights averages across tile borders after the
-            // deform, so the result is not reproducible from the params — it has to be recorded.
-            appliedHeights = dispatcher.query(heightQuery);
+            heightLayerRegistered = dispatcher.query(deformCmd);
+            anyApplied |= heightLayerRegistered;
         }
 
         if (wantsPaint)
@@ -275,18 +269,17 @@ namespace services
             return;
         }
 
-        // Record the spline whenever anything landed, not just for sculpt. `originalHeights` is
-        // empty when the sculpt op was off, which makes deleteSpline a no-op for heights — right,
-        // since nothing deformed them. Copied, not moved: the undo command needs it too.
+        // Record the spline whenever anything landed, not just for sculpt. A paint-only or
+        // mesh-only apply registers no height layer, so deleteSpline is a no-op for heights —
+        // right, since nothing deformed them.
         terrain::SplineData spline;
         spline.id = splineId;
         spline.controlPoints = activePoints;
         spline.params = currentParams;
-        spline.originalHeights = originalHeights;
         appliedSplines.push_back(std::move(spline));
 
         auto undoCommand = std::make_shared<SplineApplyUndoCommand>(
-            beginBatch.description, std::move(originalHeights), std::move(appliedHeights),
+            beginBatch.description, splineId, heightLayerRegistered,
             std::move(originalWeights), std::move(appliedWeights));
         if (undoCommand->hasSnapshots())
         {
@@ -319,11 +312,13 @@ namespace services
         if (it == appliedSplines.end())
             return;
 
-        // Restore original heights
-        events::splineTerrain::RestoreSplineHeightsCommand restoreCmd;
-        restoreCmd.splineId = id;
-        restoreCmd.originalHeights = it->originalHeights;
-        events::EventDispatcher::instance().execute(restoreCmd);
+        // VK-1645: drop the reserved height layer and recompose the tiles it covered from their
+        // authoritative bases. A no-op when this spline had no sculpt op. Overlapping splines and
+        // ordinary sculpt edits made underneath both survive, because neither was ever folded
+        // into the base.
+        events::splineTerrain::RemoveSplineHeightLayerCommand removeCmd;
+        removeCmd.splineId = id;
+        events::EventDispatcher::instance().execute(removeCmd);
 
         appliedSplines.erase(it);
     }

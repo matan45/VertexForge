@@ -161,12 +161,30 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "ApplySplineDeform"; }
     };
 
-    struct RestoreSplineHeightsCommand : ICommand<>
+    // VK-1645. A sculpt spline's height effect is a reserved LAYER over the authoritative base
+    // now, so undoing an apply is a visibility flip plus a recompose -- not a snapshot restore.
+    // Hiding rather than removing is deliberate: coverage survives, so the tile's base stays
+    // authoritative and an ordinary sculpt underneath still routes there. Redo is the same
+    // command with visible = true, and because compose always restarts from the base, repeated
+    // cycles are bit-identical.
+    //
+    // Returns false when no layer carries that id.
+    struct SetSplineHeightLayerVisibleCommand : ICommand<bool>
     {
         uint64_t splineId = 0;
-        std::unordered_map<::terrain::TileCoord, std::vector<float>, ::terrain::TileCoordHash> originalHeights;
+        bool visible = true;
 
-        std::string_view getName() const override { return "RestoreSplineHeights"; }
+        std::string_view getName() const override { return "SetSplineHeightLayerVisible"; }
+    };
+
+    // Drops the layer for good (spline deletion, as opposed to undo). The base blocks it seeded
+    // are deliberately kept: they are authoritative artist data, and a later sculpt or another
+    // spline over the same tile still needs them.
+    struct RemoveSplineHeightLayerCommand : ICommand<>
+    {
+        uint64_t splineId = 0;
+
+        std::string_view getName() const override { return "RemoveSplineHeightLayer"; }
     };
 
     // VK-1621. Builds the road ribbon from an already-applied spline. Handled by TerrainService
@@ -182,12 +200,4 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "BuildSplineRoadMesh"; }
     };
 
-    // Query to get captured original heights after deform
-    struct GetSplineOriginalHeightsQuery : IQuery<std::unordered_map<::terrain::TileCoord, std::vector<float>, ::terrain::TileCoordHash>>
-    {
-        std::vector<glm::vec3> splineSamples;
-        float totalHalfWidth = 0.0f;
-
-        std::string_view getName() const override { return "GetSplineOriginalHeights"; }
-    };
 }

@@ -3,13 +3,11 @@
 
 namespace
 {
-    void restoreHeights(const services::SplineHeightSnapshot& heights)
+    void setHeightLayerVisible(uint64_t splineId, bool visible)
     {
-        if (heights.empty())
-            return;
-
-        events::splineTerrain::RestoreSplineHeightsCommand cmd;
-        cmd.originalHeights = heights;
+        events::splineTerrain::SetSplineHeightLayerVisibleCommand cmd;
+        cmd.splineId = splineId;
+        cmd.visible = visible;
         events::EventDispatcher::instance().execute(cmd);
     }
 
@@ -21,14 +19,6 @@ namespace
         events::splineTerrain::RestoreSplineWeightsCommand cmd;
         cmd.originalWeights = weights;
         events::EventDispatcher::instance().execute(cmd);
-    }
-
-    [[nodiscard]] size_t footprintOf(const services::SplineHeightSnapshot& heights)
-    {
-        size_t total = 0;
-        for (const auto& [coord, plane] : heights)
-            total += plane.capacity() * sizeof(float);
-        return total;
     }
 
     [[nodiscard]] size_t footprintOf(const events::splineTerrain::SplineWeightSnapshot& weights)
@@ -48,13 +38,12 @@ namespace
 namespace services
 {
     SplineApplyUndoCommand::SplineApplyUndoCommand(
-        std::string desc,
-        SplineHeightSnapshot beforeHeights, SplineHeightSnapshot afterHeights,
+        std::string desc, uint64_t splineId, bool hasHeightLayer,
         events::splineTerrain::SplineWeightSnapshot beforeWeights,
         events::splineTerrain::SplineWeightSnapshot afterWeights)
         : description(std::move(desc)),
-          heightsBefore(std::move(beforeHeights)),
-          heightsAfter(std::move(afterHeights)),
+          splineId(splineId),
+          hasHeightLayer(hasHeightLayer),
           weightsBefore(std::move(beforeWeights)),
           weightsAfter(std::move(afterWeights))
     {
@@ -62,23 +51,26 @@ namespace services
 
     void SplineApplyUndoCommand::execute()
     {
-        restoreHeights(heightsAfter);
+        if (hasHeightLayer)
+            setHeightLayerVisible(splineId, true);
         restoreWeights(weightsAfter);
     }
 
     void SplineApplyUndoCommand::undo()
     {
-        restoreHeights(heightsBefore);
+        if (hasHeightLayer)
+            setHeightLayerVisible(splineId, false);
         restoreWeights(weightsBefore);
     }
 
     size_t SplineApplyUndoCommand::getMemoryFootprint() const
     {
-        // Reported honestly, both endpoints included: PushUndoableCommand wraps everything in
-        // SharedUndoCommand, which forwards this, and the undo service's byte budget is the only
-        // thing stopping a few long roads from pinning tens of megabytes of tile snapshots.
-        return footprintOf(heightsBefore) + footprintOf(heightsAfter)
-             + footprintOf(weightsBefore) + footprintOf(weightsAfter)
-             + description.capacity();
+        // Reported honestly, both weight endpoints included: PushUndoableCommand wraps everything
+        // in SharedUndoCommand, which forwards this, and the undo service's byte budget is the
+        // only thing stopping a few long painted roads from pinning tens of megabytes.
+        //
+        // The height half now costs a splineId and a bool. That is the point: before VK-1645 a
+        // single road across a 129x129 tile row carried two full float planes per tile.
+        return footprintOf(weightsBefore) + footprintOf(weightsAfter) + description.capacity();
     }
 }

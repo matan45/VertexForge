@@ -33,6 +33,9 @@ namespace services
 
             std::vector<float> heightsBefore;
             std::vector<float> heightsAfter;
+            // VK-1645: the authoritative base plane, for tiles under a reserved height layer.
+            std::vector<float> baseBefore;
+            std::vector<float> baseAfter;
             ::terrain::TileWeightMapData weightsBefore;
             ::terrain::TileWeightMapData weightsAfter;
             std::vector<uint8_t> holesBefore;
@@ -59,13 +62,17 @@ namespace services
         // unconditionally dirties the +X/+Z neighbours whose boundary is usually already
         // welded.
         //
-        // Takes the live tile rather than a grid so the command stays unit-testable --
-        // no test in the repo constructs a TerrainGrid.
+        // Takes the live tile plus a raw pointer to its post-stroke base plane, rather than a
+        // grid, so the command stays unit-testable without a TerrainGrid or a TerrainService.
+        // `baseAfter` is null when the tile is not covered by a reserved height layer, which
+        // drops the BaseHeights kind.
         bool addTile(int32_t tileX, int32_t tileZ, uint8_t requestedKinds,
                      std::vector<float> heightsBefore,
+                     std::vector<float> baseBefore,
                      ::terrain::TileWeightMapData weightsBefore,
                      std::vector<uint8_t> holesBefore,
-                     const ::terrain::TerrainTile& after);
+                     const ::terrain::TerrainTile& after,
+                     const std::vector<float>* baseAfter);
 
         [[nodiscard]] bool hasChanges() const { return !tiles.empty(); }
         [[nodiscard]] size_t getTileCount() const { return tiles.size(); }

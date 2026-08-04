@@ -140,6 +140,12 @@ namespace services
             physicsProvider->removeCaveTileCollider(terrainEntity, tileX, tileZ);
         }
 
+        // VK-1645: this is the DELIBERATE deletion path, as opposed to streamOutTile, so the
+        // authoritative base block goes with the tile. Everywhere else it must survive -- the
+        // base has no persistence until VK-1646, and dropping it on an unload would silently
+        // destroy artist edits.
+        grid.getHeightLayers().eraseBase(coord);
+
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
 
