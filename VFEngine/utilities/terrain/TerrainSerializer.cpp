@@ -5,6 +5,7 @@
 #include "../resource/EndianUtils.hpp"
 #include <fstream>
 #include <filesystem>
+#include <shared_mutex>
 
 namespace terrain
 {
@@ -82,6 +83,7 @@ namespace terrain
             writeLE(file, entry.meshletDataOffset);
             writeLE(file, entry.holeMaskDataOffset);
             writeLE(file, entry.caveSdfDataOffset);
+            writeLE(file, entry.payloadSize);
         }
         return file.good();
     }
@@ -195,6 +197,14 @@ namespace terrain
             if (!writeTileCaveData(file, tile, outEntry))
                 return false;
         }
+
+        // Every sub-block above was appended contiguously from heightDataOffset, so the stream
+        // position now marks the end of this tile's record. Recording its length is what lets
+        // obsolete bytes be derived and lets compaction relocate the record without decoding it.
+        uint64_t recordEnd = 0;
+        if (!safeTellp(file, recordEnd))
+            return false;
+        outEntry.payloadSize = static_cast<uint32_t>(recordEnd - outEntry.heightDataOffset);
 
         return file.good();
     }
@@ -332,6 +342,8 @@ namespace terrain
             return false;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
             auto input = detail::openTerrainInputFile(std::string(path), entry.heightDataOffset);
@@ -430,6 +442,8 @@ namespace terrain
     {
         if (entry.caveSdfDataOffset == 0)
             return false;
+
+        std::shared_lock lock(terrainFileMutex());
 
         try
         {

@@ -47,6 +47,15 @@ namespace terrain
 
         std::shared_mutex accessMutex;
         TerrainFileAccess fileAccess = makeDefaultAccess();
+
+        // Distinct from accessMutex, which only guards the callback bundle above. This one guards
+        // the terrain files themselves — see the comment on terrainFileMutex().
+        std::shared_mutex fileMutex;
+    }
+
+    std::shared_mutex& terrainFileMutex()
+    {
+        return fileMutex;
     }
 
     bool setTerrainFileAccess(TerrainFileAccess access)

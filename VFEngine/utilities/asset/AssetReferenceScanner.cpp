@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../terrain/TerrainSerializer.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../resource/AtomicFileReplace.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -320,16 +321,21 @@ namespace asset
                 newFileData[pos + b] = static_cast<char>((adjusted >> (b * 8)) & 0xFF);
         };
 
-        // Field offsets within the 52-byte serialized TileIndexEntry: coordX 0, coordZ 4,
-        // heightDataOffset 8, heightDataSize 16, weightDataOffset 20, meshletDataOffset 28,
-        // holeMaskDataOffset 36, caveSdfDataOffset 44. Sizes do not move, only offsets.
+        // Only the absolute offsets move; the sizes are lengths, not positions. Both the stride and
+        // the positions within an entry come from the serializer's own constants — hand-copied
+        // arithmetic here went stale once already and silently corrupted every file it rewrote.
         for (size_t i = 0; i < index.size(); ++i) {
             size_t entryOffset = indexTableOffset + i * terrain::TILE_INDEX_ENTRY_SIZE;
-            adjustOffset(entryOffset + 8, index[i].heightDataOffset);
-            adjustOffset(entryOffset + 20, index[i].weightDataOffset);
-            adjustOffset(entryOffset + 28, index[i].meshletDataOffset);
-            adjustOffset(entryOffset + 36, index[i].holeMaskDataOffset);
-            adjustOffset(entryOffset + 44, index[i].caveSdfDataOffset);
+            adjustOffset(entryOffset + terrain::TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET,
+                         index[i].heightDataOffset);
+            adjustOffset(entryOffset + terrain::TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET,
+                         index[i].weightDataOffset);
+            adjustOffset(entryOffset + terrain::TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET,
+                         index[i].meshletDataOffset);
+            adjustOffset(entryOffset + terrain::TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET,
+                         index[i].holeMaskDataOffset);
+            adjustOffset(entryOffset + terrain::TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET,
+                         index[i].caveSdfDataOffset);
         }
     }
 
@@ -338,6 +344,17 @@ namespace asset
     {
         try
         {
+            // This rewrite shifts every absolute offset in the file. A save journal left by an
+            // interrupted edit holds the pre-shift offsets, so replaying it afterwards would write
+            // them back over the shifted file — settle it first, and then none can exist.
+            if (terrain::TerrainSerializer::recoverPending(filePath.string()) ==
+                terrain::TerrainRecoveryResult::Failed)
+            {
+                vfLogError("Could not recover an interrupted save for terrain file: {}",
+                           filePath.string());
+                return false;
+            }
+
             terrain::TerrainFileHeader header;
             std::vector<terrain::TileIndexEntry> index;
             if (!terrain::TerrainSerializer::readHeader(filePath.string(), header, index))
@@ -381,13 +398,30 @@ namespace asset
                     index, delta);
             }
 
-            std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);
+            // Never truncate the live terrain in place: a failure part-way through would leave a
+            // half-rewritten .vfTerrain with no way back. Build the new file beside it and swap.
+            fs::path tempPath = filePath;
+            tempPath += ".tmp";
+
+            std::ofstream outFile(tempPath, std::ios::binary | std::ios::trunc);
             if (!outFile.is_open()) {
-                vfLogError("Failed to open terrain file for writing: {}", filePath.string());
+                vfLogError("Failed to open terrain file for writing: {}", tempPath.string());
                 return false;
             }
             outFile.write(newFileData.data(), static_cast<std::streamsize>(newFileData.size()));
             outFile.close();
+            if (outFile.fail()) {
+                vfLogError("Failed to write terrain file: {}", tempPath.string());
+                std::error_code removeEc;
+                fs::remove(tempPath, removeEc);
+                return false;
+            }
+
+            if (!resource::replaceFileAtomically(tempPath, filePath))
+            {
+                vfLogError("Failed to replace terrain file: {}", filePath.string());
+                return false;
+            }
 
             vfLogInfo("Updated terrain material path in: {}", filePath.string());
             return true;

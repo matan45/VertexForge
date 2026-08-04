@@ -82,6 +82,40 @@ namespace services
         if (cache.getDirtyCount() == 0)
             needsFullSave = true;
 
+        // Settle an interrupted earlier save here, on the main thread, rather than letting the
+        // background job discover it: replaying a journal moves the on-disk header and index, so
+        // the cache has to be refreshed afterwards, and refreshing is only safe out here.
+        const std::string& cachedPath = cache.getFilePath();
+        if (!cachedPath.empty())
+        {
+            const auto recovery = terrain::TerrainSerializer::recoverPending(cachedPath);
+            if (recovery == terrain::TerrainRecoveryResult::Failed)
+            {
+                vfLogError("TerrainService: Could not recover an interrupted save for {}", cachedPath);
+                return false;
+            }
+            if (recovery != terrain::TerrainRecoveryResult::NotNeeded)
+            {
+                cache.refreshIndex(cachedPath);
+                needsFullSave = true;
+            }
+        }
+
+        // Matches the serializer's guard: a dirty tile with no index slot cannot be written
+        // incrementally, and prepareSave() below is what makes the full save that replaces it safe.
+        if (!needsFullSave)
+        {
+            const auto& indexMap = cache.getIndexMap();
+            for (const auto& coord : cache.getDirtyCoords())
+            {
+                if (indexMap.find(coord) == indexMap.end())
+                {
+                    needsFullSave = true;
+                    break;
+                }
+            }
+        }
+
         // Check whether the header would change size (material path length, or the optional
         // physics/streaming blocks toggling), which moves the index table.
         // NOTE: TerrainSerializer::saveIncremental() has a matching guard as a safety net, built
@@ -228,14 +262,24 @@ namespace services
         incParams.physicsConfig = physicsConfig;
         incParams.streamingConfig = streamingConfig;
 
-        bool result = terrain::TerrainSerializer::saveIncremental(incParams);
+        const auto result = terrain::TerrainSerializer::saveIncremental(incParams);
 
-        if (!result)
+        if (result == terrain::TerrainIncrementalSaveResult::NeedsFullSave)
         {
-            // Fall back to full save (no prepareSave — unsafe on background thread)
-            // saveTerrain() will save whatever tiles are currently in the grid
-            vfLogWarning("TerrainService: Incremental save failed, falling back to full save");
+            // Only this outcome is safe to answer with a full save. prepareSaveIncremental() checks
+            // the same conditions on the main thread and calls prepareSave() for them, so the grid
+            // is resident and saveTerrain() cannot drop a streamed-out tile.
+            vfLogWarning("TerrainService: Incremental save not applicable, falling back to full save");
             return saveTerrain(terrainEntityId, path);
+        }
+
+        if (result == terrain::TerrainIncrementalSaveResult::Failed)
+        {
+            // A real IO failure. Falling back here would run saveTerrain() without prepareSave(),
+            // which writes only the resident tiles — with streaming on that deletes every unloaded
+            // tile from the file. Report the failure and leave the file as it is instead.
+            vfLogError("TerrainService: Incremental save failed for {}; the file is unchanged", path);
+            return false;
         }
 
         // Post-save bookkeeping
@@ -245,6 +289,17 @@ namespace services
         saveFoliage(terrainEntityId, path);
 
         comp.saveDirty = false;
+
+        // Reclaim the records superseded by this and earlier incremental saves, once enough of them
+        // have piled up. Deliberately after the commit succeeded and deliberately unable to fail
+        // the save: compaction is atomic, so a failure leaves a valid — merely fat — file, and
+        // routing that into the full-save fallback would turn a space optimisation into data loss.
+        // It must also run before refreshIndex(), which is what picks up the relocated offsets.
+        bool compacted = false;
+        if (!terrain::TerrainSerializer::compactIfNeeded(path, &compacted))
+            vfLogWarning("TerrainService: Compaction of {} did not run; the file remains valid", path);
+        else if (compacted)
+            vfLogInfo("TerrainService: Compacted {}", path);
 
         cache.refreshIndex(path);
 
@@ -387,6 +442,15 @@ namespace services
         terrain::TerrainFileHeader header;
         std::vector<terrain::TileIndexEntry> index;
         uint64_t indexTableOffset = 0;
+
+        // A save interrupted by a crash leaves its commit in a journal beside the file. Settle it
+        // before anything reads the header, or the header and index may still be the spliced
+        // halves the crash left behind.
+        if (terrain::TerrainSerializer::recoverPending(path) == terrain::TerrainRecoveryResult::Failed)
+        {
+            vfLogError("TerrainService: Could not recover an interrupted save for {}", path);
+            return {};
+        }
 
         if (!terrain::TerrainSerializer::readHeader(path, header, index, &indexTableOffset))
         {

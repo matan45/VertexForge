@@ -11,58 +11,6 @@
 
 namespace
 {
-    struct IncrementalTerrainFixture
-    {
-        IncrementalTerrainFixture()
-            : config(makeTerrainTestConfig(terrain::TileResolution::Low)),
-              coords{{0, 0}, {1, 0}, {2, 0}},
-              grid(makePopulatedTerrainTestGrid(config, coords, true)),
-              file("incremental")
-        {
-            REQUIRE(terrain::TerrainSerializer::save(
-                makeTerrainTestSaveParams(file.string(), *grid, config, materialPath)));
-            REQUIRE(readTerrainTestSnapshot(file.string(), snapshot));
-            indexMap = makeTerrainTestIndexMap(snapshot.index);
-        }
-
-        bool saveDirty(
-            const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash>& dirty,
-            const terrain::TerrainPhysicsConfig* physics = nullptr,
-            const terrain::TerrainStreamingConfig* streaming = nullptr,
-            const std::string* material = nullptr)
-        {
-            terrain::TerrainIncrementalSaveParams params;
-            params.path = file.string();
-            params.grid = grid.get();
-            params.dirtyCoords = &dirty;
-            params.currentHeader = snapshot.header;
-            params.indexTableOffset = snapshot.indexTableOffset;
-            params.currentIndexMap = &indexMap;
-            // materialPath is the value to persist, not a "leave alone" sentinel — default it to
-            // whatever is on disk so tests that are not about the material keep the header size.
-            params.materialPath = material ? *material : snapshot.header.materialPath;
-            params.physicsConfig = physics ? *physics : snapshot.header.physicsConfig;
-            params.streamingConfig = streaming ? *streaming : snapshot.header.streamingConfig;
-            return terrain::TerrainSerializer::saveIncremental(params);
-        }
-
-        void refresh()
-        {
-            snapshot = TerrainFileSnapshot{};
-            REQUIRE(readTerrainTestSnapshot(file.string(), snapshot));
-            indexMap = makeTerrainTestIndexMap(snapshot.index);
-        }
-
-        terrain::TerrainTileConfig config;
-        std::vector<terrain::TileCoord> coords;
-        std::unique_ptr<terrain::TerrainGrid> grid;
-        ScopedTerrainTestFile file;
-        std::string materialPath = "mat/original.vfTerrainMat";
-        TerrainFileSnapshot snapshot;
-        std::unordered_map<terrain::TileCoord, terrain::TileIndexEntry, terrain::TileCoordHash>
-            indexMap;
-    };
-
     struct MaterialPathIncrementalResult
     {
         bool saveSucceeded = false;
@@ -104,7 +52,8 @@ namespace
         params.currentIndexMap = &indexMap;
         params.physicsConfig = snapshot.header.physicsConfig;
         params.streamingConfig = snapshot.header.streamingConfig;
-        result.saveSucceeded = terrain::TerrainSerializer::saveIncremental(params);
+        result.saveSucceeded = terrain::TerrainSerializer::saveIncremental(params) ==
+                               terrain::TerrainIncrementalSaveResult::Success;
         result.fileUnchanged = readTerrainTestFileBytes(file.path()) == beforeBytes;
         if (!result.saveSucceeded)
             return result;
@@ -139,7 +88,7 @@ TEST_SUITE("TerrainSerializerIncremental")
         const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {
             fixture.coords[1]
         };
-        REQUIRE(fixture.saveDirty(dirty));
+        REQUIRE(fixture.saveDirtySucceeds(dirty));
 
         fixture.refresh();
         const auto afterBytes = readTerrainTestFileBytes(fixture.file.path());
@@ -192,11 +141,16 @@ TEST_SUITE("TerrainSerializerIncremental")
             const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {
                 fixture.coords[0]
             };
-            REQUIRE(fixture.saveDirty(dirty));
+            REQUIRE(fixture.saveDirtySucceeds(dirty));
             fixture.refresh();
 
             const uint64_t newSize = terrain_test_fs::file_size(fixture.file.path());
             CHECK(newSize > previousSize);
+            // Growth is only unbounded below the compaction threshold. Assert the coupling rather
+            // than leave it accidental: three Low-resolution records are far under the 1 MiB floor,
+            // so nothing has compacted here and the monotonic-growth expectation above still holds.
+            CHECK_FALSE(terrain::shouldCompactTerrainFile(
+                terrainTestOccupancy(fixture.snapshot, newSize)));
             CHECK(fixture.snapshot.indexTableOffset == originalIndexOffset);
             CHECK(fixture.snapshot.header.tileCount == originalTileCount);
             CHECK(static_cast<uint32_t>(fixture.snapshot.header.flags) ==
@@ -212,6 +166,76 @@ TEST_SUITE("TerrainSerializerIncremental")
                 }));
             previousSize = newSize;
         }
+    }
+
+    TEST_CASE("an incremental save never clears a feature flag the resident tiles cannot justify")
+    {
+        // computeFlags() only sees the tiles in the grid. On the incremental path that is a subset
+        // of the file — with streaming on, most tiles are not resident — so taking its answer
+        // verbatim would clear flags the streamed-out tiles still depend on. Worse, writeTileData()
+        // gates each optional section on those flags, so the tiles being rewritten would lose that
+        // data outright. The flags must therefore only ever be unioned.
+        IncrementalTerrainFixture fixture;
+        REQUIRE(hasFlag(fixture.snapshot.header.flags, terrain::TerrainFormatFlags::HAS_CAVE_DATA));
+
+        const auto* untouchedEntry = findTerrainTestEntry(fixture.snapshot.index, fixture.coords[0]);
+        REQUIRE(untouchedEntry != nullptr);
+        REQUIRE(untouchedEntry->caveSdfDataOffset != 0);
+
+        // Stand in for "the tiles that justified this flag are no longer in memory".
+        for (const auto& coord : fixture.coords)
+        {
+            terrain::TerrainTile* tile = fixture.grid->getTile(coord);
+            REQUIRE(tile != nullptr);
+            tile->caveData.reset();
+        }
+
+        terrain::TerrainTile* dirtyTile = fixture.grid->getTile(fixture.coords[1]);
+        REQUIRE(dirtyTile != nullptr);
+        dirtyTile->heightData[0] += 0.25f;
+        const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {
+            fixture.coords[1]
+        };
+        REQUIRE(fixture.saveDirtySucceeds(dirty));
+        fixture.refresh();
+
+        CHECK(hasFlag(fixture.snapshot.header.flags, terrain::TerrainFormatFlags::HAS_CAVE_DATA));
+
+        // And the untouched tile's cave data is still both indexed and readable.
+        const auto* reloaded = findTerrainTestEntry(fixture.snapshot.index, fixture.coords[0]);
+        REQUIRE(reloaded != nullptr);
+        CHECK(reloaded->caveSdfDataOffset == untouchedEntry->caveSdfDataOffset);
+        terrain::CaveSDFData caveData;
+        CHECK(terrain::TerrainSerializer::readTileCaveData(fixture.file.string(), *reloaded, caveData));
+    }
+
+    TEST_CASE("an incremental save preserves header flag bits it does not know about")
+    {
+        // Bit 6 is reserved for HAS_EDIT_LAYER_SIDECAR. Assigning computeFlags()' answer wholesale
+        // would silently drop it, and the sidecar it marks would become an orphan.
+        IncrementalTerrainFixture fixture;
+        constexpr uint32_t reservedBit = 1u << 6;
+        constexpr uint64_t flagsFieldOffset = 4 + 3 * sizeof(uint32_t);
+
+        uint32_t onDiskFlags = 0;
+        REQUIRE(terrainTestReadValueAt<uint32_t>(fixture.file.path(), flagsFieldOffset, onDiskFlags));
+        REQUIRE((onDiskFlags & reservedBit) == 0);
+        REQUIRE(terrainTestWriteValueAt<uint32_t>(
+            fixture.file.path(), flagsFieldOffset, onDiskFlags | reservedBit));
+
+        fixture.refresh();
+        REQUIRE((static_cast<uint32_t>(fixture.snapshot.header.flags) & reservedBit) != 0);
+
+        terrain::TerrainTile* dirtyTile = fixture.grid->getTile(fixture.coords[1]);
+        REQUIRE(dirtyTile != nullptr);
+        dirtyTile->heightData[0] += 0.125f;
+        const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {
+            fixture.coords[1]
+        };
+        REQUIRE(fixture.saveDirtySucceeds(dirty));
+        fixture.refresh();
+
+        CHECK((static_cast<uint32_t>(fixture.snapshot.header.flags) & reservedBit) != 0);
     }
 
     TEST_CASE("material path persists in place at equal length and is refused at any other length")
@@ -299,7 +323,7 @@ TEST_SUITE("TerrainSerializerIncremental")
             terrain::TerrainTile* dirtyTile = fixture.grid->getTile(fixture.coords[1]);
             REQUIRE(dirtyTile != nullptr);
             dirtyTile->heightData[0] += 0.125f;
-            REQUIRE(fixture.saveDirty(dirty, nullptr, nullptr, &path));
+            REQUIRE(fixture.saveDirtySucceeds(dirty, nullptr, nullptr, &path));
 
             fixture.refresh();
             CHECK(fixture.snapshot.header.materialPath == path);
@@ -333,12 +357,14 @@ TEST_SUITE("TerrainSerializerIncremental")
         params.grid = nullptr;
         params.currentIndexMap = nullptr;
         params.dirtyCoords = nullptr;
-        CHECK(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) ==
+              terrain::TerrainIncrementalSaveResult::Success);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
 
         const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> empty;
         params.dirtyCoords = &empty;
-        CHECK(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) ==
+              terrain::TerrainIncrementalSaveResult::Success);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
     }
 
@@ -362,48 +388,61 @@ TEST_SUITE("TerrainSerializerIncremental")
         params.materialPath = fixture.snapshot.header.materialPath;
         params.physicsConfig = fixture.snapshot.header.physicsConfig;
         params.streamingConfig = fixture.snapshot.header.streamingConfig;
-        CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));
+
+        using Result = terrain::TerrainIncrementalSaveResult;
+
+        // Malformed arguments are a caller bug, not a layout problem — they must NOT report
+        // NeedsFullSave, because the service answers that by full-saving from whatever tiles happen
+        // to be resident.
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) == Result::Failed);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
 
         params.grid = fixture.grid.get();
         params.currentIndexMap = nullptr;
-        CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) == Result::Failed);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
 
         ScopedTerrainTestFile missing("missing");
         params.path = missing.string();
         params.currentIndexMap = &fixture.indexMap;
-        CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) == Result::Failed);
         CHECK_FALSE(terrain_test_fs::exists(missing.path()));
 
+        // A flag toggle resizes the header and moves the index table. That one IS a layout
+        // problem, and the full-save fallback is the correct answer to it.
         params.path = fixture.file.string();
         auto toggledPhysics = fixture.snapshot.header.physicsConfig;
         toggledPhysics.hasCollider = false;
         params.physicsConfig = toggledPhysics;
-        CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) == Result::NeedsFullSave);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
 
         params.physicsConfig = fixture.snapshot.header.physicsConfig;
         auto toggledStreaming = fixture.snapshot.header.streamingConfig;
         toggledStreaming.enabled = false;
         params.streamingConfig = toggledStreaming;
-        CHECK_FALSE(terrain::TerrainSerializer::saveIncremental(params));
+        CHECK(terrain::TerrainSerializer::saveIncremental(params) == Result::NeedsFullSave);
         CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
+        CHECK_FALSE(terrain_test_fs::exists(terrainTestJournalPath(fixture.file)));
     }
 
-    TEST_CASE("dirty coordinates absent from the cached index append data but remain unindexed")
+    TEST_CASE("dirty coordinates absent from the cached index are refused, not appended unindexed")
     {
+        // Writing a record no index entry can point at produced pure garbage AND lost the tile's
+        // edits anyway, because refreshIndex() clears the dirty set either way. The save is now
+        // refused so the caller full-saves, which does have a slot for the tile.
         IncrementalTerrainFixture fixture;
         const auto missingCoord = fixture.coords[1];
         fixture.indexMap.erase(missingCoord);
-        const uint64_t oldSize = terrain_test_fs::file_size(fixture.file.path());
+        const auto before = readTerrainTestFileBytes(fixture.file.path());
         const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> dirty = {missingCoord};
 
-        REQUIRE(fixture.saveDirty(dirty));
-        CHECK(terrain_test_fs::file_size(fixture.file.path()) > oldSize);
+        CHECK(fixture.saveDirty(dirty) == terrain::TerrainIncrementalSaveResult::NeedsFullSave);
+        CHECK(readTerrainTestFileBytes(fixture.file.path()) == before);
+        CHECK_FALSE(terrain_test_fs::exists(terrainTestJournalPath(fixture.file)));
 
         TerrainFileSnapshot reloaded;
         REQUIRE(readTerrainTestSnapshot(fixture.file.string(), reloaded));
-        CHECK(findTerrainTestEntry(reloaded.index, missingCoord) == nullptr);
+        CHECK(findTerrainTestEntry(reloaded.index, missingCoord) != nullptr);
     }
 }

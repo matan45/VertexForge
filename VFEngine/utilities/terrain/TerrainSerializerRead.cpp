@@ -4,8 +4,12 @@
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
+#include <algorithm>
+#include <array>
 #include <fstream>
 #include <filesystem>
+#include <shared_mutex>
+#include <utility>
 
 namespace terrain
 {
@@ -125,6 +129,7 @@ namespace terrain
             outIndex[i].meshletDataOffset = readLE<uint64_t>(file);
             outIndex[i].holeMaskDataOffset = readLE<uint64_t>(file);
             outIndex[i].caveSdfDataOffset = readLE<uint64_t>(file);
+            outIndex[i].payloadSize = readLE<uint32_t>(file);
         }
         return file.good();
     }
@@ -286,7 +291,94 @@ namespace terrain
         return true;
     }
 
+    // Every non-zero sub-block offset must fall inside the record its entry describes, and records
+    // must not overlap each other or the header/index. compact() copies records as opaque bytes and
+    // shifts their offsets by one per-record delta, so these are the invariants that make that safe
+    // even for a hostile or corrupt file — it does no decoding of its own to fall back on.
+    bool TerrainSerializer::validateRecordExtents(const TerrainFileHeader& header,
+                                                   const std::vector<TileIndexEntry>& index,
+                                                   uint64_t indexTableOffset,
+                                                   uint64_t fileSize)
+    {
+        const uint64_t payloadStart = indexTableOffset +
+            static_cast<uint64_t>(header.tileCount) * TILE_INDEX_ENTRY_SIZE;
+
+        std::vector<std::pair<uint64_t, uint64_t>> ranges;
+        ranges.reserve(index.size());
+
+        for (const auto& entry : index)
+        {
+            if (entry.heightDataOffset == 0 || entry.heightDataOffset >= fileSize)
+            {
+                vfLogError("TerrainSerializer: Invalid height data offset {} for tile ({}, {})",
+                           entry.heightDataOffset, entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.heightDataOffset < payloadStart)
+            {
+                vfLogError("TerrainSerializer: Tile ({}, {}) record overlaps the header or index table",
+                           entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.heightDataSize > fileSize - entry.heightDataOffset)
+            {
+                vfLogError("TerrainSerializer: Height data size {} exceeds file bounds for tile ({}, {})",
+                           entry.heightDataSize, entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.payloadSize == 0 || entry.payloadSize > MAX_TILE_PAYLOAD_BYTES ||
+                entry.payloadSize < entry.heightDataSize ||
+                entry.payloadSize > fileSize - entry.heightDataOffset)
+            {
+                vfLogError("TerrainSerializer: Invalid payload size {} for tile ({}, {})",
+                           entry.payloadSize, entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            const uint64_t recordEnd = entry.heightDataOffset + entry.payloadSize;
+            const std::array<uint64_t, 4> optionalOffsets = {
+                entry.weightDataOffset,
+                entry.meshletDataOffset,
+                entry.holeMaskDataOffset,
+                entry.caveSdfDataOffset
+            };
+            for (uint64_t offset : optionalOffsets)
+            {
+                if (offset != 0 && (offset < entry.heightDataOffset || offset >= recordEnd))
+                {
+                    vfLogError("TerrainSerializer: Optional data offset {} falls outside the record of tile ({}, {})",
+                               offset, entry.coordX, entry.coordZ);
+                    return false;
+                }
+            }
+
+            ranges.emplace_back(entry.heightDataOffset, recordEnd);
+        }
+
+        std::sort(ranges.begin(), ranges.end());
+        for (size_t i = 1; i < ranges.size(); ++i)
+        {
+            if (ranges[i].first < ranges[i - 1].second)
+            {
+                vfLogError("TerrainSerializer: Overlapping tile records at offsets {} and {}",
+                           ranges[i - 1].first, ranges[i].first);
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool TerrainSerializer::readHeader(
+        std::string_view path,
+        TerrainFileHeader& outHeader,
+        std::vector<TileIndexEntry>& outIndex,
+        uint64_t* outIndexTableOffset)
+    {
+        std::shared_lock lock(terrainFileMutex());
+        return readHeaderLocked(path, outHeader, outIndex, outIndexTableOffset);
+    }
+
+    bool TerrainSerializer::readHeaderLocked(
         std::string_view path,
         TerrainFileHeader& outHeader,
         std::vector<TileIndexEntry>& outIndex,
@@ -312,9 +404,8 @@ namespace terrain
             if (outIndexTableOffset)
                 *outIndexTableOffset = *indexTableOffset;
 
-            constexpr uint64_t SERIALIZED_INDEX_ENTRY_SIZE = 52;
             const uint64_t indexBytes = static_cast<uint64_t>(outHeader.tileCount) *
-                                        SERIALIZED_INDEX_ENTRY_SIZE;
+                                        TILE_INDEX_ENTRY_SIZE;
             if (*indexTableOffset > input->location.size ||
                 indexBytes > input->location.size - *indexTableOffset)
             {
@@ -334,40 +425,8 @@ namespace terrain
                 return false;
             }
 
-            const uint64_t fileSize = input->location.size;
-            for (const auto& entry : outIndex)
-            {
-                if (entry.heightDataOffset == 0 || entry.heightDataOffset >= fileSize)
-                {
-                    vfLogError("TerrainSerializer: Invalid height data offset {} for tile ({}, {})",
-                               entry.heightDataOffset, entry.coordX, entry.coordZ);
-                    return false;
-                }
-                if (entry.heightDataSize > fileSize - entry.heightDataOffset)
-                {
-                    vfLogError("TerrainSerializer: Height data size {} exceeds file bounds for tile ({}, {})",
-                               entry.heightDataSize, entry.coordX, entry.coordZ);
-                    return false;
-                }
-
-                const std::array<uint64_t, 4> optionalOffsets = {
-                    entry.weightDataOffset,
-                    entry.meshletDataOffset,
-                    entry.holeMaskDataOffset,
-                    entry.caveSdfDataOffset
-                };
-                for (uint64_t offset : optionalOffsets)
-                {
-                    if (offset != 0 && offset >= fileSize)
-                    {
-                        vfLogError("TerrainSerializer: Optional data offset {} exceeds file bounds for tile ({}, {})",
-                                   offset, entry.coordX, entry.coordZ);
-                        return false;
-                    }
-                }
-            }
-
-            return true;
+            return validateRecordExtents(outHeader, outIndex, *indexTableOffset,
+                                         input->location.size);
         }
         catch (const std::exception& e)
         {
@@ -386,6 +445,8 @@ namespace terrain
             outWeights = TileWeightMapData{};
             return true;
         }
+
+        std::shared_lock lock(terrainFileMutex());
 
         try
         {
@@ -447,6 +508,8 @@ namespace terrain
             return false;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
             auto input = detail::openTerrainInputFile(std::string(path), entry.meshletDataOffset);
@@ -493,6 +556,8 @@ namespace terrain
             outHoleMask.clear();
             return true;
         }
+
+        std::shared_lock lock(terrainFileMutex());
 
         try
         {

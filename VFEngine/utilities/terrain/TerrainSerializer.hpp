@@ -4,6 +4,7 @@
 #include "TerrainTypes.hpp"
 #include "TerrainTile.hpp"
 #include "TerrainWeightMap.hpp"
+#include <iosfwd>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,7 +19,10 @@ namespace terrain
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
-    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 4;
+    // 2.5.0 added TileIndexEntry::payloadSize, which is what lets obsolete bytes be derived and
+    // lets compaction relocate a tile record without decoding it. The reader rejects any other
+    // triple outright — there is no upgrade path, a 2.4.0 file must be re-saved.
+    static constexpr uint32_t TERRAIN_FORMAT_VERSION_MINOR = 5;
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_PATCH = 0;
     static constexpr uint32_t MAX_REASONABLE_TERRAIN_TILES = 10000;
     inline constexpr uint32_t MAX_TILE_HEIGHT_SAMPLES =
@@ -145,16 +149,116 @@ namespace terrain
         uint64_t meshletDataOffset = 0;
         uint64_t holeMaskDataOffset = 0;
         uint64_t caveSdfDataOffset = 0;
+        // Total bytes of the tile's record, which writeTileData() emits as one contiguous run
+        // starting at heightDataOffset. Without it a tile's extent is unknowable from the index —
+        // only heightDataSize is stored, the other four sections have no size — so obsolete bytes
+        // could not be derived and compaction could not relocate a record without decoding it.
+        // Appended last on purpose: every earlier field keeps its byte position inside the entry.
+        uint32_t payloadSize = 0;
     };
+
+    // Byte position of each field inside a serialized TileIndexEntry. AssetReferenceScanner patches
+    // offsets directly in the file bytes, so these must not be hand-copied — a stale copy of this
+    // arithmetic silently corrupted every terrain it rewrote once already.
+    inline constexpr size_t TILE_INDEX_COORD_X_FIELD_OFFSET = 0;
+    inline constexpr size_t TILE_INDEX_COORD_Z_FIELD_OFFSET =
+        TILE_INDEX_COORD_X_FIELD_OFFSET + sizeof(int32_t);
+    inline constexpr size_t TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET =
+        TILE_INDEX_COORD_Z_FIELD_OFFSET + sizeof(int32_t);
+    inline constexpr size_t TILE_INDEX_HEIGHT_SIZE_FIELD_OFFSET =
+        TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET + sizeof(uint64_t);
+    inline constexpr size_t TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET =
+        TILE_INDEX_HEIGHT_SIZE_FIELD_OFFSET + sizeof(uint32_t);
+    inline constexpr size_t TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET =
+        TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET + sizeof(uint64_t);
+    inline constexpr size_t TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET =
+        TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET + sizeof(uint64_t);
+    inline constexpr size_t TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET =
+        TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET + sizeof(uint64_t);
+    inline constexpr size_t TILE_INDEX_PAYLOAD_SIZE_FIELD_OFFSET =
+        TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET + sizeof(uint64_t);
 
     // On-disk serialized size of TileIndexEntry (sum of field sizes, no padding)
     inline constexpr size_t TILE_INDEX_ENTRY_SIZE =
-        sizeof(int32_t) + sizeof(int32_t) +     // coordX, coordZ
-        sizeof(uint64_t) + sizeof(uint32_t) +    // heightDataOffset, heightDataSize
-        sizeof(uint64_t) + sizeof(uint64_t) +    // weightDataOffset, meshletDataOffset
-        sizeof(uint64_t) +                        // holeMaskDataOffset
-        sizeof(uint64_t);                         // caveSdfDataOffset
-    static_assert(TILE_INDEX_ENTRY_SIZE == 52, "TileIndexEntry on-disk size changed — update serialization code");
+        TILE_INDEX_PAYLOAD_SIZE_FIELD_OFFSET + sizeof(uint32_t);
+    static_assert(TILE_INDEX_ENTRY_SIZE == 56, "TileIndexEntry on-disk size changed — update serialization code");
+    static_assert(TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET == 8 &&
+                  TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET == 20 &&
+                  TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET == 28 &&
+                  TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET == 36 &&
+                  TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET == 44,
+                  "TileIndexEntry field order changed — update every reader that patches entries in place");
+
+    // Byte accounting for one .vfTerrain. Derived from what the index references rather than tracked
+    // in a persisted counter, so it is exact again after any interruption: a payload appended by a
+    // save that never committed is simply not referenced, and therefore counts as obsolete.
+    struct TerrainFileOccupancy
+    {
+        uint64_t fileSize = 0;
+        uint64_t overheadBytes = 0;   // header + index table
+        uint64_t liveBytes = 0;       // Σ payloadSize over the indexed tiles
+        uint64_t obsoleteBytes = 0;   // whatever is left over
+        bool consistent = true;       // false when the referenced bytes exceed the file
+    };
+
+    // A tile record cannot legitimately approach 4 GiB. Bounding it stops a corrupt index from
+    // driving compaction into an enormous copy.
+    inline constexpr uint64_t MAX_TILE_PAYLOAD_BYTES = 256ull * 1024ull * 1024ull;
+
+    // Compaction policy. The floor stops a small terrain rewriting itself on every save (25% of a
+    // 400 KB file is a single Low-resolution tile); above it, either a quarter of the live bytes or
+    // a flat 64 MiB is enough — a ratio alone would let a 1 GB file carry 250 MB of dead weight.
+    inline constexpr uint64_t TERRAIN_COMPACT_MIN_OBSOLETE_BYTES = 1ull * 1024ull * 1024ull;
+    inline constexpr uint64_t TERRAIN_COMPACT_ABSOLUTE_BYTES = 64ull * 1024ull * 1024ull;
+    inline constexpr uint64_t TERRAIN_COMPACT_RATIO_DIVISOR = 4;
+
+    inline TerrainFileOccupancy terrainFileOccupancy(const TerrainFileHeader& header,
+                                                     const std::vector<TileIndexEntry>& index,
+                                                     uint64_t indexTableOffset,
+                                                     uint64_t fileSize)
+    {
+        TerrainFileOccupancy usage;
+        usage.fileSize = fileSize;
+        usage.overheadBytes = indexTableOffset +
+                              static_cast<uint64_t>(header.tileCount) * TILE_INDEX_ENTRY_SIZE;
+        for (const auto& entry : index)
+            usage.liveBytes += entry.payloadSize;
+
+        const uint64_t referenced = usage.overheadBytes + usage.liveBytes;
+        // Unsigned arithmetic would wrap a truncated file into an enormous "garbage" figure and
+        // trigger a compaction of a file that is already broken.
+        usage.consistent = referenced <= fileSize;
+        usage.obsoleteBytes = usage.consistent ? fileSize - referenced : 0;
+        return usage;
+    }
+
+    inline bool shouldCompactTerrainFile(const TerrainFileOccupancy& usage)
+    {
+        if (!usage.consistent || usage.obsoleteBytes < TERRAIN_COMPACT_MIN_OBSOLETE_BYTES)
+            return false;
+        return usage.obsoleteBytes >= TERRAIN_COMPACT_ABSOLUTE_BYTES ||
+               usage.obsoleteBytes * TERRAIN_COMPACT_RATIO_DIVISOR >= usage.liveBytes;
+    }
+
+    // Why saveIncremental cannot just return bool: TerrainService::saveTerrainIncremental() runs on
+    // a background thread and answers failure by calling saveTerrain(), which writes only the tiles
+    // resident in the grid. With streaming on that silently deletes every unloaded tile. So a real
+    // IO error must be distinguishable from "this edit needs a full save" — only the latter is safe
+    // to fall back on, and only because prepareSaveIncremental() forced residency for those cases.
+    enum class TerrainIncrementalSaveResult
+    {
+        Success,
+        NeedsFullSave,
+        Failed
+    };
+
+    enum class TerrainRecoveryResult
+    {
+        NotNeeded,
+        Discarded,
+        Redone,
+        Failed
+    };
 
     struct TileLoadResult
     {
@@ -213,7 +317,18 @@ namespace terrain
             std::vector<TileIndexEntry>& outIndex,
             uint64_t* outIndexTableOffset = nullptr);
 
-        static bool saveIncremental(const TerrainIncrementalSaveParams& params);
+        static TerrainIncrementalSaveResult saveIncremental(const TerrainIncrementalSaveParams& params);
+
+        // Reclaims the bytes saveIncremental() orphaned, by copying each live tile record verbatim
+        // into a fresh file and shifting its index offsets. It decodes nothing and needs no
+        // TerrainGrid, so — unlike a full save — it cannot drop a streamed-out tile.
+        static bool compact(std::string_view path);
+        static bool compactIfNeeded(std::string_view path, bool* outCompacted = nullptr);
+
+        // Applies or discards an interrupted incremental commit and sweeps a stale .tmp.
+        // Idempotent, and a no-op in archive mode or for a terrain packed inside a .vfpak.
+        // Must run before anything reads the file for real work — see the note on TerrainFileCache.
+        static TerrainRecoveryResult recoverPending(std::string_view path);
 
         static bool readTileHeights(
             std::string_view path,
@@ -278,6 +393,37 @@ namespace terrain
         static bool validateIncrementalHeaderLayout(const TerrainFileHeader& updatedHeader,
                                                      uint64_t indexTableOffset);
 
+        // computeFlags() only sees the tiles resident in the grid, so on the incremental path it
+        // would clear any flag that only a streamed-out tile justifies — and writeTileData() then
+        // drops that section from the tiles it rewrites. Union with what is already on disk; only
+        // the physics and streaming bits are authoritatively config-derived, and toggling either
+        // resizes the header, which validateIncrementalHeaderLayout() already refuses.
+        static TerrainFormatFlags mergeIncrementalFlags(TerrainFormatFlags onDisk,
+                                                         TerrainFormatFlags computed);
+
+        static bool serializeHeaderToBytes(const TerrainFileHeader& header,
+                                            std::vector<uint8_t>& out);
+        static bool serializeIndexToBytes(const std::vector<TileIndexEntry>& index,
+                                           std::vector<uint8_t>& out);
+        static bool commitIncrementalBuffers(std::fstream& file,
+                                              uint64_t indexTableOffset,
+                                              const std::vector<uint8_t>& headerBytes,
+                                              const std::vector<uint8_t>& indexBytes);
+
+        static bool validateRecordExtents(const TerrainFileHeader& header,
+                                           const std::vector<TileIndexEntry>& index,
+                                           uint64_t indexTableOffset,
+                                           uint64_t fileSize);
+
+        // Lock-free internals: the public entry points already hold terrainFileMutex(), which is
+        // not recursive, so these must never be called from outside one.
+        static bool readHeaderLocked(std::string_view path,
+                                      TerrainFileHeader& outHeader,
+                                      std::vector<TileIndexEntry>& outIndex,
+                                      uint64_t* outIndexTableOffset);
+        static TerrainRecoveryResult recoverPendingLocked(std::string_view path);
+        static bool compactLocked(std::string_view path);
+
         static std::vector<TileIndexEntry> buildSortedIndex(
             const std::unordered_map<TileCoord, TileIndexEntry, TileCoordHash>& indexMap);
 
@@ -286,11 +432,6 @@ namespace terrain
                                            const std::unordered_set<TileCoord, TileCoordHash>& dirtyCoords,
                                            TerrainFormatFlags flags,
                                            std::vector<TileIndexEntry>& indexEntries);
-
-        static bool writeIncrementalHeaderAndIndex(std::ostream& file,
-                                                    const TerrainFileHeader& updatedHeader,
-                                                    uint64_t indexTableOffset,
-                                                    const std::vector<TileIndexEntry>& indexEntries);
 
         static bool parseHeader(std::istream& file, TerrainFileHeader& outHeader);
         static bool parseIndexTable(std::istream& file, uint32_t tileCount,

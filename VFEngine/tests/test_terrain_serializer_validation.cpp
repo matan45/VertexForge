@@ -34,27 +34,17 @@ namespace
         return terrain::TerrainSerializer::save(params);
     }
 
+    // Shared with the incremental and crash-safety suites — see the fixture header.
     template<typename T>
     bool writeValueAt(const std::filesystem::path& path, uint64_t offset, T value)
     {
-        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
-        if (!file.is_open())
-            return false;
-        file.seekp(static_cast<std::streamoff>(offset));
-        resource::endian::writeLE<T>(file, value);
-        file.flush();
-        return file.good();
+        return terrainTestWriteValueAt<T>(path, offset, value);
     }
 
     template<typename T>
     bool readValueAt(const std::filesystem::path& path, uint64_t offset, T& value)
     {
-        std::ifstream file(path, std::ios::binary);
-        if (!file.is_open())
-            return false;
-        file.seekg(static_cast<std::streamoff>(offset));
-        value = resource::endian::readLE<T>(file);
-        return file.good();
+        return terrainTestReadValueAt<T>(path, offset, value);
     }
 
     bool headerReads(const ScopedTerrainTestFile& file)
@@ -239,40 +229,56 @@ TEST_SUITE("TerrainSerializerValidation")
         const auto entry = snapshot.index.front();
         const uint64_t fileSize = std::filesystem::file_size(file.path());
 
-        constexpr uint64_t HEIGHT_OFFSET_FIELD = 2u * sizeof(int32_t);
-        constexpr uint64_t HEIGHT_SIZE_FIELD = HEIGHT_OFFSET_FIELD + sizeof(uint64_t);
+        // Positions inside a serialized entry come from the serializer's own constants — three
+        // hand-maintained copies of this arithmetic existed before, and one of them went stale.
+        constexpr uint64_t HEIGHT_OFFSET_FIELD = terrain::TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET;
+        constexpr uint64_t HEIGHT_SIZE_FIELD = terrain::TILE_INDEX_HEIGHT_SIZE_FIELD_OFFSET;
+        constexpr uint64_t PAYLOAD_SIZE_FIELD = terrain::TILE_INDEX_PAYLOAD_SIZE_FIELD_OFFSET;
         constexpr std::array<uint64_t, 4> OPTIONAL_OFFSET_FIELDS = {
-            HEIGHT_SIZE_FIELD + sizeof(uint32_t),
-            HEIGHT_SIZE_FIELD + sizeof(uint32_t) + sizeof(uint64_t),
-            HEIGHT_SIZE_FIELD + sizeof(uint32_t) + 2u * sizeof(uint64_t),
-            HEIGHT_SIZE_FIELD + sizeof(uint32_t) + 3u * sizeof(uint64_t)
+            terrain::TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET,
+            terrain::TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET,
+            terrain::TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET,
+            terrain::TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET
         };
         const uint64_t indexBase = snapshot.indexTableOffset;
+        const uint64_t recordEnd = entry.heightDataOffset + entry.payloadSize;
+        REQUIRE(recordEnd <= fileSize);
 
         REQUIRE(writeValueAt<uint64_t>(file.path(), indexBase + HEIGHT_OFFSET_FIELD, 0u));
         CHECK_FALSE(headerReads(file));
-        REQUIRE(writeValueAt<uint64_t>(
-            file.path(), indexBase + HEIGHT_OFFSET_FIELD, entry.heightDataOffset));
-
-        REQUIRE(writeValueAt<uint32_t>(file.path(), indexBase + HEIGHT_SIZE_FIELD, 0u));
-        REQUIRE(writeValueAt<uint64_t>(file.path(), indexBase + HEIGHT_OFFSET_FIELD, fileSize - 1u));
-        CHECK(headerReads(file));
         REQUIRE(writeValueAt<uint64_t>(file.path(), indexBase + HEIGHT_OFFSET_FIELD, fileSize));
         CHECK_FALSE(headerReads(file));
         REQUIRE(writeValueAt<uint64_t>(
             file.path(), indexBase + HEIGHT_OFFSET_FIELD, std::numeric_limits<uint64_t>::max()));
         CHECK_FALSE(headerReads(file));
-
+        // A record may not start inside the header or the index table it is indexed by.
+        REQUIRE(writeValueAt<uint64_t>(file.path(), indexBase + HEIGHT_OFFSET_FIELD, indexBase));
+        CHECK_FALSE(headerReads(file));
         REQUIRE(writeValueAt<uint64_t>(
             file.path(), indexBase + HEIGHT_OFFSET_FIELD, entry.heightDataOffset));
-        const uint64_t exactRemaining = fileSize - entry.heightDataOffset;
-        REQUIRE(exactRemaining <= std::numeric_limits<uint32_t>::max());
-        REQUIRE(writeValueAt<uint32_t>(
-            file.path(), indexBase + HEIGHT_SIZE_FIELD, static_cast<uint32_t>(exactRemaining)));
         CHECK(headerReads(file));
-        REQUIRE(writeValueAt<uint32_t>(
-            file.path(), indexBase + HEIGHT_SIZE_FIELD, static_cast<uint32_t>(exactRemaining + 1u)));
+
+        // payloadSize bounds the blind byte copy compaction performs, so it is checked hard: it
+        // must be non-zero, must cover the height block, and must stay inside the file.
+        REQUIRE(writeValueAt<uint32_t>(file.path(), indexBase + PAYLOAD_SIZE_FIELD, 0u));
         CHECK_FALSE(headerReads(file));
+        REQUIRE(writeValueAt<uint32_t>(
+            file.path(), indexBase + PAYLOAD_SIZE_FIELD, entry.heightDataSize - 1u));
+        CHECK_FALSE(headerReads(file));
+        const uint64_t remaining = fileSize - entry.heightDataOffset;
+        REQUIRE(remaining + 1u <= std::numeric_limits<uint32_t>::max());
+        REQUIRE(writeValueAt<uint32_t>(
+            file.path(), indexBase + PAYLOAD_SIZE_FIELD, static_cast<uint32_t>(remaining + 1u)));
+        CHECK_FALSE(headerReads(file));
+        REQUIRE(writeValueAt<uint32_t>(file.path(), indexBase + PAYLOAD_SIZE_FIELD, entry.payloadSize));
+        CHECK(headerReads(file));
+
+        REQUIRE(writeValueAt<uint32_t>(
+            file.path(), indexBase + HEIGHT_SIZE_FIELD, entry.payloadSize + 1u));
+        CHECK_FALSE(headerReads(file));
+        REQUIRE(writeValueAt<uint32_t>(
+            file.path(), indexBase + HEIGHT_SIZE_FIELD, entry.heightDataSize));
+        CHECK(headerReads(file));
 
         const std::array<uint64_t, 4> originalOptionalOffsets = {
             entry.weightDataOffset,
@@ -280,20 +286,24 @@ TEST_SUITE("TerrainSerializerValidation")
             entry.holeMaskDataOffset,
             entry.caveSdfDataOffset
         };
-        REQUIRE(writeValueAt<uint32_t>(
-            file.path(), indexBase + HEIGHT_SIZE_FIELD, entry.heightDataSize));
         for (size_t i = 0; i < OPTIONAL_OFFSET_FIELDS.size(); ++i)
         {
             CAPTURE(i);
             const uint64_t field = indexBase + OPTIONAL_OFFSET_FIELDS[i];
 
+            // 0 means "this section is absent" and stays legal.
             REQUIRE(writeValueAt<uint64_t>(file.path(), field, 0u));
             CHECK(headerReads(file));
-            REQUIRE(writeValueAt<uint64_t>(file.path(), field, fileSize - 1u));
+            // Anywhere inside the record is legal...
+            REQUIRE(writeValueAt<uint64_t>(file.path(), field, entry.heightDataOffset + 1u));
             CHECK(headerReads(file));
-            REQUIRE(writeValueAt<uint64_t>(file.path(), field, fileSize));
+            // ...and anywhere outside it is not, even while still inside the file. This is the
+            // invariant that lets compaction shift a whole record by a single delta.
+            REQUIRE(writeValueAt<uint64_t>(file.path(), field, entry.heightDataOffset - 1u));
             CHECK_FALSE(headerReads(file));
-            REQUIRE(writeValueAt<uint64_t>(file.path(), field, fileSize + 1u));
+            REQUIRE(writeValueAt<uint64_t>(file.path(), field, recordEnd));
+            CHECK_FALSE(headerReads(file));
+            REQUIRE(writeValueAt<uint64_t>(file.path(), field, fileSize));
             CHECK_FALSE(headerReads(file));
             REQUIRE(writeValueAt<uint64_t>(
                 file.path(), field, std::numeric_limits<uint64_t>::max()));

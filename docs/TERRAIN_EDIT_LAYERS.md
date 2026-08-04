@@ -193,8 +193,11 @@ The future sidecar implementation uses:
 - uncompressed `float` height blocks in v1;
 - stored byte length and CRC32 for every indexed block.
 
-VFTR bit 6 is reserved as `HAS_EDIT_LAYER_SIDECAR`; the VFTR version remains
-2.4.0. Future flag computation must explicitly preserve/set the marker.
+VFTR bit 6 is reserved as `HAS_EDIT_LAYER_SIDECAR`. VK-1644 has since moved VFTR
+to **2.5.0** (`TileIndexEntry` gained `payloadSize`, so the entry is 56 bytes),
+and incremental flag computation now unions with the on-disk flags rather than
+replacing them (`TerrainSerializer::mergeIncrementalFlags`), so the marker
+already survives an incremental save without any further work.
 
 Load behavior is deterministic:
 
@@ -217,18 +220,32 @@ rename, so a crash between replacements is detected by the marker/hash pair;
 the flattened VFTR remains the recovery result and layer editing stays
 disabled until repaired.
 
-The existing full-save path is only a temporary-file replacement, not a truly
-atomic replacement: it removes the live file before renaming the temporary
-file (`TerrainSerializerSave.cpp:330-351`). Incremental save appends fresh
-dirty-tile payloads at EOF and then rewrites the header/index in place
-(`TerrainSerializerSave.cpp:193-208`). Full saves naturally reclaim orphaned
-incremental payloads, but there is no threshold-triggered compaction and a
-crash during the in-place patch can corrupt the live file.
+The gaps this section originally recorded — a full save that removed the live
+file before renaming its temporary, an in-place header/index patch that a crash
+could tear, unbounded incremental growth with no compaction, and an incremental
+path that neither persisted `materialPath` nor refreshed `.vfmeta` — have all
+been closed by VK-1643 and VK-1644. The current contract is:
 
-Incremental save also copies the cached header and overwrites only flags,
-physics, and streaming configuration (`TerrainSerializerSave.cpp:200-203`).
-Consequently, a changed `materialPath` is not persisted incrementally, and the
-incremental path does not refresh `.vfmeta`.
+- **Replacement.** `resource::replaceFileAtomically` flushes the temporary file
+  to disk and then commits it with a single `MoveFileExW(MOVEFILE_REPLACE_EXISTING
+  | MOVEFILE_WRITE_THROUGH)`. The destination name resolves to the complete old
+  file until it resolves to the complete new one; it is never absent.
+- **Incremental commit.** Records are appended past EOF, made durable, and then
+  the exact header and index bytes are written to a `<path>.vftrj` journal —
+  hash-covered, so "committed" is all-or-nothing — before the live file is
+  patched. `TerrainSerializer::recoverPending()` replays a committed journal and
+  discards an incomplete one; replay is idempotent, and it never truncates,
+  because an unreferenced tail is inert and counts as obsolete instead.
+- **Compaction.** Obsolete bytes are *derived*
+  (`fileSize − header − index − Σ payloadSize`), so they are exact again after
+  any interruption. Past `TERRAIN_COMPACT_MIN_OBSOLETE_BYTES` (1 MiB) and either
+  a quarter of the live bytes or `TERRAIN_COMPACT_ABSOLUTE_BYTES` (64 MiB),
+  `compact()` copies every live record verbatim into a new file and shifts its
+  offsets. It needs no `TerrainGrid` and no tile residency, so — unlike a full
+  save — it structurally cannot drop a streamed-out tile.
+- **Ordering rule.** A full save and a compaction both delete any pending
+  journal *before* the swap, never after: a journal describes the generation
+  being replaced, and replaying it onto the new one would corrupt it.
 
 ## 5. Follow-up backlog
 

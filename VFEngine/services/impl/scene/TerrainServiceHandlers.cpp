@@ -1630,6 +1630,15 @@ namespace services
                 std::vector<terrain::TileIndexEntry> index;
                 uint64_t indexTableOffset = 0;
 
+                // Settle an interrupted save before reading — see TerrainService::loadTerrain().
+                if (terrain::TerrainSerializer::recoverPending(cmd.path) ==
+                    terrain::TerrainRecoveryResult::Failed)
+                {
+                    vfLogError("TerrainService: Could not recover an interrupted save for {}", cmd.path);
+                    saveInProgress.store(false, std::memory_order_release);
+                    return false;
+                }
+
                 if (!terrain::TerrainSerializer::readHeader(cmd.path, header, index, &indexTableOffset))
                 {
                     vfLogError("TerrainService: Failed to read terrain header from {}", cmd.path);

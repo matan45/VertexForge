@@ -1,7 +1,13 @@
 #pragma once
 
+#include <doctest.h>
+
 #include <terrain/TerrainGrid.hpp>
+#include <terrain/TerrainSaveFaultInjection.hpp>
+#include <terrain/TerrainSaveJournal.hpp>
 #include <terrain/TerrainSerializer.hpp>
+
+#include <resource/EndianUtils.hpp>
 
 #include <algorithm>
 #include <array>
@@ -12,9 +18,11 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -42,17 +50,11 @@ namespace
 
         ~ScopedTerrainTestFile()
         {
+            // remove_all rather than remove: a crash-safety test deliberately leaves .tmp and
+            // .vftrj artifacts behind, and a non-recursive remove would silently fail and leak the
+            // whole temp directory. It also covers the .vfmeta sidecar a save writes alongside.
             std::error_code ec;
-            terrain_test_fs::remove(filePath, ec);
-            terrain_test_fs::path tmpPath = filePath;
-            tmpPath += ".tmp";
-            terrain_test_fs::remove(tmpPath, ec);
-            // The sidecar a save may have written alongside it, otherwise the directory
-            // removal below fails and the temp dir leaks.
-            terrain_test_fs::path metaPath = filePath;
-            metaPath += ".vfmeta";
-            terrain_test_fs::remove(metaPath, ec);
-            terrain_test_fs::remove(directory, ec);
+            terrain_test_fs::remove_all(directory, ec);
         }
 
         [[nodiscard]] const terrain_test_fs::path& path() const { return filePath; }
@@ -206,7 +208,88 @@ namespace
                lhs.weightDataOffset == rhs.weightDataOffset &&
                lhs.meshletDataOffset == rhs.meshletDataOffset &&
                lhs.holeMaskDataOffset == rhs.holeMaskDataOffset &&
-               lhs.caveSdfDataOffset == rhs.caveSdfDataOffset;
+               lhs.caveSdfDataOffset == rhs.caveSdfDataOffset &&
+               lhs.payloadSize == rhs.payloadSize;
+    }
+
+    inline terrain_test_fs::path terrainTestJournalPath(const ScopedTerrainTestFile& file)
+    {
+        return terrain::detail::terrainJournalPath(file.path());
+    }
+
+    inline terrain_test_fs::path terrainTestTempPath(const ScopedTerrainTestFile& file)
+    {
+        terrain_test_fs::path temp = file.path();
+        temp += ".tmp";
+        return temp;
+    }
+
+    inline uint64_t terrainTestFileSize(const ScopedTerrainTestFile& file)
+    {
+        std::error_code ec;
+        const auto size = terrain_test_fs::file_size(file.path(), ec);
+        return ec ? 0 : size;
+    }
+
+    inline terrain::TerrainFileOccupancy terrainTestOccupancy(const TerrainFileSnapshot& snapshot,
+                                                              uint64_t fileSize)
+    {
+        return terrain::terrainFileOccupancy(snapshot.header, snapshot.index,
+                                             snapshot.indexTableOffset, fileSize);
+    }
+
+    // Arms a save fault point for the duration of a scope. Saves run on a background thread in the
+    // engine, and the injector is process-wide, so leaking one into the next test case would make
+    // failures look like they belong to whichever test ran next.
+    class ScopedTerrainFault
+    {
+    public:
+        ScopedTerrainFault(terrain::TerrainSaveStage stage, uint64_t partialBytes)
+        {
+            terrain::setTerrainSaveFaultInjector(
+                [stage, partialBytes](terrain::TerrainSaveStage current) -> terrain::TerrainSaveFault
+                {
+                    if (current != stage)
+                        return {};
+                    terrain::TerrainSaveFault fault;
+                    fault.abort = true;
+                    fault.partialBytes = partialBytes;
+                    return fault;
+                });
+        }
+
+        explicit ScopedTerrainFault(terrain::TerrainSaveStage stage)
+            : ScopedTerrainFault(stage, (std::numeric_limits<uint64_t>::max)()) {}
+
+        ScopedTerrainFault(const ScopedTerrainFault&) = delete;
+        ScopedTerrainFault& operator=(const ScopedTerrainFault&) = delete;
+
+        ~ScopedTerrainFault() { terrain::resetTerrainSaveFaultInjector(); }
+    };
+
+    // In-place field surgery on a real file: the way these suites synthesise a corrupt, torn or
+    // hand-edited terrain without needing a second writer.
+    template<typename T>
+    inline bool terrainTestWriteValueAt(const terrain_test_fs::path& path, uint64_t offset, T value)
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        if (!file.is_open())
+            return false;
+        file.seekp(static_cast<std::streamoff>(offset));
+        resource::endian::writeLE<T>(file, value);
+        file.flush();
+        return file.good();
+    }
+
+    template<typename T>
+    inline bool terrainTestReadValueAt(const terrain_test_fs::path& path, uint64_t offset, T& value)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+            return false;
+        file.seekg(static_cast<std::streamoff>(offset));
+        value = resource::endian::readLE<T>(file);
+        return file.good();
     }
 
     inline std::vector<uint8_t> readTerrainTestFileBytes(const terrain_test_fs::path& path)
@@ -307,6 +390,96 @@ namespace
                lhs.boundingSphere.z == rhs.boundingSphere.z &&
                lhs.boundingSphere.w == rhs.boundingSphere.w &&
                lhs.geometricError == rhs.geometricError;
+    }
+
+    using TerrainTestDirtySet =
+        std::unordered_set<terrain::TileCoord, terrain::TileCoordHash>;
+
+    // A saved three-tile terrain plus the cached header/index an incremental save needs. Shared by
+    // the incremental and crash-safety suites, which exercise the same save through different
+    // interruption points.
+    struct IncrementalTerrainFixture
+    {
+        IncrementalTerrainFixture()
+            : config(makeTerrainTestConfig(terrain::TileResolution::Low)),
+              coords{{0, 0}, {1, 0}, {2, 0}},
+              grid(makePopulatedTerrainTestGrid(config, coords, true)),
+              file("incremental")
+        {
+            REQUIRE(terrain::TerrainSerializer::save(
+                makeTerrainTestSaveParams(file.string(), *grid, config, materialPath)));
+            REQUIRE(readTerrainTestSnapshot(file.string(), snapshot));
+            indexMap = makeTerrainTestIndexMap(snapshot.index);
+        }
+
+        terrain::TerrainIncrementalSaveResult saveDirty(
+            const TerrainTestDirtySet& dirty,
+            const terrain::TerrainPhysicsConfig* physics = nullptr,
+            const terrain::TerrainStreamingConfig* streaming = nullptr,
+            const std::string* material = nullptr)
+        {
+            terrain::TerrainIncrementalSaveParams params;
+            params.path = file.string();
+            params.grid = grid.get();
+            params.dirtyCoords = &dirty;
+            params.currentHeader = snapshot.header;
+            params.indexTableOffset = snapshot.indexTableOffset;
+            params.currentIndexMap = &indexMap;
+            // materialPath is the value to persist, not a "leave alone" sentinel — default it to
+            // whatever is on disk so tests that are not about the material keep the header size.
+            params.materialPath = material ? *material : snapshot.header.materialPath;
+            params.physicsConfig = physics ? *physics : snapshot.header.physicsConfig;
+            params.streamingConfig = streaming ? *streaming : snapshot.header.streamingConfig;
+            return terrain::TerrainSerializer::saveIncremental(params);
+        }
+
+        bool saveDirtySucceeds(
+            const TerrainTestDirtySet& dirty,
+            const terrain::TerrainPhysicsConfig* physics = nullptr,
+            const terrain::TerrainStreamingConfig* streaming = nullptr,
+            const std::string* material = nullptr)
+        {
+            return saveDirty(dirty, physics, streaming, material) ==
+                   terrain::TerrainIncrementalSaveResult::Success;
+        }
+
+        void refresh()
+        {
+            snapshot = TerrainFileSnapshot{};
+            REQUIRE(readTerrainTestSnapshot(file.string(), snapshot));
+            indexMap = makeTerrainTestIndexMap(snapshot.index);
+        }
+
+        terrain::TerrainTileConfig config;
+        std::vector<terrain::TileCoord> coords;
+        std::unique_ptr<terrain::TerrainGrid> grid;
+        ScopedTerrainTestFile file;
+        std::string materialPath = "mat/original.vfTerrainMat";
+        TerrainFileSnapshot snapshot;
+        std::unordered_map<terrain::TileCoord, terrain::TileIndexEntry, terrain::TileCoordHash>
+            indexMap;
+    };
+
+    // Reads every persisted section of every indexed tile. Used to prove that an interrupted save
+    // or a compaction left the file's tile data intact rather than merely parseable.
+    inline bool allTerrainTestTilesRead(const ScopedTerrainTestFile& file,
+                                        const std::vector<terrain::TileIndexEntry>& index)
+    {
+        for (const auto& entry : index)
+        {
+            std::vector<float> heights;
+            terrain::TileWeightMapData weights;
+            std::array<terrain::TileLODData, terrain::TERRAIN_LOD_COUNT> lodData;
+            std::vector<uint8_t> holes;
+            if (!terrain::TerrainSerializer::readTileHeights(file.string(), entry, heights) ||
+                !terrain::TerrainSerializer::readTileWeights(file.string(), entry, weights) ||
+                !terrain::TerrainSerializer::readTileLODData(file.string(), entry, lodData) ||
+                !terrain::TerrainSerializer::readTileHoleMask(file.string(), entry, holes))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     inline bool equalTerrainTestCaveData(
