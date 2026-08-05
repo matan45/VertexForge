@@ -96,6 +96,13 @@ namespace services
         std::string metaOriginalPath;
         std::string metaBackupPath;
 
+        // VK-1646: a terrain's .vfterrainlayers sidecar, trashed and restored with it. Without
+        // this, undoing a terrain delete would bring back a file whose flag bit 6 promises a
+        // sidecar that no longer exists — the terrain would open flattened with layer editing
+        // disabled, and the artist's stack would be gone for good.
+        std::string layersOriginalPath;
+        std::string layersBackupPath;
+
         // Assets that referenced this one at delete time; re-scanned on undo
         // to restore their dependency-graph edges
         std::vector<std::string> dependentPaths;

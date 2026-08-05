@@ -7,6 +7,8 @@
 #include "terrain/TerrainTile.hpp"
 #include "terrain/TerrainTypes.hpp"
 #include "terrain/TerrainSerializer.hpp"
+#include "terrain/TerrainLayerSidecar.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include "TerrainAssetMetadata.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -136,13 +138,27 @@ namespace services
                 hasStreamingNow = streamerIt->second->isEnabled();
 
             // Mirror what TerrainSerializer::computeFlags() would derive from the same configs.
-            // Only these two flags affect header size, so the rest can stay as they were saved.
+            // Only these three flags affect header size, so the rest can stay as they were saved.
             terrain::TerrainFileHeader candidate = cache.getHeader();
             auto flagBits = static_cast<uint32_t>(candidate.flags);
             constexpr auto physicsBit = static_cast<uint32_t>(terrain::TerrainFormatFlags::HAS_PHYSICS_DATA);
             constexpr auto streamingBit = static_cast<uint32_t>(terrain::TerrainFormatFlags::HAS_STREAMING_CONFIG);
             flagBits = hasPhysicsNow ? (flagBits | physicsBit) : (flagBits & ~physicsBit);
             flagBits = hasStreamingNow ? (flagBits | streamingBit) : (flagBits & ~streamingBit);
+
+            // VK-1646. HAS_EDIT_LAYER_SIDECAR gates an 8-byte header block, so the FIRST save after
+            // a terrain gains its first layer — and the first after it loses its last — resizes the
+            // header and can only be done by a full save.
+            //
+            // Predicting it here is not an optimisation. saveIncremental() answers that transition
+            // with NeedsFullSave, and TerrainService::saveTerrainIncremental then calls saveTerrain()
+            // on the BACKGROUND thread with no prepareSave() — which writes only the resident tiles
+            // and, with streaming on, deletes every unloaded one. Missing this mirror is terrain loss.
+            constexpr auto sidecarBit =
+                static_cast<uint32_t>(terrain::TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR);
+            const bool hasLayersNow = !grid.getHeightLayers().empty();
+            flagBits = hasLayersNow ? (flagBits | sidecarBit) : (flagBits & ~sidecarBit);
+
             candidate.flags = static_cast<terrain::TerrainFormatFlags>(flagBits);
 
             // Resolving here also warms the AssetRef path cache on the main thread, so the
@@ -180,25 +196,109 @@ namespace services
         return true;
     }
 
-    // VK-1645: VFTR stores the DERIVED composite, which is correct -- it is the flattened runtime
-    // artifact. But the authoritative bases and the layer stack are RAM-only until the VK-1646
-    // sidecar lands, so a save-and-reload bakes the corridor and loses both. Say so out loud
-    // rather than let an artist discover it after closing the editor.
+    // VK-1646. VFTR stores the DERIVED composite, which is correct -- it is the flattened artifact
+    // geometry, physics, streaming and the shipped runtime all consume. The authoritative bases and
+    // the layer stack go beside it in a `.vfterrainlayers` sidecar, written as part of the same
+    // commit by TerrainSerializer::save().
     //
-    // VFTR flag bit 6 (HAS_EDIT_LAYER_SIDECAR) is deliberately NOT set here: nothing writes a
-    // sidecar yet, and the documented load rule is "marker set + sidecar missing => disable layer
-    // editing and offer recovery", which would drop every terrain saved by this build straight
-    // into VK-1646's recovery path.
+    // What is left here is the one case the serializer cannot answer for itself: a terrain that
+    // still has authoring state but is being written by a path that does not carry it.
     void TerrainService::warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid)
     {
         const terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
-        if (store.empty())
+        if (store.empty() || !store.isEditingLocked())
             return;
 
         vfLogWarning("TerrainService: {} reserved height layer(s) over {} authoritative base "
-                     "block(s) are NOT persisted yet (VK-1646). The saved terrain keeps the "
-                     "composited heights; the layer stack is lost on reload.",
+                     "block(s) are present but editing is locked; they will not be re-persisted "
+                     "until the terrain's .vfterrainlayers sidecar is repaired or removed.",
                      store.layers().size(), store.baseCount());
+    }
+
+    // VK-1646. Every outcome below keeps the terrain itself loadable — the flattened VFTR is
+    // complete on its own, and nothing here can prevent it opening. What varies is only whether
+    // layer AUTHORING is available, because that depends on the authoritative bases that live in
+    // the sidecar. Failing loudly and degrading is the whole point: the alternative is composing
+    // an artist's road over ground it was never authored against.
+    void TerrainService::loadHeightLayerSidecar(const std::string& path,
+                                                const terrain::TerrainFileHeader& header,
+                                                terrain::TerrainGrid& grid)
+    {
+        // Authoring-only data, deliberately excluded from game exports. In a shipped build the
+        // marker is set and the sidecar is legitimately absent, so every branch below would be
+        // noise in a player's log.
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return;
+
+        const bool marked = terrain::hasFlag(header.flags,
+                                             terrain::TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR);
+        const auto sidecarPath = terrain::terrainLayerSidecarPath(path);
+
+        if (!marked)
+        {
+            // An unmarked sidecar is an orphan: a terrain saved by a build that did not carry the
+            // store, or a leftover beside a file that has since been replaced. It is never applied
+            // — and never deleted either. Removing a file on a load path is the one irreversible
+            // thing this code could do, and we cannot tell garbage from the survivor of a crash the
+            // user still wants back.
+            terrain::TerrainLayerSidecarMeta orphanMeta;
+            if (terrain::peekTerrainLayerSidecar(sidecarPath, orphanMeta) !=
+                terrain::TerrainLayerSidecarStatus::Absent)
+            {
+                vfLogWarning("TerrainService: {} exists but {} does not claim an edit-layer "
+                             "sidecar, so it is being ignored. Delete it if it is stale.",
+                             sidecarPath.string(), path);
+            }
+            return;
+        }
+
+        terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
+
+        // Straight out of the header the caller already parsed. No second read of the terrain, and
+        // nothing derived from its bytes — see TerrainFileHeader::editLayerGenerationId for why
+        // that matters.
+        const uint64_t generationId = header.editLayerGenerationId;
+
+        terrain::TerrainLayerSidecarMeta meta;
+        const auto status =
+            terrain::readTerrainLayerSidecar(sidecarPath, generationId, meta, store);
+
+        switch (status)
+        {
+        case terrain::TerrainLayerSidecarStatus::Ok:
+            vfLogInfo("TerrainService: Loaded {} height layer(s) over {} authoritative base "
+                      "block(s) from {}",
+                      store.layers().size(), store.baseCount(), sidecarPath.string());
+            return;
+
+        case terrain::TerrainLayerSidecarStatus::Absent:
+            vfLogWarning("TerrainService: {} claims an edit-layer sidecar but {} is missing. The "
+                         "terrain loads flattened and layer editing is disabled; restore the file "
+                         "to recover the layer stack.", path, sidecarPath.string());
+            break;
+
+        case terrain::TerrainLayerSidecarStatus::Stale:
+            vfLogWarning("TerrainService: {} was written for a different generation of {} "
+                         "(sidecar {:#x}, terrain {:#x}) — most likely a save interrupted between "
+                         "the two files, or one of them restored on its own. Loading flattened "
+                         "with layer editing disabled.",
+                         sidecarPath.string(), path, meta.generationId, generationId);
+            break;
+
+        case terrain::TerrainLayerSidecarStatus::Degraded:
+            vfLogError("TerrainService: {} contains a layer type this build cannot evaluate. "
+                       "Applying part of a stack would compose ground the artist never authored, "
+                       "so none of it is applied and layer editing is disabled.",
+                       sidecarPath.string());
+            break;
+
+        case terrain::TerrainLayerSidecarStatus::Invalid:
+            vfLogError("TerrainService: {} is corrupt or truncated. The terrain loads flattened "
+                       "and layer editing is disabled.", sidecarPath.string());
+            break;
+        }
+
+        store.setEditingLocked(true);
     }
 
     bool TerrainService::saveTerrainIncremental(uint64_t terrainEntityId, const std::string& path)
@@ -285,6 +385,12 @@ namespace services
         incParams.physicsConfig = physicsConfig;
         incParams.streamingConfig = streamingConfig;
 
+        // VK-1646. Same opt-in as the full save: the sidecar is rewritten whole on every commit
+        // that carries authoring state, and the generation id in the header is re-stamped with it.
+        const auto incrementalGuid = peekOrMintTerrainGuid(path);
+        incParams.heightLayers = &gridIt->second->getHeightLayers();
+        incParams.terrainGuid = incrementalGuid.getValue();
+
         const auto result = terrain::TerrainSerializer::saveIncremental(incParams);
 
         if (result == terrain::TerrainIncrementalSaveResult::NeedsFullSave)
@@ -327,7 +433,7 @@ namespace services
         cache.refreshIndex(path);
 
         // Same metadata contract as the full save — see refreshTerrainSidecar().
-        const auto metaGuid = refreshTerrainSidecar(path);
+        const auto metaGuid = refreshTerrainSidecar(path, incrementalGuid);
         if (metaGuid.isValid())
             comp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
@@ -412,6 +518,16 @@ namespace services
         saveParams.physicsConfig = physicsConfig;
         saveParams.streamingConfig = streamingConfig;
 
+        // VK-1646. The authoritative bases and the layer stack go out as a `.vfterrainlayers`
+        // sidecar in the same commit as the terrain, marked by VFTR flag bit 6.
+        //
+        // The GUID has to be resolved BEFORE the save, because the sidecar stamps it — and
+        // refreshTerrainSidecar() below cannot supply it on a first save, where no .vfmeta exists
+        // yet. Both calls agree on one value by passing it through.
+        const auto terrainGuid = peekOrMintTerrainGuid(path);
+        saveParams.heightLayers = &gridIt->second->getHeightLayers();
+        saveParams.terrainGuid = terrainGuid.getValue();
+
         bool result = terrain::TerrainSerializer::save(saveParams);
 
         if (result)
@@ -446,8 +562,9 @@ namespace services
                 }
             }
 
-            // Create or update .vfmeta sidecar
-            const auto metaGuid = refreshTerrainSidecar(path);
+            // Create or update .vfmeta sidecar, persisting the GUID the layer sidecar was stamped
+            // with so the two never disagree about which asset this is.
+            const auto metaGuid = refreshTerrainSidecar(path, terrainGuid);
             if (metaGuid.isValid())
                 mutableComp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
@@ -568,6 +685,11 @@ namespace services
         auto grid = std::make_unique<terrain::TerrainGrid>(tileConfig);
         auto cache = std::make_shared<terrain::TerrainFileCache>(path, header, index, indexTableOffset);
         grid->setFileCache(cache);
+
+        // Before any tile is materialised: coverage decides where a sculpt writes, so it has to be
+        // settled while nothing can be sculpting.
+        loadHeightLayerSidecar(path, header, *grid);
+
         loadInitialTiles(*grid, header, index);
 
         scene::Entity parentEntity("Terrain");

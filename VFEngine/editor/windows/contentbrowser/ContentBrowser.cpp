@@ -272,6 +272,10 @@ namespace windows
         if (extension == ".vfPrefab") return Prefab;
         if (extension == ".vfTerrainMat") return TerrainMaterial;
         if (extension == ".vfTerrain") return Terrain;
+        // VK-1646 sidecar. Shown rather than hidden, like .vfCollider and unlike .vfmeta: when a
+        // terrain stops claiming one, the load path's advice is "delete it if it is stale", and a
+        // file the browser hides is one the user cannot act on.
+        if (extension == ".vfterrainlayers") return TerrainLayers;
         if (extension == ".vfNavmesh") return Navmesh;
         if (extension == ".vfNavIndex") return Navmesh;
         if (extension == ".vfNavTile") return Navmesh;

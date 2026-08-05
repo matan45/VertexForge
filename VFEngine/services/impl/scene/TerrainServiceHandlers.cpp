@@ -548,6 +548,19 @@ namespace services
                     return false;
 
                 auto& grid = terrainGrids.begin()->second;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+
+                // VK-1646: this terrain claims a sidecar that could not be loaded, so its
+                // authoritative bases are unavailable. Registering a layer now would compose over
+                // the flattened plane and then persist that as authored ground.
+                if (store.isEditingLocked())
+                {
+                    vfLogWarning("TerrainService: Spline deform refused — edit-layer authoring is "
+                                 "disabled until this terrain's .vfterrainlayers sidecar is "
+                                 "repaired or removed.");
+                    return false;
+                }
+
                 float worldTileSize = 32.0f;
                 const auto& allTiles = grid->getAllTiles();
                 if (!allTiles.empty())
@@ -563,25 +576,22 @@ namespace services
                 auto cacheIt = fileCaches.find(terrainGrids.begin()->first);
                 auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
-                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
-
                 terrain::HeightLayerRecord record;
                 record.id = cmd.splineId;
                 record.visible = true;
 
-                terrain::SplineCorridorParams corridor;
-                corridor.corridorWidth = cmd.params.corridorWidth;
-                corridor.falloffWidth = cmd.params.falloffWidth;
-                corridor.embankmentHeight = cmd.params.embankmentHeight;
+                // VK-1646: the parameters are stored on the record, not captured ad hoc, so the
+                // sidecar can persist them and rebuild an identical evaluator on load.
+                record.type = terrain::HeightLayerType::SplineCorridor;
+                record.spline.corridor.corridorWidth = cmd.params.corridorWidth;
+                record.spline.corridor.falloffWidth = cmd.params.falloffWidth;
+                record.spline.corridor.embankmentHeight = cmd.params.embankmentHeight;
+                record.spline.samples = cmd.splineSamples;
 
-                // The closure captures only plain data and calls a pure Terrain.dll function, so
-                // nothing inside the DLL ever reaches back into Services or the dispatcher.
-                record.eval = [samples = cmd.splineSamples, corridor](
-                    const terrain::TileCoord& coord, const terrain::TerrainTileConfig& config,
-                    const std::vector<float>& in, std::vector<float>& out)
-                {
-                    terrain::applySplineCorridorToTile(coord, config, samples, corridor, in, out);
-                };
+                // The one construction site for a corridor evaluator, shared with the sidecar
+                // loader. The closure it returns captures only plain data and calls a pure
+                // Terrain.dll function, so nothing inside the DLL reaches back into Services.
+                record.eval = terrain::makeSplineCorridorEval(record.spline);
 
                 std::vector<terrain::TileCoord> seeded;
                 for (const terrain::TileCoord& coord : affected)
@@ -1458,6 +1468,14 @@ namespace services
             [this](const events::terrain::SetTerrainSaveLockCommand& cmd)
             {
                 saveInProgress.store(cmd.locked, std::memory_order_release);
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::IsHeightLayerEditingLockedQuery>(
+            [this](const events::terrain::IsHeightLayerEditingLockedQuery&) -> bool
+            {
+                if (terrainGrids.empty())
+                    return false;
+                return terrainGrids.begin()->second->getHeightLayers().isEditingLocked();
             });
 
         dispatcher.registerCommandHandler<events::physics::AddTerrainColliderCommand>(

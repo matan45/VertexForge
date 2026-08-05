@@ -21,6 +21,18 @@ namespace terrain
         float embankmentHeight = 0.0f; // raise above the spline height
     };
 
+    // VK-1646. Everything a corridor evaluator needs, as plain data — the serializable twin of the
+    // lambda captures the spline-apply handler used to build by hand.
+    //
+    // A HeightLayerRecord's `eval` is a std::function and cannot be written to disk, so the
+    // sidecar persists this instead and rebuilds the callable on load. Keeping the two in one
+    // struct is what makes "what was saved" and "what runs" the same thing by construction.
+    struct SplineCorridorLayerParams
+    {
+        SplineCorridorParams corridor;
+        std::vector<glm::vec3> samples; // world XZ polyline, .y = target height
+    };
+
     // Writes the corridor into `out` reading from `in`. `in` and `out` MUST NOT alias, and
     // `out` is fully populated on every path (unaffected vertices are copied straight from
     // `in`) -- that total-write contract is what lets composeTileHeights ping-pong buffers

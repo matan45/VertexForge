@@ -207,10 +207,15 @@ Load behavior is deterministic:
 - marker clear but a sidecar exists: ignore/quarantine it as an orphan and
   warn rather than silently applying it.
 
-Older readers ignore unknown flag bits and can still consume the flattened
-terrain. If an older editor saves it, its current flag recomputation clears bit
-6; the content hash prevents a later editor from silently reapplying stale
-layer data.
+This section originally claimed that "older readers ignore unknown flag bits".
+That is false for VFTR, which rejects any version triple that is not identical
+to its own (`TerrainSerializerRead.cpp`) — there is no reader old enough to
+encounter bit 6 and also new enough to open the file. What the claim was
+reaching for still holds, and is what VK-1646 relies on: bit 6 changes nothing
+about the header layout or the tile records, so a build that does not know the
+bit reads the flattened terrain exactly as before. If such a build saves, its
+flag recomputation clears bit 6 and the sidecar becomes an orphan; the content
+hash then prevents a later editor from silently reapplying stale layer data.
 
 ### Save and recovery
 
@@ -349,11 +354,98 @@ mid-session.
 - Runtime script edits stay on **derived**, deliberately. They are transient by
   design — no `markDirty`, no undo entry — so routing them to the base would let a
   gameplay crater permanently rewrite authored data with no way back.
-- VFTR flag bit 6 is deliberately **left clear**: nothing writes a sidecar yet, and
-  setting it would drop every terrain saved by this build into VK-1646's recovery
-  path. `saveTerrain` logs a warning instead when the store is non-empty.
-- Byte-stability holds **within a session with no intervening save**. Across a save
-  the derived plane round-trips through uint16 quantization while the base does not.
+- VFTR flag bit 6 was deliberately **left clear** at the time: nothing wrote a
+  sidecar yet, and setting it would have dropped every terrain saved by that build
+  into VK-1646's recovery path. VK-1646 now sets it. (Superseded — see §4c.)
+- Byte-stability held **within a session with no intervening save**, because the base
+  was RAM-only. VK-1646 persists it uncompressed, so it now survives a save too; the
+  derived plane still round-trips through uint16 quantization.
+
+## 4c. VK-1646 as built
+
+Section 4's contract shipped essentially as written. Five things it did not
+anticipate:
+
+### The binding is a stored nonce, not a hash of anything
+
+Section 4 specified "a 64-bit content hash of the associated flattened VFTR
+generation". Implementation showed that to be wrong, in two ways.
+
+First, a hash over only the header and index table does not work: a tile's height
+payload is a fixed-size quantised block (`writeTileHeightData`), so two full saves
+that differ only in sculpted heights produce a byte-identical header and index. The
+most common edit there is would go undetected.
+
+Second — and decisively — a hash over the *whole* file does not work either, because
+two existing paths rewrite every byte of a `.vfterrain` without changing a single
+height:
+
+- `TerrainSerializer::compact()` relocates every record and shifts every offset.
+- `AssetReferenceScanner::updateTerrainFile` splices a renamed material path into the
+  header and adjusts the index, then swaps the file. It runs whenever a
+  `.vfTerrainMat` is renamed.
+
+Either would make a perfectly valid sidecar read as stale — and a false stale costs
+the artist the entire layer stack. **Renaming a material must not delete an artist's
+roads.**
+
+So `TerrainFileHeader` gained `editLayerGenerationId`: an opaque random 64-bit value,
+regenerated whenever the sidecar is rewritten and stamped into both files by the same
+commit. Both paths above copy the header through verbatim, so it survives them for
+free. Random rather than a counter, because a counter collides after a restore from
+backup.
+
+This also removes the reason to force a full save. Only the id's *value* changes on an
+incremental save, and it is patched in place with the rest of the header — so a
+layered terrain keeps using the incremental path.
+
+### Bit 6 gates an 8-byte header block, and both transitions cost one full save
+
+The id lives in the flag-gated tail beside the physics and streaming blocks, so a
+terrain with no layers is byte-identical to one the previous build wrote and **no
+version bump is needed** — 2.5.0 files stay readable.
+
+The cost is that turning bit 6 on (first layer) or off (last layer removed) resizes
+the header, which moves the index table, which an in-place incremental patch cannot
+do. `validateIncrementalHeaderLayout` refuses and one full save happens.
+
+`TerrainService::prepareSaveIncremental` **must** mirror that decision into its
+candidate flags, exactly as it already mirrors the physics and streaming bits. This is
+not an optimisation: `saveTerrainIncremental` answers `NeedsFullSave` by calling
+`saveTerrain()` on the background thread with no `prepareSave()`, which writes only
+resident tiles — with streaming on, missing the mirror deletes every unloaded tile.
+
+### A record's parameters had to become part of the record
+
+`HeightLayerRecord::eval` is a `std::function` and cannot be persisted. The record
+gained `type` (`HeightLayerType`) and a typed `SplineCorridorLayerParams`, and
+`makeSplineCorridorEval` became the single construction site for the callable —
+shared by the spline-apply handler and the sidecar loader, so a layer rebuilt from
+disk cannot drift from one applied live.
+
+`affected` is persisted verbatim rather than recomputed from the polyline: the apply
+path only claims tiles that were resident *with height data* at the time, so the set
+is a function of residency as well as of geometry.
+
+### A partially understood sidecar is not applied at all
+
+An unrecognised layer type is skippable — each record stores its own byte length —
+but the file is reported `Degraded` and **nothing** is loaded, not even the records
+this build does understand. Half a stack composes ground the artist never authored,
+and because coverage is sticky the tiles would stay authoritative afterwards.
+
+### The sidecar does not ship
+
+`.vfterrainlayers` is excluded from `packAssets` (`GameExporter.cpp`). It is authoring
+state, the runtime consumes only the flattened VFTR, and a fully covered map's sidecar
+runs to tens of megabytes. The consequence is that the load rule's "marker set,
+sidecar absent" row must be **silent in archive mode** — in a shipped build that is
+the expected state, not damage.
+
+Orphans (a sidecar beside a terrain whose bit 6 is clear) are left on disk and warned
+about, never renamed or deleted. A load path has no business destroying a file it
+cannot identify, and the content browser shows `.vfterrainlayers` — like `.vfCollider`
+and unlike `.vfmeta` — precisely so the user can act on that warning.
 
 ## 5. Follow-up backlog
 

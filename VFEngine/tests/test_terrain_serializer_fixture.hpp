@@ -430,6 +430,10 @@ namespace
             params.materialPath = material ? *material : snapshot.header.materialPath;
             params.physicsConfig = physics ? *physics : snapshot.header.physicsConfig;
             params.streamingConfig = streaming ? *streaming : snapshot.header.streamingConfig;
+            // VK-1646: always opted in, exactly as TerrainService does. With an empty store this
+            // is a no-op — bit 6 stays clear and the header keeps its size — so the suites that
+            // predate the sidecar are unaffected.
+            params.heightLayers = &grid->getHeightLayers();
             return terrain::TerrainSerializer::saveIncremental(params);
         }
 

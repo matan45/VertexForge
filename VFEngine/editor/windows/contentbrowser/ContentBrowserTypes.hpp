@@ -39,6 +39,7 @@ namespace windows
         VFXSequence,
         Collider,
         ToonProfile,
+        TerrainLayers,
         Other
     };
 
@@ -72,6 +73,8 @@ namespace windows
         Collider = 21, // .vfCollider sidecar glyph
         ToonProfile = 22 // .vfToonProfile "shading" glyph (VK-1493)
     };
+    // No new atlas glyph for .vfterrainlayers: it reuses AtlasIcon::Terrain, because adding one
+    // means regenerating the 5x5 atlas that this enum's values index into by position.
 
     // Canonical per-type display data. Single source of truth for the filter
     // dropdown, grid icons and (future) type badges — keep it covering every
@@ -84,10 +87,10 @@ namespace windows
         uint32_t badgeColor; // IM_COL32 layout (0xAABBGGRR)
     };
 
-    inline const std::array<AssetTypeInfo, 27>& assetTypeTable()
+    inline const std::array<AssetTypeInfo, 28>& assetTypeTable()
     {
         using enum AssetType;
-        static const std::array<AssetTypeInfo, 27> table = {{
+        static const std::array<AssetTypeInfo, 28> table = {{
             {Texture,          "Texture",           AtlasIcon::File,         0xFFF7C34F},
             {HDR,              "HDR",               AtlasIcon::File,         0xFFF7E04F},
             {Model,            "Model",             AtlasIcon::File,         0xFF4FC3F7},
@@ -114,6 +117,7 @@ namespace windows
             {VFXSequence,      "VFX Sequence",      AtlasIcon::VFXSequence,  0xFFF74FC8},
             {Collider,         "Collider",          AtlasIcon::Collider,     0xFF7AA7FF},
             {ToonProfile,      "Toon Profile",      AtlasIcon::ToonProfile,  0xFF9E7FF7},
+            {TerrainLayers,    "Terrain Layers",    AtlasIcon::Terrain,      0xFF7ECFA8},
             {Other,            "Other",             AtlasIcon::File,         0xFF909090}
         }};
         return table;

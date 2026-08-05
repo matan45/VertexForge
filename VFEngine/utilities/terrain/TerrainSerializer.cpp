@@ -67,6 +67,10 @@ namespace terrain
             writeLE(file, header.streamingConfig.maxUnloadsPerFrame);
         }
 
+        // VK-1646. Last, so the two blocks above keep their byte positions.
+        if (hasFlag(header.flags, TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR))
+            writeLE(file, header.editLayerGenerationId);
+
         return file.good();
     }
 

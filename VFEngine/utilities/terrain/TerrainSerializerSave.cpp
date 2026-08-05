@@ -3,6 +3,7 @@
 #include "TerrainFileAccess.hpp"
 #include "TerrainSaveFaultInjection.hpp"
 #include "TerrainSaveJournal.hpp"
+#include "TerrainLayerSidecar.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/AtomicFileReplace.hpp"
@@ -86,8 +87,10 @@ namespace terrain
         // rewritten lose their meshlet cache outright, and TerrainFileCache::hasMeshletCache()
         // then stops every other tile's cache from ever being read again.
         //
-        // Unioning also preserves bits this build knows nothing about — bit 6 is reserved for
-        // HAS_EDIT_LAYER_SIDECAR, and a plain assignment silently destroys it.
+        // Unioning also preserves bits this build knows nothing about. HAS_EDIT_LAYER_SIDECAR is no
+        // longer among them — saveIncremental() sets and clears it explicitly after this call,
+        // because it describes what that save is doing rather than what the tiles contain — but the
+        // union is still what keeps any future flag from being silently destroyed here.
         constexpr uint32_t configBits =
             static_cast<uint32_t>(TerrainFormatFlags::HAS_PHYSICS_DATA) |
             static_cast<uint32_t>(TerrainFormatFlags::HAS_STREAMING_CONFIG);
@@ -314,6 +317,24 @@ namespace terrain
             updatedHeader.streamingConfig = params.streamingConfig;
             updatedHeader.materialPath = params.materialPath;
 
+            // VK-1646. Bit 6 states what THIS save is doing, so it is set and cleared here rather
+            // than inherited through the union — exactly as in save(). Either transition resizes
+            // the header, and validateIncrementalHeaderLayout() below turns that into a full save,
+            // which is the only place the block can be added or removed safely.
+            const bool writesSidecar = params.heightLayers && !params.heightLayers->empty();
+            {
+                constexpr auto sidecarBit =
+                    static_cast<uint32_t>(TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR);
+                const auto bits = static_cast<uint32_t>(updatedHeader.flags);
+                updatedHeader.flags = static_cast<TerrainFormatFlags>(
+                    writesSidecar ? (bits | sidecarBit) : (bits & ~sidecarBit));
+            }
+            // A fresh id every time the sidecar is rewritten. The block is already present in the
+            // header at its current size, so changing its VALUE costs nothing here — which is what
+            // lets a layered terrain keep using the incremental path at all.
+            if (writesSidecar)
+                updatedHeader.editLayerGenerationId = newLayerGenerationId();
+
             // The caller's cached offset must still describe the header on disk, otherwise the
             // index table is not where we think it is and nothing below can be trusted.
             if (serializedHeaderSize(params.currentHeader) != params.indexTableOffset)
@@ -392,6 +413,34 @@ namespace terrain
                 return TerrainIncrementalSaveResult::Failed;
             }
 
+            // VK-1646. Built before the journal, so a sidecar this save cannot write aborts while
+            // the terrain's header and index are still the previous generation's. The temporary is
+            // only renamed into place once the terrain's own commit has succeeded.
+            const fs::path sidecarPath = terrainLayerSidecarPath(filePath);
+            fs::path sidecarTmpPath = sidecarPath;
+            sidecarTmpPath += ".tmp";
+            if (writesSidecar)
+            {
+                TerrainLayerSidecarMeta meta;
+                meta.terrainGuid = params.terrainGuid;
+                meta.generationId = updatedHeader.editLayerGenerationId;
+                meta.gridMinX = updatedHeader.gridMinX;
+                meta.gridMinZ = updatedHeader.gridMinZ;
+                meta.gridMaxX = updatedHeader.gridMaxX;
+                meta.gridMaxZ = updatedHeader.gridMaxZ;
+                meta.resolution = updatedHeader.resolution;
+                meta.worldTileSize = updatedHeader.worldTileSize;
+
+                if (!writeTerrainLayerSidecar(sidecarTmpPath, meta, *params.heightLayers))
+                {
+                    std::error_code sidecarEc;
+                    fs::remove(sidecarTmpPath, sidecarEc);
+                    vfLogError("TerrainSerializer: Could not write the edit-layer sidecar for {}; "
+                               "the terrain is unchanged", params.path);
+                    return TerrainIncrementalSaveResult::Failed;
+                }
+            }
+
             detail::TerrainJournalRecord journal;
             journal.preAppendSize = preAppendSize;
             journal.targetSize = static_cast<uint64_t>(targetPos);
@@ -424,6 +473,27 @@ namespace terrain
                 // clear it on the next open.
                 vfLogWarning("TerrainSerializer: Could not remove {} after committing",
                              journalPath.string());
+            }
+
+            // The terrain is committed and carries its new generation id. Swapping the sidecar in
+            // last means a crash here leaves the previous sidecar beside a terrain that no longer
+            // claims its id — the stale case, which loads flattened with layer editing disabled.
+            // Never turned into a failure: the caller must go on to refresh its cached index.
+            if (writesSidecar)
+            {
+                if (detail::terrainSaveFault(TerrainSaveStage::BetweenTerrainAndSidecarReplace).abort)
+                {
+                    vfLogWarning("TerrainSerializer: Interrupted between committing {} and its "
+                                 "edit-layer sidecar", params.path);
+                    return TerrainIncrementalSaveResult::Success;
+                }
+
+                if (!resource::replaceFileAtomically(sidecarTmpPath, sidecarPath))
+                {
+                    vfLogError("TerrainSerializer: Saved {} but could not commit its edit-layer "
+                               "sidecar; layer editing will be disabled on the next load",
+                               params.path);
+                }
             }
 
             vfLogInfo("TerrainSerializer: Incremental save: updated {} dirty tiles in {}",
@@ -543,7 +613,24 @@ namespace terrain
                   });
 
         TerrainFormatFlags flags = computeFlags(*params.grid, params.physicsConfig, params.streamingConfig);
+
+        // VK-1646. The marker is a fact about this save, not about the grid: it is set exactly when
+        // this save is also writing a sidecar, so "bit 6 set" and "a sidecar exists beside me" can
+        // only ever disagree because something happened between the two commits below — which is
+        // precisely the condition the load path is built to diagnose.
+        const bool writesSidecar = params.heightLayers && !params.heightLayers->empty();
+        if (writesSidecar)
+            flags = flags | TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR;
+
         TerrainFileHeader header = buildSaveHeader(params, flags, static_cast<uint32_t>(allTiles.size()));
+
+        // One freshly generated id, stamped into the header below and into the sidecar beside it,
+        // so the pair that lands on disk matches by construction. Regenerated on every save that
+        // rewrites the sidecar and left alone by every save that does not — which is what makes a
+        // restored backup on either side, or a commit interrupted between the two renames, come
+        // back as a mismatch rather than as a plausible pair.
+        if (writesSidecar)
+            header.editLayerGenerationId = newLayerGenerationId();
 
         std::unique_lock lock(terrainFileMutex());
 
@@ -553,6 +640,10 @@ namespace terrain
             fs::create_directories(filePath.parent_path());
             fs::path tmpPath = filePath;
             tmpPath += ".tmp";
+
+            const fs::path sidecarPath = terrainLayerSidecarPath(filePath);
+            fs::path sidecarTmpPath = sidecarPath;
+            sidecarTmpPath += ".tmp";
 
             std::error_code ec;
             {
@@ -568,6 +659,34 @@ namespace terrain
                     vfLogError("TerrainSerializer: Failed to flush file: {}", params.path);
                     file.close();
                     fs::remove(tmpPath, ec);
+                    return false;
+                }
+            }
+
+            // Both temporaries are built in full before either is committed, so the pair that lands
+            // on disk is consistent by construction — there is no window in which the sidecar names
+            // a generation that was never written.
+            if (writesSidecar)
+            {
+                TerrainLayerSidecarMeta meta;
+                meta.terrainGuid = params.terrainGuid;
+                meta.generationId = header.editLayerGenerationId;
+                meta.gridMinX = header.gridMinX;
+                meta.gridMinZ = header.gridMinZ;
+                meta.gridMaxX = header.gridMaxX;
+                meta.gridMaxZ = header.gridMaxZ;
+                meta.resolution = header.resolution;
+                meta.worldTileSize = header.worldTileSize;
+
+                if (!writeTerrainLayerSidecar(sidecarTmpPath, meta, *params.heightLayers))
+                {
+                    // Neither file is committed. The terrain on disk is the previous generation and
+                    // its sidecar still matches it, which is a strictly better outcome than a saved
+                    // terrain whose authoring data was silently dropped.
+                    vfLogError("TerrainSerializer: Could not write the edit-layer sidecar for {}; "
+                               "nothing was saved", params.path);
+                    fs::remove(tmpPath, ec);
+                    fs::remove(sidecarTmpPath, ec);
                     return false;
                 }
             }
@@ -593,7 +712,53 @@ namespace terrain
             if (!resource::replaceFileAtomically(tmpPath, filePath))
             {
                 vfLogError("TerrainSerializer: Failed to replace {}", params.path);
+                fs::remove(sidecarTmpPath, ec);
                 return false;
+            }
+
+            // Past this point the save HAS happened: the terrain everything else consumes is the
+            // new generation, and the caller must go on to refresh its cached index against it. So
+            // a sidecar failure below is reported loudly but never turns into a false return — that
+            // would leave TerrainService holding an index built for the file we just replaced.
+            if (writesSidecar)
+            {
+                if (detail::terrainSaveFault(TerrainSaveStage::BetweenTerrainAndSidecarReplace).abort)
+                {
+                    // Stands in for the process dying here. What survives is the new terrain beside
+                    // the PREVIOUS sidecar, whose stored generation id no longer matches — the
+                    // stale case, which loads flattened with layer editing disabled.
+                    vfLogWarning("TerrainSerializer: Interrupted between committing {} and its "
+                                 "edit-layer sidecar", params.path);
+                    return true;
+                }
+
+                if (!resource::replaceFileAtomically(sidecarTmpPath, sidecarPath))
+                {
+                    vfLogError("TerrainSerializer: Saved {} but could not commit its edit-layer "
+                               "sidecar; the terrain is intact and layer editing will be disabled "
+                               "on the next load", params.path);
+                }
+            }
+            else if (params.heightLayers)
+            {
+                // The stack was emptied deliberately, and bit 6 is now clear. Drop the file rather
+                // than leave it behind as an orphan a later load has to warn about — the same
+                // reason saveFoliage removes a tile's sidecar once its instances are all erased.
+                if (fs::exists(sidecarPath, ec))
+                {
+                    fs::remove(sidecarPath, ec);
+                    vfLogInfo("TerrainSerializer: Removed {} — the terrain no longer has any edit "
+                              "layers or authoritative bases", sidecarPath.string());
+                }
+            }
+            else if (fs::exists(sidecarPath, ec))
+            {
+                // A caller that did not pass a store cannot know whether the sidecar is still
+                // wanted, so it is left alone — but bit 6 is now clear, so say out loud that it
+                // just became an orphan.
+                vfLogWarning("TerrainSerializer: {} was saved without its edit-layer store, so {} "
+                             "is now an orphan and will be ignored on load",
+                             params.path, sidecarPath.string());
             }
 
             vfLogInfo("TerrainSerializer: Saved {} tiles to {}", header.tileCount, params.path);

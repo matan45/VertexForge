@@ -20,6 +20,10 @@ namespace terrain
         BeforeJournalDelete,  // patch durable, journal still present
         CompactionCopy,       // copying a tile record into the compaction temp
         BeforeReplace,        // temp file complete and flushed, replacement not started
+
+        // VK-1646. The VFTL sidecar's half of a two-file commit.
+        SidecarWrite,                    // writing the .vfterrainlayers temp
+        BetweenTerrainAndSidecarReplace, // VFTR committed, sidecar temp not yet renamed over
     };
 
     struct TerrainSaveFault

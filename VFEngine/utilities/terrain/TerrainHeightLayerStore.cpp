@@ -35,6 +35,20 @@ namespace terrain
         return bases.emplace(coord, std::move(block)).first->second;
     }
 
+    BaseHeightBlock& TerrainHeightLayerStore::adoptBase(
+        const TileCoord& coord, std::vector<float>&& seed, uint32_t vertexCount)
+    {
+        auto it = bases.find(coord);
+        if (it != bases.end())
+            return it->second; // same one-shot rule as the copying overload
+
+        BaseHeightBlock block;
+        block.heights = std::move(seed);
+        block.vertexCount = vertexCount;
+        block.dirty = false;
+        return bases.emplace(coord, std::move(block)).first->second;
+    }
+
     void TerrainHeightLayerStore::eraseBase(const TileCoord& coord)
     {
         bases.erase(coord);
@@ -61,9 +75,13 @@ namespace terrain
             it->second.dirty = false;
     }
 
-    void TerrainHeightLayerStore::addLayer(HeightLayerRecord record)
+    bool TerrainHeightLayerStore::addLayer(HeightLayerRecord record)
     {
+        if (editingLocked)
+            return false;
+
         stack.push_back(std::move(record));
+        return true;
     }
 
     bool TerrainHeightLayerStore::removeLayer(uint64_t id)
@@ -137,6 +155,16 @@ namespace terrain
                   [](const TileCoord& a, const TileCoord& b)
                   { return a.z != b.z ? a.z < b.z : a.x < b.x; });
         return result;
+    }
+
+    HeightLayerTileEval makeSplineCorridorEval(SplineCorridorLayerParams params)
+    {
+        return [params = std::move(params)](
+                   const TileCoord& coord, const TerrainTileConfig& config,
+                   const std::vector<float>& in, std::vector<float>& out)
+        {
+            applySplineCorridorToTile(coord, config, params.samples, params.corridor, in, out);
+        };
     }
 
     void composeTileHeights(

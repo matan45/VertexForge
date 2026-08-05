@@ -417,9 +417,19 @@ namespace services
         static bool anyTileCovered(terrain::TerrainGrid* grid,
                                    const std::vector<terrain::TileCoord>& coords);
 
-        // Logs once per save when reserved height layers exist, because VK-1645 keeps them in RAM
-        // only -- VFTR persists the composite and the stack is lost on reload until VK-1646.
+        // Logs once per save when reserved height layers exist but editing is locked, i.e. when
+        // this save cannot re-persist them (VK-1646).
         static void warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid);
+
+        // VK-1646. Resolves the `.vfterrainlayers` sidecar for a terrain being loaded and applies
+        // the documented outcome: load the bases and stack when the pair matches, otherwise leave
+        // the store empty and lock layer authoring so the flattened terrain still opens.
+        //
+        // Runs after the header is read and before any tile is, so coverage is settled before
+        // anything can sculpt.
+        static void loadHeightLayerSidecar(const std::string& path,
+                                           const terrain::TerrainFileHeader& header,
+                                           terrain::TerrainGrid& grid);
 
         // Marks every tile one layer covers, plus their rings, derived-stale. Does NOT recompose:
         // callers that are about to mutate the stack must mark first, mutate, then recompose,

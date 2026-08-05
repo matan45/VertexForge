@@ -700,6 +700,15 @@ namespace gameExport
 			// Skip source scripts and project files
 			if (ext == ".mt" || ext == ".vfproj") continue;
 
+			// VK-1646: `.vfterrainlayers` is authoring state — a terrain's authoritative base
+			// heights and its reserved layer stack. The runtime only ever consumes the flattened
+			// heights already inside the `.vfterrain`, and a fully covered map's sidecar runs to
+			// tens of megabytes, so shipping it would be pure weight.
+			//
+			// The terrain's HAS_EDIT_LAYER_SIDECAR flag stays set in the packed file; the loader
+			// treats a missing sidecar as expected in archive mode rather than as damage.
+			if (ext == ".vfterrainlayers") continue;
+
 			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
 			std::string archivePath = "Assets/" + relativePath.generic_string();
 

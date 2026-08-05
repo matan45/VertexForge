@@ -16,6 +16,7 @@
 namespace terrain
 {
     class TerrainGrid;
+    class TerrainHeightLayerStore;
 
     static constexpr std::array<char, 4> TERRAIN_MAGIC = {'V', 'F', 'T', 'R'};
     static constexpr uint32_t TERRAIN_FORMAT_VERSION_MAJOR = 2;
@@ -41,6 +42,13 @@ namespace terrain
         HAS_HOLE_MASK     = 1 << 3,
         HAS_STREAMING_CONFIG = 1 << 4,
         HAS_COMPRESSED_DATA  = 1 << 5,
+        // VK-1646. A `<path>.vfterrainlayers` sidecar carries this terrain's authoritative base
+        // heights and reserved layer stack. The bit changes nothing about how the tiles below are
+        // read — VFTR still holds the flattened composite — it only tells a loader that layer
+        // AUTHORING depends on a second file, so a missing or mismatched one is worth a diagnostic
+        // instead of being invisible. Deliberately does not alter the header layout, so a file
+        // with it set stays byte-compatible with VFTR 2.5.0.
+        HAS_EDIT_LAYER_SIDECAR = 1 << 6,
         HAS_CAVE_DATA        = 1 << 7,
     };
 
@@ -75,7 +83,13 @@ namespace terrain
         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(float) + sizeof(float);
     inline constexpr uint64_t TERRAIN_HEADER_STREAMING_BLOCK_SIZE =
         sizeof(uint8_t) + sizeof(float) + sizeof(float) + sizeof(int32_t) + sizeof(int32_t);
-    static_assert(TERRAIN_HEADER_PHYSICS_BLOCK_SIZE == 10 && TERRAIN_HEADER_STREAMING_BLOCK_SIZE == 17,
+    // VK-1646. Present only when HAS_EDIT_LAYER_SIDECAR is set: the opaque id that binds this
+    // terrain to its `.vfterrainlayers` sidecar. Deliberately in the flag-gated tail rather than
+    // the fixed prefix, so a terrain without layers is byte-identical to one this build's
+    // predecessor wrote and no version bump is needed.
+    inline constexpr uint64_t TERRAIN_HEADER_EDIT_LAYER_BLOCK_SIZE = sizeof(uint64_t);
+    static_assert(TERRAIN_HEADER_PHYSICS_BLOCK_SIZE == 10 && TERRAIN_HEADER_STREAMING_BLOCK_SIZE == 17 &&
+                  TERRAIN_HEADER_EDIT_LAYER_BLOCK_SIZE == 8,
                   "VFTR optional header blocks changed — update every reader that seeks past them");
 
     struct TerrainPhysicsConfig
@@ -122,6 +136,22 @@ namespace terrain
 
         TerrainPhysicsConfig physicsConfig;
         TerrainStreamingConfig streamingConfig;
+
+        // VK-1646. An opaque 64-bit id, regenerated every time this terrain's `.vfterrainlayers`
+        // sidecar is (re)written and stamped into both files. Meaningful only when
+        // HAS_EDIT_LAYER_SIDECAR is set.
+        //
+        // A NONCE, not a content hash. Two existing paths rewrite a terrain's bytes without
+        // changing a single height — compaction relocates every record
+        // (TerrainSerializerCompact.cpp) and a terrain-material rename splices a new path into the
+        // header and shifts every offset (AssetReferenceScanner::updateTerrainFile). A hash over
+        // file bytes would call both of those "stale" and cost the artist their entire layer stack
+        // for renaming a material. Both copy the header through verbatim, so an id survives them
+        // for free — which is the whole reason it lives here rather than being derived.
+        //
+        // Random rather than a counter: a counter collides after a restore from backup, where two
+        // different generations legitimately share a number.
+        uint64_t editLayerGenerationId = 0;
     };
 
     // Serialized size of the header, which is also the index table offset: the format does not
@@ -136,7 +166,9 @@ namespace terrain
                (hasFlag(header.flags, TerrainFormatFlags::HAS_PHYSICS_DATA)
                     ? TERRAIN_HEADER_PHYSICS_BLOCK_SIZE : 0) +
                (hasFlag(header.flags, TerrainFormatFlags::HAS_STREAMING_CONFIG)
-                    ? TERRAIN_HEADER_STREAMING_BLOCK_SIZE : 0);
+                    ? TERRAIN_HEADER_STREAMING_BLOCK_SIZE : 0) +
+               (hasFlag(header.flags, TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR)
+                    ? TERRAIN_HEADER_EDIT_LAYER_BLOCK_SIZE : 0);
     }
 
     struct TileIndexEntry
@@ -287,6 +319,21 @@ namespace terrain
         std::string materialPath;
         TerrainPhysicsConfig physicsConfig;
         TerrainStreamingConfig streamingConfig;
+
+        // VK-1646. When this is non-null and non-empty the save becomes a two-file commit: it also
+        // writes `<path>.vfterrainlayers` and sets HAS_EDIT_LAYER_SIDECAR. Null (or empty) keeps
+        // the pre-VK-1646 behaviour exactly, including deleting a sidecar left over from a stack
+        // the artist has since emptied.
+        //
+        // Passed rather than read off params.grid so a caller can save a terrain without also
+        // committing to persisting its authoring state — the compaction and test paths both do.
+        const TerrainHeightLayerStore* heightLayers = nullptr;
+
+        // asset::AssetGUID::getValue() of the owning .vfterrain, stamped into the sidecar so a
+        // copied or renamed asset can be told apart from the one the sidecar was written for.
+        // Zero when the caller has no GUID yet; the sidecar records it as "unknown" and the load
+        // path treats a zero on either side as "do not compare".
+        uint64_t terrainGuid = 0;
     };
 
     struct TerrainIncrementalSaveParams
@@ -304,6 +351,12 @@ namespace terrain
         std::string materialPath;
         TerrainPhysicsConfig physicsConfig;
         TerrainStreamingConfig streamingConfig;
+
+        // VK-1646, same contract as TerrainSaveParams. Adding or removing the sidecar resizes the
+        // header, so either transition is refused as NeedsFullSave; keeping one is free, because
+        // only the id's VALUE changes and the block is already there.
+        const TerrainHeightLayerStore* heightLayers = nullptr;
+        uint64_t terrainGuid = 0;
     };
 
     class VF_TERRAIN_API TerrainSerializer

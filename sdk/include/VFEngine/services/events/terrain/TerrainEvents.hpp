@@ -169,6 +169,17 @@ namespace events::terrain
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
     };
 
+    // VK-1646. True when this terrain claimed a `.vfterrainlayers` sidecar that could not be
+    // loaded — missing, corrupt, or written for a different generation of the terrain file. The
+    // terrain still renders from its flattened heights; only layer authoring is refused.
+    //
+    // A query rather than a TerrainComponent field on purpose: TerrainComponent is consumed across
+    // Graphics, Serialization and World, and this concerns the editor alone.
+    struct IsHeightLayerEditingLockedQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "IsHeightLayerEditingLocked"; }
+    };
+
     struct PrepareTerrainSaveCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;

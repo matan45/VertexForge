@@ -1,5 +1,6 @@
 #include "TerrainSerializer.hpp"
 #include "TerrainFileAccess.hpp"
+#include "TerrainLayerSidecar.hpp"
 #include "TerrainSaveFaultInjection.hpp"
 #include "TerrainSaveJournal.hpp"
 #include "../print/Log.hpp"
@@ -34,6 +35,7 @@ namespace terrain
             const auto location = locateTerrainFile(std::string(path));
             return location.has_value() && location->baseOffset != 0;
         }
+
     }
 
     TerrainRecoveryResult TerrainSerializer::recoverPending(std::string_view path)
@@ -51,6 +53,14 @@ namespace terrain
         const fs::path journalPath = detail::terrainJournalPath(live);
         const fs::path tmpPath = terrainTempPath(live);
         std::error_code ec;
+
+        // VK-1646. A sidecar temporary only ever exists between "both files written" and "both
+        // files committed". Whichever side of that window the crash fell on, the temp is now
+        // describing a generation no live file is guaranteed to be, so it is swept unconditionally
+        // — never promoted. The committed pair is the truth, and if they disagree the load path's
+        // stale case already covers it.
+        fs::remove(terrainTempPath(terrainLayerSidecarPath(live)), ec);
+        ec.clear();
 
         detail::TerrainJournalRecord record;
         const auto state = detail::readTerrainJournal(journalPath, record);
@@ -352,6 +362,11 @@ namespace terrain
                 return false;
             }
 
+            // VK-1646 needs nothing here. Compaction relocates every tile record but re-emits the
+            // header verbatim, so editLayerGenerationId comes through untouched and the sidecar
+            // stays bound. That is precisely why the binding is an opaque id rather than a hash of
+            // the file's bytes: a hash would call a perfectly good sidecar stale after a pure
+            // byte-shuffle, and cost the artist their layer stack for reclaiming disk space.
             return resource::replaceFileAtomically(tmpPath, live);
         }
         catch (const std::exception& e)

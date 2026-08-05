@@ -107,6 +107,12 @@ namespace terrain
             outHeader.streamingConfig.maxUnloadsPerFrame = readLE<int32_t>(file);
         }
 
+        // VK-1646. Consuming this is what leaves the stream on the index table: readHeaderLocked
+        // takes the position AFTER this function as indexTableOffset, so skipping the block would
+        // shift every tile offset by eight bytes.
+        if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR))
+            outHeader.editLayerGenerationId = readLE<uint64_t>(file);
+
         return file.good();
     }
 
