@@ -218,10 +218,17 @@ TEST_SUITE("TerrainSerializerIncremental")
 
     TEST_CASE("an incremental save preserves header flag bits it does not know about")
     {
-        // Bit 6 is reserved for HAS_EDIT_LAYER_SIDECAR. Assigning computeFlags()' answer wholesale
-        // would silently drop it, and the sidecar it marks would become an orphan.
+        // Assigning computeFlags()' answer wholesale would silently drop any bit it does not know
+        // about, so mergeIncrementalFlags() unions instead. That guarantee is what let VK-1646
+        // claim bit 6 without VK-1644 having to anticipate it.
+        //
+        // Deliberately NOT bit 6 any more: that is now HAS_EDIT_LAYER_SIDECAR, which gates an
+        // 8-byte header block. Setting it in the raw bytes without also inserting the block would
+        // move the index table out from under the reader — which is a fact about the format, not
+        // about flag preservation. Bits 0-7 are all assigned, so the next genuinely unknown one is
+        // bit 8.
         IncrementalTerrainFixture fixture;
-        constexpr uint32_t reservedBit = 1u << 6;
+        constexpr uint32_t reservedBit = 1u << 8;
         constexpr uint64_t flagsFieldOffset = 4 + 3 * sizeof(uint32_t);
 
         uint32_t onDiskFlags = 0;
