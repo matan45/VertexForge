@@ -185,7 +185,12 @@ TEST_SUITE("TerrainSerializerIncremental")
         IncrementalTerrainFixture fixture;
         REQUIRE(hasFlag(fixture.snapshot.header.flags, terrain::TerrainFormatFlags::HAS_CAVE_DATA));
 
-        const auto* untouchedEntry = findTerrainTestEntry(fixture.snapshot.index, fixture.coords[0]);
+        // Copied, not pointed at — the same idiom as every other test here. refresh() below starts
+        // with `snapshot = TerrainFileSnapshot{}`, which frees the vector this entry lives in, so a
+        // pointer taken now would dangle by the time it is compared. It read whatever the allocator
+        // had since put there, which for a long time happened to be the original bytes.
+        const auto beforeIndex = fixture.snapshot.index;
+        const auto* untouchedEntry = findTerrainTestEntry(beforeIndex, fixture.coords[0]);
         REQUIRE(untouchedEntry != nullptr);
         REQUIRE(untouchedEntry->caveSdfDataOffset != 0);
 
