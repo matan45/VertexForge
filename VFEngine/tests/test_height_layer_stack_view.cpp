@@ -75,9 +75,19 @@ TEST_SUITE("HeightLayerStackView")
             CHECK(services::selectionAfterDelete(stack, 999, 999) == 999);
         }
 
-        SUBCASE("an empty stack cannot select anything")
+        SUBCASE("an empty stack is just the unknown-id case, not a special one")
         {
-            CHECK(services::selectionAfterDelete({}, 11, 11) == 0);
+            // The selection is returned UNCHANGED rather than cleared. An empty stack means the
+            // delete found nothing to delete, and this function's whole contract is "what moves
+            // when `deletedId` leaves `stack`" — if it never left, nothing moves.
+            //
+            // Clearing here instead would be a second, contradictory rule for a case the panel
+            // never reaches: it only calls this while actually deleting a row it is looking at,
+            // and refresh() independently drops a selection whose layer is gone.
+            CHECK(services::selectionAfterDelete({}, 11, 11) == 11);
+
+            // Deleting the last REAL row is the case that clears the selection, and it is
+            // covered above by "deleting the only row leaves nothing selected".
         }
 
         SUBCASE("repeatedly deleting the selection walks down and then stops")

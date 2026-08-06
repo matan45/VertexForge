@@ -91,6 +91,34 @@ namespace
         UndoCaptureGuard& operator=(const UndoCaptureGuard&) = delete;
     };
 
+    // Destroys the terrain at the end of each run, BEFORE the service that owns its grid.
+    //
+    // Load-bearing, not politeness. createTerrain puts a terrain entity AND one entity per tile
+    // into the process-global EntityRegistry (TerrainCreationOps.cpp), and ~TerrainService only
+    // unregisters handlers — it does not remove them. doctest re-executes a TEST_CASE body once
+    // per SUBCASE, so without this every iteration left another terrain behind whose components
+    // referenced a grid the previous iteration had already freed. That is what crashed here: a
+    // SIGSEGV outside any subcase, in the prologue of the second run.
+    //
+    // The editor never hits it — one TerrainService lives for the process.
+    class ScopedTerrain
+    {
+    public:
+        ScopedTerrain(services::TerrainService& owner, services::EntityHandle terrain)
+            : service(owner), entity(terrain)
+        {
+        }
+
+        ~ScopedTerrain() { service.deleteTerrain(entity); }
+
+        ScopedTerrain(const ScopedTerrain&) = delete;
+        ScopedTerrain& operator=(const ScopedTerrain&) = delete;
+
+    private:
+        services::TerrainService& service;
+        services::EntityHandle entity;
+    };
+
     // A 3x1 strip of Low-resolution tiles: wide enough that a corridor running along X crosses
     // more than one tile and therefore exercises seams, small enough to stay fast.
     services::TerrainCreationData stripTerrain()
@@ -186,8 +214,18 @@ TEST_SUITE("TerrainHeightLayerStackOps")
         UndoLog undoLog;
         UndoCaptureGuard undoGuard(undoLog);
 
+        // NOTE: this is the first test in the suite to build a MULTI-tile terrain, and that is
+        // what exposed the missing uninitialized-JobSystem guard in JobSystem::parallelFor.
+        // createGrid's LOD pass passes minBatchSize 1, so a one-tile terrain took the inline fast
+        // path while three tiles went to a scheduler the preceding tests had shut down. Keep the
+        // tile count above one: it is the only coverage the engine has for that path.
         const services::EntityHandle terrainEntity = service.createTerrain(stripTerrain());
         REQUIRE(terrainEntity.isValid());
+
+        // Declared here so it is destroyed BEFORE `service`, while the grid it must clean up
+        // still exists.
+        ScopedTerrain terrainGuard(service, terrainEntity);
+
         REQUIRE(service.getAllLoadedTiles().size() == 3);
 
         // A fresh terrain has no sidecar to fail to load, so authoring must be open.
@@ -453,6 +491,10 @@ TEST_SUITE("TerrainHeightLayerStackOps")
             CHECK(copy[0].affectedTileCount > 0);
         }
 
-        dispatcher.clear();
+        // No trailing dispatcher.clear(): the teardown order that matters is ScopedTerrain ->
+        // UndoCaptureGuard -> splineService -> service, and each of those releases its own
+        // handlers. Clearing here would instead have run deleteTerrain with the handler table
+        // already empty. The next case that needs a clean table clears on the way IN, which is
+        // the convention test_terrain_layer_weight_query.cpp follows.
     }
 }
