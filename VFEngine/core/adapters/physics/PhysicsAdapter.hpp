@@ -112,6 +112,8 @@ namespace core
                                      const services::TerrainTileColliderInfo& tile) override;
         void removeTerrainTileCollider(services::EntityHandle entity,
                                         int32_t tileX, int32_t tileZ) override;
+        void setTerrainColliderMaterial(services::EntityHandle entity, float friction, float restitution,
+                                         uint32_t collisionLayer) override;
 
         void submitAsyncTerrainTileCollider(services::EntityHandle entity,
                                              const services::TerrainTileColliderInfo& tile,

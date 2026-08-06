@@ -33,6 +33,7 @@ namespace windows
 
         bool sculptDragging = false;
         bool paintDragging = false;
+        bool holeDragging = false;   // VK-1615: hole strokes had no drag latch at all
         bool caveDragging = false;
         bool vegetationDragging = false;
         bool meshBrushDragging = false;
@@ -74,5 +75,9 @@ namespace windows
         void updateFoliageBrushCursorUV(glm::vec2 viewportPos, glm::vec2 viewportSize);
         void handleFoliageBrush();
         void handleSplineTool();
+
+        // VK-1621: which control point the spline tool is dragging, -1 when none. Grabbing an
+        // existing point is what turns the tool from append-only into an editor.
+        int32_t draggedSplinePoint = -1;
     };
 }

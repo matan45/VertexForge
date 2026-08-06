@@ -60,12 +60,26 @@ namespace render::gpudriven
     // the edit-mode pbrCache fallback in MergedMeshBuffer::populateObjectData.
     using ShadingResolver = std::function<std::pair<uint8_t, uint8_t>(const std::string& materialPath)>;
 
+    // VK-1620/VK-1648: the same defaultMaterialPath fallback as ShadingResolver, for mesh-into-
+    // terrain blending. Without it a blend authored on the mesh's own material rather than on a
+    // per-submesh override applies in the editor viewport (MergedMeshBuffer::populateObjectData
+    // reads pbrCache) but not in play mode or an exported game, where the object-streaming path
+    // sees only `subMat` — the prop's base dissolves into the ground until you press Play.
+    struct TerrainBlendParams
+    {
+        bool blendToTerrain = false;
+        float band = 0.0f;
+        float contrast = 0.0f;
+    };
+    using TerrainBlendResolver = std::function<TerrainBlendParams(const std::string& materialPath)>;
+
     struct ObjectResolvers
     {
         TextureIndexResolver textureResolver;
         ShaderGroupResolver shaderGroupResolver;
         BoneOffsetResolver boneOffsetResolver;
         ShadingResolver shadingResolver;
+        TerrainBlendResolver terrainBlendResolver;
         float time = 0.0f;
         glm::vec3 cameraPosition{0.0f};
     };

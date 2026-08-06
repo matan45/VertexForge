@@ -3,6 +3,8 @@
 #include "../../data/EntityHandle.hpp"
 #include "../../data/TerrainData.hpp"
 #include "terrain/TerrainHeightAtResult.hpp"
+#include "terrain/TerrainLayerWeightResult.hpp"
+#include "asset/AssetRef.hpp"
 #include <glm/glm.hpp>
 #include <optional>
 #include <vector>
@@ -107,6 +109,53 @@ namespace events::terrain
         std::string_view getName() const override { return "LoadWeightMaps"; }
     };
 
+    // VK-1614 world-anchored wetness/snow mask (R = wetness, G = snow), stored as a `.vfImage`.
+    // Create snapshots the terrain's current world bounds into the mask's AUTHORED rect, once.
+    struct CreateSurfaceMaskCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        uint32_t resolution = 1024;
+
+        std::string_view getName() const override { return "CreateSurfaceMask"; }
+    };
+
+    struct LoadSurfaceMaskCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "LoadSurfaceMask"; }
+    };
+
+    struct SaveSurfaceMaskCommand : ICommand<bool>
+    {
+        services::EntityHandle terrainEntity;
+        std::string path;
+
+        std::string_view getName() const override { return "SaveSurfaceMask"; }
+    };
+
+    // VK-1648. Every surface-mask event carries its terrain, because the service holds ONE mask
+    // and remembers which terrain owns it (TerrainService::surfaceMaskOwner). Without the entity
+    // the panel drawn for terrain B reports and clears terrain A's mask — including blanking A's
+    // TerrainComponent.surfaceMaskPath, which loses the artist's painted puddles on the next scene
+    // save. Handlers no-op when the entity is not the current owner.
+    struct ClearSurfaceMaskCommand : ICommand<>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "ClearSurfaceMask"; }
+    };
+
+    // Has a mask been created/loaded this session FOR THIS TERRAIN? Drives the editor's
+    // paint-target availability.
+    struct HasSurfaceMaskQuery : IQuery<bool>
+    {
+        services::EntityHandle terrainEntity;
+
+        std::string_view getName() const override { return "HasSurfaceMask"; }
+    };
+
     struct SaveTerrainCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;
@@ -119,6 +168,7 @@ namespace events::terrain
     struct LoadTerrainCommand : ICommand<services::EntityHandle>
     {
         std::string path;
+        asset::AssetRef terrainRef;
 
         std::string_view getName() const override { return "LoadTerrain"; }
     };
@@ -128,6 +178,39 @@ namespace events::terrain
         bool locked = false;
 
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
+    };
+
+    // VK-1648. Applies whatever a finished save worker parked for the main thread — the component's
+    // savePath/terrainRef/bounds, and the TerrainSavedNotification. SaveTerrainCommand is dispatched
+    // on a JobSystem worker (TerrainDrawer::startSave), and TerrainComponent is main-thread state:
+    // terrainRef owns a std::string that ScenePersistenceService and SceneSerializeLights resolve
+    // while a save is in flight. Dispatch this from the main thread once the save future is ready.
+    struct FlushTerrainSaveResultsCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "FlushTerrainSaveResults"; }
+    };
+
+    // VK-1646. True when this terrain claimed a `.vfterrainlayers` sidecar that could not be
+    // loaded — missing, corrupt, or written for a different generation of the terrain file. The
+    // terrain still renders from its flattened heights; only layer authoring is refused.
+    //
+    // A query rather than a TerrainComponent field on purpose: TerrainComponent is consumed across
+    // Graphics, Serialization and World, and this concerns the editor alone.
+    struct IsHeightLayerEditingLockedQuery : IQuery<bool>
+    {
+        std::string_view getName() const override { return "IsHeightLayerEditingLocked"; }
+    };
+
+    // VK-1647. What a wide layer invalidation still owes. Polled per frame rather than pushed,
+    // matching GetBakeProgressQuery and the volumetric bake: the work is drained by the terrain
+    // tick, so there is no natural moment to publish from and a poll cannot fall behind.
+    //
+    // Hiding, showing, reordering or deleting a layer over a large map invalidates its whole
+    // affected set; the recompose itself is synchronous, but the geometry those tiles need is
+    // rebuilt eight per frame, so a 1,000-tile stack takes seconds of wall clock to settle.
+    struct GetHeightLayerRecomposeProgressQuery : IQuery<services::HeightLayerRecomposeProgress>
+    {
+        std::string_view getName() const override { return "GetHeightLayerRecomposeProgress"; }
     };
 
     struct PrepareTerrainSaveCommand : ICommand<bool>
@@ -231,6 +314,21 @@ namespace events::terrain
         float worldX = 0.0f;
         float worldZ = 0.0f;
         std::string_view getName() const override { return "GetTerrainHeightAt"; }
+    };
+
+    struct GetTerrainLayerWeightsAtQuery : IQuery<::terrain::TerrainLayerWeightsAtResult>
+    {
+        float worldX = 0.0f;
+        float worldZ = 0.0f;
+        std::string_view getName() const override { return "GetTerrainLayerWeightsAt"; }
+    };
+
+    struct GetTerrainLayerWeightsBatchQuery
+        : IQuery<std::vector<::terrain::TerrainLayerWeightsAtResult>>
+    {
+        // World-space XZ positions. Results preserve this vector's size and order.
+        std::vector<glm::vec2> positions;
+        std::string_view getName() const override { return "GetTerrainLayerWeightsBatch"; }
     };
 
     struct TerrainGeometryResult

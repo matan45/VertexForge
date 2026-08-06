@@ -3,6 +3,7 @@
 #include "../render/RenderPassHandler.hpp"
 #include "../render/DebugRenderer.hpp"
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
+#include "../render/gpudriven/brush/HydraulicErosionPipeline.hpp"
 
 namespace controllers
 {
@@ -212,6 +213,51 @@ namespace controllers
         constants._padTerrace = 0.0f;
 
         return brushComputePipeline->applyBrush(heightData, constants);
+    }
+
+    bool OffScreenController::applyHydraulicErosionGPU(
+        std::vector<float>& field,
+        const std::vector<uint32_t>& validMask,
+        const terrain::HydraulicGPUParams& params)
+    {
+        if (!hydraulicErosionPipeline)
+        {
+            hydraulicErosionPipeline = std::make_unique<render::gpudriven::HydraulicErosionPipeline>(device);
+            hydraulicErosionPipeline->init();
+        }
+
+        render::gpudriven::HydraulicErosionPushConstants constants{};
+        constants.regionOriginWorld = params.regionOriginWorld;
+        constants.brushCenter = params.brushCenter;
+        constants.regionWidth = params.regionWidth;
+        constants.regionHeight = params.regionHeight;
+        constants.passIndex = 0;
+        constants.falloffType = static_cast<uint32_t>(params.falloff);
+        constants.shapeType = static_cast<uint32_t>(params.shape);
+        constants.terrainParity = 0;
+        constants.sedimentParity = 0;
+        constants.cellCount = params.regionWidth * params.regionHeight;
+        constants.cellSize = params.cellSize;
+        constants.brushRadius = params.brushRadius;
+        constants.dt = params.dt;
+        constants.rainAmount = params.rainAmount;
+        constants.sedimentCapacity = params.sedimentCapacity;
+        constants.dissolveRate = params.dissolveRate;
+        constants.depositRate = params.depositRate;
+        constants.evaporation = params.evaporation;
+        constants.gravity = params.gravity;
+        constants.minTiltSin = params.minTiltSin;
+        constants.maxVelocity = params.maxVelocity;
+        constants.maxStepDelta = params.maxStepDelta;
+        constants.minWater = params.minWater;
+        constants.smoothing = params.smoothing;
+        constants.talusThreshold = params.talusThreshold;
+        constants.strengthScale = params.strengthScale;
+        constants.minHeight = params.minHeight;
+        constants.maxHeight = params.maxHeight;
+
+        return hydraulicErosionPipeline->simulate(field, validMask, constants,
+                                                  params.iterations, params.thermalInterval);
     }
 
     void OffScreenController::setStampData(

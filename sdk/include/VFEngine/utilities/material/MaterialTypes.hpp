@@ -1,5 +1,6 @@
 #pragma once
 #include "ToonProfile.hpp"
+#include "TerrainBlendCurve.hpp" // VK-1620: blend band/contrast ranges + defaults
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -502,6 +503,23 @@ namespace material
         std::string gpuDrivenFallbackReason;
 
         bool needsRecompile = true;
+
+        // Mesh-into-terrain blending (VK-1620). When `blendToTerrain` is true, pixels of this
+        // material's meshes within `terrainBlendBand` metres above the terrain surface fade their
+        // albedo, ORM and normal toward the terrain's baked RVT sample, so props melt into the
+        // ground instead of meeting it at a hard line. `terrainBlendContrast` shapes the falloff.
+        //
+        // Requires the RVT world-height plane (VirtualTextureSettings::rvtWorldHeight); with it off
+        // the flag is inert rather than wrong. Serialized only when enabled so materials that do not
+        // use it stay byte-identical — the same rule receiveWind above follows, and the reason
+        // neither of them bumps MATERIAL_FORMAT_VERSION.
+        //
+        // APPENDED AT THE END ON PURPOSE — this struct is included by the Serialization DLL and by
+        // several static libs, so a mid-struct insertion shifts every following member for anything
+        // not rebuilt. See the matching note on ExtractedPBRValues. Keep new fields here.
+        bool blendToTerrain = false;
+        float terrainBlendBand = DEFAULT_TERRAIN_BLEND_BAND;
+        float terrainBlendContrast = DEFAULT_TERRAIN_BLEND_CONTRAST;
     };
 
     inline bool endsWithIgnoreCase(std::string_view value, std::string_view suffix)

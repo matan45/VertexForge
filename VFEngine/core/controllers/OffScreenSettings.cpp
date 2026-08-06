@@ -75,6 +75,14 @@ namespace controllers {
 		return offScreenController->applyBrushGPU(heightData, params);
 	}
 
+	bool OffScreen::applyHydraulicErosionGPU(
+		std::vector<float>& field,
+		const std::vector<uint32_t>& validMask,
+		const terrain::HydraulicGPUParams& params)
+	{
+		return offScreenController->applyHydraulicErosionGPU(field, validMask, params);
+	}
+
 	void OffScreen::setStampData(
 		const std::vector<float>& heights,
 		uint32_t width, uint32_t height)

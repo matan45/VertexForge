@@ -21,6 +21,7 @@ namespace editor::materialeditor
         aoPath.clear();
         roughnessPath.clear();
         metallicPath.clear();
+        heightPath.clear();
         outputPath.clear();
         errorMessage.clear();
         progress = 0.0f;
@@ -40,7 +41,7 @@ namespace editor::materialeditor
         if (ImGui::BeginPopupModal("Pack ORM Texture", &showDialog, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::TextWrapped(
-                "Pack textures into a single ORME texture (R=AO, G=Roughness, B=Metallic, A=Emissive). All textures are optional - provide at least one. Missing textures use defaults.");
+                "Pack textures into a single ORM texture (R=AO, G=Roughness, B=Metallic, A=Height). All textures are optional - provide at least one. Missing textures use defaults.");
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
@@ -105,6 +106,34 @@ namespace editor::materialeditor
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Clear")) metallicPath.clear();
+            }
+            ImGui::PopID();
+
+            // VK-1609: height texture selection. Terrain height-blended layer compositing reads
+            // per-layer height from ORM alpha, which is why it costs no extra texture fetch.
+            ImGui::Text("Height - default: 128 (neutral, no height blending):");
+            ImGui::PushID("height");
+            {
+                std::string display = heightPath.empty()
+                                          ? "(None - uses default)"
+                                          : std::filesystem::path(heightPath).filename().string();
+                ImGui::InputText("##path", &display[0], display.size(), ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::Button("Browse..."))
+                {
+                    std::string path = fileDialog.openFileDialog(filters);
+                    if (!path.empty())
+                    {
+                        heightPath = path;
+                        // The vendored BC7 encoder emits mode 6 only - one 4-bit index shared
+                        // across RGBA - so a height signal uncorrelated with AO/roughness/metallic
+                        // quantizes badly AND drags RGB down with it. Steer to Uncompressed by
+                        // default; the artist can still override.
+                        compressionMode = importConfig::TextureCompressionMode::Uncompressed;
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) heightPath.clear();
             }
             ImGui::PopID();
 
@@ -174,6 +203,14 @@ namespace editor::materialeditor
                     {
                         compressionQuality = static_cast<importConfig::TextureCompressionQuality>(qualityIndex);
                     }
+
+                    if (!heightPath.empty())
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+                                           "BC7 shares one index across RGBA - a height channel\n"
+                                           "uncorrelated with AO/roughness/metallic will band and\n"
+                                           "degrade RGB. Prefer Uncompressed for height-bearing ORM.");
+                    }
                 }
             }
             ImGui::Unindent();
@@ -183,7 +220,8 @@ namespace editor::materialeditor
             ImGui::Spacing();
 
             // Buttons
-            bool hasAtLeastOneTexture = !aoPath.empty() || !roughnessPath.empty() || !metallicPath.empty();
+            bool hasAtLeastOneTexture = !aoPath.empty() || !roughnessPath.empty() || !metallicPath.empty()
+                                        || !heightPath.empty();
             bool canPack = hasAtLeastOneTexture && !outputPath.empty() && !packInProgress;
 
             if (!canPack) ImGui::BeginDisabled();
@@ -213,6 +251,7 @@ namespace editor::materialeditor
         input.aoPath = aoPath;
         input.roughnessPath = roughnessPath;
         input.metallicPath = metallicPath;
+        input.heightPath = heightPath;
         input.outputPath = outputPath;
 
         // Decompress compressed inputs (BC7) before channel packing

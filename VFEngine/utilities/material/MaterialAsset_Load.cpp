@@ -427,6 +427,14 @@ namespace material
             material.toonProfile = j.value("toonProfile", "");
             // Foliage wind (VK-1580)
             material.receiveWind = j.value("receiveWind", false);
+            // Mesh-into-terrain blending (VK-1620). Clamped INTO the valid ranges, never to 0 — a
+            // contrast of 0 would make pow() return 1 across the whole band and cut hard at its
+            // edge, i.e. the opposite of what the control means.
+            material.blendToTerrain = j.value("blendToTerrain", false);
+            material.terrainBlendBand =
+                clampTerrainBlendBand(j.value("terrainBlendBand", DEFAULT_TERRAIN_BLEND_BAND));
+            material.terrainBlendContrast =
+                clampTerrainBlendContrast(j.value("terrainBlendContrast", DEFAULT_TERRAIN_BLEND_CONTRAST));
             material.blendMode = stringToBlendMode(j.value("blendMode", "opaque"));
             material.opacity = j.value("opacity", 1.0f);
             material.alphaCutoff = j.value("alphaCutoff", 0.5f);

@@ -1,5 +1,6 @@
 #include "ConvexDecompositionSidecar.hpp"
 
+#include "AtomicFileReplace.hpp"
 #include "EndianUtils.hpp"
 #include "VirtualFileSystem.hpp"
 #include "../print/Log.hpp"
@@ -121,37 +122,6 @@ namespace resource
             return !file.fail();
         }
 
-        bool replaceFileAtomically(const std::filesystem::path& tempPath,
-                                   const std::filesystem::path& finalPath)
-        {
-            std::error_code ec;
-            const std::filesystem::path backupPath = finalPath.string() + ".bak";
-            std::filesystem::remove(backupPath, ec);
-            ec.clear();
-
-            const bool hadExisting = std::filesystem::exists(finalPath, ec);
-            if (ec)
-                return false;
-
-            if (hadExisting)
-            {
-                std::filesystem::rename(finalPath, backupPath, ec);
-                if (ec)
-                    return false;
-            }
-
-            std::filesystem::rename(tempPath, finalPath, ec);
-            if (!ec)
-            {
-                std::filesystem::remove(backupPath, ec);
-                return true;
-            }
-
-            std::error_code restoreEc;
-            if (hadExisting)
-                std::filesystem::rename(backupPath, finalPath, restoreEc);
-            return false;
-        }
     }
 
     std::filesystem::path ConvexDecompositionSidecar::sidecarPathForMesh(std::string_view meshPath)

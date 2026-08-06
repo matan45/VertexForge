@@ -1,0 +1,815 @@
+// VK-1646 — the `.vfterrainlayers` (VFTL) format itself.
+//
+// Pure format coverage: no TerrainGrid, no serializer, no service. Everything here builds a
+// TerrainHeightLayerStore by hand, round-trips it, and then damages the bytes on disk in each of
+// the ways the load contract has to tell apart. The serializer-level half — two-file commits,
+// interrupted replacements, incremental refusal — lives in test_terrain_layer_sidecar_recovery.cpp.
+
+#include <doctest.h>
+
+#include "test_terrain_serializer_fixture.hpp"
+
+#include <terrain/TerrainLayerSidecar.hpp>
+#include <terrain/TerrainHeightLayerStore.hpp>
+
+#include <resource/Crc32.hpp>
+#include <resource/EndianUtils.hpp>
+
+#include <cstring>
+#include <fstream>
+#include <string>
+#include <vector>
+
+namespace
+{
+    constexpr uint32_t SIDECAR_TEST_VERTS = 33; // Low resolution
+
+    std::vector<float> makeSidecarTestHeights(uint32_t vertexCount, float bias)
+    {
+        std::vector<float> heights(static_cast<size_t>(vertexCount) * vertexCount);
+        for (size_t i = 0; i < heights.size(); ++i)
+            heights[i] = bias + static_cast<float>(i % 97) * 0.125f;
+        return heights;
+    }
+
+    terrain::HeightLayerRecord makeSidecarTestLayer(uint64_t id, bool visible,
+                                                    const std::vector<terrain::TileCoord>& affected)
+    {
+        terrain::HeightLayerRecord record;
+        record.id = id;
+        record.visible = visible;
+        // VK-1648. Non-empty on purpose, and long enough to matter: the name sits in the record
+        // prologue, so if it were ever moved after the params the Degraded skip below would land
+        // mid-string and the NEXT record would decode as garbage. That test only discriminates
+        // while these names have length.
+        record.name = "Sidecar Layer " + std::to_string(id);
+        record.type = terrain::HeightLayerType::SplineCorridor;
+        record.spline.corridor.corridorWidth = 4.5f + static_cast<float>(id);
+        record.spline.corridor.falloffWidth = 2.25f;
+        record.spline.corridor.embankmentHeight = -0.75f;
+        record.spline.samples = {
+            glm::vec3(0.0f, 1.0f, 0.0f),
+            glm::vec3(16.0f, 1.5f, 8.0f),
+            glm::vec3(32.0f, 2.0f, 24.0f),
+        };
+        for (const terrain::TileCoord& coord : affected)
+            record.affected.insert(coord);
+        record.eval = terrain::makeSplineCorridorEval(record.spline);
+        return record;
+    }
+
+    // Two layers over three bases: enough that stack order, per-record parameters and the sparse
+    // base index all have something to get wrong.
+    void populateSidecarTestStore(terrain::TerrainHeightLayerStore& store)
+    {
+        store.addLayer(makeSidecarTestLayer(11, true, {{0, 0}, {1, 0}}));
+        store.addLayer(makeSidecarTestLayer(22, false, {{1, 0}, {1, 1}}));
+
+        store.adoptBase({0, 0}, makeSidecarTestHeights(SIDECAR_TEST_VERTS, 0.0f), SIDECAR_TEST_VERTS);
+        store.adoptBase({1, 0}, makeSidecarTestHeights(SIDECAR_TEST_VERTS, 10.0f), SIDECAR_TEST_VERTS);
+        store.adoptBase({1, 1}, makeSidecarTestHeights(SIDECAR_TEST_VERTS, 20.0f), SIDECAR_TEST_VERTS);
+    }
+
+    terrain::TerrainLayerSidecarMeta makeSidecarTestMeta(uint64_t generationId)
+    {
+        terrain::TerrainLayerSidecarMeta meta;
+        meta.terrainGuid = 0xABCDEF0123456789ull;
+        meta.generationId = generationId;
+        meta.gridMinX = -1;
+        meta.gridMinZ = -2;
+        meta.gridMaxX = 3;
+        meta.gridMaxZ = 4;
+        meta.resolution = 0;
+        meta.worldTileSize = 32.0f;
+        return meta;
+    }
+
+    terrain_test_fs::path sidecarTestPath(const ScopedTerrainTestFile& file)
+    {
+        return terrain::terrainLayerSidecarPath(file.path());
+    }
+
+    std::vector<uint8_t> readSidecarBytes(const terrain_test_fs::path& path)
+    {
+        std::ifstream in(path, std::ios::binary);
+        return std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
+                                    std::istreambuf_iterator<char>());
+    }
+
+    void writeSidecarBytes(const terrain_test_fs::path& path, const std::vector<uint8_t>& bytes)
+    {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()),
+                  static_cast<std::streamsize>(bytes.size()));
+    }
+
+    // Recomputes the whole-file checksum after a test has rewritten bytes in place. Without this
+    // every hand-edit would fail as Invalid, which would make it impossible to reach the reader's
+    // later checks at all.
+    void resealSidecar(std::vector<uint8_t>& bytes)
+    {
+        const size_t trailerOffset =
+            bytes.size() - static_cast<size_t>(terrain::TERRAIN_LAYER_TRAILER_SIZE);
+        const uint32_t crc =
+            resource::endian::toLittleEndian(resource::crc32(bytes.data(), trailerOffset));
+        std::memcpy(bytes.data() + trailerOffset, &crc, sizeof(uint32_t));
+    }
+
+    // VK-1647. Byte offset of a layer record's `order` field, from the writer's field sequence:
+    // recordByteLength(u32) id(u64) type(u32) visible(u8) order(u32) ...
+    constexpr size_t LAYER_RECORD_ORDER_OFFSET = sizeof(uint32_t) + sizeof(uint64_t)
+                                                 + sizeof(uint32_t) + sizeof(uint8_t);
+
+    uint32_t readLE32(const std::vector<uint8_t>& bytes, size_t offset)
+    {
+        uint32_t value = 0;
+        std::memcpy(&value, bytes.data() + offset, sizeof(uint32_t));
+        return resource::endian::fromLittleEndian(value);
+    }
+
+    // Rewrites the FIRST record's `order` field and re-seals BOTH checksums that guard it, so the
+    // reader reaches its permutation check instead of rejecting the edit as disk damage.
+    void setFirstRecordOrder(std::vector<uint8_t>& bytes, uint32_t order)
+    {
+        const size_t recordStart = static_cast<size_t>(terrain::TERRAIN_LAYER_HEADER_SIZE);
+        const uint32_t recordByteLength = readLE32(bytes, recordStart);
+
+        const uint32_t stored = resource::endian::toLittleEndian(order);
+        std::memcpy(bytes.data() + recordStart + LAYER_RECORD_ORDER_OFFSET, &stored,
+                    sizeof(uint32_t));
+
+        // The per-record CRC covers everything up to but not including itself.
+        const size_t coveredBytes = static_cast<size_t>(recordByteLength) - sizeof(uint32_t);
+        const uint32_t recordCrc = resource::endian::toLittleEndian(
+            resource::crc32(bytes.data() + recordStart, coveredBytes));
+        std::memcpy(bytes.data() + recordStart + coveredBytes, &recordCrc, sizeof(uint32_t));
+
+        resealSidecar(bytes);
+    }
+}
+
+// VK-1647. The two format changes: an id watermark in the header, and `order` becoming
+// authoritative on read instead of being written and discarded.
+TEST_CASE("VFTL persists the id watermark and honours stack order")
+{
+    ScopedTerrainTestFile file("sidecar-vk1647");
+    const auto path = sidecarTestPath(file);
+
+    const auto meta = makeSidecarTestMeta(0x5566778899AABBCCull);
+
+    SUBCASE("the format is 1.2.0 with an 85-byte header")
+    {
+        // Pinned here as well as by the static_assert, because the offsets rebindTerrainLayerSidecar
+        // patches are derived from this layout and a silent drift would corrupt every rebind.
+        //
+        // VK-1648 took the minor to 2 for the per-record `name`. The header is deliberately
+        // UNCHANGED by that: the name lives in the variable-length record body, so 85 and both
+        // patch offsets below still hold and the rebind path needed no work a second time.
+        CHECK(terrain::TERRAIN_LAYER_VERSION_MAJOR == 1);
+        CHECK(terrain::TERRAIN_LAYER_VERSION_MINOR == 2);
+        CHECK(terrain::TERRAIN_LAYER_VERSION_PATCH == 0);
+        CHECK(terrain::TERRAIN_LAYER_HEADER_SIZE == 85);
+
+        // Unmoved by the append, which is why the rebind path needed no change.
+        CHECK(terrain::TERRAIN_LAYER_GUID_OFFSET == 16);
+        CHECK(terrain::TERRAIN_LAYER_GENERATION_ID_OFFSET == 24);
+    }
+
+    SUBCASE("the id watermark survives a round trip")
+    {
+        terrain::TerrainHeightLayerStore source;
+        populateSidecarTestStore(source);
+
+        // addLayer already pushed it past 22; burn a few more so the stored value is not simply
+        // "one past the highest id", which a reader could otherwise fake by scanning the records.
+        source.reserveLayerId();
+        source.reserveLayerId();
+        const uint64_t expected = source.peekNextLayerId();
+        REQUIRE(expected > 23);
+
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        terrain::TerrainHeightLayerStore loaded;
+        terrain::TerrainLayerSidecarMeta readMeta;
+        REQUIRE(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+                terrain::TerrainLayerSidecarStatus::Ok);
+
+        // Without this, a reload restarts at 1 and hands out ids the sidecar has just restored --
+        // and because removeLayer/setLayerVisible resolve by first match, the next spline's undo
+        // hides the older layer instead of its own.
+        CHECK(loaded.peekNextLayerId() == expected);
+        CHECK(loaded.reserveLayerId() == expected);
+    }
+
+    SUBCASE("a reordered stack reloads in its new order")
+    {
+        terrain::TerrainHeightLayerStore source;
+        populateSidecarTestStore(source);
+        REQUIRE(source.layers()[0].id == 11);
+
+        REQUIRE(source.moveLayer(11, 1));
+        REQUIRE(source.layers()[0].id == 22);
+
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        terrain::TerrainHeightLayerStore loaded;
+        terrain::TerrainLayerSidecarMeta readMeta;
+        REQUIRE(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+                terrain::TerrainLayerSidecarStatus::Ok);
+
+        // The writer emits the live stack index as `order`, so reorder persists with no further
+        // format work -- the field VK-1646 reserved is now the one that carries it.
+        REQUIRE(loaded.layers().size() == 2);
+        CHECK(loaded.layers()[0].id == 22);
+        CHECK(loaded.layers()[1].id == 11);
+    }
+
+    SUBCASE("the reader rebuilds order from the field, not from record sequence")
+    {
+        terrain::TerrainHeightLayerStore source;
+        populateSidecarTestStore(source);
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        // Swap the two records' order fields without moving a byte of either record. A reader that
+        // still trusted file sequence would hand back 11 then 22 and never notice.
+        std::vector<uint8_t> bytes = readSidecarBytes(path);
+        const size_t firstStart = static_cast<size_t>(terrain::TERRAIN_LAYER_HEADER_SIZE);
+        const uint32_t firstLength = readLE32(bytes, firstStart);
+
+        setFirstRecordOrder(bytes, 1);
+        {
+            // ...and the second record to 0, by hand, since the helper only reaches the first.
+            const size_t secondStart = firstStart + firstLength;
+            const uint32_t secondLength = readLE32(bytes, secondStart);
+            const uint32_t stored = resource::endian::toLittleEndian(0u);
+            std::memcpy(bytes.data() + secondStart + LAYER_RECORD_ORDER_OFFSET, &stored,
+                        sizeof(uint32_t));
+
+            const size_t covered = static_cast<size_t>(secondLength) - sizeof(uint32_t);
+            const uint32_t crc = resource::endian::toLittleEndian(
+                resource::crc32(bytes.data() + secondStart, covered));
+            std::memcpy(bytes.data() + secondStart + covered, &crc, sizeof(uint32_t));
+            resealSidecar(bytes);
+        }
+        writeSidecarBytes(path, bytes);
+
+        terrain::TerrainHeightLayerStore loaded;
+        terrain::TerrainLayerSidecarMeta readMeta;
+        REQUIRE(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+                terrain::TerrainLayerSidecarStatus::Ok);
+
+        REQUIRE(loaded.layers().size() == 2);
+        CHECK(loaded.layers()[0].id == 22);
+        CHECK(loaded.layers()[1].id == 11);
+    }
+
+    SUBCASE("an order set that is not a permutation is Invalid, not silently reordered")
+    {
+        terrain::TerrainHeightLayerStore source;
+        populateSidecarTestStore(source);
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        // Both records now claim order 1: nothing says which composes first, and composition is
+        // order-dependent, so "either" would mean ground nobody authored.
+        std::vector<uint8_t> bytes = readSidecarBytes(path);
+        setFirstRecordOrder(bytes, 1);
+        writeSidecarBytes(path, bytes);
+
+        terrain::TerrainHeightLayerStore loaded;
+        terrain::TerrainLayerSidecarMeta readMeta;
+        CHECK(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("an out-of-range order is Invalid")
+    {
+        terrain::TerrainHeightLayerStore source;
+        populateSidecarTestStore(source);
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        std::vector<uint8_t> bytes = readSidecarBytes(path);
+        setFirstRecordOrder(bytes, 9999);
+        writeSidecarBytes(path, bytes);
+
+        terrain::TerrainHeightLayerStore loaded;
+        terrain::TerrainLayerSidecarMeta readMeta;
+        CHECK(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+        CHECK(loaded.empty());
+    }
+}
+
+TEST_CASE("VFTL round-trips a layer stack and its authoritative bases")
+{
+    ScopedTerrainTestFile file("sidecar-roundtrip");
+    const auto path = sidecarTestPath(file);
+
+    terrain::TerrainHeightLayerStore source;
+    populateSidecarTestStore(source);
+
+    const auto meta = makeSidecarTestMeta(0x1122334455667788ull);
+    REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+    terrain::TerrainHeightLayerStore loaded;
+    terrain::TerrainLayerSidecarMeta readMeta;
+    REQUIRE(terrain::readTerrainLayerSidecar(path, meta.generationId, readMeta, loaded) ==
+            terrain::TerrainLayerSidecarStatus::Ok);
+
+    SUBCASE("metadata survives")
+    {
+        CHECK(readMeta.terrainGuid == meta.terrainGuid);
+        CHECK(readMeta.generationId == meta.generationId);
+        CHECK(readMeta.gridMinX == meta.gridMinX);
+        CHECK(readMeta.gridMaxZ == meta.gridMaxZ);
+        CHECK(readMeta.resolution == meta.resolution);
+        CHECK(readMeta.worldTileSize == meta.worldTileSize);
+    }
+
+    SUBCASE("stack order, visibility and parameters survive")
+    {
+        REQUIRE(loaded.layers().size() == 2);
+
+        // Order is the whole point of persisting a stack: composition is order-dependent, so a
+        // reader that returned the same two layers the other way round would produce different
+        // ground from the same file.
+        CHECK(loaded.layers()[0].id == 11);
+        CHECK(loaded.layers()[1].id == 22);
+
+        CHECK(loaded.layers()[0].visible);
+        CHECK_FALSE(loaded.layers()[1].visible);
+
+        for (size_t i = 0; i < 2; ++i)
+        {
+            const auto& out = loaded.layers()[i];
+            const auto& in = source.layers()[i];
+            CHECK(out.type == terrain::HeightLayerType::SplineCorridor);
+            CHECK(out.spline.corridor.corridorWidth == in.spline.corridor.corridorWidth);
+            CHECK(out.spline.corridor.falloffWidth == in.spline.corridor.falloffWidth);
+            CHECK(out.spline.corridor.embankmentHeight == in.spline.corridor.embankmentHeight);
+            REQUIRE(out.spline.samples.size() == in.spline.samples.size());
+            for (size_t s = 0; s < out.spline.samples.size(); ++s)
+            {
+                CHECK(out.spline.samples[s].x == in.spline.samples[s].x);
+                CHECK(out.spline.samples[s].y == in.spline.samples[s].y);
+                CHECK(out.spline.samples[s].z == in.spline.samples[s].z);
+            }
+        }
+    }
+
+    SUBCASE("affected sets survive exactly")
+    {
+        // Stored rather than recomputed from the polyline: the apply path only claims tiles that
+        // were resident at the time, so re-deriving would widen a layer's reach across a reload.
+        REQUIRE(loaded.layers().size() == 2);
+        CHECK(loaded.layers()[0].affected == source.layers()[0].affected);
+        CHECK(loaded.layers()[1].affected == source.layers()[1].affected);
+    }
+
+    SUBCASE("base blocks survive byte-for-byte")
+    {
+        REQUIRE(loaded.baseCount() == 3);
+        for (const auto& entry : source.allBases())
+        {
+            const terrain::BaseHeightBlock* block = loaded.base(entry.first);
+            REQUIRE(block != nullptr);
+            CHECK(block->vertexCount == entry.second.vertexCount);
+            CHECK(block->heights == entry.second.heights);
+        }
+    }
+
+    SUBCASE("a loaded layer evaluates — the callable was rebuilt, not dropped")
+    {
+        REQUIRE(loaded.layers().size() == 2);
+        CHECK(static_cast<bool>(loaded.layers()[0].eval));
+
+        terrain::TerrainTileConfig config = makeTerrainTestConfig(terrain::TileResolution::Low);
+        const std::vector<float> in = makeSidecarTestHeights(SIDECAR_TEST_VERTS, 5.0f);
+        std::vector<float> out;
+        loaded.layers()[0].eval({0, 0}, config, in, out);
+        CHECK(out.size() == in.size());
+    }
+
+    SUBCASE("writing the same store twice is byte-identical")
+    {
+        // Both the affected set and the base index come out of unordered containers, so anything
+        // that leaked hash order into the file would make two saves of one stack differ.
+        ScopedTerrainTestFile second("sidecar-determinism");
+        const auto secondPath = sidecarTestPath(second);
+        REQUIRE(terrain::writeTerrainLayerSidecar(secondPath, meta, source));
+        CHECK(readSidecarBytes(path) == readSidecarBytes(secondPath));
+    }
+}
+
+TEST_CASE("VFTL reports every damaged state distinctly")
+{
+    ScopedTerrainTestFile file("sidecar-damage");
+    const auto path = sidecarTestPath(file);
+
+    terrain::TerrainHeightLayerStore source;
+    populateSidecarTestStore(source);
+
+    const uint64_t generation = 0x0F0F0F0F0F0F0F0Full;
+    const auto meta = makeSidecarTestMeta(generation);
+    REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+    const std::vector<uint8_t> pristine = readSidecarBytes(path);
+    REQUIRE(pristine.size() > terrain::TERRAIN_LAYER_HEADER_SIZE);
+
+    terrain::TerrainHeightLayerStore loaded;
+    terrain::TerrainLayerSidecarMeta readMeta;
+
+    SUBCASE("missing")
+    {
+        terrain_test_fs::remove(path);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Absent);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("stale — the file is sound, it just belongs to another generation")
+    {
+        CHECK(terrain::readTerrainLayerSidecar(path, generation ^ 1ull, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Stale);
+        // The header still parsed, so a diagnostic can name both generations.
+        CHECK(readMeta.generationId == generation);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("truncated")
+    {
+        std::vector<uint8_t> truncated(
+            pristine.begin(),
+            pristine.begin() + static_cast<std::ptrdiff_t>(pristine.size() / 2));
+        writeSidecarBytes(path, truncated);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("truncated to nothing but a header")
+    {
+        std::vector<uint8_t> stub(
+            pristine.begin(),
+            pristine.begin() + static_cast<std::ptrdiff_t>(terrain::TERRAIN_LAYER_HEADER_SIZE));
+        writeSidecarBytes(path, stub);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+    }
+
+    SUBCASE("wrong magic")
+    {
+        std::vector<uint8_t> damaged = pristine;
+        damaged[0] = 'X';
+        resealSidecar(damaged);
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+    }
+
+    SUBCASE("a future format version is refused rather than guessed at")
+    {
+        // VK-1648: reported as VersionMismatch, not Invalid. The magic matched, so the file is a
+        // readable one from another build rather than damage — and after a format bump that is
+        // every sidecar on the artist's disk, which must not be described as corruption.
+        std::vector<uint8_t> damaged = pristine;
+        const uint32_t future =
+            resource::endian::toLittleEndian(terrain::TERRAIN_LAYER_VERSION_MAJOR + 1);
+        std::memcpy(damaged.data() + 4, &future, sizeof(uint32_t));
+        resealSidecar(damaged);
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::VersionMismatch);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("the previous minor version is refused too — VFTL has no backward compatibility")
+    {
+        std::vector<uint8_t> damaged = pristine;
+        const uint32_t previous =
+            resource::endian::toLittleEndian(terrain::TERRAIN_LAYER_VERSION_MINOR - 1);
+        std::memcpy(damaged.data() + 8, &previous, sizeof(uint32_t));
+        resealSidecar(damaged);
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::VersionMismatch);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("a flipped bit inside a base block")
+    {
+        // Resealed, so the whole-file checksum passes and the per-block CRC is the only thing left
+        // that can catch it — which is exactly why blocks carry their own.
+        std::vector<uint8_t> damaged = pristine;
+        damaged[damaged.size() - static_cast<size_t>(terrain::TERRAIN_LAYER_TRAILER_SIZE) - 8] ^= 0xFF;
+        resealSidecar(damaged);
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+        CHECK(loaded.empty());
+    }
+
+    SUBCASE("a flipped bit inside a layer record")
+    {
+        std::vector<uint8_t> damaged = pristine;
+        damaged[static_cast<size_t>(terrain::TERRAIN_LAYER_HEADER_SIZE) + 6] ^= 0xFF;
+        resealSidecar(damaged);
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+    }
+
+    SUBCASE("the commit magic must be present — a torn tail is not a short file")
+    {
+        std::vector<uint8_t> damaged = pristine;
+        damaged[damaged.size() - 1] ^= 0xFF;
+        writeSidecarBytes(path, damaged);
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+    }
+}
+
+TEST_CASE("VFTL refuses to apply a stack it cannot fully evaluate")
+{
+    ScopedTerrainTestFile file("sidecar-degraded");
+    const auto path = sidecarTestPath(file);
+
+    terrain::TerrainHeightLayerStore source;
+    populateSidecarTestStore(source);
+
+    const uint64_t generation = 0x2468ACE013579BDFull;
+    REQUIRE(terrain::writeTerrainLayerSidecar(path, makeSidecarTestMeta(generation), source));
+
+    // Rewrite the FIRST record's type to one this build has never heard of, then repair both
+    // checksums so the file is otherwise indistinguishable from one a newer editor wrote.
+    std::vector<uint8_t> bytes = readSidecarBytes(path);
+    const size_t recordStart = static_cast<size_t>(terrain::TERRAIN_LAYER_HEADER_SIZE);
+
+    uint32_t recordByteLength = 0;
+    std::memcpy(&recordByteLength, bytes.data() + recordStart, sizeof(uint32_t));
+    recordByteLength = resource::endian::fromLittleEndian(recordByteLength);
+
+    const uint32_t alienType = resource::endian::toLittleEndian(uint32_t{9999});
+    std::memcpy(bytes.data() + recordStart + sizeof(uint32_t) + sizeof(uint64_t), &alienType,
+                sizeof(uint32_t));
+
+    const size_t covered = recordByteLength - sizeof(uint32_t);
+    const uint32_t recordCrc =
+        resource::endian::toLittleEndian(resource::crc32(bytes.data() + recordStart, covered));
+    std::memcpy(bytes.data() + recordStart + covered, &recordCrc, sizeof(uint32_t));
+    resealSidecar(bytes);
+    writeSidecarBytes(path, bytes);
+
+    terrain::TerrainHeightLayerStore loaded;
+    terrain::TerrainLayerSidecarMeta readMeta;
+
+    // VK-1648: Degraded, specifically NOT Invalid, is what proves the name sits in the record
+    // PROLOGUE. The unknown-type branch steps over a record with skip(paramByteLength + crc); if
+    // the name lived after the params that arithmetic would leave the cursor inside the string,
+    // the second record's length prefix would decode as garbage, and this would come back Invalid.
+    CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+          terrain::TerrainLayerSidecarStatus::Degraded);
+
+    // Nothing is applied, not even the records this build DOES understand. Half a stack composes
+    // ground the artist never authored, and because coverage is sticky the tiles would stay
+    // authoritative afterwards — silently wrong is worse than plainly unavailable.
+    CHECK(loaded.empty());
+    CHECK(loaded.layers().empty());
+    CHECK(loaded.baseCount() == 0);
+}
+
+// VK-1648. The one format change this ticket makes: a length-prefixed display name per record.
+TEST_CASE("VFTL 1.2.0 round-trips a layer name")
+{
+    ScopedTerrainTestFile file("sidecar-name");
+    const auto path = sidecarTestPath(file);
+
+    const uint64_t generation = 0x0F1E2D3C4B5A6978ull;
+    const auto meta = makeSidecarTestMeta(generation);
+
+    terrain::TerrainHeightLayerStore loaded;
+    terrain::TerrainLayerSidecarMeta readMeta;
+
+    auto roundTrip = [&](const std::string& name)
+    {
+        terrain::TerrainHeightLayerStore source;
+        terrain::HeightLayerRecord record = makeSidecarTestLayer(7, true, {{0, 0}});
+        record.name = name;
+        REQUIRE(source.addLayer(std::move(record)));
+        source.adoptBase({0, 0}, makeSidecarTestHeights(SIDECAR_TEST_VERTS, 3.0f),
+                         SIDECAR_TEST_VERTS);
+
+        REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+        loaded = terrain::TerrainHeightLayerStore{};
+        REQUIRE(terrain::readTerrainLayerSidecar(path, generation, readMeta, loaded) ==
+                terrain::TerrainLayerSidecarStatus::Ok);
+        REQUIRE(loaded.layers().size() == 1);
+    };
+
+    SUBCASE("an ordinary name")
+    {
+        roundTrip("Main Road");
+        CHECK(loaded.layers()[0].name == "Main Road");
+    }
+
+    SUBCASE("an empty name is a legal value, not a missing field")
+    {
+        // A layer created before any rename has one, so the zero-length case is the common case
+        // and must not be confused with a truncated record.
+        roundTrip("");
+        CHECK(loaded.layers()[0].name.empty());
+        CHECK(loaded.layers()[0].id == 7);
+    }
+
+    const size_t cap = static_cast<size_t>(terrain::MAX_LAYER_NAME_LENGTH);
+
+    SUBCASE("exactly the cap survives intact")
+    {
+        const std::string atCap(cap, 'x');
+        roundTrip(atCap);
+        CHECK(loaded.layers()[0].name == atCap);
+    }
+
+    SUBCASE("over the cap is truncated by the writer, never refused")
+    {
+        // Refusing the SAVE over a long name would lose the whole terrain's worth of work to fix
+        // a cosmetic field, so the writer clamps. The reader is the strict half.
+        const std::string tooLong(cap + 40, 'y');
+        roundTrip(tooLong);
+        CHECK(loaded.layers()[0].name.size() == cap);
+        CHECK(loaded.layers()[0].name == tooLong.substr(0, cap));
+    }
+
+    SUBCASE("bytes are carried verbatim — the field is not text-processed")
+    {
+        // UTF-8 and anything else: the format stores a byte count and those bytes. Nothing in the
+        // reader or writer may normalise, re-encode or NUL-terminate them.
+        const std::string utf8 = "Rue de l\xC3\xA9""cole \xE2\x80\x94 \xE6\xA9\x8B";
+        roundTrip(utf8);
+        CHECK(loaded.layers()[0].name == utf8);
+    }
+
+    SUBCASE("a corrupt over-cap length is rejected before it allocates")
+    {
+        roundTrip("Short");
+
+        // Patch nameLength to something absurd. The reader must reject on the bound rather than
+        // trusting a number whose own CRC has not been reached yet.
+        std::vector<uint8_t> bytes = readSidecarBytes(path);
+        const size_t recordStart = static_cast<size_t>(terrain::TERRAIN_LAYER_HEADER_SIZE);
+        const uint32_t recordByteLength = readLE32(bytes, recordStart);
+
+        // recordByteLength(u32) id(u64) type(u32) visible(u8) order(u32) affectedCount(u32)
+        // + affected pairs, then nameLength.
+        const size_t affectedCountOffset = recordStart + LAYER_RECORD_ORDER_OFFSET
+                                           + sizeof(uint32_t);
+        const uint32_t affectedCount = readLE32(bytes, affectedCountOffset);
+        const size_t nameLengthOffset = affectedCountOffset + sizeof(uint32_t)
+                                        + static_cast<size_t>(affectedCount) * 2 * sizeof(int32_t);
+        REQUIRE(readLE32(bytes, nameLengthOffset) == 5); // "Short" -- the offset arithmetic is right
+
+        const uint32_t absurd = resource::endian::toLittleEndian(uint32_t{1u << 30});
+        std::memcpy(bytes.data() + nameLengthOffset, &absurd, sizeof(uint32_t));
+
+        const size_t covered = recordByteLength - sizeof(uint32_t);
+        const uint32_t recordCrc =
+            resource::endian::toLittleEndian(resource::crc32(bytes.data() + recordStart, covered));
+        std::memcpy(bytes.data() + recordStart + covered, &recordCrc, sizeof(uint32_t));
+        resealSidecar(bytes);
+        writeSidecarBytes(path, bytes);
+
+        terrain::TerrainHeightLayerStore rejected;
+        CHECK(terrain::readTerrainLayerSidecar(path, generation, readMeta, rejected) ==
+              terrain::TerrainLayerSidecarStatus::Invalid);
+        CHECK(rejected.empty());
+    }
+}
+
+TEST_CASE("VFTL rebinding re-points a sidecar without decoding it")
+{
+    ScopedTerrainTestFile file("sidecar-rebind");
+    const auto path = sidecarTestPath(file);
+
+    terrain::TerrainHeightLayerStore source;
+    populateSidecarTestStore(source);
+
+    const uint64_t oldGeneration = 0x1111111111111111ull;
+    const auto meta = makeSidecarTestMeta(oldGeneration);
+    REQUIRE(terrain::writeTerrainLayerSidecar(path, meta, source));
+
+    const uint64_t newGuid = 0x5555AAAA5555AAAAull;
+    const uint64_t newGeneration = 0x9999999999999999ull;
+    REQUIRE(terrain::rebindTerrainLayerSidecar(path, newGuid, newGeneration));
+
+    terrain::TerrainHeightLayerStore loaded;
+    terrain::TerrainLayerSidecarMeta readMeta;
+
+    SUBCASE("the old generation no longer matches")
+    {
+        CHECK(terrain::readTerrainLayerSidecar(path, oldGeneration, readMeta, loaded) ==
+              terrain::TerrainLayerSidecarStatus::Stale);
+    }
+
+    SUBCASE("the new one does, and the payload is intact")
+    {
+        REQUIRE(terrain::readTerrainLayerSidecar(path, newGeneration, readMeta, loaded) ==
+                terrain::TerrainLayerSidecarStatus::Ok);
+        CHECK(readMeta.terrainGuid == newGuid);
+        CHECK(readMeta.generationId == newGeneration);
+        CHECK(loaded.layers().size() == 2);
+        CHECK(loaded.baseCount() == 3);
+        for (const auto& entry : source.allBases())
+        {
+            const terrain::BaseHeightBlock* block = loaded.base(entry.first);
+            REQUIRE(block != nullptr);
+            CHECK(block->heights == entry.second.heights);
+        }
+    }
+
+    SUBCASE("rebinding refuses a file it could not have written")
+    {
+        ScopedTerrainTestFile junkFile("sidecar-junk");
+        const auto junkPath = sidecarTestPath(junkFile);
+        writeSidecarBytes(junkPath, std::vector<uint8_t>(64, 0x7F));
+        CHECK_FALSE(terrain::rebindTerrainLayerSidecar(junkPath, newGuid, newGeneration));
+    }
+}
+
+TEST_CASE("VFTL writing refuses a stack it could not read back")
+{
+    ScopedTerrainTestFile file("sidecar-refusal");
+    const auto path = sidecarTestPath(file);
+
+    SUBCASE("a layer with no persistable type")
+    {
+        terrain::TerrainHeightLayerStore store;
+        terrain::HeightLayerRecord record;
+        record.id = 5;
+        record.type = terrain::HeightLayerType::Unknown; // e.g. built in RAM by an older path
+        store.addLayer(std::move(record));
+
+        // Refusing beats writing a file that silently omits a layer the artist can see on screen.
+        CHECK_FALSE(terrain::writeTerrainLayerSidecar(path, makeSidecarTestMeta(1), store));
+    }
+
+    SUBCASE("a base block whose array disagrees with its vertex count")
+    {
+        terrain::TerrainHeightLayerStore store;
+        store.adoptBase({0, 0}, makeSidecarTestHeights(SIDECAR_TEST_VERTS, 0.0f),
+                        SIDECAR_TEST_VERTS + 1);
+        CHECK_FALSE(terrain::writeTerrainLayerSidecar(path, makeSidecarTestMeta(1), store));
+    }
+}
+
+TEST_CASE("VFTL sidecar paths are appended, never substituted")
+{
+    // The same rule .vfmeta, .vfCollider and .vftrj follow. Substituting the extension would make
+    // `Map.vfTerrain` and a hypothetical `Map.vfWorld` fight over one sidecar name.
+    const terrain_test_fs::path terrainPath = "Assets/Maps/Skirmish.vfTerrain";
+    CHECK(terrain::terrainLayerSidecarPath(terrainPath).string() ==
+          terrainPath.string() + ".vfterrainlayers");
+}
+
+TEST_CASE("The layer store refuses to grow while editing is locked")
+{
+    terrain::TerrainHeightLayerStore store;
+    store.setEditingLocked(true);
+    CHECK(store.isEditingLocked());
+
+    // A locked store is one whose authoritative bases could not be read. Accepting a layer would
+    // let the next save write a sidecar describing ground nobody authored.
+    CHECK_FALSE(store.addLayer(makeSidecarTestLayer(1, true, {{0, 0}})));
+    CHECK(store.layers().empty());
+    CHECK(store.empty());
+
+    store.setEditingLocked(false);
+    CHECK(store.addLayer(makeSidecarTestLayer(1, true, {{0, 0}})));
+    CHECK(store.layers().size() == 1);
+}
+
+TEST_CASE("CRC-32 matches the published check value and detects single-bit damage")
+{
+    // The compile-time check in Crc32.hpp already pins the standard vector; this pins the
+    // behaviour the format actually leans on.
+    CHECK(resource::crc32(std::string_view{"123456789"}) == 0xCBF43926u);
+
+    std::vector<uint8_t> bytes(256);
+    for (size_t i = 0; i < bytes.size(); ++i)
+        bytes[i] = static_cast<uint8_t>(i);
+
+    const uint32_t clean = resource::crc32(bytes.data(), bytes.size());
+    for (size_t i : {size_t{0}, bytes.size() / 2, bytes.size() - 1})
+    {
+        std::vector<uint8_t> damaged = bytes;
+        damaged[i] ^= 0x01;
+        CHECK(resource::crc32(damaged.data(), damaged.size()) != clean);
+    }
+
+    // Streaming in pieces must equal hashing in one go, or a writer that emits a block in chunks
+    // would disagree with a reader that checks it whole.
+    uint32_t state = resource::crc32Init();
+    state = resource::crc32Update(state, bytes.data(), 100);
+    state = resource::crc32Update(state, bytes.data() + 100, bytes.size() - 100);
+    CHECK(resource::crc32Finish(state) == clean);
+}

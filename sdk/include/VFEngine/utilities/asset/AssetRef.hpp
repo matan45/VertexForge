@@ -1,6 +1,7 @@
 #pragma once
 #include "AssetGUID.hpp"
 #include <string>
+#include <utility>
 
 namespace asset
 {
@@ -11,6 +12,13 @@ namespace asset
         explicit AssetRef(const AssetGUID& guid) : guid(guid) {}
 
         static AssetRef fromGUID(const AssetGUID& guid) { return AssetRef(guid); }
+        static AssetRef fromGUIDAndPath(const AssetGUID& guid, std::string path)
+        {
+            AssetRef ref(guid);
+            ref.cachedPath = std::move(path);
+            ref.cacheValid = !ref.cachedPath.empty();
+            return ref;
+        }
         static AssetRef fromPath(const std::string& path);
         static AssetRef fromHexString(const std::string& hex);
         static AssetRef invalid() { return AssetRef(); }

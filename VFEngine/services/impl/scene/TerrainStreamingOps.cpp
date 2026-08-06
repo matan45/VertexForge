@@ -9,6 +9,7 @@
 #include "terrain/TerrainSerializer.hpp"
 #include "vegetation/VegetationSerializer.hpp"
 #include "foliage/FoliageSerializer.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
@@ -139,6 +140,20 @@ namespace services
             physicsProvider->removeCaveTileCollider(terrainEntity, tileX, tileZ);
         }
 
+        // VK-1645: this is the DELIBERATE deletion path, as opposed to streamOutTile, so the
+        // authoritative base block goes with the tile. Everywhere else it must survive -- the
+        // base has no persistence until VK-1646, and dropping it on an unload would silently
+        // destroy artist edits.
+        grid.getHeightLayers().eraseBase(coord);
+
+        // VK-1647: and un-claim it, so no layer is left naming a tile that owns no base. isCovered
+        // is satisfied by EITHER a base or a claim, so a claimed-but-baseless coord reads as
+        // covered forever: recomposeTile refuses it, while normalizeDerivedSeams still welds its
+        // boundary column -- and a covered<->covered weld averages in the neighbour's composed
+        // value, so another layer's corridor bleeds into a plane nothing can rebuild. It survives a
+        // save too, because `affected` and the base index are persisted independently.
+        grid.getHeightLayers().dropCoordFromLayers(coord);
+
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
 
@@ -226,12 +241,11 @@ namespace services
                 const auto& tc = registry.get<components::TerrainComponent>(ent);
                 if (!tc.savePath.empty())
                 {
-                    namespace fs = std::filesystem;
                     std::string vegDir = getVegetationDirectory(tc.savePath);
 
                     std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
                         vegDir, tileX, tileZ);
-                    if (fs::exists(instancesPath))
+                    if (resource::VirtualFileSystem::instance().exists(instancesPath))
                     {
                         vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances);
                         tile->billboardInstancesDirty = true;
@@ -247,7 +261,7 @@ namespace services
                     std::string foliageDir = getFoliageDirectory(tc.savePath);
                     std::string foliagePath = std::format("{}/tile_{}_{}.vfFoliage",
                         foliageDir, tileX, tileZ);
-                    if (fs::exists(foliagePath))
+                    if (resource::VirtualFileSystem::instance().exists(foliagePath))
                     {
                         foliage::FoliageSerializer::loadFoliageInstances(foliagePath, tile->foliageInstances);
                         tile->foliageInstancesDirty = true;

@@ -240,6 +240,41 @@ layout(set = 11, binding = 4) uniform WorldMaskUBO {
 } worldMask;
 #endif
 
+#ifdef TERRAIN_WEATHER_MASK
+// VK-1614 world-anchored wetness/snow mask: R = wetness, G = snow, XZ-projected over worldMinMax.
+// Bindings 5/6 of set 11, mirroring the plugin world mask at 3/4 — set 11 is the right home here
+// precisely because it does NOT exist in the RVT bake pipeline (TerrainRVTBaker binds
+// {weightMap, bindless, terrainData} as its sets 0/1/2), and the mask must not reach the bake.
+// That is the inverse of VK-1611's anti-tiling block, which had to go on the weight-map set for
+// exactly the opposite reason.
+layout(set = 11, binding = 5) uniform sampler2D terrainWeatherMaskTexture;
+layout(set = 11, binding = 6) uniform TerrainWeatherMaskUBO {
+    vec4 worldMinMax;          // minX, minZ, maxX, maxZ — AUTHORED, never derived from live grid bounds
+    float wetnessScale;        // authored strength multiplier on the R channel
+    float snowScale;           // authored strength multiplier on the G channel
+    uint flags;                // bit0 enabled
+    float _padTWM;
+} weatherMask;
+#endif
+
+#ifdef TERRAIN_PARALLAX
+// VK-1625 POM-lite parameters. Binding 7 of set 11, continuing the plugin world mask at 3/4 and the
+// VK-1614 weather mask at 5/6 — and on this set for the same reason they are: set 11 does not exist
+// in the RVT bake pipeline (TerrainRVTBaker binds {weightMap, bindless, terrainData} and its shader
+// declares only binding 0 of the last one), so a view-dependent parameter cannot reach the bake even
+// by accident. The offset these drive is applied at final shading to BOTH sampling paths instead.
+layout(set = 11, binding = 7) uniform TerrainParallaxUBO {
+    float depthMetres;         // displacement volume depth; 0 = off (the permutation is then not compiled)
+    float fadeStart;           // metres from the camera
+    float fadeEnd;             // metres; kept strictly past fadeStart, smoothstep with equal edges is undefined
+    float invReferenceHeight;  // 1 / referenceHeight, inverted on upload; exactly 1.0 at the default
+    uint  steps;               // uniform loop bound, clamped to [1,32] on upload
+    uint  _flagsTP;            // reserved
+    float _pad0TP;
+    float _pad1TP;
+} parallax;
+#endif
+
 layout(std430, set = 1, binding = 0) readonly buffer WeightMapBuffer {
     uint weightMapData[];
 };
@@ -277,7 +312,46 @@ layout(std430, set = 1, binding = 1) readonly buffer TerrainLayerBuffer {
     TerrainLayerGPUData terrainLayers[];
 };
 
+// VK-1611 material-global anti-tiling. Binding 2 of the weight-map set is the ONE home reachable
+// from both composite consumers: terrain_rvt_bake.glsl binds this very same descriptor set as its
+// set 0 (TerrainRVTBaker::init takes {weightMap, bindless, terrainData} and nothing else), so the
+// generated snippet reads identical values in the live and baked paths. Set 11 — which the story
+// originally called for — does not exist in the bake pipeline at all.
+layout(std430, set = 1, binding = 2) readonly buffer TerrainAntiTilingBuffer {
+    TerrainAntiTilingGPUData terrainAntiTiling;
+};
+
 layout(set = 2, binding = 0) uniform sampler2D bindlessTextures[];
+
+// VK-1611: world-anchored value noise for macro variation. File scope, because the generated
+// composite is #include-d INSIDE main() and so cannot declare functions of its own.
+#include "../common/terrain_value_noise.glsl"
+#ifdef TERRAIN_HEX_TILING
+// VK-1612: must follow the bindlessTextures declaration — the helpers index it directly rather
+// than taking a sampler2D parameter.
+#include "../common/hex_tiling_terrain.glsl"
+#endif
+
+// VK-1614. TERRAIN_LOCAL_WEATHER is the union gate: it selects the unified weather block at the apply
+// point, and each individual feature inside it stays behind its own macro. CAUSTICS_ENABLED is part of
+// the union because this story folds the shoreline wetness — previously a second, uncoordinated
+// material model — into the same signal, so a caustics build takes the unified path even with no mask
+// and no authored layer.
+#if defined(TERRAIN_WEATHER_RESPONSE) || defined(TERRAIN_WEATHER_MASK) || defined(TERRAIN_PUDDLES) || defined(CAUSTICS_ENABLED)
+#define TERRAIN_LOCAL_WEATHER 1
+// Must follow tiles[] / weightMapData[] / sampleTileWeight / terrainLayers[] — the splat gather reads
+// them directly rather than taking parameters, same contract as hex_tiling_terrain.glsl above.
+#include "../common/terrain_weather.glsl"
+#endif
+
+#ifdef TERRAIN_PARALLAX
+// VK-1625. Same includer contract as the two above: it reads tiles[] / terrainLayers[] /
+// bindlessTextures[] / sampleTileWeight directly, so it must follow all four. Also absent from
+// terrain_rvt_bake.glsl, but for the opposite reason to terrain_weather.glsl — weather runs AFTER the
+// RVT-resolve join and so cannot reach the bake, whereas parallax runs BEFORE it and steers both
+// sampling paths from one offset. Either way the bake stays view-independent.
+#include "../common/terrain_parallax.glsl"
+#endif
 
 #ifdef RVT_ENABLED
 // VK-1209 terrain Runtime Virtual Texture (set 5, the previously-empty placeholder set).
@@ -293,7 +367,11 @@ layout(set = 5, binding = 4) uniform RVTParams {
     vec2 worldMin;        // terrain XZ origin
     vec2 invWorldExtent;  // 1 / (worldMax - worldMin)
     float virtualResTexels;
-    float pad0; float pad1; float pad2;
+    // VK-1620: the world-height plane's decode range. The terrain pipeline does not sample that
+    // plane — these are here because the scene mesh pipeline reads THIS SAME struct (it is uploaded
+    // once and consumed by both) and needs them to turn a normalized height back into a world Y.
+    float heightMin; float heightRange;
+    float pad2;
 } rvt;
 #ifdef TERRAIN_DETAIL_MAPS
 layout(set = 5, binding = 5) uniform sampler2D rvtNormalAtlas;
@@ -393,9 +471,11 @@ layout(set = CAUSTIC_SET, binding = 1) uniform CausticParamsUBO {
     float depthFalloff;
     float patchSize;
     float shoreWetRange;
-    float shoreWetDarkening;
-    float shoreWetRoughness;
+    // VK-1614 retired shoreWetDarkening / shoreWetRoughness — the shoreline feeds the unified terrain
+    // wetness signal now instead of applying a second material model of its own.
+    float pad0;
     float pad1;
+    float pad2;
 } causticParams;
 #include "../common/caustic_sampling.glsl"
 #endif
@@ -502,6 +582,82 @@ void main() {
     vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
 
+    // VK-1611 composite contract. terrainWorldXZ is the UNSCALED world position: macro variation
+    // is world-anchored, and triplanarWorldUV is already multiplied by textureScale and is
+    // triplanar-blended inside caves, so it cannot stand in for it.
+    vec2 terrainWorldXZ = fragWorldPos.xz;
+    // Footprint = log2(texture repeats per output texel), the distance signal that is meaningful
+    // in the camera-less RVT bake as well as here. rho_MAX with no anisotropy division: Vulkan's
+    // lambda_base divides by eta and therefore follows the minor axis, which under a grazing RTS
+    // view reports "near" for distant ground. Computed rather than queried because the spec only
+    // BOUNDS hardware rho, so textureQueryLod is not reproducible across vendors — disqualifying
+    // for content baked into shared pages.
+    float terrainFootprintLog2 = 0.5 * log2(max(max(dot(triplanarWorldUVdx, triplanarWorldUVdx),
+                                                    dot(triplanarWorldUVdy, triplanarWorldUVdy)), 1e-30));
+
+#ifdef TERRAIN_PARALLAX
+    // VK-1625 POM-lite. ONE march, placed here — after the base UV and its uniform-control-flow
+    // gradients exist, and before anything consumes a surface position — so the single world offset it
+    // produces can steer BOTH the RVT lookup below and the live composite's base UV. That is what
+    // resolves the story's RVT acceptance criterion without the bake changing at all: resolved and
+    // fallback fragments are displaced identically, so no seam can crawl along a page-residency
+    // boundary, and terrain_rvt_bake.glsl stays view-independent because it never sees any of this.
+    //
+    // Caves are NOT excluded. The offset is projected through whichever UV construction ran above, and
+    // that construction is affine in world position in both arms, so the mapping is exact for the
+    // triplanar blend too.
+    //
+    // Declared outside the block below because the RVT lookup consumes it further down; it stays
+    // vec2(0) for every fragment the fade or the grazing guard switched off.
+    vec2 tpWorldOffsetXZ = vec2(0.0);
+    {
+        float tpNdotV = dot(V, N);
+        float tpDepth = parallax.depthMetres
+                      * terrainParallaxDistanceFade(distance(camera.cameraPos, fragWorldPos),
+                                                    parallax.fadeStart, parallax.fadeEnd)
+                      * terrainParallaxGrazeFade(tpNdotV);
+        // Fading the DEPTH rather than the finished offset shrinks the search volume continuously to
+        // nothing, so this branch cannot draw an edge: at the far side of the fade the solved depth is
+        // 0 and the offset is bitwise zero either way. The branch is wave-coherent and legal because
+        // every fetch inside carries explicit gradients.
+        if (tpDepth > 0.0)
+        {
+            // The UV is affine in world position, so the projection is linear and hoists out of the
+            // march entirely: the base UV at ray depth z is exactly baseUV + tpUVStep * z. This mirrors
+            // the uvXZ / blended selection above, term for term.
+            vec3 tpRayStep = terrainParallaxRayStep(V, N);
+#if defined(RVT_ENABLED) && defined(TERRAIN_DETAIL_MAPS)
+            vec2 tpProjected = (fragIsCave == 0u)
+                ? tpRayStep.xz
+                : (tpRayStep.xz * blendWeights.y + tpRayStep.xy * blendWeights.z + tpRayStep.yz * blendWeights.x);
+#else
+            vec2 tpProjected = tpRayStep.xz * blendWeights.y
+                             + tpRayStep.xy * blendWeights.z
+                             + tpRayStep.yz * blendWeights.x;
+#endif
+            vec2 tpUVStep = tpProjected * textureScale;
+
+            TerrainParallaxField tpField = terrainParallaxGather(fragTileIndex, fragTexCoord);
+            float tpZ = terrainParallaxSolveDepth(tpField, triplanarWorldUV,
+                                                  triplanarWorldUVdx, triplanarWorldUVdy,
+                                                  tpUVStep, tpDepth, parallax.steps,
+                                                  parallax.invReferenceHeight);
+            triplanarWorldUV += tpUVStep * tpZ;
+            tpWorldOffsetXZ = tpRayStep.xz * tpZ;
+        }
+    }
+    // fragTexCoord (the splat weights) and terrainWorldXZ (macro variation) are deliberately NOT
+    // offset. The weights were frozen for the march, so shifting them afterwards would shade with a
+    // coverage the height field never saw; macro variation is world-anchored and shared with the bake,
+    // and a centimetre shift is far below its metre-scale frequencies anyway.
+    //
+    // terrainFootprintLog2 is likewise untouched: the gradients are unchanged by a translation, so the
+    // footprint at the offset UV is the same value.
+#define TERRAIN_PARALLAX_WORLD_XZ (fragWorldPos.xz + tpWorldOffsetXZ)
+#else
+#define TERRAIN_PARALLAX_WORLD_XZ fragWorldPos.xz
+#endif
+
 #ifdef RVT_ENABLED
     // Sample the baked terrain RVT atlas (2 or 4 planes) instead of the live 8-layer composite.
     // A lookup "resolves" only when the page-table entry is valid AND the ORM atlas alpha
@@ -517,7 +673,12 @@ void main() {
 #ifdef TERRAIN_DETAIL_MAPS
     vec3 mat_normalTS;
 #endif
-    vec2 rvtUV = clamp((fragWorldPos.xz - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
+    // VK-1625: TERRAIN_PARALLAX_WORLD_XZ is fragWorldPos.xz verbatim when parallax is not compiled, so
+    // this line's token stream is unchanged and the OFF build's SPIR-V is byte-identical by
+    // construction rather than by trusting the optimizer to fold a copy. With parallax on it carries
+    // the offset, so the resolved branch reads the parallaxed texel from ONE lookup — no second
+    // page-table walk — and the feedback write below requests the page actually sampled.
+    vec2 rvtUV = clamp((TERRAIN_PARALLAX_WORLD_XZ - rvt.worldMin) * rvt.invWorldExtent, vec2(0.0), vec2(0.999999));
     uint rvtMip = uint(max(vtDesiredMip(rvtUV, rvt.virtualResTexels), 0.0));
 #ifdef TERRAIN_DETAIL_MAPS
     bool rvtSurfaceEligible = fragIsCave == 0u;
@@ -529,6 +690,21 @@ void main() {
     VTSample rvtS = vtLookup(rvt.img, rvtUV, rvtMip);
     vec4 rvtO = (rvtSurfaceEligible && rvtS.valid) ? texture(rvtOrmAtlas, rvtS.uv) : vec4(0.0);
     bool rvtResolved = rvtSurfaceEligible && rvtS.valid && rvtO.a >= 0.5;
+    // VK-1611 bake/live parity for the footprint-driven distance rescale. A fragment that falls
+    // back to the live composite sits right next to fragments served from a baked page, and the
+    // bake computed ITS footprint from the page's texel size, not from screen derivatives. Keying
+    // the fallback off the same page's mip is what makes the rescale transition continuous across
+    // the page-residency boundary instead of drawing a seam that crawls with the camera — the
+    // failure mode VK-1609 documented and that an RVT-off test cannot see.
+    //
+    // The bake's world step per fragment is exactly the page's texel size, T0 * 2^mip: it expands
+    // the page rect by VT_BORDER / VT_PAGE_INTERIOR and then rasterizes the full 128-texel tile,
+    // and those two cancel. T0 is the mip-0 world texel size. Selected branchlessly; this sits in
+    // uniform control flow, above the divergent branch, so no derivative is taken inside it.
+    float rvtWorldTexel0 = 1.0 / max(rvt.invWorldExtent.x * rvt.virtualResTexels, 1e-20);
+    float rvtBakeFootprintLog2 = log2(max(rvtWorldTexel0 * textureScale, 1e-20))
+                               + float(rvtS.valid ? rvtS.residentMip : rvtMip);
+    terrainFootprintLog2 = rvtSurfaceEligible ? rvtBakeFootprintLog2 : terrainFootprintLog2;
     if (rvtResolved) {
         vec4 rvtA = texture(rvtAlbedoAtlas, rvtS.uv);
         // Coverage renormalization: rvtO.a is the per-texel baked-coverage bit (1.0 baked,
@@ -637,25 +813,80 @@ void main() {
     }
 
 #ifdef CAUSTICS_ENABLED
-    // Shoreline wetness: darken and roughen terrain near and above waterline
+    // Shoreline wetness, VK-1614: this block now only COMPUTES how wet the shore is. It used to
+    // apply its own material model here — `albedo *= mix(1, shoreWetDarkening, w)`,
+    // `roughness = mix(roughness, max(roughness, shoreWetRoughness), w)` and an AO raise — running
+    // immediately before applyWetness, which pulls roughness the OTHER WAY (x0.3). Only one of those
+    // can be right: wet surfaces get smoother. Worse, shoreWetRoughness defaulted to 0.15 against a
+    // terrain layer roughness default of 0.9, so `max(0.9, 0.15)` made that slider a no-op across its
+    // whole plausible range. Both authored knobs are retired; shoreWetRange still sets the extent.
+    float shoreWet = 0.0;
     if (causticParams.shoreWetRange > 0.0) {
         float waveFreq = 6.2831853 / causticParams.patchSize;
         float waveApprox = sin(fragWorldPos.x * waveFreq + fragWorldPos.z * waveFreq * 1.5 + camera.time) * 0.5;
         float heightAboveWater = fragWorldPos.y - causticParams.waterHeight + waveApprox;
-        // Only apply above water (fade in from waterline up to shoreWetRange)
-        float wetness = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);
-        // Fade out below waterline (terrain underwater doesn't need wet effect)
-        wetness *= smoothstep(-1.0, 0.0, heightAboveWater);
-        wetness *= wetness;
-        albedo *= mix(1.0, causticParams.shoreWetDarkening, wetness);
-        roughness = mix(roughness, max(roughness, causticParams.shoreWetRoughness), wetness);
-        ao = mix(ao, 1.0, wetness * 0.3);
+        // Fade in from the waterline up to shoreWetRange...
+        shoreWet = 1.0 - smoothstep(0.0, causticParams.shoreWetRange, heightAboveWater);
+        // ...and out below it (terrain underwater doesn't need the wet look).
+        shoreWet *= smoothstep(-1.0, 0.0, heightAboveWater);
+        shoreWet *= shoreWet;
     }
 #endif
 
     // Weather surface effects (wetness first, then snow on top)
+#ifdef TERRAIN_LOCAL_WEATHER
+    // VK-1614. Deliberately HERE, after the RVT-resolve / live-composite join above, so baked pages
+    // stay weather-independent and one page serves every weather state.
+    float twWet = camera.wetness;
+    float twSnow = camera.snowAccumulation;
+#ifdef CAUSTICS_ENABLED
+    twWet = terrainWeatherOr(twWet, shoreWet);
+#endif
+#ifdef TERRAIN_WEATHER_MASK
+    if ((weatherMask.flags & 1u) != 0u) {
+        vec2 twMaskUV = (fragWorldPos.xz - weatherMask.worldMinMax.xy)
+                      / max(weatherMask.worldMinMax.zw - weatherMask.worldMinMax.xy, vec2(1e-6));
+        // Outside the authored rect the mask contributes nothing, so terrain that streamed in beyond
+        // it falls back to global-only weather instead of sampling a clamped edge texel.
+        if (all(greaterThanEqual(twMaskUV, vec2(0.0))) && all(lessThanEqual(twMaskUV, vec2(1.0)))) {
+            vec2 twM = texture(terrainWeatherMaskTexture, twMaskUV).rg;
+            twWet = terrainWeatherOr(twWet, twM.r * weatherMask.wetnessScale);
+            twSnow = terrainWeatherOr(twSnow, twM.g * weatherMask.snowScale);
+        }
+    }
+#endif
+    // The derived porosity is computed HERE, not earlier: wetness.glsl derives it from the roughness
+    // AS IT ARRIVES, i.e. after the cave darkening above forces roughness >= 0.9. Hoisting it would
+    // change today's output.
+    float twPorosity = clamp(roughness * roughness, 0.0, 1.0);
+    float twRetention = 1.0;
+#ifdef TERRAIN_WEATHER_RESPONSE
+    TerrainWeatherResponse twR = sampleTerrainWeatherResponse(fragTileIndex, fragTexCoord);
+    // mix(x, y, 0.0) == x bitwise, and the T factors are EXACTLY 0 when no layer covering this
+    // fragment opted in — so a tile painted only with unauthored layers renders bit-identically to
+    // the pre-VK-1614 shader even inside this permutation.
+    twPorosity = mix(twPorosity, twR.porosity, twR.porosityT);
+    twRetention = mix(twRetention, twR.retention, twR.retentionT);
+#endif
+#ifdef TERRAIN_PUDDLES
+    // Computed BEFORE applyTerrainWetness, which mutates the roughness twPorosity was derived from
+    // and the albedo the puddle then tints.
+    float twPuddle = terrainPuddleCoverage(twWet, normalize(fragNormal).y, ao, twPorosity);
+#endif
+    applyTerrainWetness(twWet, twPorosity, albedo, roughness, metallic, N);
+#ifdef TERRAIN_PUDDLES
+    applyTerrainPuddle(twPuddle, albedo, roughness, metallic, N);
+#endif
+    // Retention folds into the AMOUNT rather than needing a new parameter: applySnowAccumulation
+    // computes snowFactor = amount * slopeMask, and (amount * retention) * slopeMask ==
+    // snowFactor * retention. So snow_accumulation.glsl is untouched — which keeps
+    // mesh_shader_gpudriven.glsl byte-identical — and its `snowAmount < 0.001` early-out makes a
+    // fully-shedding layer free.
+    applySnowAccumulation(twSnow * twRetention, fragNormal, albedo, roughness, metallic, N);
+#else
     applyWetness(camera.wetness, albedo, roughness, metallic, N);
     applySnowAccumulation(camera.snowAccumulation, fragNormal, albedo, roughness, metallic, N);
+#endif
 
     // Fog-of-war visibility for this terrain fragment (1.0 = fully visible). Stays 1.0 unless
     // the bound mask opts in to affecting shadows (bit3), so shadow fading is configurable.

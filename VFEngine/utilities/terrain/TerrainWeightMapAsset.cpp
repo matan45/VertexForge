@@ -1,7 +1,7 @@
 #include "TerrainWeightMapAsset.hpp"
+#include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
-#include "../resource/VFSHelpers.hpp"
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -24,6 +24,11 @@ namespace terrain
         uint32_t resolution,
         const std::string& materialPath)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainWeightMapAsset: Cannot save in archive mode");
+            return false;
+        }
         if (tileWeights.empty())
         {
             vfLogWarning("TerrainWeightMapAsset: No weight data to save");
@@ -110,7 +115,7 @@ namespace terrain
 
         try
         {
-            auto fileData = resource::readFileBytes(std::string(path));
+            auto fileData = readTerrainFileBytes(std::string(path));
             if (fileData.empty())
             {
                 vfLogWarning("TerrainWeightMapAsset: Failed to read file: {}", path);

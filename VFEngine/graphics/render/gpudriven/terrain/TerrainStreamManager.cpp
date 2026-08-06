@@ -2,6 +2,7 @@
 #include "TerrainMeshBuffer.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/CaveMeshGenerator.hpp"
+#include "terrain/TerrainFileAccess.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
@@ -71,7 +72,9 @@ namespace render::gpudriven
         {
             if (!tile) continue;
             if (tile->hasAnyGPUDirtyLOD() || tile->caveGPUDirty) return true;
-            if (tile->weightMapGPUDirty && tile->hasWeightMap()) return true;
+            // VK-1613: the adapter owns this decision now — a layer-visibility change makes tiles
+            // need a re-pack without any per-tile flag being set.
+            if (adapter.needsWeightMapUpload(*tile)) return true;
         }
         return false;
     }
@@ -114,7 +117,7 @@ namespace render::gpudriven
                 infoIt->second.targetLOD = selectTargetLOD(entry.distance);
                 infoIt->second.lastAccessFrame = currentFrame;
             }
-            if (tile->hasWeightMap() && tile->weightMapGPUDirty)
+            if (adapter.needsWeightMapUpload(*tile))
                 if (adapter.uploadWeightMap(*tile)) tile->weightMapGPUDirty = false;
 
             if (infoIt->second.hasLODLoaded(FALLBACK_LOD)) continue;
@@ -180,9 +183,19 @@ namespace render::gpudriven
     {
         for (auto* tile : visibleTiles)
         {
-            if (!tile || !tile->weightMapGPUDirty || !tile->hasWeightMap()) continue;
+            if (!tile || !adapter.needsWeightMapUpload(*tile)) continue;
             if (adapter.uploadWeightMap(*tile))
                 tile->weightMapGPUDirty = false;
+        }
+        // VK-1620: the RVT world-height plane's source data, on the same visible-tile cadence as
+        // the weight map. Both predicates no-op when the plane is off, so this costs one branch per
+        // visible tile in the default configuration. It runs AFTER updateGPUDirtyLODs so a sculpt
+        // that re-uploaded geometry this frame gets its heights re-uploaded in the same frame.
+        for (auto* tile : visibleTiles)
+        {
+            if (!tile || !adapter.needsHeightFieldUpload(*tile)) continue;
+            if (adapter.uploadHeightField(*tile))
+                tile->heightFieldGPUDirty = false;
         }
         for (auto* tile : visibleTiles)
         {
@@ -492,8 +505,16 @@ namespace render::gpudriven
         auto ctx = tileLoadContextProvider(key);
         if (!ctx.valid) return;
 
+        // The index entry below is a SNAPSHOT of absolute file offsets, read on a worker some
+        // frames from now. terrainFileMutex() makes each read atomic against a rewrite, but it
+        // cannot keep the snapshot current: a full save, a compaction or a material-path rewrite
+        // landing in the gap relocates every record, and the worker would decode a different
+        // tile's bytes at these offsets. Capture the epoch here and re-check it once the reads are
+        // done — see terrain::terrainFileRelocationEpoch().
+        const uint64_t submitEpoch = terrain::terrainFileRelocationEpoch();
+
         // Phase 2 (worker thread): perform actual file I/O
-        auto future = std::async(std::launch::async, [ctx = std::move(ctx)]() -> TileLODLoadResult {
+        auto future = std::async(std::launch::async, [ctx = std::move(ctx), submitEpoch]() -> TileLODLoadResult {
             TileLODLoadResult result;
             result.key = ctx.key;
 
@@ -511,6 +532,17 @@ namespace render::gpudriven
                 if (ctx.indexEntry.holeMaskDataOffset != 0)
                     if (terrain::TerrainSerializer::readTileHoleMask(ctx.filePath, ctx.indexEntry, result.holeMask))
                         result.hasHoleMask = true;
+            }
+
+            // Checked after the reads rather than before: every relocating commit bumps the epoch
+            // under the exclusive lock and after its replacement, so a read that saw the new bytes
+            // necessarily sees the new epoch too. Anything decoded from stale offsets is discarded
+            // whole — a partially-correct tile is worse than a re-queued one.
+            if (terrain::terrainFileRelocationEpoch() != submitEpoch)
+            {
+                TileLODLoadResult stale;
+                stale.key = ctx.key;
+                return stale;
             }
 
             return result;

@@ -82,10 +82,36 @@ namespace render::gpudriven::detail
         uint32_t renderLayer = 0;
         // Terrain as a shadow CASTER (gates the VSM terrain raster); receiving is unaffected.
         bool castShadows = true;
-        // Per-layer normal/emission texture sampling and the matching four-plane RVT layout.
+        // VK-1610: two flags, because "the user allows detail maps" and "this terrain actually
+        // has any" are different questions. `detailMapsAllowed` is the render setting; `detailMaps`
+        // is what the shader permutation, the bindless registration gate and the RVT plane layout
+        // were last built with — `allowed && the material carries normal/emission maps`. Keeping
+        // them apart is what stops terrain with no detail maps from paying the four-plane RVT
+        // (20 B/texel instead of 8, i.e. 400 resident pages instead of 1024) for nothing.
+        bool detailMapsAllowed = true;
         bool detailMaps = false;
+        // VK-1620: whether the RVT pool that is currently built carries the world-height plane.
+        // Same "effective, not requested" role detailMaps plays above — the setting lives in
+        // VTCache::rvtWorldHeight and this is `setting && the device supports R16_UNORM as a
+        // colour attachment`. Every terrainRVTLayout() call must read THIS, or the baker's MRT
+        // count and the pool's plane count silently disagree.
+        bool rvtWorldHeight = false;
         std::string currentMaterialPath;
         std::vector<TerrainLayerGPUData> layerData;
+        // VK-1611: the material-global anti-tiling scalars last uploaded to the weight-map set's
+        // binding 2, kept here because the composite permutation is derived from them (a rescale
+        // strength of 0 means the extra textureGrad is never compiled) and the derivation runs
+        // separately from the upload.
+        TerrainAntiTilingGPUData antiTiling{};
+        // VK-1625: the material-global POM-lite scalars last uploaded to set 11 binding 7, kept here
+        // for the same reason antiTiling is — the TERRAIN_PARALLAX permutation is derived from the
+        // RESOLVED depth (0 means the march is not compiled at all), and that derivation runs in
+        // syncTerrainCompositePermutation, separately from the upload.
+        TerrainParallaxUBOData parallax{};
+        // VK-1614: whether a world-anchored wetness/snow mask is currently assigned. Drives the
+        // TERRAIN_WEATHER_MASK macro (resource-derived, unlike the two content-derived weather flags),
+        // so the sampler on set 11 binding 5 is only statically used once it points at a real image.
+        bool surfaceMaskAssigned = false;
         bool layerDataDirty = false;
         // VK-1486: set (editor/saver thread) when any material asset changes, so a terrain layer
         // that sources a .vfMat/.vfMatInstance re-resolves. Consumed (render thread) via exchange().

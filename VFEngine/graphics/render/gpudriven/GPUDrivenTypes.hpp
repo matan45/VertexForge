@@ -164,6 +164,18 @@ namespace render::gpudriven
         // so no PerDrawData change is needed. Must match FLAG_FOLIAGE_WIND in
         // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
         constexpr uint32_t FoliageWind = 1 << 8;
+
+        // VK-1620: mesh-into-terrain blending. Bits 0-3 were the last unclaimed region — every
+        // named constant above starts at 1<<4, and nothing (cull shader, draw packer, task/mesh
+        // stages) reads below bit 4. Does NOT collide with blend (4-12), Instanced (15), Category
+        // (13-16), ShadowStatic (17), Layer (18-22), ShadingModel (23-24), ProfileIndex (25-31) or
+        // FoliageWind (8). `makePerDrawData` copies flags verbatim, so no PerDrawData change is
+        // needed. Must match FLAG_BLEND_TO_TERRAIN in
+        // resources/shaders/gpudriven/mesh_shader_gpudriven.glsl.
+        //
+        // Unlike FoliageWind this flag has PARAMETERS: band and contrast ride
+        // GPUObjectData::instanceData.z as two halfs (see material/TerrainBlendCurve.hpp).
+        constexpr uint32_t BlendToTerrain = 1 << 0;
     }
 
     namespace ObjectCategory
@@ -191,10 +203,16 @@ namespace render::gpudriven
         int32_t coordZ;
         uint32_t flags;
         uint32_t weightMapOffset;       // Byte offset into weight map SSBO
-        glm::uvec4 caveMeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = reserved
+        // .w (VK-1620) = heightFieldOffset + 1 into the terrain heightfield SSBO, 0 = this tile has
+        // no height data. Biased because offset 0 is a legal allocation. Set independently of the
+        // cave fields — a tile with no cave still has heights.
+        glm::uvec4 caveMeshletData;     // x = meshletOffset, y = meshletCount, z = baseVertexOffset, w = heightFieldOffset + 1
     };
     static_assert(sizeof(TerrainTileGPUData) == 272);
 
+    // Every member is a 4-byte scalar on purpose: std430 then gives base alignment 4 and an array
+    // stride equal to sizeof, so C++ and gpu_types.glsl agree with no 16-byte rounding. Adding a
+    // vec2/vec3/vec4 member would raise the base alignment and silently desync the two layouts.
     struct TerrainLayerGPUData
     {
         uint32_t albedoTextureIndex;   // Bindless index (0 = default white)
@@ -206,12 +224,90 @@ namespace render::gpudriven
         float ao;                      // Scalar fallback when no ORM
         float emissionStrength;        // Emission intensity
         uint32_t emissionTextureIndex; // Bindless index (0 = no emission texture)
+        // VK-1609 height-blended compositing. Per-texel height rides the ORM texture's alpha
+        // channel, so it costs no extra fetch and no extra bindless slot.
+        // 0.0 == linear: the generated composite's mix() then returns EXACTLY 1.0 and the layer's
+        // contribution is bit-identical to the pre-VK-1609 weighted average. resolveTerrainLayerPBR
+        // clamps to [0, terrain::MAX_HEIGHT_BLEND_CONTRAST]; that bound keeps exp2's argument in
+        // [-8, 8] and is REQUIRED for the mix() exactness argument to hold (an infinity here would
+        // make 0.0 * y == NaN and poison the linear case).
+        float heightBlendContrast;     // 0 = this layer blends linearly
+        // VK-1614 local wetness / snow, consuming the two slots VK-1609 reserved here — so this is a
+        // rename, not a layout change: the offsets below and sizeof are untouched, which is the whole
+        // "no second ABI bump" guarantee.
+        //
+        // 0.0 is the SENTINEL for "this layer did not opt in", not a meaningful value, and that
+        // choice is load-bearing rather than cosmetic. Every slot is value-initialised
+        // (`gpuLayer = {}` in GPUDrivenRendererTerrain), and a per-tile palette index may legitimately
+        // exceed activeLayerCount (TerrainLayerVisibility.hpp), so an all-zero layer is reachable by
+        // real fragments. Had 1.0 meant "retains snow", every pre-VK-1614 material and every unused
+        // palette slot would silently have shed all snow the moment this field was read. The shader
+        // resolves the sentinel with a weighted authority accumulator; see
+        // terrain/TerrainWeatherResponse.hpp.
+        //
+        //   layerPorosity      how much water this layer absorbs. Overrides the roughness*roughness
+        //                      value common/wetness.glsl derives, and suppresses puddling.
+        //   layerSnowRetention how much of the snow amount this layer holds. Scales the amount, so it
+        //                      composes with the shared slope mask instead of fighting it.
+        float layerPorosity;
+        float layerSnowRetention;
+        // VK-1612 hex-tile stochastic sampling. Per layer, because the opt-in is per layer.
+        // hexTilingStrength is exactly 0 for every layer that did not opt in (or that has no albedo
+        // texture worth stochastically sampling), and the composite's ternary then takes the
+        // single-tap path — so an opted-out layer pays one compare, not three texture fetches.
+        // That is why the AC's literal "blend factor 0/1" reading was not taken: a mix() would run
+        // all three taps regardless and make the opt-in meaningless.
+        float hexTilingStrength;
+        float hexCellScale;
+        float hexContrast;        // Burley's exponent, clamped to [1, 16] on upload
+        float hexRotationStrength;
     };
-    static_assert(sizeof(TerrainLayerGPUData) == 36);
+    static_assert(sizeof(TerrainLayerGPUData) == 64);
+    static_assert(alignof(TerrainLayerGPUData) == 4);
+    static_assert(sizeof(TerrainLayerGPUData) % 16 == 0,
+                  "keep a 16-byte multiple so a later vec4 member cannot desync the std430 stride");
     static_assert(offsetof(TerrainLayerGPUData, albedoTextureIndex) == 0);
     static_assert(offsetof(TerrainLayerGPUData, normalTextureIndex) == 4);
     static_assert(offsetof(TerrainLayerGPUData, ormTextureIndex) == 12);
     static_assert(offsetof(TerrainLayerGPUData, emissionTextureIndex) == 32);
+    static_assert(offsetof(TerrainLayerGPUData, heightBlendContrast) == 36);
+    static_assert(offsetof(TerrainLayerGPUData, layerPorosity) == 40);
+    static_assert(offsetof(TerrainLayerGPUData, layerSnowRetention) == 44);
+    static_assert(offsetof(TerrainLayerGPUData, hexTilingStrength) == 48);
+    static_assert(offsetof(TerrainLayerGPUData, hexCellScale) == 52);
+    static_assert(offsetof(TerrainLayerGPUData, hexContrast) == 56);
+    static_assert(offsetof(TerrainLayerGPUData, hexRotationStrength) == 60);
+
+    // VK-1611 terrain anti-tiling, part 1. These are MATERIAL-global, not per-layer, so they live
+    // in their own tiny buffer rather than being replicated into all 32 layer slots.
+    //
+    // Home is binding 2 of the weight-map descriptor set (live set 1, bake set 0). The Jira asked
+    // for a set-11 UBO; that is not implementable, for the same reason VK-1609's identical AC had
+    // to be renegotiated: set 11's bindings 0-4 are all in use, AND TerrainRVTBaker::init binds
+    // only {weightMap, bindless, terrainData}, so set 11 does not exist in the bake pipeline at
+    // all — nothing in it could reach the shared composite snippet, and the story's "baked into
+    // RVT pages" criterion would be unreachable. The weight-map set is the one set both pipelines
+    // bind (they pass the very same vk::DescriptorSet object), so a free binding on it costs one
+    // creation site and one descriptor write, and zero changes to the baker.
+    //
+    // Every member is a 4-byte scalar, for the same std430 reason spelled out above.
+    struct TerrainAntiTilingGPUData
+    {
+        float macroStrength;    // 0 = off; the composite's multiplier is then EXACTLY 1.0
+        float macroFrequency0;  // 1 / world metres per cycle (reciprocal precomputed on the CPU)
+        float macroFrequency1;
+        uint32_t macroSeed;     // octave 1 uses macroSeed ^ 0x9E3779B9u to decorrelate the pair
+        float rescaleStrength;  // 0 = off (the TERRAIN_DISTANCE_RESCALE arm is not even compiled)
+        float rescaleScale;     // UV multiplier for the far tap; < 1 reads as a larger texture
+        float rescaleKneeLog2;  // footprint (log2 texture repeats per output texel) where the fade starts
+        float rescaleWidthLog2; // fade width in the same units; clamped away from 0 (smoothstep)
+    };
+    static_assert(sizeof(TerrainAntiTilingGPUData) == 32);
+    static_assert(alignof(TerrainAntiTilingGPUData) == 4);
+    static_assert(sizeof(TerrainAntiTilingGPUData) % 16 == 0);
+    static_assert(offsetof(TerrainAntiTilingGPUData, macroSeed) == 12);
+    static_assert(offsetof(TerrainAntiTilingGPUData, rescaleStrength) == 16);
+    static_assert(offsetof(TerrainAntiTilingGPUData, rescaleWidthLog2) == 28);
 
     struct alignas(16) TerrainCullingStats
     {

@@ -1,4 +1,5 @@
 #include "TerrainRVTBaker.hpp"
+#include "TerrainRVTLayout.hpp" // VK-1620: terrainRVTWorldHeightPlaneIndex
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "print/Log.hpp"
@@ -22,7 +23,7 @@ namespace render::gpudriven
                                vk::DescriptorSetLayout bindlessLayout,
                                vk::DescriptorSetLayout terrainDataLayout,
                                const std::vector<vk::Format>& planeFormats,
-                               bool detailMaps)
+                               const TerrainCompositePermutation& permutation)
     {
         if (graphicsPipeline)
             return;
@@ -30,8 +31,19 @@ namespace render::gpudriven
         const vk::Device vkDevice = device.getLogicalDevice();
 
         core::Shader shader(device);
-        if (detailMaps)
-            shader.addMacroDefinition("TERRAIN_DETAIL_MAPS");
+        // Mirrors TerrainMeshShaderPipeline::loadTerrainShaders — literally the same function on
+        // the same struct. Both pipelines #include terrain_material_generated.glsl, so the two
+        // macro sets must agree or the baked pages composite differently from the live fallback.
+        applyTerrainCompositeMacros(shader, permutation);
+        // VK-1620: the world-height plane is NOT part of the composite permutation — it changes
+        // what the bake writes, not how the material composites, and the live terrain pipeline does
+        // not sample it at all. Derived from the plane list rather than passed separately so the
+        // shader's MRT outputs and the pipeline's colour-attachment count cannot disagree: they are
+        // both this one vector.
+        const bool worldHeight =
+            planeFormats.size() > terrainRVTWorldHeightPlaneIndex(permutation.detailMaps);
+        if (worldHeight)
+            shader.addMacroDefinition("TERRAIN_RVT_WORLD_HEIGHT");
         shader.readShader("../../resources/shaders/gpudriven/terrain_rvt_bake.glsl");
         const auto& stages = shader.getShaderStages();
         if (stages.size() < 2)

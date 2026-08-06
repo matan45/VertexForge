@@ -223,9 +223,14 @@ namespace types
         // Terrain as a shadow CASTER (VSM page raster). Receiving shadows is unaffected.
         // Off is a large GPU win on flat maps where terrain self-shadowing is negligible.
         bool castShadows = true;
-        // Opt-in sampling of terrain-layer normal and emission textures. When RVT is enabled,
-        // changing this also rebuilds the terrain RVT layout to carry the extra detail planes.
-        bool detailMaps = false;
+        // VK-1610: ALLOW sampling of terrain-layer normal and emission textures. Whether the
+        // TERRAIN_DETAIL_MAPS permutation is actually compiled is derived from the loaded terrain
+        // material - a material with no normal/emission maps gains nothing from it but would still
+        // pay the four-plane RVT layout (20 B/texel instead of 8, i.e. 400 resident pages instead
+        // of 1024 at the default budget). So this defaults ON and costs nothing until content uses
+        // it; unticking it is the escape hatch for terrain that has the maps but cannot afford them.
+        // When RVT is enabled, an effective change rebuilds the RVT pool + baker for the new layout.
+        bool detailMaps = true;
     };
 
     struct WaterSettings
@@ -242,6 +247,13 @@ namespace types
     {
         bool rvtEnabled = false;          // terrain runtime virtual texture
         bool svtEnabled = false;          // streamed material virtual textures
+        // VK-1620: bake the terrain's world-height into a 5th RVT plane, which is what lets scene
+        // meshes flagged "Blend To Terrain" melt into the ground. Costs +2 B/texel, and because the
+        // pool is sized by AREA that is a bigger cut than it sounds: at the 128 MB default it takes
+        // resident pages from 1024 to 784 (legacy layout) or 400 to 361 (detail layout). Off by
+        // default so projects that never blend a prop do not pay it. Restart-scoped, like the pool
+        // budget below — it changes the atlas's plane count, and Vulkan images don't resize.
+        bool rvtWorldHeight = false;
         uint32_t rvtPoolBudgetMB = 128;   // terrain RVT atlas budget (restart to apply)
         // VK-1480: a hardware-safe BC7 atlas caps at 256 MiB per pool (VT_MAX_POOL_DIM); with two
         // pools (sRGB + Unorm) the 256 default splits 128/128 and the tail-only fallback path means

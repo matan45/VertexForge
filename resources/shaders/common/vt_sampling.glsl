@@ -14,6 +14,15 @@
 //   #define VT_PAGE_TABLE <name>   // a `uint <name>[];` SSBO member
 // Optional, to emit page requests:
 //   #define VT_FEEDBACK   <name>   // a `uint <name>[];` SSBO member (atomicOr target)
+//
+// VK-1620: the walk itself now lives in vt_lookup_impl.glsl, which is UNGUARDED and
+// parameterized by VT_LOOKUP_FN / VT_WRITE_FEEDBACK_FN. This file is still the entry
+// point and still emits the familiar `vtLookup` / `vtWriteFeedback` pair, so every
+// existing consumer is untouched — but a shader that needs a SECOND virtual texture
+// can now include the impl again under a different name. That is required because
+// this file's include guard (and the fixed function names) made a second instance
+// impossible, and the scene mesh shader must host material SVT and the terrain RVT
+// at once. The stateless helpers below are instance-independent and stay here.
 // ============================================================
 
 struct VTSample
@@ -24,50 +33,15 @@ struct VTSample
 };
 
 #ifdef VT_PAGE_TABLE
-VTSample vtLookup(VTImageInfo img, vec2 uv, uint desiredMip)
-{
-    VTSample s;
-    s.uv = vec2(0.0);
-    s.residentMip = 0u;
-    s.valid = false;
-    if (img.mipCount == 0u)
-        return s;
-
-    uv = clamp(uv, vec2(0.0), vec2(0.999999));
-    uint mip = min(desiredMip, img.mipCount - 1u);
-    // Compute the starting mip's block offset once, then advance it incrementally per level
-    // (O(mip) total instead of recomputing vtMipSubOffset every iteration = O(mip^2)).
-    uint mipOffset = vtMipSubOffset(img.pagesX0, img.pagesY0, mip);
-
-    for (; mip < img.mipCount; ++mip)
-    {
-        uint pagesX = vtPagesAtMip(img.pagesX0, mip);
-        uint pagesY = vtPagesAtMip(img.pagesY0, mip);
-
-        uint pageX = min(uint(uv.x * float(pagesX)), pagesX - 1u);
-        uint pageY = min(uint(uv.y * float(pagesY)), pagesY - 1u);
-
-        uint entry = VT_PAGE_TABLE[img.pageTableBase + mipOffset + pageY * pagesX + pageX];
-        if (vtIsPageValid(entry))
-        {
-            uint tileX = vtEntryTileX(entry);
-            uint tileY = vtEntryTileY(entry);
-
-            float fx = uv.x * float(pagesX) - float(pageX);
-            float fy = uv.y * float(pagesY) - float(pageY);
-
-            float texelX = float(tileX * VT_PAGE_SIZE + VT_BORDER) + fx * float(VT_PAGE_INTERIOR);
-            float texelY = float(tileY * VT_PAGE_SIZE + VT_BORDER) + fy * float(VT_PAGE_INTERIOR);
-
-            s.uv = vec2(texelX, texelY) / float(img.poolDim);
-            s.residentMip = mip;
-            s.valid = true;
-            return s;
-        }
-        mipOffset += pagesX * pagesY; // next coarser level's block offset
-    }
-    return s;
-}
+#ifndef VT_LOOKUP_FN
+#define VT_LOOKUP_FN vtLookup
+#endif
+#ifdef VT_FEEDBACK
+#ifndef VT_WRITE_FEEDBACK_FN
+#define VT_WRITE_FEEDBACK_FN vtWriteFeedback
+#endif
+#endif
+#include "vt_lookup_impl.glsl"
 #endif // VT_PAGE_TABLE
 
 // Desired mip from screen-space UV derivatives (fragment stage). virtualResTexels
@@ -88,26 +62,5 @@ bool vtFeedbackFragment(vec2 fragCoord)
 {
     return (uint(fragCoord.x) & 7u) == 0u && (uint(fragCoord.y) & 7u) == 0u;
 }
-
-#ifdef VT_FEEDBACK
-// Mark page (mip, x, y) as requested this frame (idempotent atomicOr into the bitmask).
-void vtWriteFeedback(VTImageInfo img, vec2 uv, uint mip)
-{
-    if (img.mipCount == 0u)
-        return;
-    uv = clamp(uv, vec2(0.0), vec2(0.999999));
-    mip = min(mip, img.mipCount - 1u);
-    uint pagesX = vtPagesAtMip(img.pagesX0, mip);
-    uint pagesY = vtPagesAtMip(img.pagesY0, mip);
-    uint pageX = min(uint(uv.x * float(pagesX)), pagesX - 1u);
-    uint pageY = min(uint(uv.y * float(pagesY)), pagesY - 1u);
-    uint entryIdx = img.pageTableBase
-                  + vtMipSubOffset(img.pagesX0, img.pagesY0, mip)
-                  + pageY * pagesX + pageX;
-    // Bit-packed feedback: one bit per entry, 32 entries per uint word (VK-1480).
-    // Mirrors render::vt::VTFeedbackWords.hpp — CPU decode must use the same packing.
-    atomicOr(VT_FEEDBACK[entryIdx >> 5u], 1u << (entryIdx & 31u));
-}
-#endif // VT_FEEDBACK
 
 #endif // VT_SAMPLING_GLSL

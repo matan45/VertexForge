@@ -29,25 +29,41 @@ namespace render::gpudriven
         std::memcpy(tileDataBufferMapped, tiles.data(), dataSize);
     }
 
-    void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer)
+    void TerrainMeshShaderPipeline::updateWeightMapDescriptor(vk::Buffer weightMapBuffer,
+                                                              vk::Buffer heightFieldBuffer)
     {
         if (!initialized || !weightMapDescriptorSet || !weightMapBuffer) return;
 
         vk::Device vkDevice = device.getLogicalDevice();
 
-        vk::DescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = weightMapBuffer;
-        bufferInfo.offset = 0;
-        bufferInfo.range = VK_WHOLE_SIZE;
+        std::array<vk::DescriptorBufferInfo, 2> bufferInfos{};
+        bufferInfos[0].buffer = weightMapBuffer;
+        bufferInfos[0].offset = 0;
+        bufferInfos[0].range = VK_WHOLE_SIZE;
 
-        vk::WriteDescriptorSet write{};
-        write.dstSet = weightMapDescriptorSet;
-        write.dstBinding = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = vk::DescriptorType::eStorageBuffer;
-        write.pBufferInfo = &bufferInfo;
+        // VK-1620 binding 3. When the world-height plane is off TerrainMeshBuffer never created the
+        // heightfield arena, so the weight-map buffer stands in: the binding exists in the layout
+        // unconditionally, but the bake shader only declares and reads it under
+        // TERRAIN_RVT_WORLD_HEIGHT. A bound-but-unused descriptor is legal; a null one is not, and
+        // this layout is created without ePartiallyBound.
+        bufferInfos[1].buffer = heightFieldBuffer ? heightFieldBuffer : weightMapBuffer;
+        bufferInfos[1].offset = 0;
+        bufferInfos[1].range = VK_WHOLE_SIZE;
 
-        vkDevice.updateDescriptorSets(write, {});
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        writes[0].dstSet = weightMapDescriptorSet;
+        writes[0].dstBinding = 0;
+        writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[0].pBufferInfo = &bufferInfos[0];
+
+        writes[1].dstSet = weightMapDescriptorSet;
+        writes[1].dstBinding = 3;
+        writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[1].pBufferInfo = &bufferInfos[1];
+
+        vkDevice.updateDescriptorSets(writes, {});
     }
 
     void TerrainMeshShaderPipeline::updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers)
@@ -63,6 +79,12 @@ namespace render::gpudriven
 
         uint32_t count = static_cast<uint32_t>(std::min(layers.size(), static_cast<size_t>(maxLayers)));
         std::memcpy(terrainLayerBufferMapped, layers.data(), count * sizeof(TerrainLayerGPUData));
+    }
+
+    void TerrainMeshShaderPipeline::updateTerrainAntiTiling(const TerrainAntiTilingGPUData& params)
+    {
+        if (!terrainAntiTilingBufferMapped) return;
+        std::memcpy(terrainAntiTilingBufferMapped, &params, sizeof(TerrainAntiTilingGPUData));
     }
 
     void TerrainMeshShaderPipeline::updateSharedDescriptors(vk::DescriptorSet iblDescSet,

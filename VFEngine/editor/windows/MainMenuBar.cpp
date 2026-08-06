@@ -11,6 +11,7 @@
 #include "config/RenderConfigWindow.hpp"
 #include "config/ProjectSettingsWindow.hpp"
 #include "terrain/TerrainCreationWindow.hpp"
+#include "terrain/HeightLayerPanel.hpp"
 #include "ocean/OceanEditorWindow.hpp"
 #include "config/PostProcessConfigWindow.hpp"
 #include "config/NavmeshWindow.hpp"
@@ -229,6 +230,9 @@ namespace windows
             controllers::imguiHandler::ImguiWindowHandler::add(std::make_shared<RetargetingEditorWindow>(""));
         if (ImGui::MenuItem("UI Theme Editor") && themeEditorWindow) themeEditorWindow->show();
         if (ImGui::MenuItem("UI Layer Builder") && uiLayerBuilderWindow) uiLayerBuilderWindow->show();
+        // VK-1648. Under Tools rather than Add: it manages layers that already exist, and unlike
+        // every entry in the Add menu it creates nothing.
+        if (ImGui::MenuItem("Terrain Height Layers") && heightLayerPanel) heightLayerPanel->show();
         ImGui::EndMenu();
     }
 

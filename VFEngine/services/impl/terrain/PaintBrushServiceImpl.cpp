@@ -79,6 +79,26 @@ namespace services
                 setBrushType(cmd.type);
             });
 
+        // VK-1614: what the stroke writes. Follows the falloff/shape shape (mutate + publish) rather
+        // than the brush-type one, because a target is not a mode and needs no separate notification.
+        dispatcher.registerCommandHandler<events::paintBrush::SetPaintTargetCommand>(
+            [this](const events::paintBrush::SetPaintTargetCommand& cmd)
+            {
+                if (!paintModeActive)
+                {
+                    return;
+                }
+
+                currentParams.target = cmd.target;
+                publishParamsChanged();
+            });
+
+        dispatcher.registerQueryHandler<events::paintBrush::GetPaintTargetQuery>(
+            [this](const events::paintBrush::GetPaintTargetQuery&)
+            {
+                return currentParams.target;
+            });
+
         dispatcher.registerQueryHandler<events::paintBrush::GetPaintBrushParamsQuery>(
             [this](const events::paintBrush::GetPaintBrushParamsQuery&)
             {

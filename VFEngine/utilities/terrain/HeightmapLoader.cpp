@@ -1,8 +1,8 @@
 #include "HeightmapLoader.hpp"
+#include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
 #include "../resource/BC7Decoder.hpp"
-#include "../resource/VFSHelpers.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -64,7 +64,7 @@ namespace terrain
 
     std::shared_ptr<HeightmapData> HeightmapLoader::loadVFImage(const std::string& filePath)
     {
-        auto rawData = resource::readFileBytes(filePath);
+        auto rawData = readTerrainFileBytes(filePath);
         if (rawData.empty())
         {
             vfLogError("HeightmapLoader: Failed to read vfImage file: {}", filePath);

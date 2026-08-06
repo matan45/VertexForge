@@ -18,6 +18,9 @@ namespace windows
         int activeLayer = 0;
         int falloffIndex = 2;
         int shapeIndex = 0;
+        // VK-1614: mirrors terrain::PaintTarget. Kept as an int like the other radio-group mirrors
+        // above so the ImGui::RadioButton calls stay uniform.
+        int selectedTarget = 0;
 
         // Cached terrain material data for layer names
         std::shared_ptr<terrain::TerrainMaterialData> materialData;
@@ -38,6 +41,7 @@ namespace windows
     private:
         void subscribe();
         void loadMaterialFromTarget();
+        void drawPaintTarget();
         void drawBrushType();
         void drawTerrainMaterial();
         void drawLayerSelection();

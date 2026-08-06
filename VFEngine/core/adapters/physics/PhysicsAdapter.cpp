@@ -631,6 +631,14 @@ namespace core
         physicsWorld->removeTerrainTileBody(entity.id, tileX, tileZ);
     }
 
+    void PhysicsAdapter::setTerrainColliderMaterial(services::EntityHandle entity, float friction,
+                                                     float restitution, uint32_t collisionLayer)
+    {
+        if (!physicsWorld) return;
+        physicsWorld->getTerrainManager().setTerrainColliderMaterial(entity.id, friction, restitution,
+                                                                     collisionLayer);
+    }
+
     void PhysicsAdapter::submitAsyncTerrainTileCollider(services::EntityHandle entity,
                                                           const services::TerrainTileColliderInfo& tile,
                                                           float distanceToCamera)

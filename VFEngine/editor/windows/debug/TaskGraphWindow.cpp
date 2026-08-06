@@ -888,6 +888,10 @@ namespace windows
 		drawFrameHistoryPlot("##gpuhistory", gpuHistoryMs);
 		ImGui::Separator();
 
+		// VK-1610: before the per-pass toggle, because this costs no timestamps and stays
+		// readable with Tier 2 off.
+		drawTerrainRVTSection();
+
 		// Tier 2: one timestamp per render-graph pass boundary. Not free, so it is
 		// off by default and draw() drops the request when the window closes.
 		bool enabled = gpuProfilingEnabled;
@@ -964,5 +968,68 @@ namespace windows
 				ImGui::TreePop();
 			}
 		}
+	}
+
+	void TaskGraphWindow::drawTerrainRVTSection()
+	{
+		const render::TerrainRVTFrameStats rvt = render::TerrainRVTStats::instance().snapshot();
+		if (!rvt.active)
+			return;
+
+		if (!ImGui::TreeNodeEx("Terrain RVT residency", ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		const float used = rvt.capacityPages > 0
+			? static_cast<float>(rvt.residentPages) / static_cast<float>(rvt.capacityPages)
+			: 0.0f;
+		ImGui::Text("Pool: %ux%u, %u planes @ %u B/texel, %u MB budget",
+			rvt.poolDim, rvt.poolDim, rvt.planeCount, rvt.bytesPerTexel, rvt.budgetMB);
+		ImGui::Text("Pages: %u / %u resident (%.0f%%)", rvt.residentPages, rvt.capacityPages, used * 100.0f);
+		ImGui::Text("This frame: %u requested, %u allocated, %u evicted, %u baked",
+			rvt.requestedPages, rvt.allocatedPages, rvt.evictedPages, rvt.scheduledBakes);
+		if (rvt.uncoveredSkipped > 0)
+		{
+			ImGui::TextDisabled("  %u requested pages lie outside loaded terrain (skipped on purpose)",
+				rvt.uncoveredSkipped);
+		}
+		ImGui::TextDisabled("Residency CPU: %llu us readback + %llu us decode + %llu us plan",
+			static_cast<unsigned long long>(rvt.readbackUs),
+			static_cast<unsigned long long>(rvt.decodeUs),
+			static_cast<unsigned long long>(rvt.residencyUs));
+
+		// The whole point of the section: separate "streaming in" from "the pool is too small".
+		// Both verdicts come from the residency plan's unclamped miss count — deriving them from
+		// the number of pages actually allocated cannot work, because a pool with no room produces
+		// a SHORTER allocation list, which would read as a quiet, healthy frame.
+		if (rvt.poolLimited)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.3f, 1.0f),
+				"THRASHING: %u pages wanted but the pool has no room", rvt.unmetPages);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("The atlas cannot hold what the camera can see, so pages evict and\n"
+					"re-bake every frame — which shows up as GPU time in the VT/RVT Bake\n"
+					"scope and nowhere else. Raise the RVT pool budget under Render Config >\n"
+					"Virtual Texturing. Detail maps take the pool from 2 planes to 4, so the\n"
+					"same MB buys roughly 40%% of the pages.");
+			}
+		}
+		else if (rvt.budgetLimited)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
+				"Streaming: %u pages queued behind the per-frame budget", rvt.unmetPages);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Benign and self-correcting — the pool has room, it is just pacing\n"
+					"how many pages it bakes per frame. Only raise Pages / Frame if this\n"
+					"never clears while the camera is still.");
+			}
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "Residency steady");
+		}
+
+		ImGui::TreePop();
 	}
 }

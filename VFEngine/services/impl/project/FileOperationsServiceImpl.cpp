@@ -6,6 +6,7 @@
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/DependencyScanner.hpp"
 #include "resource/ResourceManager.hpp"
+#include "terrain/TerrainLayerSidecar.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/project/FileOperationsEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
@@ -34,6 +35,37 @@ namespace
             {
                 asset::DependencyScanner::scanAsset(*guid, file, projectRoot);
             }
+        }
+    }
+
+    // VK-1648. An asset's sidecars have to travel with it on EVERY path that moves it -- the
+    // original move, its redo, and its undo. Splitting them is silent and expensive: a terrain
+    // whose header still has HAS_EDIT_LAYER_SIDECAR set but no `.vfterrainlayers` beside it opens
+    // flattened with layer editing disabled, and the artist's whole reserved-layer stack (every
+    // road corridor) is unrecoverable. Undo used to move only the main file, so Ctrl+Z after a
+    // move was itself the data loss.
+    //
+    // Best-effort per sidecar: the asset itself has already moved by the time this runs, and
+    // failing the whole operation over a sidecar would leave a worse mess than warning about it.
+    void moveAssetSidecars(const fs::path& from, const fs::path& to)
+    {
+        const std::pair<fs::path, fs::path> sidecars[] = {
+            {asset::AssetMetadataSerializer::getMetaPath(from),
+             asset::AssetMetadataSerializer::getMetaPath(to)},
+            {terrain::terrainLayerSidecarPath(from), terrain::terrainLayerSidecarPath(to)},
+        };
+
+        for (const auto& [sidecarFrom, sidecarTo] : sidecars)
+        {
+            std::error_code ec;
+            if (!fs::exists(sidecarFrom, ec) || ec)
+                continue;
+
+            fs::rename(sidecarFrom, sidecarTo, ec);
+            if (ec)
+                vfLogWarning("Moved {} but its sidecar {} did not follow: {}. The asset and its "
+                             "sidecar are now split; move it by hand.",
+                             from.string(), sidecarFrom.string(), ec.message());
         }
     }
 }
@@ -200,13 +232,10 @@ namespace services
             return result;
         }
 
-        // Move .vfmeta sidecar if it exists
-        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
-        if (fs::exists(sourceMeta, ec))
-        {
-            auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
-            fs::rename(sourceMeta, destMeta, ec);
-        }
+        // The `.vfmeta` and (VK-1646) the terrain's `.vfterrainlayers` follow the asset. Nothing
+        // inside either needs rewriting — the GUID and the generation id both still describe the
+        // same asset and the same bytes; only the name they hang off changed.
+        moveAssetSidecars(source, dest);
 
         if (!projRoot.empty())
         {
@@ -301,6 +330,7 @@ namespace services
         }
 
         // Create new .vfmeta with new GUID for the copy (copies are distinct assets)
+        asset::AssetGUID copyGuid;
         auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
         if (fs::exists(sourceMeta, ec))
         {
@@ -309,8 +339,41 @@ namespace services
             {
                 asset::AssetMetadata newMeta = *originalMeta;
                 newMeta.guid = asset::AssetGUID::generate();
+                copyGuid = newMeta.guid;
                 auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
                 asset::AssetMetadataSerializer::save(newMeta, destMeta);
+            }
+        }
+
+        // VK-1646: duplicate a terrain and its authoring state comes along, otherwise the copy
+        // opens with layer editing disabled and the artist quietly loses the stack.
+        //
+        // The bytes cannot just be copied, though: the line above minted a NEW GUID for the copy,
+        // so a verbatim sidecar would name the original and read as an orphan. Its generation id
+        // still holds — fs::copy_file reproduced the terrain byte for byte — so only the identity
+        // is re-stamped.
+        auto sourceLayers = terrain::terrainLayerSidecarPath(source);
+        if (fs::exists(sourceLayers, ec))
+        {
+            const auto destLayers = terrain::terrainLayerSidecarPath(dest);
+            fs::copy_file(sourceLayers, destLayers, ec);
+            if (ec)
+            {
+                vfLogWarning("Copied {} but its edit-layer sidecar did not: {}. The copy will open "
+                             "with layer editing disabled.", sourcePath, ec.message());
+                ec.clear();
+            }
+            else
+            {
+                terrain::TerrainLayerSidecarMeta layerMeta;
+                if (terrain::peekTerrainLayerSidecar(destLayers, layerMeta) ==
+                        terrain::TerrainLayerSidecarStatus::Ok &&
+                    !terrain::rebindTerrainLayerSidecar(destLayers, copyGuid.getValue(),
+                                                        layerMeta.generationId))
+                {
+                    vfLogWarning("Copied {} but could not re-point its edit-layer sidecar at the "
+                                 "copy's GUID; the copy will treat it as an orphan.", sourcePath);
+                }
             }
         }
 
@@ -415,6 +478,23 @@ namespace services
             }
         }
 
+        // VK-1646: the terrain's edit-layer sidecar goes to the trash alongside it, so undo can
+        // bring back the layer stack and not just the flattened heights.
+        std::string layersOriginalPath;
+        std::string layersBackupPath;
+        auto layersPath = terrain::terrainLayerSidecarPath(filePath);
+        if (fs::exists(layersPath, ec))
+        {
+            std::string layersTrashPath = generateTrashPath(layersPath.string());
+            fs::rename(layersPath, layersTrashPath, ec);
+            if (!ec)
+            {
+                layersOriginalPath = layersPath.string();
+                layersBackupPath = layersTrashPath;
+            }
+        }
+        ec.clear();
+
         // Remove stale ResourceManager cache entries
         // With GUID-keyed caches, deletions don't need cache cleanup
 
@@ -425,6 +505,8 @@ namespace services
                 auto undoCmd = std::make_unique<DeleteFileUndoCommand>(path, trashPath);
                 undoCmd->metaOriginalPath = metaOriginalPath;
                 undoCmd->metaBackupPath = metaBackupPath;
+                undoCmd->layersOriginalPath = layersOriginalPath;
+                undoCmd->layersBackupPath = layersBackupPath;
                 undoCmd->dependentPaths = std::move(dependentPaths);
                 undoCmd->projectRoot = projRoot;
                 undoRedoService->pushCommand(std::move(undoCmd));
@@ -464,6 +546,9 @@ namespace services
             throw std::runtime_error("Failed to redo move: " + ec.message());
         }
 
+        // Same sidecar contract as moveFile() — see moveAssetSidecars().
+        moveAssetSidecars(sourcePath, destPath);
+
         if (!projectRoot.empty())
         {
             asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
@@ -492,6 +577,11 @@ namespace services
         {
             throw std::runtime_error("Failed to undo move: " + ec.message());
         }
+
+        // The sidecars come back too. Without this, Ctrl+Z after moving a .vfTerrain left the
+        // layer sidecar at the destination and the terrain opened flattened — see
+        // moveAssetSidecars().
+        moveAssetSidecars(destPath, sourcePath);
 
         asset::AssetReferenceScanner::restoreOriginalContents(
             std::vector<std::pair<std::string, std::string>>(
@@ -582,6 +672,12 @@ namespace services
             fs::rename(metaOriginalPath, metaBackupPath, ec);
         }
 
+        // ...and the edit-layer sidecar with it (VK-1646)
+        if (!layersOriginalPath.empty())
+        {
+            fs::rename(layersOriginalPath, layersBackupPath, ec);
+        }
+
         // Unregister from the AssetDatabase, as the original delete did
         events::fileops::FileDeletedNotification notification;
         notification.path = originalPath;
@@ -614,6 +710,12 @@ namespace services
         if (!metaBackupPath.empty())
         {
             fs::rename(metaBackupPath, metaOriginalPath, ec);
+        }
+
+        // ...and the edit-layer sidecar, so the restored terrain keeps its layer stack (VK-1646)
+        if (!layersBackupPath.empty())
+        {
+            fs::rename(layersBackupPath, layersOriginalPath, ec);
         }
 
         // Re-register the asset (reuses the GUID from the restored .vfmeta)

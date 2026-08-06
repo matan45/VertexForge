@@ -123,6 +123,33 @@ namespace core::physics
         }
     }
 
+    // VK-1613. The editor exposes friction / restitution / collision layer only while a collider
+    // already exists, so reading them at body construction (buildTileColliderInfo) was the whole
+    // story and the controls did nothing. Push them onto the live bodies as well; the component stays
+    // the source of truth, so tiles that stream in later still pick the same values up at creation.
+    void PhysicsTerrainManager::setTerrainColliderMaterial(uint64_t entityId, float friction,
+                                                           float restitution, uint32_t collisionLayer)
+    {
+        if (!ctx || !ctx->physicsSystem) return;
+
+        auto entityIt = terrainBodies.find(entityId);
+        if (entityIt == terrainBodies.end()) return;
+
+        auto& bodyInterface = ctx->getBodyInterface();
+        const auto layer = static_cast<JPH::ObjectLayer>(collisionLayer);
+
+        for (auto& [tileKey, bodyId] : entityIt->second)
+        {
+            if (bodyId.IsInvalid()) continue;
+
+            bodyInterface.SetFriction(bodyId, friction);
+            bodyInterface.SetRestitution(bodyId, restitution);
+            // Static terrain bodies are created with DontActivate and stay asleep; the layer change
+            // is what needs the broadphase to know, and SetObjectLayer handles that itself.
+            bodyInterface.SetObjectLayer(bodyId, layer);
+        }
+    }
+
     void PhysicsTerrainManager::removeAllTerrainBodies(uint64_t entityId)
     {
         if (!ctx || !ctx->physicsSystem) return;

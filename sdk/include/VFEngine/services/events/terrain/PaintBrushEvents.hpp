@@ -61,6 +61,16 @@ namespace events::paintBrush
         std::string_view getName() const override { return "SetPaintBrushType"; }
     };
 
+    // VK-1614: what the stroke writes — the layer weight map (today's behaviour) or one channel of
+    // the world-anchored surface mask. Cloned from the brush-type pair above, deliberately: a target
+    // is a brush parameter, so it belongs next to type/shape/falloff rather than becoming a mode.
+    struct SetPaintTargetCommand : ICommand<>
+    {
+        ::terrain::PaintTarget target;
+
+        std::string_view getName() const override { return "SetPaintTarget"; }
+    };
+
     struct ApplyPaintBrushCommand : ICommand<>
     {
         glm::vec3 worldPosition{0.0f};
@@ -79,6 +89,11 @@ namespace events::paintBrush
     struct GetPaintBrushTypeQuery : IQuery<::terrain::PaintBrushType>
     {
         std::string_view getName() const override { return "GetPaintBrushType"; }
+    };
+
+    struct GetPaintTargetQuery : IQuery<::terrain::PaintTarget>
+    {
+        std::string_view getName() const override { return "GetPaintTarget"; }
     };
 
     struct PaintBrushParamsChangedNotification : INotification

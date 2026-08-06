@@ -31,6 +31,10 @@ namespace windows
         void compileMaterial();
 
         void drawToolbar();
+        // VK-1611 material-global anti-tiling (macro variation + distance tiling rescale).
+        void drawAntiTilingProperties();
+        // VK-1625 material-global parallax (POM-lite from the ORM-alpha height).
+        void drawParallaxProperties();
         void drawLayerProperties();
 
         void removeLayer(int removeIndex, int currentCount);

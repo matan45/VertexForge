@@ -1,8 +1,10 @@
 #include "FoliageSerializer.hpp"
 #include "../print/Log.hpp"
 #include "../resource/VFSHelpers.hpp"
+#include "../resource/VirtualFileSystem.hpp"
 #include <fstream>
 #include <filesystem>
+#include <sstream>
 #include <nlohmann/json.hpp>
 
 namespace foliage
@@ -16,6 +18,9 @@ namespace foliage
     bool FoliageSerializer::saveFoliageInstances(const std::string& filePath,
                                                  const std::vector<FoliageInstance>& instances)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         namespace fs = std::filesystem;
         fs::path dir = fs::path(filePath).parent_path();
         if (!dir.empty() && !fs::exists(dir))
@@ -42,8 +47,10 @@ namespace foliage
     bool FoliageSerializer::loadFoliageInstances(const std::string& filePath,
                                                  std::vector<FoliageInstance>& instances)
     {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open()) return false;
+        const auto bytes = resource::readFileBytes(filePath);
+        if (bytes.empty()) return false;
+        const std::string contents(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        std::istringstream file(contents, std::ios::binary);
 
         std::array<char, 4> magic{};
         file.read(magic.data(), 4);
@@ -89,6 +96,9 @@ namespace foliage
     bool FoliageSerializer::saveFoliagePalette(const std::string& filePath,
                                                const std::vector<FoliageType>& palette)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         namespace fs = std::filesystem;
         fs::path dir = fs::path(filePath).parent_path();
         if (!dir.empty() && !fs::exists(dir))

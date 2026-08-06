@@ -252,6 +252,13 @@ namespace render::gpudriven
         allocations_.clear();
         cachedGPUTileData_.clear();
         gpuTileDataDirty_ = true;
+
+        // VK-1613: the mask is material state, and this adapter no longer holds the material's
+        // terrain. Leaving it set would carry the previous scene's hidden layers into a scene whose
+        // material load never overwrites it (one with no terrain material at all). The version bump
+        // is only tidiness — every per-tile stamp was just erased with the allocations.
+        layerEnabledMask_ = terrain::ALL_TERRAIN_LAYERS_ENABLED;
+        ++maskVersion_;
     }
 
     bool TerrainGPUAdapter::uploadLODData(
@@ -362,12 +369,33 @@ namespace render::gpudriven
         uint32_t offsetElements = terrainBuffer_.allocateWeightMap(tileKey, totalBytes);
         if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
         {
-            vfLogError("TerrainGPUAdapter: Failed to allocate weight map for tile ({}, {})",
-                       key.coordX, key.coordZ);
+            // VK-1613: log once per tile, not once per frame. needsWeightMapUpload keeps returning
+            // true for a tile that has never uploaded (deliberately — it is publishing
+            // weightMapOffset = 0 and sampling another tile's weights until it succeeds), so an
+            // ungated error here would spam every frame for as long as the arena stays full.
+            if (!alloc.weightMapAllocFailed)
+            {
+                alloc.weightMapAllocFailed = true;
+                vfLogError("TerrainGPUAdapter: Failed to allocate weight map for tile ({}, {}) — "
+                           "weight arena is full; this tile will render with another tile's weights "
+                           "until space frees up",
+                           key.coordX, key.coordZ);
+            }
             return false;
         }
+        alloc.weightMapAllocFailed = false;
 
         std::vector<uint8_t> packedData(totalBytes);
+
+        // VK-1613: resolve each channel's visibility ONCE (it is per channel, not per texel) and
+        // then write a hard 0 for a hidden layer. The composite culls at w < 0.001 and normalizes by
+        // the surviving weight, so a zeroed channel disappears and the rest scale up — no shader
+        // change, and `wm` itself is never modified, so unhiding restores the artist's paint exactly.
+        std::array<bool, terrain::WEIGHT_CHANNELS> channelVisible{};
+        for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
+        {
+            channelVisible[ch] = terrain::isWeightChannelEnabled(wm, ch, layerEnabledMask_);
+        }
 
         for (uint32_t z = 0; z < wm.resolution; ++z)
         {
@@ -376,8 +404,9 @@ namespace render::gpudriven
                 uint32_t pixelOffset = (z * wm.resolution + x) * terrain::WEIGHT_CHANNELS;
                 for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
                 {
-                    packedData[pixelOffset + ch] = static_cast<uint8_t>(
-                        wm.getWeight(ch, x, z) * 255.0f + 0.5f);
+                    packedData[pixelOffset + ch] = channelVisible[ch]
+                        ? static_cast<uint8_t>(wm.getWeight(ch, x, z) * 255.0f + 0.5f)
+                        : uint8_t{0};
                 }
             }
         }
@@ -392,8 +421,140 @@ namespace render::gpudriven
         // Store byte offset (elements * 4) for shader access
         alloc.weightMapOffset = offsetElements * 4;
         alloc.weightMapUploaded = true;
+        alloc.weightMaskVersion = maskVersion_;
         gpuTileDataDirty_ = true;
 
+        return true;
+    }
+
+    void TerrainGPUAdapter::setLayerEnabledMask(uint32_t mask)
+    {
+        if (layerEnabledMask_ == mask)
+        {
+            return;
+        }
+
+        layerEnabledMask_ = mask;
+        // Every stamped tile is now out of date. Bumping one counter is what makes this scale: the
+        // alternative — walking the tiles and marking them dirty — cannot reach tiles that are not
+        // resident yet, and those are exactly the ones that would come back with the old visibility.
+        ++maskVersion_;
+    }
+
+    bool TerrainGPUAdapter::needsWeightMapUpload(const terrain::TerrainTile& tile) const
+    {
+        if (!tile.hasWeightMap())
+        {
+            // Nothing to pack. Without this guard a tile whose CPU weight data has been evicted
+            // would fail uploadWeightMap() every frame forever, since neither flag below can clear.
+            return false;
+        }
+
+        if (tile.weightMapGPUDirty)
+        {
+            return true;
+        }
+
+        auto it = allocations_.find(TerrainTileKey{tile.coord.x, tile.coord.z});
+        if (it == allocations_.end())
+        {
+            return false;
+        }
+
+        // !weightMapUploaded belongs in this disjunction rather than as a precondition on the
+        // version compare: removeTileLOD erases the whole allocation when the last LOD goes, while
+        // TerrainMeshBuffer::freeTileLOD does not free the weight region — so a re-added tile arrives
+        // with weightMapUploaded == false, weightMapOffset == 0 and nobody having set the dirty flag,
+        // and would otherwise sample whichever tile owns offset 0 in the shared weight SSBO.
+        return !it->second.weightMapUploaded || it->second.weightMaskVersion != maskVersion_;
+    }
+
+    // VK-1620 --- terrain heights for the RVT world-height plane -------------------------------
+    //
+    // The bake needs the terrain surface at each page texel. It cannot read the terrain VERTEX
+    // buffer for that: TerrainStreamManager pins only the COARSEST LOD, and populateGPUTile writes
+    // lodNMeshletData for every LOD whether allocated or not, so a LOD-0 vertex read on a tile that
+    // only has its fallback resident returns whatever tile owns vertex slot 0 — wrong heights, no
+    // validation error. This is a straight copy of the CPU heightData grid instead, which is
+    // authoritative and LOD-independent, and lands on the SAME grid as the splat weights
+    // (TerrainTile::initializeWeightMap sizes the weight map from config.getVertexCount(), which is
+    // also heightData's stride) so the bake's two samples are co-located by construction.
+    bool TerrainGPUAdapter::needsHeightFieldUpload(const terrain::TerrainTile& tile) const
+    {
+        if (!terrainBuffer_.isHeightFieldEnabled() || !tile.hasHeightData())
+        {
+            // Same guard as the weight map's: without it, a tile whose CPU heights were evicted
+            // would fail upload every frame forever because neither flag below can clear.
+            return false;
+        }
+
+        if (tile.heightFieldGPUDirty)
+            return true;
+
+        auto it = allocations_.find(TerrainTileKey{tile.coord.x, tile.coord.z});
+        if (it == allocations_.end())
+            return false;
+
+        // !heightFieldUploaded is a disjunct, not a precondition, for the same reason it is on the
+        // weight map: removeTileLOD erases the allocation when the last LOD goes while the arena
+        // region survives, so a re-added tile arrives uploaded == false with nobody having set the
+        // dirty flag, and would otherwise publish offset 0 and read another tile's heights.
+        return !it->second.heightFieldUploaded;
+    }
+
+    bool TerrainGPUAdapter::uploadHeightField(const terrain::TerrainTile& tile)
+    {
+        if (!terrainBuffer_.isHeightFieldEnabled() || !tile.hasHeightData())
+            return false;
+
+        TerrainTileKey key{tile.coord.x, tile.coord.z};
+        auto it = allocations_.find(key);
+        if (it == allocations_.end())
+            return false;
+
+        auto& alloc = it->second;
+
+        const uint32_t vertexCount = tile.config.getVertexCount();
+        const uint32_t totalBytes = vertexCount * vertexCount * static_cast<uint32_t>(sizeof(float));
+        if (tile.heightData.size() != static_cast<size_t>(vertexCount) * vertexCount)
+        {
+            vfLogError("TerrainGPUAdapter: tile ({}, {}) height data is {} floats, expected {} — "
+                       "skipping world-height upload",
+                       key.coordX, key.coordZ, tile.heightData.size(),
+                       static_cast<size_t>(vertexCount) * vertexCount);
+            return false;
+        }
+
+        const std::string tileKey = alloc.getMeshPath();
+        const uint32_t offsetElements = terrainBuffer_.allocateHeightField(tileKey, totalBytes);
+        if (offsetElements == FreeListAllocator::ALLOCATION_FAILED)
+        {
+            // Gated to once per tile per failure episode, exactly like the weight arena's: the
+            // needs-upload predicate keeps returning true for a tile that never uploaded, so an
+            // ungated error would spam every frame while the arena stays full.
+            if (!alloc.heightFieldAllocFailed)
+            {
+                alloc.heightFieldAllocFailed = true;
+                vfLogError("TerrainGPUAdapter: Failed to allocate height field for tile ({}, {}) — "
+                           "height arena is full; props over this tile will not blend into it",
+                           key.coordX, key.coordZ);
+            }
+            return false;
+        }
+        alloc.heightFieldAllocFailed = false;
+
+        // heightData is already the exact row-major float grid the bake indexes, so there is no
+        // repacking step here — unlike the weight map, which has to interleave 8 channels per texel.
+        if (!terrainBuffer_.uploadHeightFieldData(tileKey, tile.heightData.data(), totalBytes))
+        {
+            vfLogError("TerrainGPUAdapter: Failed to upload height field for tile ({}, {})",
+                       key.coordX, key.coordZ);
+            return false;
+        }
+
+        alloc.heightFieldOffset = offsetElements;
+        alloc.heightFieldUploaded = true;
+        gpuTileDataDirty_ = true;
         return true;
     }
 
@@ -578,6 +739,13 @@ namespace render::gpudriven
             gpuTile.flags |= ObjectFlags::Selected;
         gpuTile.weightMapOffset = alloc.weightMapUploaded ? alloc.weightMapOffset : 0;
 
+        // VK-1620: the heightfield element offset rides caveMeshletData.w, which was reserved and
+        // unused. Biased by +1 so 0 means "no height data for this tile" — offset 0 is a legal
+        // allocation and could not otherwise be told apart from absent, which would make the first
+        // tile in the arena the fallback for every tile that has none.
+        const uint32_t heightFieldSlot =
+            alloc.heightFieldUploaded ? (alloc.heightFieldOffset + 1u) : 0u;
+
         // Cave meshlet data
         if (alloc.caveAlloc.isAllocated)
         {
@@ -585,11 +753,13 @@ namespace render::gpudriven
                 alloc.caveAlloc.meshletOffset,
                 alloc.caveAlloc.meshletCount,
                 alloc.caveAlloc.vertexOffset,
-                0u);
+                heightFieldSlot);
         }
         else
         {
-            gpuTile.caveMeshletData = glm::uvec4(0u);
+            // .w must survive the no-cave case: a tile without a cave still has heights, and
+            // zeroing the whole vector here would silently disable blending on flat terrain.
+            gpuTile.caveMeshletData = glm::uvec4(0u, 0u, 0u, heightFieldSlot);
         }
     }
 

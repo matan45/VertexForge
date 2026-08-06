@@ -76,13 +76,13 @@ TEST_CASE("VT pool sizing: budget -> pool dim -> tile count")
 
 TEST_CASE("Terrain RVT layout: detail maps add normal and HDR emission planes")
 {
-    const auto legacyLayout = render::gpudriven::terrainRVTLayout(false);
+    const auto legacyLayout = render::gpudriven::terrainRVTLayout(false, /*worldHeight*/ false);
     REQUIRE(legacyLayout.planeFormats.size() == 2);
     CHECK(legacyLayout.bytesPerTexel == 8);
     CHECK(legacyLayout.planeFormats[0] == vk::Format::eR8G8B8A8Srgb);
     CHECK(legacyLayout.planeFormats[1] == vk::Format::eR8G8B8A8Unorm);
 
-    const auto detailLayout = render::gpudriven::terrainRVTLayout(true);
+    const auto detailLayout = render::gpudriven::terrainRVTLayout(true, /*worldHeight*/ false);
     REQUIRE(detailLayout.planeFormats.size() == 4);
     CHECK(detailLayout.bytesPerTexel == 20);
     CHECK(detailLayout.planeFormats[0] == vk::Format::eR8G8B8A8Srgb);

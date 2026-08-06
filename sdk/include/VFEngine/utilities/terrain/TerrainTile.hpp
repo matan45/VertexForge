@@ -95,8 +95,19 @@ namespace terrain
         void clearLODDirty(uint32_t lod) { dirtyLODMask &= ~(1 << lod); }
         void setAllLODsDirty() { dirtyLODMask = 0x3F; isDirty = true; }
 
+        // VK-1620: the RVT world-height plane is baked from a GPU copy of heightData, so that copy
+        // has to be invalidated whenever heights move. Starts true so a freshly created or loaded
+        // tile uploads once. Only meaningful when the world-height plane is enabled; otherwise the
+        // arena does not exist and every upload path early-outs.
+        bool heightFieldGPUDirty = true;
+
         bool isLODGPUDirty(uint32_t lod) const { return (gpuDirtyLODMask & (1 << lod)) != 0; }
-        void setLODGPUDirty(uint32_t lod) { gpuDirtyLODMask |= (1 << lod); }
+        // Marking a LOD for GPU re-upload is precisely the moment a tile's geometry changed, which
+        // is the only way its heights change. Invalidating here rather than at each sculpt / erosion
+        // / spline / stamp call site means a future height-editing path cannot forget to do it. A
+        // topology-only edit (hole mask) re-uploads heights redundantly — one memcpy of data already
+        // in RAM, which is a cheap price for that immunity.
+        void setLODGPUDirty(uint32_t lod) { gpuDirtyLODMask |= (1 << lod); heightFieldGPUDirty = true; }
         void clearLODGPUDirty(uint32_t lod) { gpuDirtyLODMask &= ~(1 << lod); }
         bool hasAnyGPUDirtyLOD() const { return gpuDirtyLODMask != 0; }
 

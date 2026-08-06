@@ -9,6 +9,7 @@
 #include "vegetation/VegetationSerializer.hpp"
 #include "vegetation/ScatterProfileSerialization.hpp" // VK-1585 foliage scatter sidecar
 #include "foliage/FoliageSerializer.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include <asset/AssetRef.hpp>
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
@@ -20,6 +21,9 @@ namespace services
 {
     bool TerrainService::saveWeightMaps(uint64_t terrainEntityId, const std::string& path)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
         {
@@ -121,6 +125,9 @@ namespace services
 
     bool TerrainService::saveVegetation(uint64_t terrainEntityId, const std::string& terrainPath)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
             return false;
@@ -169,11 +176,7 @@ namespace services
         if (gridIt == terrainGrids.end())
             return false;
 
-        namespace fs = std::filesystem;
         std::string vegDir = getVegetationDirectory(terrainPath);
-
-        if (!fs::exists(vegDir) || !fs::is_directory(vegDir))
-            return true; // No vegetation data — not an error
 
         auto allTiles = gridIt->second->getAllTiles();
         uint32_t loadedCount = 0;
@@ -184,7 +187,7 @@ namespace services
 
             std::string instancesPath = std::format("{}/tile_{}_{}.vfVegInstances",
                 vegDir, tile->coord.x, tile->coord.z);
-            if (fs::exists(instancesPath))
+            if (resource::VirtualFileSystem::instance().exists(instancesPath))
             {
                 if (vegetation::VegetationSerializer::loadBillboardInstances(instancesPath, tile->billboardInstances))
                 {
@@ -197,7 +200,7 @@ namespace services
 
         // Load billboard palette
         std::string palettePath = vegDir + "/billboard_palette.vfBillboard";
-        if (fs::exists(palettePath))
+        if (resource::VirtualFileSystem::instance().exists(palettePath))
         {
             std::vector<vegetation::BillboardPaletteEntry> palette;
             if (vegetation::VegetationSerializer::loadBillboardPalette(palettePath, palette))
@@ -233,6 +236,9 @@ namespace services
 
     bool TerrainService::saveFoliage(uint64_t terrainEntityId, const std::string& terrainPath)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         auto gridIt = terrainGrids.find(terrainEntityId);
         if (gridIt == terrainGrids.end())
             return false;
@@ -295,11 +301,7 @@ namespace services
         if (gridIt == terrainGrids.end())
             return false;
 
-        namespace fs = std::filesystem;
         std::string foliageDir = getFoliageDirectory(terrainPath);
-
-        if (!fs::exists(foliageDir) || !fs::is_directory(foliageDir))
-            return true; // No foliage data — not an error
 
         auto allTiles = gridIt->second->getAllTiles();
         uint32_t loadedCount = 0;
@@ -310,7 +312,7 @@ namespace services
 
             std::string instancesPath = std::format("{}/tile_{}_{}.vfFoliage",
                 foliageDir, tile->coord.x, tile->coord.z);
-            if (fs::exists(instancesPath))
+            if (resource::VirtualFileSystem::instance().exists(instancesPath))
             {
                 if (foliage::FoliageSerializer::loadFoliageInstances(instancesPath, tile->foliageInstances))
                 {
@@ -323,7 +325,7 @@ namespace services
 
         // Load the foliage palette onto TerrainService (drives the render collector).
         std::string palettePath = foliageDir + "/foliage_palette.json";
-        if (fs::exists(palettePath))
+        if (resource::VirtualFileSystem::instance().exists(palettePath))
         {
             std::vector<foliage::FoliageType> palette;
             if (foliage::FoliageSerializer::loadFoliagePalette(palettePath, palette))
@@ -335,7 +337,7 @@ namespace services
 
         // Load the procedural foliage scatter profile (VK-1585).
         std::string scatterPath = foliageDir + "/foliage_scatter.json";
-        if (fs::exists(scatterPath))
+        if (resource::VirtualFileSystem::instance().exists(scatterPath))
         {
             vegetation::ScatterProfile profile;
             if (vegetation::loadScatterProfileFile(scatterPath, profile))

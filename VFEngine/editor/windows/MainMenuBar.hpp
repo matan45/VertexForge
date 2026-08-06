@@ -15,6 +15,7 @@ namespace windows
     class RenderConfigWindow;
     class ProjectSettingsWindow;
     class TerrainCreationWindow;
+    class HeightLayerPanel;
     class PostProcessConfigWindow;
     class OceanEditorWindow;
     class NavmeshWindow;
@@ -61,6 +62,7 @@ namespace windows
         RenderConfigWindow* renderConfigWindow = nullptr;
         ProjectSettingsWindow* projectSettingsWindow = nullptr;
         TerrainCreationWindow* terrainCreationWindow = nullptr;
+        HeightLayerPanel* heightLayerPanel = nullptr;
         OceanEditorWindow* oceanEditorWindow = nullptr;
         PostProcessConfigWindow* postProcessConfigWindow = nullptr;
         NavmeshWindow* navmeshWindow = nullptr;
@@ -116,6 +118,11 @@ namespace windows
         void setTerrainCreationWindow(TerrainCreationWindow* window)
         {
             terrainCreationWindow = window;
+        }
+
+        void setHeightLayerPanel(HeightLayerPanel* window)
+        {
+            heightLayerPanel = window;
         }
 
         void setOceanEditorWindow(OceanEditorWindow* window)

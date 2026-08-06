@@ -294,6 +294,11 @@ namespace render::gpudriven
         {
             bool rvtEnabled = false;
             bool svtEnabled = false;
+            // VK-1620: bake a world-height plane into the RVT so scene meshes can blend into the
+            // terrain. The SETTING; terrain.rvtWorldHeight is what the pool was actually built with
+            // (this AND the device can render to R16_UNORM). Like the pool budget it only takes
+            // effect where the atlas is created, i.e. on restart or an RVT off/on toggle.
+            bool rvtWorldHeight = false;
             uint32_t rvtPoolBudgetMB = 128;
             uint32_t svtPoolBudgetMB = 256; // VK-1480: 256 total, split across sRGB + Unorm pools
             float rvtTexelsPerMeter = 8.0f;
@@ -308,6 +313,29 @@ namespace render::gpudriven
         std::unique_ptr<TerrainRVTBaker> terrainRVTBaker;
         glm::vec2 rvtWorldMin{0.0f};
         glm::vec2 rvtWorldMax{0.0f};
+        // VK-1620: the normalization basis for the world-height plane, captured ONCE alongside the
+        // world bounds from the terrain's AUTHORED TerrainTileConfig::minHeight/maxHeight. It must
+        // not track loaded tile AABBs: a page bakes once and is read for as long as it stays
+        // resident, so a range that drifted as tiles streamed in would leave already-baked pages
+        // decoding to a wrong world Y — a silent, camera-dependent error.
+        float rvtHeightMin = 0.0f;
+        float rvtHeightRange = 1.0f;
+
+        // VK-1620: the scene mesh pipelines' own copy of the RVT params (set 1, binding 9). The
+        // terrain pipeline's equivalent is private to TerrainMeshShaderPipeline and describes the
+        // same atlas, but it carries no bindless slots — the terrain reaches its planes through
+        // set 5, while a scene mesh must reach them through the bindless heap. Host-visible and
+        // written once per RVT bring-up.
+        vk::Buffer rvtBlendParamsBuffer;
+        core::VulkanAllocation rvtBlendParamsAllocation;
+        void* rvtBlendParamsMapped = nullptr;
+        void createRVTBlendParamsBuffer();
+        // Register the RVT atlas planes in the bindless heap, refresh the params buffer and point
+        // every scene mesh pipeline's set-1 bindings at it. Safe to call repeatedly.
+        void wireRVTBlendPipelines();
+        // Enable/disable the blend path on the three scene mesh pipelines and recompile them.
+        // MUST run at every terrainRVT create/reset edge.
+        void applyRVTBlendToggle();
         uint32_t rvtFrameCounter = 0;
         bool rvtInvalidateAll = false; // set on terrain material change; re-bakes all fine pages
 
@@ -667,9 +695,30 @@ namespace render::gpudriven
         // Out-of-line: a change invalidates all cached VSM pages (they were baked
         // with the old caster set).
         void setTerrainCastShadows(bool cast);
-        // Changes the terrain shader permutation and, when RVT is enabled, rebuilds its
-        // baker/pool layout as one synchronized transition. Safe to call before init.
-        void setTerrainDetailMaps(bool enabled);
+        // VK-1610: does the project ALLOW per-layer normal/emission detail maps. Whether they are
+        // actually compiled in is derived from the loaded terrain material (a material with no
+        // normal/emission maps gets nothing from the permutation but would still pay the
+        // four-plane RVT pool), so this re-resolves the terrain rather than flipping a switch.
+        // Safe to call before init.
+        void setTerrainDetailMaps(bool allowed);
+
+        // VK-1614 world-anchored wetness/snow mask.
+        //
+        // `rgba` is the full mask image (R = wetness, G = snow); `worldRect` is (minX, minZ, maxX,
+        // maxZ) and is AUTHORED — snapshotted when the mask was created and never derived from live
+        // grid bounds, because the tile map is sparse, signed and mutable at runtime, so a derived
+        // rect would slide every painted puddle when a tile appeared at a negative coord.
+        //
+        // Assigning enables TERRAIN_WEATHER_MASK (one pipeline recreate, no RVT re-bake — the mask is
+        // applied after the composite join, so no baked page is affected).
+        void setTerrainSurfaceMask(uint32_t width, uint32_t height, const std::vector<uint8_t>& rgba,
+                                   const glm::vec4& worldRect, float wetnessScale, float snowScale);
+        // Re-uploads the pixels of the already-assigned mask; no pipeline work. This is the paint-stroke
+        // path, so it must stay cheap.
+        void updateTerrainSurfaceMaskPixels(const std::vector<uint8_t>& rgba);
+        void clearTerrainSurfaceMask();
+        // Records the pending mask copy. MUST be called outside any render pass.
+        void flushTerrainSurfaceMaskUploads(const vk::CommandBuffer& cmd);
 
         // VK-1209 — apply virtual-texturing settings (RVT/SVT enable, pool budgets,
         // page-per-frame + eviction age). Pool byte budgets are restart-scoped; the live
@@ -855,6 +904,28 @@ namespace render::gpudriven
         // VK-1209: rebuild the terrain pipeline so set 5 + RVT_ENABLED match rvtSampleEnabled
         // (used when the RVT config is toggled at runtime). Gathers the same layouts as init.
         void recreateTerrainPipelineForRVT();
+        // Derive the generated composite's content-driven macros and, if any of them changed,
+        // recompile the terrain pipeline AND rebuild the RVT baker so the live composite and the
+        // baked pages stay in lockstep. Cheap no-op when nothing moved.
+        //   TERRAIN_HEIGHT_BLEND    (VK-1609) any layer with a non-zero height-blend contrast
+        //   TERRAIN_DISTANCE_RESCALE (VK-1611) the material's resolved rescale strength/scale
+        // Both are settled here, in one rebuild, because neither changes what the bindless
+        // registration loop uploads. TERRAIN_DETAIL_MAPS cannot join them — see below.
+        void syncTerrainCompositePermutation();
+        // VK-1610: same idea for TERRAIN_DETAIL_MAPS, but the flag also changes the RVT plane
+        // layout (2 planes -> 4), so this rebuilds the RVT *manager* as well as the baker rather
+        // than just recompiling. `effective` is `terrain.detailMapsAllowed && the resolved material
+        // carries normal/emission maps`. Called from registerTerrainLayerTextures BEFORE the
+        // bindless registration loop, because it decides whether that loop uploads those textures
+        // at all — and, unlike setTerrainDetailMaps used to, it never re-enters that function.
+        void syncTerrainDetailMapsPermutation(bool effective);
+        // VK-1620: resolve VTCache::rvtWorldHeight (the setting) into terrain.rvtWorldHeight (what
+        // the pool is actually built with) by checking the device can render to R16_UNORM. Must run
+        // before ANY terrainRVTLayout() call, because the baker's MRT attachment count and the
+        // pool's plane count are both derived from the result and a disagreement is a device-lost.
+        // Deliberately not a getter: the check hits the driver, and resolving it once per pool
+        // build keeps the two consumers reading the same answer.
+        void syncTerrainRVTWorldHeight();
         void createGrassBuffers(uint32_t maxInstances);
         void initWaterSubsystems(vk::DescriptorSetLayout iblDescriptorSetLayout,
                                  const std::vector<vk::Format>& colorFormats, vk::Format depthFormat,

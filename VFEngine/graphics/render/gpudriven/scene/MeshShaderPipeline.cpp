@@ -273,6 +273,36 @@ namespace render::gpudriven
         device.getLogicalDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
     }
 
+    void MeshShaderPipeline::updateRVTBlendResources(vk::Buffer pageTableBuffer, vk::Buffer paramsBuffer)
+    {
+        // VK-1620. Only TWO bindings, not SVT's three, and both storage buffers:
+        //  - the RVT atlas planes are reached through the BINDLESS heap (their slots ride
+        //    VTImageInfo.pad0/1/2 inside the params buffer), exactly as SVT reaches its BC7 atlas,
+        //    which is what keeps this off the crowded shared set space entirely;
+        //  - there is no feedback binding, deliberately. vtDesiredMip keys off dFdx/dFdy of world
+        //    XZ, which collapses toward zero on a near-vertical cliff face, so a prop would request
+        //    far finer mips than the terrain ever needs and evict pages the terrain is using. The
+        //    coarsest mip is pinned resident, so a lookup always resolves without asking.
+        //
+        // Storage rather than uniform for the params too: createUpdateAfterBindLayout stamps
+        // eUpdateAfterBind on every binding, and a UBO there would add a
+        // descriptorBindingUniformBufferUpdateAfterBind device-feature dependency. Same reasoning
+        // as the VK-1580 wind block above.
+        if (!rvtBlendEnabled || !perDrawDataDescriptorSet || !pageTableBuffer || !paramsBuffer)
+            return;
+
+        vk::DescriptorBufferInfo pt{pageTableBuffer, 0, VK_WHOLE_SIZE};
+        vk::DescriptorBufferInfo pr{paramsBuffer, 0, VK_WHOLE_SIZE};
+
+        std::array<vk::WriteDescriptorSet, 2> writes{};
+        writes[0].dstSet = perDrawDataDescriptorSet; writes[0].dstBinding = 8; writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer; writes[0].pBufferInfo = &pt;
+        writes[1].dstSet = perDrawDataDescriptorSet; writes[1].dstBinding = 9; writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer; writes[1].pBufferInfo = &pr;
+
+        device.getLogicalDevice().updateDescriptorSets(static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    }
+
     void MeshShaderPipeline::updateMeshletDescriptors(MeshletBuffer& meshletBuffer)
     {
         std::array<vk::DescriptorBufferInfo, 3> bufferInfos{};
@@ -456,7 +486,15 @@ namespace render::gpudriven
         // VK-1209: SVT page table (3) / feedback (4) / image info (5), fragment stage. Always declared
         // so the layout matches the shader whether SVT_ENABLED is compiled in or not (a runtime toggle
         // recompiles the shader but does not rebuild this layout). When SVT is off the shader doesn't
-        // reference them and they stay unwritten — safe because descriptorBindingPartiallyBound is on.
+        // reference them and they stay unwritten.
+        //
+        // That is safe, but NOT for the reason this comment used to give: createUpdateAfterBindLayout
+        // (PipelineUtilities.cpp) stamps only eUpdateAfterBind — it has never set
+        // descriptorBindingPartiallyBound. What actually makes it legal is that the shader declares
+        // bindings 3-5 only under #ifdef SVT_ENABLED, so with SVT off they are not STATICALLY USED,
+        // and Vulkan permits a bound-but-statically-unused binding to be unwritten. Bindings 6 and 7
+        // below are compiled unconditionally and therefore really must always point at a live
+        // buffer. VK-1620's 8/9 follow the SVT pattern, not the toon/wind one.
         for (uint32_t b = 3; b <= 5; ++b)
         {
             vk::DescriptorSetLayoutBinding sb{};
@@ -499,6 +537,25 @@ namespace render::gpudriven
             wb.descriptorCount = 1;
             wb.stageFlags = vk::ShaderStageFlagBits::eMeshEXT;
             bindings.push_back(wb);
+        }
+
+        // VK-1620: terrain RVT page table (8) and params (9), fragment stage — the plumbing that
+        // lets a scene mesh blend into the terrain. Declared like SVT's 3-5 (always present in the
+        // layout, referenced by the shader only under RVT_TERRAIN_BLEND_ENABLED) so the pipeline
+        // can be recompiled for the toggle without rebuilding this set.
+        //
+        // These two are all that is needed: the RVT atlas planes are sampled through the bindless
+        // heap, so nothing here is an image and the storage-only pool size below still covers the
+        // whole set. That is what makes this fit at all — the scene mesh pipeline already binds up
+        // to 16 descriptor sets and cannot afford another one.
+        for (uint32_t b = 8; b <= 9; ++b)
+        {
+            vk::DescriptorSetLayoutBinding rb{};
+            rb.binding = b;
+            rb.descriptorType = vk::DescriptorType::eStorageBuffer;
+            rb.descriptorCount = 1;
+            rb.stageFlags = vk::ShaderStageFlagBits::eFragment;
+            bindings.push_back(rb);
         }
 
         perDrawDataLayout = core::PipelineUtilities::createUpdateAfterBindLayout(
@@ -658,6 +715,11 @@ namespace render::gpudriven
         if (svtSampleEnabled)
         {
             meshShader->addMacroDefinition("SVT_ENABLED"); // VK-1209 material SVT (set-1 bindings 3/4/5)
+        }
+        if (rvtBlendEnabled)
+        {
+            // VK-1620 mesh-into-terrain blending (set-1 bindings 8/9 + the bindless atlas slots).
+            meshShader->addMacroDefinition("RVT_TERRAIN_BLEND_ENABLED");
         }
         if (info.selectionCoverageLayout)
         {

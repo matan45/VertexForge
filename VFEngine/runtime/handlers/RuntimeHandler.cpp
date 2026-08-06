@@ -54,6 +54,7 @@
 #include "core/PluginManager.hpp"
 #include "api/PluginVersion.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
+#include "impl/common/VfsBridge.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/CoreComponents.hpp"
 #include "events/render/RenderEvents.hpp"
@@ -109,6 +110,7 @@ namespace {
     void RuntimeHandler::init() {
         resource::PathResolver::initialize();
         resource::VirtualFileSystem::instance().initialize();
+        services::configureVfsBridges();
         bootstrap->init();
 
         // Runtime is always in play mode - hide editor-only overlays (grid, gizmos, etc.)
@@ -268,7 +270,7 @@ namespace {
         std::filesystem::path scenePath =
             std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
 
-        if (!std::filesystem::exists(scenePath)) {
+        if (!resource::VirtualFileSystem::instance().exists(scenePath.string())) {
             vfLogError("Startup scene not found: {}", scenePath.string());
             dispatcher.execute(events::scene::NewSceneCommand{});
             return false;

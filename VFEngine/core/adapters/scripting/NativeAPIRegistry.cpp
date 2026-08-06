@@ -132,5 +132,6 @@ namespace core
     {
         api::PhysicsAPI::beginFrame();
         api::NavmeshAPI::beginFrame();
+        api::TerrainAPI::beginFrame();
     }
 }

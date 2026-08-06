@@ -47,8 +47,6 @@ namespace windows
             visualSettings.shoreFoamIntensity = dataOpt->shoreFoamIntensity;
             visualSettings.shoreBreakingStrength = dataOpt->shoreBreakingStrength;
             visualSettings.shoreWetRange = dataOpt->shoreWetRange;
-            visualSettings.shoreWetDarkening = dataOpt->shoreWetDarkening;
-            visualSettings.shoreWetRoughness = dataOpt->shoreWetRoughness;
             // VK-1604
             visualSettings.ssrEnabled = dataOpt->ssrEnabled;
             visualSettings.ssrIntensity = dataOpt->ssrIntensity;
@@ -346,14 +344,9 @@ namespace windows
             visualSettingsDirty |= labeledDragFloat("Wet Range", "##ShoreWetRange",
                 &visualSettings.shoreWetRange, 0.1f, 0.0f, 20.0f, "%.1f");
             ImGui::TextDisabled("How far above waterline terrain gets wet");
-
-            visualSettingsDirty |= labeledDragFloat("Darkening", "##ShoreWetDarkening",
-                &visualSettings.shoreWetDarkening, 0.01f, 0.0f, 1.0f, "%.2f");
-            ImGui::TextDisabled("0 = black, 1 = no darkening");
-
-            visualSettingsDirty |= labeledDragFloat("Roughness", "##ShoreWetRoughness",
-                &visualSettings.shoreWetRoughness, 0.01f, 0.0f, 1.0f, "%.2f");
-            ImGui::TextDisabled("Surface roughness at waterline");
+            ImGui::TextDisabled("The shore feeds the terrain's single wetness response, so how wet\n"
+                                "ground actually looks is set by the terrain material's per-layer\n"
+                                "Porosity rather than by a separate darkening here.");
 
             // VK-1605 — depth-driven shoreline. Everything below needs the shore-depth field.
             ImGui::Spacing();

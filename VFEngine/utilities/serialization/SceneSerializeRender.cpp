@@ -283,6 +283,7 @@ namespace serialization
             return {
                 {"rvtEnabled", s.rvtEnabled},
                 {"svtEnabled", s.svtEnabled},
+                {"rvtWorldHeight", s.rvtWorldHeight}, // VK-1620 mesh-into-terrain blending
                 {"rvtPoolBudgetMB", s.rvtPoolBudgetMB},
                 {"svtPoolBudgetMB", s.svtPoolBudgetMB},
                 {"rvtTexelsPerMeter", s.rvtTexelsPerMeter},
@@ -304,6 +305,8 @@ namespace serialization
                 settings.rvtEnabled = vt["rvtEnabled"].get<bool>();
             if (vt.contains("svtEnabled") && vt["svtEnabled"].is_boolean())
                 settings.svtEnabled = vt["svtEnabled"].get<bool>();
+            if (vt.contains("rvtWorldHeight") && vt["rvtWorldHeight"].is_boolean())
+                settings.rvtWorldHeight = vt["rvtWorldHeight"].get<bool>(); // VK-1620
             // Finding #5: clamp the numeric fields (read as int64 so a negative JSON value can't wrap to
             // a huge uint32) — a hand-edited/older scene must not drive a 0 (zero-size staging buffer) or
             // billions (OOM) into the VT managers. Mirrors the editor UI's floors/ranges.

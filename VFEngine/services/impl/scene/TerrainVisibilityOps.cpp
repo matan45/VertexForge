@@ -14,6 +14,15 @@ namespace services
     {
         std::vector<terrain::TerrainTile*> result;
 
+        // VK-1624: drain script-driven terrain edits first. This is the once-per-frame terrain tick
+        // and the only place the grid is mutated, so the seam weld and the collider submission the
+        // edits deferred belong here rather than on the Scripts task that issued them; it is also
+        // the only place the camera position exists, which the async collider path needs to pick a
+        // physics LOD. Deliberately BEFORE the streaming block below: streamOutTile evicts tile
+        // geometry, and it must not free heightData out from under a tile that still owes a
+        // collider rebuild.
+        drainRuntimeTerrainEdits(cameraPosition);
+
         // Process sector-driven terrain streaming (world mode) or standalone streaming
         if (worldModeActive)
         {
@@ -94,6 +103,7 @@ namespace services
                 physicsProvider->updatePhysicsColliderStreaming(cameraPosition);
 
             auto visibleTiles = grid->getVisibleTiles(frustum);
+            const size_t resultBefore = result.size();
 
             if (distanceCullingEnabled_ && maxTerrainDistSq_ > 0.0f)
             {
@@ -119,6 +129,20 @@ namespace services
                     {
                         result.push_back(tile);
                     }
+                }
+            }
+
+            // VK-1613: the details panel printed a visibleTileCount that was only ever written 0 at
+            // creation. This is the one place that knows the answer — and specifically the MAIN
+            // camera path: secondary frustums (minimap, RTT) go through queryVisibleTiles instead, so
+            // the number cannot flip between views frame to frame.
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                entt::entity terrainEnt = internal::fromHandle(EntityHandle{entityId});
+                if (registry.valid(terrainEnt) && registry.all_of<components::TerrainComponent>(terrainEnt))
+                {
+                    registry.get<components::TerrainComponent>(terrainEnt).visibleTileCount =
+                        static_cast<uint32_t>(result.size() - resultBefore);
                 }
             }
         }

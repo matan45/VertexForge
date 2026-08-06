@@ -2,12 +2,14 @@
 #include "../scene/EntityDetailsPanel.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/terrain/TerrainEvents.hpp"
+#include "events/world/WorldSectorEvents.hpp" // VK-1613: IsWorldModeQuery gates the streaming block
 #include "events/physics/PhysicsEvents.hpp"
 #include "events/physics/PhysicsSettingsEvents.hpp"
 #include "types/PhysicsTypes.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <chrono>
+#include <iterator>
 
 namespace windows::details {
 
@@ -55,6 +57,7 @@ namespace windows::details {
             drawSaveLoad(handle, terrain);
             drawGridExpansion(handle);
             drawStreaming(handle);
+            drawSurfaceMask(handle);
             drawPhysics(handle, terrain);
 
             ImGui::Unindent(10.0f);
@@ -67,9 +70,12 @@ namespace windows::details {
 
     void TerrainDrawer::drawInfo(const services::TerrainData& terrain)
     {
-        const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)", "Ultra (257x257)" };
+        // VK-1613: "Ultra (257x257)" was a 4th label for an enumerator that does not exist —
+        // terrain::TileResolution stops at High/129 (TerrainTypes.hpp), and TerrainCreationWindow
+        // correctly offers three. Bound by the array itself so the two can never drift again.
+        const char* resolutionNames[] = { "Low (33x33)", "Medium (65x65)", "High (129x129)" };
         int resIndex = static_cast<int>(terrain.resolution);
-        if (resIndex >= 0 && resIndex < 4)
+        if (resIndex >= 0 && resIndex < static_cast<int>(std::size(resolutionNames)))
         {
             ImGui::Text("Resolution: %s", resolutionNames[resIndex]);
         }
@@ -84,11 +90,11 @@ namespace windows::details {
 
         ImGui::Separator();
 
-        ImGui::Text("Active: %s", terrain.isActive ? "Yes" : "No");
-        ImGui::Text("Dirty: %s", terrain.isDirty ? "Yes" : "No");
-
-        ImGui::Separator();
-
+        // VK-1613: "Active" and "Dirty" used to be printed here, but TerrainComponent::isActive is
+        // only ever written `true` and isDirty only ever `false` (TerrainCreationOps /
+        // TerrainPersistenceOps), so both were constants dressed up as state. Removed rather than
+        // wired: neither has a meaning anything acts on. "Visible Tiles" IS real now — the main
+        // camera's visibility pass fills it (TerrainVisibilityOps::getRawVisibleTiles).
         ImGui::Text("Active Tiles: %u", terrain.activeTileCount);
         ImGui::Text("Visible Tiles: %u", terrain.visibleTileCount);
 
@@ -225,6 +231,13 @@ namespace windows::details {
         ImGui::Separator();
         ImGui::Text("World Streaming");
 
+        // VK-1613: in World mode the sector streamer owns terrain tile streaming, and BOTH commands
+        // below early-return on it (TerrainService's SetTerrainStreamingEnabled /
+        // SetTerrainStreamingConfig handlers). These controls were therefore silently inert there —
+        // they just snapped back with no explanation. Say so instead of pretending.
+        const bool worldMode = dispatcher.query(events::world::IsWorldModeQuery{});
+        ImGui::BeginDisabled(worldMode);
+
         events::terrain::IsTerrainStreamingEnabledQuery enabledQuery;
         enabledQuery.terrainEntity = handle;
         bool streamingEnabled = dispatcher.query(enabledQuery);
@@ -288,6 +301,19 @@ namespace windows::details {
         {
             ImGui::SetTooltip("Loads all saved tiles and disables streaming for this session.\n"
                               "Re-enable streaming via the checkbox above.");
+        }
+
+        ImGui::EndDisabled();
+
+        if (worldMode)
+        {
+            ImGui::TextDisabled("Managed by the world sector streamer");
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("This terrain is part of a world. Tile streaming follows sector\n"
+                                  "residency, so these per-terrain settings are ignored — tune them\n"
+                                  "in the World Sector window instead.");
+            }
         }
     }
 
@@ -484,6 +510,93 @@ namespace windows::details {
         }, threading::JobPriority::LOW);
     }
 
+    // VK-1614 world-anchored wetness/snow mask (R = wetness, G = snow).
+    //
+    // Lives on the terrain rather than on the terrain material: two terrains sharing a
+    // .vfTerrainMat must not share one puddle map. The world rect is snapshotted from the terrain's
+    // CURRENT bounds when the mask is created and never recomputed — see components::TerrainComponent
+    // for why deriving it live would slide every painted puddle on grid expansion.
+    void TerrainDrawer::drawSurfaceMask(services::EntityHandle handle)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::Spacing();
+        if (!ImGui::CollapsingHeader("Surface Mask"))
+            return;
+
+        // Scoped to the terrain this panel is drawn for. The service holds one mask; asking without
+        // the entity would report another terrain's mask here and offer to clear it.
+        events::terrain::HasSurfaceMaskQuery hasMaskQuery;
+        hasMaskQuery.terrainEntity = handle;
+        const bool hasMask = dispatcher.query(hasMaskQuery);
+
+        static constexpr const char* resLabels[] = {"512", "1024", "2048", "4096"};
+        static constexpr uint32_t resValues[] = {512u, 1024u, 2048u, 4096u};
+
+        if (!hasMask)
+        {
+            ImGui::TextDisabled("No mask. Create one to paint local wetness and snow.");
+            ImGui::SetNextItemWidth(100.0f);
+            ImGui::Combo("Resolution", &surfaceMaskResIndex, resLabels,
+                         static_cast<int>(std::size(resLabels)));
+
+            if (ImGui::Button("Create Mask"))
+            {
+                events::terrain::CreateSurfaceMaskCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.resolution = resValues[surfaceMaskResIndex];
+                dispatcher.execute(cmd);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load..."))
+            {
+                // .vfImage only — the project rule for terrain image assets.
+                std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                    {L"VF Image (*.vfImage)", L"*.vfImage"}
+                };
+                std::string path = fileDialog.openFileDialog(fileTypes);
+                if (!path.empty())
+                {
+                    events::terrain::LoadSurfaceMaskCommand cmd;
+                    cmd.terrainEntity = handle;
+                    cmd.path = path;
+                    dispatcher.execute(cmd);
+                }
+            }
+            return;
+        }
+
+        ImGui::TextDisabled("R = wetness, G = snow. Paint it with the Paint tool.");
+
+        if (ImGui::Button("Save As..."))
+        {
+            std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
+                {L"VF Image (*.vfImage)", L"*.vfImage"}
+            };
+            std::string path = fileDialog.saveFileDialog(fileTypes, L"vfImage");
+            if (!path.empty())
+            {
+                events::terrain::SaveSurfaceMaskCommand cmd;
+                cmd.terrainEntity = handle;
+                cmd.path = path;
+                dispatcher.execute(cmd);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Mask"))
+        {
+            // Discards unsaved paint; the mask is only persisted on an explicit Save As.
+            events::terrain::ClearSurfaceMaskCommand cmd;
+            cmd.terrainEntity = handle;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Removes the mask from this terrain.\n"
+                              "Unsaved painting is lost — Save As first to keep it.");
+        }
+    }
+
     void TerrainDrawer::startSaveAs(services::EntityHandle handle)
     {
         std::vector<std::pair<std::wstring, std::wstring>> fileTypes = {
@@ -523,6 +636,14 @@ namespace windows::details {
                 isSaving = false;
 
                 auto& dispatcher = events::EventDispatcher::instance();
+
+                // VK-1648. The save ran on a JobSystem worker and parked its component writes and
+                // its TerrainSavedNotification rather than applying them there — TerrainComponent
+                // is main-thread state. This is the main thread, and the worker is provably done
+                // (its future was just consumed), so apply them now, before the save lock drops
+                // and anything else can start writing to the same component.
+                dispatcher.execute(events::terrain::FlushTerrainSaveResultsCommand{});
+
                 events::terrain::SetTerrainSaveLockCommand lockCmd;
                 lockCmd.locked = false;
                 dispatcher.execute(lockCmd);

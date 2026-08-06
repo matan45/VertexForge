@@ -34,6 +34,53 @@ namespace services
         std::optional<EntityHandle> result;
     };
 
+    // VK-1647. One reserved height layer, as the Editor may see it. Deliberately POD and
+    // deliberately NOT terrain::HeightLayerRecord: that type carries a std::function, an
+    // unordered_set of TileCoord and a polyline, and the Editor does not link Terrain.dll
+    // (premake5.lua) — the same reason SplineTerrainUndoEvents.hpp is split out of
+    // SplineTerrainEvents.hpp.
+    struct HeightLayerInfo
+    {
+        uint64_t id = 0;
+        uint32_t order = 0; // position in composition order; 0 composes first
+        bool visible = true;
+        uint32_t affectedTileCount = 0;
+
+        // VK-1648. What the artist calls this layer. Empty is legal and common — it is what a layer
+        // applied from a spline with no road name gets, and the panel falls back to the id then.
+        //
+        // Carried on the LAYER rather than looked up from the road entity that created it: a
+        // sculpt-only spline has no road entity, and after a reload most rows have no live spline
+        // behind them at all.
+        std::string name;
+    };
+
+    // What a wide layer invalidation still owes. Polled per frame, in the shape the navmesh and
+    // volumetric bakes already use (status + fraction + counts).
+    struct HeightLayerRecomposeProgress
+    {
+        // Covered, stale, and resident: the tiles the per-frame recompose budget will actually get
+        // to. This is the number that drains.
+        uint32_t pendingResident = 0;
+
+        // Covered, stale, and streamed out. Waiting on the streamer, not on the recompose budget,
+        // so it is reported separately: folded into the fraction it would pin a bar below 100% for
+        // as long as the camera stays away, which reads as a hang rather than as "not loaded".
+        uint32_t pendingUnloaded = 0;
+
+        // The existing 8-tiles-per-frame geometry queue. A recompose only marks a tile dirty; the
+        // mesh the user sees is rebuilt afterwards, so this is usually the longer half.
+        uint32_t meshBacklog = 0;
+
+        // High-water mark of (pendingResident + meshBacklog) since the last time both hit zero.
+        // Latched by the service so the fraction is monotone even though new work can arrive
+        // mid-drain.
+        uint32_t totalAtStart = 0;
+
+        float progress = 1.0f; // 1.0 when idle
+        bool active = false;
+    };
+
     struct TerrainData
     {
         uint8_t resolution = 0;

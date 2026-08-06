@@ -34,8 +34,6 @@ namespace ocean
         vis["shoreFoamIntensity"] = data.shoreFoamIntensity;
         vis["shoreBreakingStrength"] = data.shoreBreakingStrength;
         vis["shoreWetRange"] = data.shoreWetRange;
-        vis["shoreWetDarkening"] = data.shoreWetDarkening;
-        vis["shoreWetRoughness"] = data.shoreWetRoughness;
 
         // VK-1604
         vis["ssrEnabled"] = data.ssrEnabled;
@@ -171,9 +169,9 @@ namespace ocean
             outData.shoreFoamRange = vis.value("shoreFoamRange", 3.0f);
             outData.shoreFoamIntensity = vis.value("shoreFoamIntensity", 0.8f);
             outData.shoreBreakingStrength = vis.value("shoreBreakingStrength", 0.8f);
+            // VK-1614: shoreWetDarkening / shoreWetRoughness retired. Files written before this
+            // change still carry the keys; value() simply ignores keys nothing asks for.
             outData.shoreWetRange = vis.value("shoreWetRange", 5.0f);
-            outData.shoreWetDarkening = vis.value("shoreWetDarkening", 0.3f);
-            outData.shoreWetRoughness = vis.value("shoreWetRoughness", 0.15f);
 
             // VK-1604 — self-defaulting reads (fall back to the struct default), so v1 files
             // that predate these keys load with every new feature off.

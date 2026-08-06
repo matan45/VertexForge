@@ -1,9 +1,9 @@
 #include "TerrainMaterialAsset.hpp"
+#include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 #include "../uuid/UUID.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../serialization/AssetRefSerializationHelper.hpp"
-#include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -17,33 +17,30 @@ namespace terrain
 
     std::optional<TerrainMaterialData> TerrainMaterialAsset::load(std::string_view path)
     {
-        fs::path filePath(path);
-
-        if (!fs::exists(filePath))
+        if (!terrainFileExists(std::string(path)))
         {
             vfLogError("Terrain material file not found: {}", path);
             return std::nullopt;
         }
 
-        std::error_code ec;
-        auto fileSize = fs::file_size(filePath, ec);
-        if (ec)
+        const auto bytes = readTerrainFileBytes(std::string(path));
+        if (bytes.empty())
         {
-            vfLogError("Cannot read terrain material file size '{}': {}", path, ec.message());
+            vfLogError("Failed to open terrain material file: {}", path);
             return std::nullopt;
         }
         constexpr size_t MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB limit
-        if (fileSize > MAX_FILE_SIZE)
+        if (bytes.size() > MAX_FILE_SIZE)
         {
             vfLogError("Terrain material file '{}' is too large ({} bytes, max {} bytes)",
-                       path, fileSize, MAX_FILE_SIZE);
+                       path, bytes.size(), MAX_FILE_SIZE);
             return std::nullopt;
         }
 
         json j;
         try
         {
-            j = resource::readJsonFile(std::string(path));
+            j = json::parse(bytes.begin(), bytes.end());
         }
         catch (const json::parse_error& e)
         {
@@ -130,6 +127,32 @@ namespace terrain
                             layer.materialRef = serialization::readAssetRef(layerJson, "materialRef");
                             layer.tilingScale = layerJson.value("tilingScale", 1.0f);
                             layer.blendMode = stringToLayerBlendMode(layerJson.value("blendMode", "Linear"));
+                            // VK-1609. Purely additive key: a file written before this story simply
+                            // takes the default, which is why no format-version bump is needed.
+                            layer.heightContrast = layerJson.value("heightContrast", 4.0f);
+                            // VK-1612. Additive too; absent keys read as "hex tiling off".
+                            layer.hexTiling = layerJson.value("hexTiling", false);
+                            layer.hexCellScale = std::clamp(
+                                layerJson.value("hexCellScale", HEX_TILING_DEFAULT_CELL_SCALE),
+                                MIN_HEX_TILING_CELL_SCALE, MAX_HEX_TILING_CELL_SCALE);
+                            layer.hexContrast = std::clamp(
+                                layerJson.value("hexContrast", HEX_TILING_DEFAULT_CONTRAST),
+                                MIN_HEX_TILING_CONTRAST, MAX_HEX_TILING_CONTRAST);
+                            layer.hexRotation = std::clamp(
+                                layerJson.value("hexRotation", HEX_TILING_DEFAULT_ROTATION),
+                                0.0f, MAX_HEX_TILING_ROTATION);
+                            // VK-1614. Additive too; absent keys read as "no weather response", so a
+                            // file written before this story renders bit-identically after it.
+                            // Clamped to [0, 1] here rather than to the non-zero authored floor: the
+                            // 0.0f sentinel lives on the RESOLVED scalar (resolveLayerWeatherScalar),
+                            // and forcing a floor here would make the opt-out flag the only way to
+                            // express "off" while silently rewriting the artist's slider value.
+                            layer.weatherResponse = layerJson.value("weatherResponse", false);
+                            layer.porosity = std::clamp(
+                                layerJson.value("porosity", DEFAULT_LAYER_POROSITY), 0.0f, 1.0f);
+                            layer.snowRetention = std::clamp(
+                                layerJson.value("snowRetention", DEFAULT_LAYER_SNOW_RETENTION),
+                                0.0f, 1.0f);
                             layer.enabled = layerJson.value("enabled", true);
 
                             if (layer.tilingScale <= 0.0f)
@@ -139,6 +162,14 @@ namespace terrain
                                     i, layer.tilingScale));
                                 layer.tilingScale = 0.01f;
                             }
+
+                            if (layer.heightContrast < 0.0f || layer.heightContrast > MAX_HEIGHT_BLEND_CONTRAST)
+                            {
+                                logWarningLimited(std::format(
+                                    "Layer {} has out-of-range heightContrast {}, clamping to [0, {}]",
+                                    i, layer.heightContrast, MAX_HEIGHT_BLEND_CONTRAST));
+                                layer.heightContrast = std::clamp(layer.heightContrast, 0.0f, MAX_HEIGHT_BLEND_CONTRAST);
+                            }
                         }
                         catch (const std::exception& e)
                         {
@@ -147,6 +178,58 @@ namespace terrain
                         }
                     }
                 }
+            }
+
+            // VK-1611. Additive block, same discipline as heightContrast above: a file written
+            // before this story has no "antiTiling" object, so every field takes its default and
+            // both features read as OFF. No format-version bump.
+            if (j.contains("antiTiling") && j["antiTiling"].is_object())
+            {
+                const auto& at = j["antiTiling"];
+                auto& dst = material.antiTiling;
+                dst.macroVariationStrength = std::clamp(
+                    at.value("macroVariationStrength", 0.0f), 0.0f, MACRO_VARIATION_MAX_STRENGTH);
+                dst.macroVariationSize0 = std::clamp(
+                    at.value("macroVariationSize0", MACRO_VARIATION_DEFAULT_SIZE0),
+                    MACRO_VARIATION_MIN_SIZE, MACRO_VARIATION_MAX_SIZE);
+                dst.macroVariationSize1 = std::clamp(
+                    at.value("macroVariationSize1", MACRO_VARIATION_DEFAULT_SIZE1),
+                    MACRO_VARIATION_MIN_SIZE, MACRO_VARIATION_MAX_SIZE);
+                dst.macroVariationSeed = at.value("macroVariationSeed", 0u);
+                dst.distanceRescaleStrength = std::clamp(
+                    at.value("distanceRescaleStrength", 0.0f), 0.0f, DISTANCE_RESCALE_MAX_STRENGTH);
+                dst.distanceRescaleScale = std::clamp(
+                    at.value("distanceRescaleScale", DISTANCE_RESCALE_DEFAULT_SCALE),
+                    DISTANCE_RESCALE_MIN_SCALE, DISTANCE_RESCALE_MAX_SCALE);
+                dst.distanceRescaleKnee = std::clamp(
+                    at.value("distanceRescaleKnee", DISTANCE_RESCALE_DEFAULT_KNEE),
+                    DISTANCE_RESCALE_MIN_KNEE, DISTANCE_RESCALE_MAX_KNEE);
+                // Clamped away from zero because the shader feeds this straight to smoothstep,
+                // whose behaviour with equal edges is undefined.
+                dst.distanceRescaleWidth = std::clamp(
+                    at.value("distanceRescaleWidth", DISTANCE_RESCALE_DEFAULT_WIDTH),
+                    DISTANCE_RESCALE_MIN_WIDTH, DISTANCE_RESCALE_MAX_WIDTH);
+            }
+
+            // VK-1625. Additive in the same way: a file written before this story has no "parallax"
+            // object, so depthMetres takes its 0.0f default and the feature reads as OFF — which is
+            // also the state in which its shader permutation is never compiled. No format bump.
+            if (j.contains("parallax") && j["parallax"].is_object())
+            {
+                const auto& px = j["parallax"];
+                auto& dst = material.parallax;
+                dst.depthMetres = std::clamp(px.value("depthMetres", 0.0f), 0.0f, PARALLAX_MAX_DEPTH);
+                dst.fadeStart = std::clamp(px.value("fadeStart", PARALLAX_DEFAULT_FADE_START),
+                                           0.0f, PARALLAX_MAX_FADE_DISTANCE);
+                // Kept strictly past fadeStart: the shader hands both straight to smoothstep, whose
+                // behaviour with equal edges is undefined.
+                dst.fadeEnd = std::clamp(px.value("fadeEnd", PARALLAX_DEFAULT_FADE_END),
+                                         dst.fadeStart + PARALLAX_MIN_FADE_SPAN,
+                                         PARALLAX_MAX_FADE_DISTANCE + PARALLAX_MIN_FADE_SPAN);
+                dst.referenceHeight = std::clamp(px.value("referenceHeight", PARALLAX_DEFAULT_REFERENCE_HEIGHT),
+                                                 PARALLAX_MIN_REFERENCE_HEIGHT, PARALLAX_MAX_REFERENCE_HEIGHT);
+                dst.steps = std::clamp(px.value("steps", PARALLAX_DEFAULT_STEPS),
+                                       PARALLAX_MIN_STEPS, PARALLAX_MAX_STEPS);
             }
 
             material.cachedMaterialSnippet = j.value("cachedMaterialSnippet", "");
@@ -172,6 +255,11 @@ namespace terrain
 
     bool TerrainMaterialAsset::save(std::string_view path, const TerrainMaterialData& material)
     {
+        if (terrainArchiveMode())
+        {
+            vfLogError("TerrainMaterialAsset: Cannot save in archive mode");
+            return false;
+        }
         json j;
 
         j["version"] = TERRAIN_MATERIAL_FORMAT_VERSION;
@@ -188,10 +276,43 @@ namespace terrain
             serialization::writeAssetRef(layerJson, "materialRef", layer.materialRef);
             layerJson["tilingScale"] = layer.tilingScale;
             layerJson["blendMode"] = blendModeToString(layer.blendMode);
+            layerJson["heightContrast"] = layer.heightContrast;
+            layerJson["hexTiling"] = layer.hexTiling;
+            layerJson["hexCellScale"] = layer.hexCellScale;
+            layerJson["hexContrast"] = layer.hexContrast;
+            layerJson["hexRotation"] = layer.hexRotation;
+            layerJson["weatherResponse"] = layer.weatherResponse;
+            layerJson["porosity"] = layer.porosity;
+            layerJson["snowRetention"] = layer.snowRetention;
             layerJson["enabled"] = layer.enabled;
             layersJson.push_back(layerJson);
         }
         j["layers"] = layersJson;
+
+        // VK-1611 material-global anti-tiling.
+        {
+            json at;
+            at["macroVariationStrength"] = material.antiTiling.macroVariationStrength;
+            at["macroVariationSize0"] = material.antiTiling.macroVariationSize0;
+            at["macroVariationSize1"] = material.antiTiling.macroVariationSize1;
+            at["macroVariationSeed"] = material.antiTiling.macroVariationSeed;
+            at["distanceRescaleStrength"] = material.antiTiling.distanceRescaleStrength;
+            at["distanceRescaleScale"] = material.antiTiling.distanceRescaleScale;
+            at["distanceRescaleKnee"] = material.antiTiling.distanceRescaleKnee;
+            at["distanceRescaleWidth"] = material.antiTiling.distanceRescaleWidth;
+            j["antiTiling"] = at;
+        }
+
+        // VK-1625 material-global parallax.
+        {
+            json px;
+            px["depthMetres"] = material.parallax.depthMetres;
+            px["fadeStart"] = material.parallax.fadeStart;
+            px["fadeEnd"] = material.parallax.fadeEnd;
+            px["referenceHeight"] = material.parallax.referenceHeight;
+            px["steps"] = material.parallax.steps;
+            j["parallax"] = px;
+        }
 
         if (!material.cachedMaterialSnippet.empty())
         {

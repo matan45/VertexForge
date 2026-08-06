@@ -5,6 +5,7 @@
 #include "events/editor/EditorKeybindingEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <cstring>
 
 namespace windows
@@ -430,6 +431,28 @@ namespace windows
         drawSettingTooltip("Display the number of visible objects per frame in the status bar");
 
         ImGui::Spacing();
+        ImGui::Text("Undo History");
+        ImGui::Spacing();
+
+        int undoDepth = static_cast<int>(settings.undo.maxHistoryDepth);
+        if (ImGui::DragInt("Undo Stack Depth", &undoDepth, 1, 0, 500))
+        {
+            settings.undo.maxHistoryDepth = static_cast<uint32_t>((std::max)(undoDepth, 0));
+            markDirty();
+        }
+        drawSettingTooltip("Maximum number of undoable operations kept in history. 0 = unlimited");
+
+        int undoBudgetMB = static_cast<int>(settings.undo.maxHistoryBytes / (1024ull * 1024ull));
+        if (ImGui::DragInt("Undo Memory Budget (MB)", &undoBudgetMB, 16, 0, 8192))
+        {
+            settings.undo.maxHistoryBytes =
+                static_cast<uint64_t>((std::max)(undoBudgetMB, 0)) * 1024ull * 1024ull;
+            markDirty();
+        }
+        drawSettingTooltip("RAM ceiling for undo and redo snapshots. Terrain sculpt/paint strokes "
+                           "snapshot whole tile arrays, so this is the effective limit. 0 = unlimited");
+
+        ImGui::Spacing();
         ImGui::Text("Logging");
         ImGui::Spacing();
 
@@ -638,6 +661,32 @@ namespace windows
                 else if (settings.debug.logLevel == "Error") idx = 4;
                 if (ImGui::Combo("Log Level##s", &idx, levels, 5)) { settings.debug.logLevel = levels[idx]; markDirty(); }
                 drawSettingTooltip("Minimum severity level for log output");
+            }});
+
+        settingsRegistry.push_back({"Undo Stack Depth", "Undoable operations kept",
+            {"undo", "redo", "history", "depth", "stack"}, Debug,
+            [this]() {
+                int depth = static_cast<int>(settings.undo.maxHistoryDepth);
+                if (ImGui::DragInt("Undo Stack Depth##s", &depth, 1, 0, 500))
+                {
+                    settings.undo.maxHistoryDepth = static_cast<uint32_t>((std::max)(depth, 0));
+                    markDirty();
+                }
+                drawSettingTooltip("Maximum number of undoable operations kept in history. 0 = unlimited");
+            }});
+
+        settingsRegistry.push_back({"Undo Memory Budget", "RAM ceiling for undo snapshots",
+            {"undo", "redo", "history", "memory", "budget"}, Debug,
+            [this]() {
+                int budgetMB = static_cast<int>(settings.undo.maxHistoryBytes / (1024ull * 1024ull));
+                if (ImGui::DragInt("Undo Memory Budget (MB)##s", &budgetMB, 16, 0, 8192))
+                {
+                    settings.undo.maxHistoryBytes =
+                        static_cast<uint64_t>((std::max)(budgetMB, 0)) * 1024ull * 1024ull;
+                    markDirty();
+                }
+                drawSettingTooltip("RAM ceiling for undo and redo snapshots. Terrain sculpt/paint strokes "
+                                   "snapshot whole tile arrays, so this is the effective limit. 0 = unlimited");
             }});
     }
 }

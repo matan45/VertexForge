@@ -22,6 +22,7 @@ namespace windows
         menuBar.setAudioMixerWindow(&audioMixerWindow);
         menuBar.setProjectSettingsWindow(&projectSettingsWindow);
         menuBar.setTerrainCreationWindow(&terrainCreationWindow);
+        menuBar.setHeightLayerPanel(&heightLayerPanel);
         menuBar.setPostProcessConfigWindow(&postProcessConfigWindow);
         menuBar.setOceanEditorWindow(&oceanEditorWindow);
         menuBar.setNavmeshWindow(&navmeshWindow);
@@ -220,6 +221,8 @@ namespace windows
             animationDebugWindow.draw();
             sculptToolPanel.draw();
             splineToolPanel.draw();
+            heightLayerPanel.draw();
+            roadMeshGenerator.update();
             paintToolPanel.draw();
             holeToolPanel.draw();
             caveToolPanel.draw();

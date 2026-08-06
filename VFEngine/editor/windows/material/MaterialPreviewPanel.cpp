@@ -188,6 +188,47 @@ namespace editor::materialeditor
                 ImGui::SetTooltip("Sway this material's meshes with the global scene wind\n(trees & bushes). Uses the shared grass WindSystem.");
             }
 
+            // VK-1620: mesh-into-terrain blending. Render-time flag like the wind gate above — the
+            // same callback re-packs it into ObjectFlags — but this one has parameters, shown
+            // indented only while it is on (the TerrainMaterialEditorWindow hex-tiling idiom).
+            if (ImGui::Checkbox("Blend To Terrain", &materialData->blendToTerrain)) {
+                if (onBlendModeChanged) {
+                    onBlendModeChanged();
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Melt this material's meshes into the terrain at their base:\n"
+                                  "pixels within the band below blend toward the terrain surface.\n"
+                                  "Requires Render Settings > Virtual Texturing > World Height Plane.");
+            }
+            if (materialData->blendToTerrain) {
+                ImGui::Indent(8.0f);
+                if (ImGui::DragFloat("Blend Height##TerrainBlend", &materialData->terrainBlendBand,
+                                     0.01f, ::material::MIN_TERRAIN_BLEND_BAND,
+                                     ::material::MAX_TERRAIN_BLEND_BAND, "%.2f m")) {
+                    materialData->terrainBlendBand =
+                        ::material::clampTerrainBlendBand(materialData->terrainBlendBand);
+                    if (onBlendModeChanged) { onBlendModeChanged(); }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("How far above the terrain surface the blend reaches.\n"
+                                      "A pebble wants a few centimetres; a cliff base wants metres.");
+                }
+                if (ImGui::DragFloat("Blend Contrast##TerrainBlend", &materialData->terrainBlendContrast,
+                                     0.05f, ::material::MIN_TERRAIN_BLEND_CONTRAST,
+                                     ::material::MAX_TERRAIN_BLEND_CONTRAST, "%.2f")) {
+                    materialData->terrainBlendContrast =
+                        ::material::clampTerrainBlendContrast(materialData->terrainBlendContrast);
+                    if (onBlendModeChanged) { onBlendModeChanged(); }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Shapes the falloff. 1 = linear-ish across the whole band;\n"
+                                      "higher pulls the blend down so only the contact line takes\n"
+                                      "terrain colour.");
+                }
+                ImGui::Unindent(8.0f);
+            }
+
             ImGui::Separator();
             ImGui::Text("Blend Mode");
             const char* blendModes[] = { "Opaque", "Masked", "Translucent", "Additive", "Multiply" };

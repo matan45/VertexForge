@@ -58,6 +58,14 @@ namespace render
         // this frame, before any pass records draws (VK-1368).
         FrameDrawStats::beginFrame();
 
+        // VK-1614: the terrain surface mask uses the same window and for the same reason — the
+        // buffer-to-image copy must land outside any render pass and complete before the terrain
+        // fragment shader samples it.
+        if (gpuDrivenRendererInitialized && gpuDrivenRenderer)
+        {
+            gpuDrivenRenderer->flushTerrainSurfaceMaskUploads(commandBuffer);
+        }
+
         if (pluginTextureManager)
         {
             pluginTextureManager->flushUploads(commandBuffer);

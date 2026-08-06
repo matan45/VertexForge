@@ -1,6 +1,7 @@
 #include "OffScreenController.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
+#include "../render/gpudriven/brush/HydraulicErosionPipeline.hpp"
 #include "../core/VulkanContext.hpp"
 #include "../core/AsyncComputeManager.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
@@ -218,6 +219,12 @@ namespace controllers
         {
             brushComputePipeline->cleanup();
             brushComputePipeline.reset();
+        }
+
+        if (hydraulicErosionPipeline)
+        {
+            hydraulicErosionPipeline->cleanup();
+            hydraulicErosionPipeline.reset();
         }
 
         offScreen->cleanUp();

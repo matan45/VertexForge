@@ -18,6 +18,8 @@
 #include "../archive/VFPakReader.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <memory>
 #include <cstdlib>
@@ -234,34 +236,59 @@ namespace gameExport
 	{
 		fs::path runtimeDir = findRuntimeExe().parent_path();
 
-		// Copy DLLs from the runtime build directory
-		const std::vector<std::string> runtimeDlls = {
-			"OpenAL32.dll",
-			"jolt.dll",
-			"meshoptimizer.dll"
-		};
-
-		for (const auto& dllName : runtimeDlls)
+		// VK-1624: copy EVERY DLL sitting next to Runtime.exe rather than a hand-maintained list.
+		//
+		// The list used to name three (OpenAL32, jolt, meshoptimizer) while Runtime.exe statically
+		// imports nine more -- Terrain, ECSRegistry, AssetDB, Threading, CpuMemory, Serialization,
+		// World, Animation, Audio -- so an exported game died in the Windows loader before main,
+		// and OpenAL32 was not even a direct import (it comes in behind Audio.dll). Every engine
+		// subsystem promoted to a SharedLib since silently widened that gap, which is exactly the
+		// failure mode a hardcoded list produces. The build directory is already the authority on
+		// what the runtime needs: each subsystem's premake postbuild puts its DLL here.
+		std::error_code dirEc;
+		fs::directory_iterator runtimeFiles(runtimeDir, dirEc);
+		if (dirEc)
 		{
-			fs::path dllPath = runtimeDir / dllName;
-			if (fs::exists(dllPath))
-			{
-				std::error_code ec;
-				fs::copy_file(dllPath, config.outputDirectory / dllName,
-							  fs::copy_options::overwrite_existing, ec);
-				if (ec)
-				{
-					result.warnings.push_back("Failed to copy " + dllName + ": " + ec.message());
-				}
-			}
-			else
-			{
-				result.warnings.push_back(dllName + " not found in runtime build output");
-			}
+			result.warnings.push_back("Could not read runtime build output at "
+									  + runtimeDir.string() + ": " + dirEc.message());
+			return true;
 		}
 
-		// shaderc_shared.dll is no longer needed in exported builds:
-		// shaders are pre-compiled to SPIR-V at export time
+		uint32_t copied = 0;
+		for (const auto& entry : runtimeFiles)
+		{
+			if (!entry.is_regular_file())
+				continue;
+
+			std::string extension = entry.path().extension().string();
+			std::transform(extension.begin(), extension.end(), extension.begin(),
+						   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			if (extension != ".dll")
+				continue;
+
+			const std::string dllName = entry.path().filename().string();
+
+			// shaderc_shared.dll is deliberately excluded: shaders are pre-compiled to SPIR-V at
+			// export time, and it is the one DLL the runtime delay-loads rather than importing.
+			if (dllName == "shaderc_shared.dll")
+				continue;
+
+			std::error_code ec;
+			fs::copy_file(entry.path(), config.outputDirectory / dllName,
+						  fs::copy_options::overwrite_existing, ec);
+			if (ec)
+			{
+				result.warnings.push_back("Failed to copy " + dllName + ": " + ec.message());
+				continue;
+			}
+			++copied;
+		}
+
+		if (copied == 0)
+		{
+			result.warnings.push_back("No runtime DLLs found in " + runtimeDir.string()
+									  + " - the exported game will not start");
+		}
 
 		return true;
 	}
@@ -672,6 +699,15 @@ namespace gameExport
 
 			// Skip source scripts and project files
 			if (ext == ".mt" || ext == ".vfproj") continue;
+
+			// VK-1646: `.vfterrainlayers` is authoring state — a terrain's authoritative base
+			// heights and its reserved layer stack. The runtime only ever consumes the flattened
+			// heights already inside the `.vfterrain`, and a fully covered map's sidecar runs to
+			// tens of megabytes, so shipping it would be pure weight.
+			//
+			// The terrain's HAS_EDIT_LAYER_SIDECAR flag stays set in the packed file; the loader
+			// treats a missing sidecar as expected in archive mode rather than as damage.
+			if (ext == ".vfterrainlayers") continue;
 
 			fs::path relativePath = fs::relative(entry.path(), config.workingDirectory, ec);
 			std::string archivePath = "Assets/" + relativePath.generic_string();

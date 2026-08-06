@@ -123,4 +123,28 @@ namespace core
     {
         return terrainMaterialDirty.exchange(false);
     }
+
+    bool TerrainRenderAdapter::consumeSurfaceMaskAssignDirty()
+    {
+        if (!terrainService) return false;
+        return terrainService->consumeSurfaceMaskAssignDirty();
+    }
+
+    bool TerrainRenderAdapter::consumeSurfaceMaskPixelsDirty()
+    {
+        if (!terrainService) return false;
+        return terrainService->consumeSurfaceMaskPixelsDirty();
+    }
+
+    const terrain::TerrainSurfaceMaskData* TerrainRenderAdapter::getSurfaceMask() const
+    {
+        if (!terrainService) return nullptr;
+        return terrainService->getSurfaceMask();
+    }
+
+    glm::vec4 TerrainRenderAdapter::getSurfaceMaskWorldRect() const
+    {
+        if (!terrainService) return glm::vec4(0.0f);
+        return terrainService->getSurfaceMaskWorldRect();
+    }
 }

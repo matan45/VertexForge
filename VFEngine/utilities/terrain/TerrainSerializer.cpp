@@ -1,9 +1,11 @@
 #include "TerrainSerializer.hpp"
+#include "TerrainFileStream.hpp"
 #include "TerrainCompression.hpp"
 #include "../print/Log.hpp"
 #include "../resource/EndianUtils.hpp"
 #include <fstream>
 #include <filesystem>
+#include <shared_mutex>
 
 namespace terrain
 {
@@ -65,6 +67,10 @@ namespace terrain
             writeLE(file, header.streamingConfig.maxUnloadsPerFrame);
         }
 
+        // VK-1646. Last, so the two blocks above keep their byte positions.
+        if (hasFlag(header.flags, TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR))
+            writeLE(file, header.editLayerGenerationId);
+
         return file.good();
     }
 
@@ -81,6 +87,7 @@ namespace terrain
             writeLE(file, entry.meshletDataOffset);
             writeLE(file, entry.holeMaskDataOffset);
             writeLE(file, entry.caveSdfDataOffset);
+            writeLE(file, entry.payloadSize);
         }
         return file.good();
     }
@@ -194,6 +201,14 @@ namespace terrain
             if (!writeTileCaveData(file, tile, outEntry))
                 return false;
         }
+
+        // Every sub-block above was appended contiguously from heightDataOffset, so the stream
+        // position now marks the end of this tile's record. Recording its length is what lets
+        // obsolete bytes be derived and lets compaction relocate the record without decoding it.
+        uint64_t recordEnd = 0;
+        if (!safeTellp(file, recordEnd))
+            return false;
+        outEntry.payloadSize = static_cast<uint32_t>(recordEnd - outEntry.heightDataOffset);
 
         return file.good();
     }
@@ -331,17 +346,25 @@ namespace terrain
             return false;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.heightDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.heightDataOffset));
+            auto& file = input->stream;
             uint32_t heightCount = readLE<uint32_t>(file);
+            if (heightCount > MAX_TILE_HEIGHT_SAMPLES)
+            {
+                vfLogError("TerrainSerializer: Height sample count {} exceeds maximum {} for tile ({}, {})",
+                           heightCount, MAX_TILE_HEIGHT_SAMPLES, entry.coordX, entry.coordZ);
+                return false;
+            }
 
             compression::HeightQuantizationParams params;
             params.minH = readLE<float>(file);
@@ -350,7 +373,7 @@ namespace terrain
             readVectorLE(file, quantized, heightCount);
             outHeights = compression::dequantizeHeights(quantized, params);
 
-            if (!file.good())
+            if (!file.good() || !input->logicalPosition())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {})", entry.coordX, entry.coordZ);
                 return false;
@@ -424,13 +447,15 @@ namespace terrain
         if (entry.caveSdfDataOffset == 0)
             return false;
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
-            std::ifstream file(std::string(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.caveSdfDataOffset);
+            if (!input)
                 return false;
 
-            file.seekg(static_cast<std::streamoff>(entry.caveSdfDataOffset));
+            auto& file = input->stream;
 
             // Read SDF config
             outCaveData.config.resX = readLE<uint32_t>(file);
@@ -471,7 +496,7 @@ namespace terrain
                 }
             }
 
-            return file.good();
+            return file.good() && input->logicalPosition().has_value();
         }
         catch (const std::exception& e)
         {

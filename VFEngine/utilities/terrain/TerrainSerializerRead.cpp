@@ -1,19 +1,25 @@
 #include "TerrainSerializer.hpp"
 #include "TerrainCompression.hpp"
+#include "TerrainFileStream.hpp"
 #include "../print/Log.hpp"
 #include "TerrainGrid.hpp"
 #include "../resource/EndianUtils.hpp"
+#include <algorithm>
+#include <array>
 #include <fstream>
 #include <filesystem>
+#include <shared_mutex>
+#include <utility>
 
 namespace terrain
 {
-    namespace fs = std::filesystem;
     using namespace resource::endian;
 
     static constexpr uint32_t MAX_PATH_LENGTH = 4096;
     static constexpr uint32_t MAX_TILE_COUNT = 100000;
     static constexpr uint32_t MAX_VERTICES_PER_LOD = 1 << 20;   // ~1M vertices
+    static constexpr uint32_t MAX_INDICES_PER_LOD = MAX_VERTICES_PER_LOD * 6;
+    static constexpr uint32_t MAX_MESHLETS_PER_LOD = MAX_VERTICES_PER_LOD;
     static bool validateResolution(uint8_t res)
     {
         return res <= static_cast<uint8_t>(TileResolution::High);
@@ -101,6 +107,12 @@ namespace terrain
             outHeader.streamingConfig.maxUnloadsPerFrame = readLE<int32_t>(file);
         }
 
+        // VK-1646. Consuming this is what leaves the stream on the index table: readHeaderLocked
+        // takes the position AFTER this function as indexTableOffset, so skipping the block would
+        // shift every tile offset by eight bytes.
+        if (hasFlag(outHeader.flags, TerrainFormatFlags::HAS_EDIT_LAYER_SIDECAR))
+            outHeader.editLayerGenerationId = readLE<uint64_t>(file);
+
         return file.good();
     }
 
@@ -123,6 +135,7 @@ namespace terrain
             outIndex[i].meshletDataOffset = readLE<uint64_t>(file);
             outIndex[i].holeMaskDataOffset = readLE<uint64_t>(file);
             outIndex[i].caveSdfDataOffset = readLE<uint64_t>(file);
+            outIndex[i].payloadSize = readLE<uint32_t>(file);
         }
         return file.good();
     }
@@ -146,6 +159,28 @@ namespace terrain
 
         if (!file.good())
             return false;
+
+        for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
+        {
+            const auto& header = lodHeaders[lod];
+            if (header.meshletCount > MAX_MESHLETS_PER_LOD)
+            {
+                vfLogError("TerrainSerializer: Meshlet count {} exceeds maximum at LOD {}",
+                           header.meshletCount, lod);
+                return false;
+            }
+
+            const uint64_t maxMeshletVertices =
+                static_cast<uint64_t>(header.meshletCount) * resource::MAX_MESHLET_VERTICES;
+            const uint64_t maxMeshletPrimitives =
+                static_cast<uint64_t>(header.meshletCount) * resource::MAX_MESHLET_PRIMITIVES;
+            if (static_cast<uint64_t>(header.meshletVertexCount) > maxMeshletVertices ||
+                static_cast<uint64_t>(header.meshletPrimitiveCount) > maxMeshletPrimitives)
+            {
+                vfLogError("TerrainSerializer: Invalid aggregate meshlet counts at LOD {}", lod);
+                return false;
+            }
+        }
 
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
@@ -185,6 +220,11 @@ namespace terrain
         for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
         {
             uint32_t indexCount = readLE<uint32_t>(file);
+            if (indexCount > MAX_INDICES_PER_LOD)
+            {
+                vfLogError("TerrainSerializer: Index count {} exceeds maximum at LOD {}", indexCount, lod);
+                return false;
+            }
             readVectorLE(file, result.lodData[lod].indices, indexCount);
         }
 
@@ -257,14 +297,101 @@ namespace terrain
         return true;
     }
 
+    // Every non-zero sub-block offset must fall inside the record its entry describes, and records
+    // must not overlap each other or the header/index. compact() copies records as opaque bytes and
+    // shifts their offsets by one per-record delta, so these are the invariants that make that safe
+    // even for a hostile or corrupt file — it does no decoding of its own to fall back on.
+    bool TerrainSerializer::validateRecordExtents(const TerrainFileHeader& header,
+                                                   const std::vector<TileIndexEntry>& index,
+                                                   uint64_t indexTableOffset,
+                                                   uint64_t fileSize)
+    {
+        const uint64_t payloadStart = indexTableOffset +
+            static_cast<uint64_t>(header.tileCount) * TILE_INDEX_ENTRY_SIZE;
+
+        std::vector<std::pair<uint64_t, uint64_t>> ranges;
+        ranges.reserve(index.size());
+
+        for (const auto& entry : index)
+        {
+            if (entry.heightDataOffset == 0 || entry.heightDataOffset >= fileSize)
+            {
+                vfLogError("TerrainSerializer: Invalid height data offset {} for tile ({}, {})",
+                           entry.heightDataOffset, entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.heightDataOffset < payloadStart)
+            {
+                vfLogError("TerrainSerializer: Tile ({}, {}) record overlaps the header or index table",
+                           entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.heightDataSize > fileSize - entry.heightDataOffset)
+            {
+                vfLogError("TerrainSerializer: Height data size {} exceeds file bounds for tile ({}, {})",
+                           entry.heightDataSize, entry.coordX, entry.coordZ);
+                return false;
+            }
+            if (entry.payloadSize == 0 || entry.payloadSize > MAX_TILE_PAYLOAD_BYTES ||
+                entry.payloadSize < entry.heightDataSize ||
+                entry.payloadSize > fileSize - entry.heightDataOffset)
+            {
+                vfLogError("TerrainSerializer: Invalid payload size {} for tile ({}, {})",
+                           entry.payloadSize, entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            const uint64_t recordEnd = entry.heightDataOffset + entry.payloadSize;
+            const std::array<uint64_t, 4> optionalOffsets = {
+                entry.weightDataOffset,
+                entry.meshletDataOffset,
+                entry.holeMaskDataOffset,
+                entry.caveSdfDataOffset
+            };
+            for (uint64_t offset : optionalOffsets)
+            {
+                if (offset != 0 && (offset < entry.heightDataOffset || offset >= recordEnd))
+                {
+                    vfLogError("TerrainSerializer: Optional data offset {} falls outside the record of tile ({}, {})",
+                               offset, entry.coordX, entry.coordZ);
+                    return false;
+                }
+            }
+
+            ranges.emplace_back(entry.heightDataOffset, recordEnd);
+        }
+
+        std::sort(ranges.begin(), ranges.end());
+        for (size_t i = 1; i < ranges.size(); ++i)
+        {
+            if (ranges[i].first < ranges[i - 1].second)
+            {
+                vfLogError("TerrainSerializer: Overlapping tile records at offsets {} and {}",
+                           ranges[i - 1].first, ranges[i].first);
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool TerrainSerializer::readHeader(
         std::string_view path,
         TerrainFileHeader& outHeader,
         std::vector<TileIndexEntry>& outIndex,
         uint64_t* outIndexTableOffset)
     {
-        fs::path filePath(path);
-        if (!fs::exists(filePath))
+        std::shared_lock lock(terrainFileMutex());
+        return readHeaderLocked(path, outHeader, outIndex, outIndexTableOffset);
+    }
+
+    bool TerrainSerializer::readHeaderLocked(
+        std::string_view path,
+        TerrainFileHeader& outHeader,
+        std::vector<TileIndexEntry>& outIndex,
+        uint64_t* outIndexTableOffset)
+    {
+        auto input = detail::openTerrainInputFile(std::string(path), 0);
+        if (!input)
         {
             vfLogError("TerrainSerializer: File not found: {}", path);
             return false;
@@ -272,18 +399,25 @@ namespace terrain
 
         try
         {
-            std::ifstream file(filePath, std::ios::binary);
-            if (!file.is_open())
-            {
-                vfLogError("TerrainSerializer: Failed to open file: {}", path);
-                return false;
-            }
+            auto& file = input->stream;
 
             if (!parseHeader(file, outHeader))
                 return false;
 
+            const auto indexTableOffset = input->logicalPosition();
+            if (!indexTableOffset)
+                return false;
             if (outIndexTableOffset)
-                *outIndexTableOffset = static_cast<uint64_t>(file.tellg());
+                *outIndexTableOffset = *indexTableOffset;
+
+            const uint64_t indexBytes = static_cast<uint64_t>(outHeader.tileCount) *
+                                        TILE_INDEX_ENTRY_SIZE;
+            if (*indexTableOffset > input->location.size ||
+                indexBytes > input->location.size - *indexTableOffset)
+            {
+                vfLogError("TerrainSerializer: Index table exceeds terrain file bounds");
+                return false;
+            }
 
             if (!parseIndexTable(file, outHeader.tileCount, outIndex))
             {
@@ -291,7 +425,14 @@ namespace terrain
                 return false;
             }
 
-            return true;
+            if (!input->logicalPosition())
+            {
+                vfLogError("TerrainSerializer: Index table crossed terrain file bounds");
+                return false;
+            }
+
+            return validateRecordExtents(outHeader, outIndex, *indexTableOffset,
+                                         input->location.size);
         }
         catch (const std::exception& e)
         {
@@ -311,16 +452,18 @@ namespace terrain
             return true;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.weightDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.weightDataOffset));
+            auto& file = input->stream;
 
             for (uint8_t li = 0; li < WEIGHT_CHANNELS; ++li)
                 outWeights.layerIndices[li] = readLE<uint8_t>(file);
@@ -344,7 +487,7 @@ namespace terrain
                 outWeights.layerWeights[ch] = compression::dequantizeWeights(quantized);
             }
 
-            if (!file.good())
+            if (!file.good() || !input->logicalPosition())
             {
                 vfLogError("TerrainSerializer: Read error for tile ({}, {}) weights",
                            entry.coordX, entry.coordZ);
@@ -371,22 +514,30 @@ namespace terrain
             return false;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.meshletDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.meshletDataOffset));
+            auto& file = input->stream;
 
             TileLoadResult tempResult;
             if (!parseTileMeshletData(file, tempResult))
             {
                 vfLogError("TerrainSerializer: Failed to read LOD data for tile ({}, {})",
                            entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            if (!input->logicalPosition())
+            {
+                vfLogError("TerrainSerializer: LOD data crossed terrain file bounds");
                 return false;
             }
 
@@ -412,33 +563,42 @@ namespace terrain
             return true;
         }
 
+        std::shared_lock lock(terrainFileMutex());
+
         try
         {
-            std::ifstream file(fs::path(path), std::ios::binary);
-            if (!file.is_open())
+            auto input = detail::openTerrainInputFile(std::string(path), entry.holeMaskDataOffset);
+            if (!input)
             {
                 vfLogError("TerrainSerializer: Failed to open file: {}", path);
                 return false;
             }
 
-            file.seekg(static_cast<std::streamoff>(entry.holeMaskDataOffset));
+            auto& file = input->stream;
             uint32_t totalVertices = readLE<uint32_t>(file);
-            uint32_t packedSize = (totalVertices + 7) / 8;
+            if (totalVertices > MAX_TILE_HOLE_QUADS)
+            {
+                vfLogError("TerrainSerializer: Hole count {} exceeds maximum {} for tile ({}, {})",
+                           totalVertices, MAX_TILE_HOLE_QUADS, entry.coordX, entry.coordZ);
+                return false;
+            }
+
+            const size_t packedSize = (static_cast<size_t>(totalVertices) + 7u) / 8u;
             std::vector<uint8_t> packed(packedSize);
             file.read(reinterpret_cast<char*>(packed.data()),
                       static_cast<std::streamsize>(packedSize));
+
+            if (!file.good() || !input->logicalPosition())
+            {
+                vfLogError("TerrainSerializer: Read error for tile ({}, {}) hole mask",
+                           entry.coordX, entry.coordZ);
+                return false;
+            }
 
             outHoleMask.resize(totalVertices, 0);
             for (uint32_t i = 0; i < totalVertices; ++i)
             {
                 outHoleMask[i] = (packed[i / 8] >> (i % 8)) & 1;
-            }
-
-            if (!file.good())
-            {
-                vfLogError("TerrainSerializer: Read error for tile ({}, {}) hole mask",
-                           entry.coordX, entry.coordZ);
-                return false;
             }
 
             return true;

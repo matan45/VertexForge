@@ -5,8 +5,10 @@
 #include "TerrainTileGenerator.hpp"
 #include "TerrainSerializer.hpp"
 #include "TerrainFileCache.hpp"
+#include "TerrainHeightLayerStore.hpp"
 #include "TerrainQuadtree.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 
@@ -23,6 +25,13 @@ namespace terrain
         std::shared_ptr<TerrainFileCache> fileCache;
         TerrainQuadtree quadtree;
         std::vector<TerrainTile*> lastVisibleTiles;
+
+        // VK-1645. Authoritative base-height blocks + the reserved height-layer stack.
+        //
+        // Lives here, not on TerrainTile, because removeTile() destroys the whole tile while a
+        // base block must survive stream-out (it has no persistence until VK-1646, so losing it
+        // loses artist data). Dies with the grid, which is exactly the lifetime it wants.
+        std::unique_ptr<TerrainHeightLayerStore> heightLayers;
 
     public:
         explicit TerrainGrid(const TerrainTileConfig& config);
@@ -81,7 +90,62 @@ namespace terrain
         void initializeWeightMaps();
         [[nodiscard]] std::vector<TerrainTile*> getWeightMapDirtyTiles();
 
+        // --- VK-1645: authoritative base vs derived heights ---
+
+        [[nodiscard]] TerrainHeightLayerStore& getHeightLayers() { return *heightLayers; }
+        [[nodiscard]] const TerrainHeightLayerStore& getHeightLayers() const { return *heightLayers; }
+
+        // Recomposes every stale COVERED tile from its base plus the visible layer stack, then
+        // normalizes seams across the stale set and its 4-neighbour ring.
+        //
+        // Strictly two phases. Interleaving compose and seam welding would let a later compose
+        // overwrite an earlier seam write, leaving the boundary asymmetric.
+        //
+        // `budget` of 0 means "everything" -- use it for explicit user actions, where a partial
+        // result would be visible. Non-zero paces residency-driven repair.
+        // Returns the number of tiles whose derived heights were recomposed.
+        uint32_t recomposeDirtyDerived(uint32_t budget = 0,
+                                       std::vector<TileCoord>* outChanged = nullptr);
+
+        // Derived-only seam welding, coverage-conditional (see the .cpp for the three cases).
+        // Never writes an authoritative plane, never captures undo state, never dispatches.
+        // `sorted` must be ordered -- the shared corner is written twice per call, so the result
+        // depends on visit order.
+        void normalizeDerivedSeams(const std::vector<TileCoord>& sorted);
+
+        // ensureHeightsLoaded plus the VK-1645 rule: on a covered tile the bytes that just came
+        // off disk are the uint16-quantized COMPOSITE, so they are a placeholder to be replaced
+        // by an exact recompose from the in-RAM base.
+        bool ensureTileHeights(TerrainTile& tile);
+
+        // VK-1647. What a recompose still owes, split by residency.
+        //
+        // The split is the whole point: a covered tile that is streamed out stays stale until it
+        // comes back, and it is waiting on the streamer rather than on the recompose budget. Folded
+        // into one number it would pin a progress bar below 100% for as long as the camera stays
+        // away, which reads as a hang.
+        struct HeightLayerRecomposeStatus
+        {
+            uint32_t pendingResident = 0; // covered + stale + resident -- work the budget will do
+            uint32_t pendingUnloaded = 0; // covered + stale + streamed out -- waiting on streaming
+            // VK-1648: tiles whose geometry the 8-per-frame loop still owes BECAUSE OF A LAYER
+            // RECOMPOSE. Scoped deliberately -- isDirty is also set by sculpting, painting, hole
+            // punching and stream-in, and counting those made the Height Layers panel disable
+            // itself for unrelated work.
+            uint32_t meshBacklog = 0;
+        };
+        [[nodiscard]] HeightLayerRecomposeStatus heightLayerRecomposeStatus() const;
+
     private:
+        // VK-1648. Coords that recomposeDirtyDerived (or its seam pass) marked dirty, drained in
+        // regenerateDirtyTiles once the mesh is rebuilt or the tile streams out. This is what makes
+        // meshBacklog answer "how much of THIS layer op is left" rather than "is any tile dirty".
+        std::unordered_set<TileCoord, TileCoordHash> layerMeshPending;
+
+        // Composes one covered tile in place. Returns false when it is not covered, has no base,
+        // or the base no longer matches the tile's resolution.
+        bool recomposeTile(TerrainTile& tile);
+
         [[nodiscard]] TerrainTile* getOrCreateTile(const TileCoord& coord);
 
         void updateNeighborReferences(TerrainTile& tile);

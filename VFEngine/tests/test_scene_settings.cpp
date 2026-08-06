@@ -170,7 +170,10 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), sceneGraph));
         CHECK(sceneGraph.getPhysicsSettings().gravityScale ==
               doctest::Approx(types::PhysicsSettings::createDefault().gravityScale));
-        CHECK_FALSE(sceneGraph.getRenderSettings().terrain.detailMaps);
+        // VK-1610: detail maps default to ALLOWED. That is not the same as "compiled in" - the
+        // TERRAIN_DETAIL_MAPS permutation is derived from the terrain material, so a scene that
+        // never opts out still pays nothing until a layer actually carries a normal/emission map.
+        CHECK(sceneGraph.getRenderSettings().terrain.detailMaps);
     }
 
     TEST_CASE("loadScene reads legacy inline settings when settingsRef is missing")
@@ -186,8 +189,10 @@ TEST_SUITE("SceneSettingsSerialization")
         json sceneJson;
         sceneJson["version"] = "1.0";
         sceneJson["physicsSettings"] = json{{"gravityScale", 4.0f}};
-        // Legacy render settings did not carry terrain.detailMaps. Loading must preserve the
-        // default-off behavior while still applying the terrain fields that were present.
+        // Legacy render settings did not carry terrain.detailMaps. VK-1610 flipped that default to
+        // "allowed", so such a scene loads as allowed - which is safe precisely because the
+        // permutation follows the material: a legacy terrain with no normal maps compiles and
+        // renders exactly as before, and keeps the 2-plane RVT layout.
         sceneJson["renderSettings"] = {
             {"terrain", {
                 {"enabled", false},
@@ -211,6 +216,6 @@ TEST_SUITE("SceneSettingsSerialization")
         CHECK(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
         CHECK(loaded.getPhysicsSettings().gravityScale == doctest::Approx(4.0f));
         CHECK_FALSE(loaded.getRenderSettings().terrain.enabled);
-        CHECK_FALSE(loaded.getRenderSettings().terrain.detailMaps);
+        CHECK(loaded.getRenderSettings().terrain.detailMaps);
     }
 }

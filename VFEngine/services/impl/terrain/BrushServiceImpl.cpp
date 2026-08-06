@@ -170,6 +170,58 @@ namespace services
                 publishParamsChanged();
             });
 
+        // VK-1616. These call validate() explicitly, unlike the talus/terrace/ramp setters above:
+        // BrushParams::validate() only runs from setParams/setRadius/setStrength today, and the
+        // hydraulic solver is the one place where an out-of-range value is not merely an odd-looking
+        // brush but a numerically unstable one.
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicRainRateCommand>(
+            [this](const events::brush::SetHydraulicRainRateCommand& cmd)
+            {
+                currentParams.hydraulicRainRate = cmd.rainRate;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicSedimentCapacityCommand>(
+            [this](const events::brush::SetHydraulicSedimentCapacityCommand& cmd)
+            {
+                currentParams.hydraulicSedimentCapacity = cmd.capacity;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicIterationsCommand>(
+            [this](const events::brush::SetHydraulicIterationsCommand& cmd)
+            {
+                currentParams.hydraulicIterations = cmd.iterations;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicEvaporationCommand>(
+            [this](const events::brush::SetHydraulicEvaporationCommand& cmd)
+            {
+                currentParams.hydraulicEvaporation = cmd.evaporation;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicHardnessCommand>(
+            [this](const events::brush::SetHydraulicHardnessCommand& cmd)
+            {
+                currentParams.hydraulicHardness = cmd.hardness;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
+        dispatcher.registerCommandHandler<events::brush::SetHydraulicSmoothingCommand>(
+            [this](const events::brush::SetHydraulicSmoothingCommand& cmd)
+            {
+                currentParams.hydraulicSmoothing = cmd.smoothing;
+                currentParams.validate();
+                publishParamsChanged();
+            });
+
         dispatcher.registerQueryHandler<events::brush::GetStampDataQuery>(
             [this](const events::brush::GetStampDataQuery&)
             {

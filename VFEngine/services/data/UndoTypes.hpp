@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <string>
 #include <memory>
 #include <map>
@@ -13,6 +14,23 @@ namespace services
         virtual void execute() = 0;
         virtual void undo() = 0;
         virtual std::string getDescription() const = 0;
+
+        // Approximate heap bytes this command holds, for the undo service's byte budget.
+        // Default 0 = negligible; only snapshot-shaped commands (terrain strokes, cave
+        // strokes) override it. A depth-only cap cannot bound RAM when one entry ranges
+        // from a few bytes (a file rename) to megabytes (a terrain paint stroke).
+        virtual size_t getMemoryFootprint() const { return 0; }
+    };
+
+    // Snapshot of the undo service's history state, for the preferences UI and for
+    // testing the trim behaviour end to end.
+    struct UndoHistoryStats
+    {
+        size_t undoCount = 0;
+        size_t redoCount = 0;
+        size_t totalBytes = 0;  // across BOTH stacks
+        size_t maxDepth = 0;    // 0 = unlimited
+        size_t maxBytes = 0;    // 0 = unlimited
     };
 
     class MoveFileUndoCommand : public IUndoableCommand
@@ -78,6 +96,13 @@ namespace services
         std::string metaOriginalPath;
         std::string metaBackupPath;
 
+        // VK-1646: a terrain's .vfterrainlayers sidecar, trashed and restored with it. Without
+        // this, undoing a terrain delete would bring back a file whose flag bit 6 promises a
+        // sidecar that no longer exists — the terrain would open flattened with layer editing
+        // disabled, and the artist's stack would be gone for good.
+        std::string layersOriginalPath;
+        std::string layersBackupPath;
+
         // Assets that referenced this one at delete time; re-scanned on undo
         // to restore their dependency-graph edges
         std::vector<std::string> dependentPaths;
@@ -104,6 +129,14 @@ namespace services
         std::string getDescription() const override
         {
             return inner ? inner->getDescription() : std::string();
+        }
+
+        // Must forward: PushUndoableCommand wraps EVERY event-pushed command in this
+        // adapter, so without the forward the byte budget silently reads zero for all
+        // of them.
+        size_t getMemoryFootprint() const override
+        {
+            return inner ? inner->getMemoryFootprint() : 0;
         }
     };
 
@@ -152,5 +185,16 @@ namespace services
         }
 
         std::string getDescription() const override { return description; }
+
+        size_t getMemoryFootprint() const override
+        {
+            size_t total = 0;
+            for (const auto& cmd : commands)
+            {
+                if (cmd)
+                    total += cmd->getMemoryFootprint();
+            }
+            return total;
+        }
     };
 }

@@ -7,6 +7,7 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
 
 namespace windows
 {
@@ -32,6 +33,32 @@ namespace windows
         }
     }
 
+    // VK-1613 documented the failure this collapses: stampMode was the one field missing from both
+    // of the two hand-maintained sync paths, so the combo reverted to "Add" on re-entering sculpt
+    // mode while the service still held Subtract -- the control worked, the readout lied. There is
+    // now one field list, so a new brush param can only be forgotten once.
+    void SculptToolPanel::applyParams(const terrain::BrushParams& params)
+    {
+        brushRadius = params.radius;
+        brushStrength = params.strength;
+        falloffIndex = static_cast<int>(params.falloff);
+        shapeIndex = static_cast<int>(params.shape);
+        stampMode = params.stampSubtract ? 1 : 0;
+        stampRotation = params.stampRotation;
+        stampScale = params.stampScale;
+        talusAngle = params.talusAngle;
+        terraceStepHeight = params.terraceStepHeight;
+        terraceSharpness = params.terraceSharpness;
+        rampWidth = params.rampWidth;
+        rampFalloff = params.rampFalloff;
+        hydraulicRainRate = params.hydraulicRainRate;
+        hydraulicSedimentCapacity = params.hydraulicSedimentCapacity;
+        hydraulicEvaporation = params.hydraulicEvaporation;
+        hydraulicHardness = params.hydraulicHardness;
+        hydraulicSmoothing = params.hydraulicSmoothing;
+        hydraulicIterations = static_cast<int>(params.hydraulicIterations);
+    }
+
     void SculptToolPanel::subscribe()
     {
         if (subscribed)
@@ -49,18 +76,7 @@ namespace windows
                 {
                     // Sync with current state
                     auto& d = events::EventDispatcher::instance();
-                    auto params = d.query(events::brush::GetBrushParamsQuery{});
-                    brushRadius = params.radius;
-                    brushStrength = params.strength;
-                    falloffIndex = static_cast<int>(params.falloff);
-                    shapeIndex = static_cast<int>(params.shape);
-                    stampRotation = params.stampRotation;
-                    stampScale = params.stampScale;
-                    talusAngle = params.talusAngle;
-                    terraceStepHeight = params.terraceStepHeight;
-                    terraceSharpness = params.terraceSharpness;
-                    rampWidth = params.rampWidth;
-                    rampFalloff = params.rampFalloff;
+                    applyParams(d.query(events::brush::GetBrushParamsQuery{}));
 
                     auto type = d.query(events::brush::GetBrushTypeQuery{});
                     selectedBrushType = static_cast<int>(type);
@@ -76,17 +92,7 @@ namespace windows
         brushParamsToken = dispatcher.subscribe<events::brush::BrushParamsChangedNotification>(
             [this](const events::brush::BrushParamsChangedNotification& n)
             {
-                brushRadius = n.params.radius;
-                brushStrength = n.params.strength;
-                falloffIndex = static_cast<int>(n.params.falloff);
-                shapeIndex = static_cast<int>(n.params.shape);
-                stampRotation = n.params.stampRotation;
-                stampScale = n.params.stampScale;
-                talusAngle = n.params.talusAngle;
-                terraceStepHeight = n.params.terraceStepHeight;
-                terraceSharpness = n.params.terraceSharpness;
-                rampWidth = n.params.rampWidth;
-                rampFalloff = n.params.rampFalloff;
+                applyParams(n.params);
             });
 
         stampImageToken = dispatcher.subscribe<events::brush::StampImageChangedNotification>(
@@ -121,18 +127,32 @@ namespace windows
         ImGui::Text("Brush Type");
         ImGui::Separator();
 
-        const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise", "Stamp", "Erosion", "Terrace", "Ramp"};
+        // VK-1616: the label array is now the single source of the count, and a static_assert ties
+        // it to the enum. The two hard-coded literals this replaces (a loop bound of 9 and a
+        // SameLine guard of 8) are exactly the pair the next brush would have forgotten.
+        constexpr const char* brushLabels[] = {"Raise", "Lower", "Smooth", "Flatten", "Noise",
+                                               "Stamp", "Erosion", "Terrace", "Ramp", "Hydraulic"};
+        constexpr int brushTypeCount = static_cast<int>(std::size(brushLabels));
+        static_assert(brushTypeCount == static_cast<int>(terrain::BrushType::Hydraulic) + 1,
+                      "brushLabels must cover every BrushType, in enum order");
+
         bool typeChanged = false;
 
-        for (int i = 0; i < 9; ++i)
+        // These no longer fit one row in a 250 px window, so wrap on content width rather than
+        // letting the last buttons run off the edge.
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float buttonPadding = ImGui::GetFrameHeight() + spacing;
+        for (int i = 0; i < brushTypeCount; ++i)
         {
+            if (i > 0)
+            {
+                const float width = ImGui::CalcTextSize(brushLabels[i]).x + buttonPadding;
+                if (ImGui::GetContentRegionAvail().x >= width)
+                    ImGui::SameLine();
+            }
             if (ImGui::RadioButton(brushLabels[i], &selectedBrushType, i))
             {
                 typeChanged = true;
-            }
-            if (i < 8)
-            {
-                ImGui::SameLine();
             }
         }
 
@@ -289,6 +309,68 @@ namespace windows
             }
         }
 
+        // Hydraulic erosion brush controls
+        if (selectedBrushType == static_cast<int>(terrain::BrushType::Hydraulic))
+        {
+            ImGui::Spacing();
+            ImGui::Text("Hydraulic Erosion");
+            ImGui::Separator();
+
+            if (ImGui::SliderFloat("Rain Amount", &hydraulicRainRate, 0.0f, 2.0f, "%.2f"))
+            {
+                events::brush::SetHydraulicRainRateCommand cmd;
+                cmd.rainRate = hydraulicRainRate;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("More water = deeper channels");
+
+            if (ImGui::SliderFloat("Sediment Capacity", &hydraulicSedimentCapacity, 0.1f, 5.0f, "%.2f"))
+            {
+                events::brush::SetHydraulicSedimentCapacityCommand cmd;
+                cmd.capacity = hydraulicSedimentCapacity;
+                dispatcher.execute(cmd);
+            }
+
+            if (ImGui::SliderInt("Iterations", &hydraulicIterations, 1, 128))
+            {
+                events::brush::SetHydraulicIterationsCommand cmd;
+                cmd.iterations = static_cast<uint32_t>(hydraulicIterations);
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Sim steps per frame; auto-reduced on huge brushes");
+
+            if (ImGui::SliderFloat("Evaporation", &hydraulicEvaporation, 0.0f, 0.2f, "%.3f"))
+            {
+                events::brush::SetHydraulicEvaporationCommand cmd;
+                cmd.evaporation = hydraulicEvaporation;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("High = short gullies, low = long channels");
+
+            if (ImGui::SliderFloat("Sediment Hardness", &hydraulicHardness, 0.0f, 1.0f, "%.2f"))
+            {
+                events::brush::SetHydraulicHardnessCommand cmd;
+                cmd.hardness = hydraulicHardness;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Soft ground carves, hard ground silts up");
+
+            if (ImGui::SliderFloat("Smoothing", &hydraulicSmoothing, 0.0f, 1.0f, "%.2f"))
+            {
+                events::brush::SetHydraulicSmoothingCommand cmd;
+                cmd.smoothing = hydraulicSmoothing;
+                dispatcher.execute(cmd);
+            }
+            ImGui::TextDisabled("Talus relaxation between channels (uses Talus Angle)");
+
+            if (ImGui::SliderFloat("Talus Angle", &talusAngle, 5.0f, 85.0f, "%.1f deg"))
+            {
+                events::brush::SetTalusAngleCommand cmd;
+                cmd.angle = talusAngle;
+                dispatcher.execute(cmd);
+            }
+        }
+
         // Ramp brush controls
         if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
         {
@@ -332,6 +414,11 @@ namespace windows
         if (selectedBrushType == static_cast<int>(terrain::BrushType::Ramp))
         {
             ImGui::TextDisabled("Click start point, then click end point");
+        }
+        else if (selectedBrushType == static_cast<int>(terrain::BrushType::Hydraulic))
+        {
+            ImGui::TextDisabled("Hold to erode; keep holding for deeper channels");
+            ImGui::TextDisabled("Hold Shift to deposit instead of carve");
         }
         else
         {

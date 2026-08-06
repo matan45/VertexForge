@@ -12,6 +12,13 @@ namespace archive { class VFPakReader; }
 
 namespace resource
 {
+	struct PhysicalLocation
+	{
+		std::string filePath;
+		uint64_t baseOffset = 0;
+		uint64_t size = 0;
+	};
+
 	class VirtualFileSystem
 	{
 	public:
@@ -20,7 +27,7 @@ namespace resource
 		void initialize();
 		void shutdown();
 
-		bool isArchiveMode() const { return archiveMode; }
+		bool isArchiveMode() const;
 
 		// Read entire file (decompresses LZ4 if needed)
 		// In dev mode: reads from filesystem
@@ -35,6 +42,10 @@ namespace resource
 			uint64_t regionSize;
 		};
 		std::optional<StreamRegion> openStream(const std::string& path) const;
+
+		// Resolve a logical path to seekable physical bytes. Compressed archive
+		// entries deliberately have no physical location.
+		std::optional<PhysicalLocation> locate(const std::string& path) const;
 
 		// Check if a path exists (filesystem or archive)
 		bool exists(const std::string& path) const;

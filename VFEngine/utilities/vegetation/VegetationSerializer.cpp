@@ -1,8 +1,10 @@
 #include "VegetationSerializer.hpp"
 #include "../print/Log.hpp"
 #include "../resource/VFSHelpers.hpp"
+#include "../resource/VirtualFileSystem.hpp"
 #include <fstream>
 #include <filesystem>
+#include <sstream>
 #include <random>
 #include <nlohmann/json.hpp>
 
@@ -11,6 +13,9 @@ namespace vegetation
     bool VegetationSerializer::saveBillboardInstances(const std::string& filePath,
                                                        const std::vector<BillboardInstance>& instances)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         namespace fs = std::filesystem;
         fs::path dir = fs::path(filePath).parent_path();
         if (!dir.empty() && !fs::exists(dir))
@@ -44,8 +49,10 @@ namespace vegetation
     bool VegetationSerializer::loadBillboardInstances(const std::string& filePath,
                                                        std::vector<BillboardInstance>& instances)
     {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file.is_open()) return false;
+        const auto bytes = resource::readFileBytes(filePath);
+        if (bytes.empty()) return false;
+        const std::string contents(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        std::istringstream file(contents, std::ios::binary);
 
         std::array<char, 4> magic{};
         file.read(magic.data(), 4);
@@ -103,6 +110,9 @@ namespace vegetation
     bool VegetationSerializer::saveBillboardPalette(const std::string& filePath,
                                                       const std::vector<BillboardPaletteEntry>& palette)
     {
+        if (resource::VirtualFileSystem::instance().isArchiveMode())
+            return false;
+
         namespace fs = std::filesystem;
         fs::path dir = fs::path(filePath).parent_path();
         if (!dir.empty() && !fs::exists(dir))

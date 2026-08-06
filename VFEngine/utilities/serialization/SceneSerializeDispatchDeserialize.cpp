@@ -193,12 +193,13 @@ namespace serialization
         }
     }
 
-    void SceneSerialization::deserializeEnvironmentComponents(const json& c, scene::Entity& entity)
+    void SceneSerialization::deserializeEnvironmentComponents(const json& c, scene::Entity& entity,
+                                                               std::string_view sourceFilename)
     {
         if (c.contains("terrain"))
         {
             auto& terrainComp = entity.addOrReplaceComponent<components::TerrainComponent>();
-            deserializeTerrain(c["terrain"], terrainComp);
+            deserializeTerrain(c["terrain"], terrainComp, sourceFilename);
         }
         if (c.contains("terrainTile"))
         {
@@ -224,6 +225,11 @@ namespace serialization
         {
             auto& brushComp = entity.addOrReplaceComponent<components::MeshBrushInstanceComponent>();
             deserializeMeshBrushInstance(c["meshBrushInstance"], brushComp);
+        }
+        if (c.contains("roadSpline")) // VK-1621
+        {
+            auto& roadComp = entity.addOrReplaceComponent<components::RoadSplineComponent>();
+            deserializeRoadSpline(c["roadSpline"], roadComp);
         }
     }
 
@@ -424,13 +430,14 @@ namespace serialization
         }
     }
 
-    void SceneSerialization::deserializeEntityComponents(const json& componentsJson, scene::Entity& entity)
+    void SceneSerialization::deserializeEntityComponents(const json& componentsJson, scene::Entity& entity,
+                                                          std::string_view sourceFilename)
     {
         deserializeRenderComponents(componentsJson, entity);
         deserializeAudioComponents(componentsJson, entity);
         deserializePhysicsComponents(componentsJson, entity);
         deserializeLightComponents(componentsJson, entity);
-        deserializeEnvironmentComponents(componentsJson, entity);
+        deserializeEnvironmentComponents(componentsJson, entity, sourceFilename);
         deserializeUIStructuralComponents(componentsJson, entity);
         deserializeUIInteractiveComponents(componentsJson, entity);
         deserializeMiscComponents(componentsJson, entity);

@@ -22,6 +22,11 @@ namespace core
             std::vector<float>& heightData,
             const terrain::BrushGPUParams& params) override;
 
+        bool applyHydraulicErosionGPU(
+            std::vector<float>& field,
+            const std::vector<uint32_t>& validMask,
+            const terrain::HydraulicGPUParams& params) override;
+
         void setStampData(
             const std::vector<float>& heights,
             uint32_t width, uint32_t height) override;

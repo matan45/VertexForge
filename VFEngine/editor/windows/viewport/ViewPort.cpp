@@ -11,6 +11,7 @@
 #include "events/terrain/PaintBrushEvents.hpp"
 #include "events/terrain/HoleModeEvents.hpp"
 #include "events/terrain/HoleBrushEvents.hpp"
+#include "events/terrain/TerrainStrokeEvents.hpp"
 #include "events/terrain/CaveModeEvents.hpp"
 #include "events/terrain/CaveBrushEvents.hpp"
 #include "events/vegetation/VegetationBrushEvents.hpp"
@@ -665,6 +666,10 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::sculpt::IsSculptModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            // VK-1615: dragging off the viewport (or leaving sculpt mode) must still close
+            // the stroke, or its undo entry is silently discarded.
+            if (sculptDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             sculptDragging = false;
             return;
         }
@@ -680,6 +685,8 @@ namespace windows
                 sculptDragging = true;
             }
         } else {
+            if (sculptDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             sculptDragging = false;
         }
     }
@@ -693,6 +700,8 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::paint::IsPaintModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            if (paintDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             paintDragging = false;
             return;
         }
@@ -708,6 +717,8 @@ namespace windows
                 paintDragging = true;
             }
         } else {
+            if (paintDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
             paintDragging = false;
         }
     }
@@ -720,15 +731,28 @@ namespace windows
     void ViewPort::handleHoleBrush()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        if (!dispatcher.query(events::hole::IsHoleModeActiveQuery{}) || !ImGui::IsWindowHovered()) return;
+        if (!dispatcher.query(events::hole::IsHoleModeActiveQuery{}) || !ImGui::IsWindowHovered()) {
+            if (holeDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
+            holeDragging = false;
+            return;
+        }
         if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit) {
                 events::holeBrush::ApplyHoleBrushCommand applyCmd;
                 applyCmd.worldPosition = hitResult.position;
                 applyCmd.erase = ImGui::GetIO().KeyShift;
+                // VK-1615: hole strokes previously had no drag concept at all, so every
+                // frame of a drag was an independent edit with nothing to undo.
+                applyCmd.isFirstApplication = !holeDragging;
                 dispatcher.execute(applyCmd);
+                holeDragging = true;
             }
+        } else {
+            if (holeDragging)
+                dispatcher.execute(events::terrain::FinalizeTerrainStrokeCommand{});
+            holeDragging = false;
         }
     }
 
@@ -737,6 +761,14 @@ namespace windows
         auto& dispatcher = events::EventDispatcher::instance();
         if (!dispatcher.query(events::cave::IsCaveModeActiveQuery{}) || !ImGui::IsWindowHovered())
         {
+            // VK-1615: this path used to reset the latch without finalizing, so dragging
+            // off the viewport silently dropped the cave stroke's undo entry (mesh,
+            // foliage and vegetation brushes all finalize here).
+            if (caveDragging)
+            {
+                events::caveBrush::FinalizeCaveBrushCommand finalizeCmd;
+                dispatcher.execute(finalizeCmd);
+            }
             caveDragging = false;
             return;
         }
@@ -888,16 +920,71 @@ namespace windows
             return;
         }
 
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        if (draggedSplinePoint >= 0)
         {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                draggedSplinePoint = -1;
+                return;
+            }
+
             auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
             if (hitResult.hit)
             {
-                events::splineTerrain::AddSplinePointCommand cmd;
-                cmd.worldPosition = hitResult.position;
-                dispatcher.execute(cmd);
+                events::splineTerrain::SetSplinePointCommand moveCmd;
+                moveCmd.index = static_cast<uint32_t>(draggedSplinePoint);
+                moveCmd.position = hitResult.position;
+                dispatcher.query(moveCmd);
+            }
+            return;
+        }
+
+        if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            return;
+
+        auto hitResult = dispatcher.query(events::terrainRaycast::GetTerrainHitQuery{});
+        if (!hitResult.hit)
+            return;
+
+        // Grab an existing point if the click landed on one, otherwise append. Picking against the
+        // TERRAIN HIT rather than screen space keeps this independent of the camera projection and
+        // gives a pick radius the author can reason about in metres.
+        const auto points = dispatcher.query(events::splineTerrain::GetActiveSplinePointsQuery{});
+        const auto params = dispatcher.query(events::splineTerrain::GetSplineParamsQuery{});
+        const float pickRadius = std::max(1.5f, params.corridorWidth * 0.5f);
+
+        int32_t nearest = -1;
+        float nearestDistanceSq = pickRadius * pickRadius;
+        for (size_t i = 0; i < points.size(); ++i)
+        {
+            const glm::vec3 delta = points[i].position - hitResult.position;
+            const float distanceSq = delta.x * delta.x + delta.z * delta.z;
+            if (distanceSq <= nearestDistanceSq)
+            {
+                nearestDistanceSq = distanceSq;
+                nearest = static_cast<int32_t>(i);
             }
         }
+
+        if (nearest >= 0)
+        {
+            // Alt-click removes a point outright; a plain click starts a drag.
+            if (ImGui::GetIO().KeyAlt)
+            {
+                events::splineTerrain::RemoveSplinePointCommand removeCmd;
+                removeCmd.index = static_cast<uint32_t>(nearest);
+                dispatcher.query(removeCmd);
+            }
+            else
+            {
+                draggedSplinePoint = nearest;
+            }
+            return;
+        }
+
+        events::splineTerrain::AddSplinePointCommand cmd;
+        cmd.worldPosition = hitResult.position;
+        dispatcher.execute(cmd);
     }
 
 }

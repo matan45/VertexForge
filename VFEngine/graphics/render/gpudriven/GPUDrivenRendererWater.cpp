@@ -233,8 +233,6 @@ namespace render::gpudriven
             params.depthFalloff = visualSettings.causticDepthFalloff;
             params.patchSize = oceanPatchSize;
             params.shoreWetRange = visualSettings.shoreWetRange;
-            params.shoreWetDarkening = visualSettings.shoreWetDarkening;
-            params.shoreWetRoughness = visualSettings.shoreWetRoughness;
             water.causticsResources->updateParams(params);
         }
 

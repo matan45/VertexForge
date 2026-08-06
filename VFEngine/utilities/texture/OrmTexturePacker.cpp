@@ -57,9 +57,11 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
+        const resource::TextureData* heightTexture,
         const resource::MipLevelData& aoMip,
         const resource::MipLevelData& roughnessMip,
         const resource::MipLevelData& metallicMip,
+        const resource::MipLevelData& heightMip,
         std::string& errorMessage)
     {
         if (aoTexture && aoMip.data.empty())
@@ -77,6 +79,11 @@ namespace texture
             errorMessage = "Metallic texture has no mip level 0 data";
             return false;
         }
+        if (heightTexture && heightMip.data.empty())
+        {
+            errorMessage = "Height texture has no mip level 0 data";
+            return false;
+        }
         return true;
     }
 
@@ -87,9 +94,11 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
+        const resource::TextureData* heightTexture,
         const resource::MipLevelData& aoMip,
         const resource::MipLevelData& roughnessMip,
         const resource::MipLevelData& metallicMip,
+        const resource::MipLevelData& heightMip,
         OrmPackProgressCallback progressCallback)
     {
         ormMip.width = width;
@@ -112,11 +121,15 @@ namespace texture
                 uint8_t metallic = metallicTexture
                                        ? getGrayscaleValue(metallicMip, x, y, width, metallicTexture->numbersOfChannels)
                                        : OrmTexturePacker::DEFAULT_METALLIC;
+                // VK-1609: alpha carries per-layer height for terrain height-blended compositing.
+                uint8_t height8 = heightTexture
+                                      ? getGrayscaleValue(heightMip, x, y, width, heightTexture->numbersOfChannels)
+                                      : OrmTexturePacker::DEFAULT_HEIGHT;
 
                 ormMip.data[outIdx + 0] = ao;
                 ormMip.data[outIdx + 1] = roughness;
                 ormMip.data[outIdx + 2] = metallic;
-                ormMip.data[outIdx + 3] = 255;
+                ormMip.data[outIdx + 3] = height8;
             }
 
             if (progressCallback && (y % (height / 10 + 1) == 0))
@@ -135,7 +148,7 @@ namespace texture
         uint32_t dstIdx)
     {
         uint32_t samples = 0;
-        uint32_t sumR = 0, sumG = 0, sumB = 0;
+        uint32_t sumR = 0, sumG = 0, sumB = 0, sumA = 0;
 
         for (uint32_t dy = 0; dy < 2 && (srcY + dy) < srcHeight; ++dy)
         {
@@ -145,6 +158,7 @@ namespace texture
                 sumR += srcMip.data[srcIdx + 0];
                 sumG += srcMip.data[srcIdx + 1];
                 sumB += srcMip.data[srcIdx + 2];
+                sumA += srcMip.data[srcIdx + 3];
                 ++samples;
             }
         }
@@ -157,7 +171,12 @@ namespace texture
         dstData[dstIdx + 0] = static_cast<uint8_t>(sumR / samples);
         dstData[dstIdx + 1] = static_cast<uint8_t>(sumG / samples);
         dstData[dstIdx + 2] = static_cast<uint8_t>(sumB / samples);
-        dstData[dstIdx + 3] = 255;
+        // VK-1609: alpha is box-averaged like the other channels instead of being force-written to
+        // 255. Without this the height signal would exist at mip 0 only, so terrain height blending
+        // would work within a few metres of the camera and silently revert to a linear blend at
+        // distance — a failure that reads as a shader bug rather than an asset one. Averaging also
+        // gives the correct LOD behaviour: the blend softens with distance.
+        dstData[dstIdx + 3] = static_cast<uint8_t>(sumA / samples);
     }
 
     static resource::MipLevelData downsampleLevel(
@@ -271,25 +290,29 @@ namespace texture
 
     static void loadTextures(
         const OrmPackInput& input,
-        bool hasAo, bool hasRoughness, bool hasMetallic,
+        bool hasAo, bool hasRoughness, bool hasMetallic, bool hasHeight,
         std::shared_ptr<resource::TextureData>& aoData,
         std::shared_ptr<resource::TextureData>& roughnessData,
         std::shared_ptr<resource::TextureData>& metallicData,
+        std::shared_ptr<resource::TextureData>& heightData,
         OrmPackProgressCallback progressCallback)
     {
         std::future<std::shared_ptr<resource::TextureData>> aoFuture;
         std::future<std::shared_ptr<resource::TextureData>> roughnessFuture;
         std::future<std::shared_ptr<resource::TextureData>> metallicFuture;
+        std::future<std::shared_ptr<resource::TextureData>> heightFuture;
 
         if (hasAo) aoFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.aoPath));
         if (hasRoughness) roughnessFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.roughnessPath));
         if (hasMetallic) metallicFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.metallicPath));
+        if (hasHeight) heightFuture = resource::ResourceManager::loadTextureAsync(asset::AssetRef::fromPath(input.heightPath));
 
         if (progressCallback) progressCallback(0.1f);
 
         if (hasAo) aoData = aoFuture.get();
         if (hasRoughness) roughnessData = roughnessFuture.get();
         if (hasMetallic) metallicData = metallicFuture.get();
+        if (hasHeight) heightData = heightFuture.get();
     }
 
     static bool decompressIfNeeded(
@@ -316,13 +339,19 @@ namespace texture
     }
 
     static bool validateLoadedTextures(
-        bool hasAo, bool hasRoughness, bool hasMetallic,
+        bool hasAo, bool hasRoughness, bool hasMetallic, bool hasHeight,
         const std::shared_ptr<resource::TextureData>& aoData,
         const std::shared_ptr<resource::TextureData>& roughnessData,
         const std::shared_ptr<resource::TextureData>& metallicData,
+        const std::shared_ptr<resource::TextureData>& heightData,
         const OrmPackInput& input,
         std::string& errorMessage)
     {
+        if (hasHeight && (!heightData || heightData->textureData().empty()))
+        {
+            errorMessage = "Failed to load height texture: " + input.heightPath;
+            return false;
+        }
         if (hasAo && (!aoData || aoData->textureData().empty()))
         {
             errorMessage = "Failed to load AO texture: " + input.aoPath;
@@ -347,12 +376,14 @@ namespace texture
         const resource::MipLevelData* aoMip;
         const resource::MipLevelData* roughnessMip;
         const resource::MipLevelData* metallicMip;
+        const resource::MipLevelData* heightMip;
     };
 
     static ChannelMipRefs getChannelMipRefs(
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
-        const resource::TextureData* metallicTexture)
+        const resource::TextureData* metallicTexture,
+        const resource::TextureData* heightTexture)
     {
         ChannelMipRefs refs;
         refs.aoMip = (aoTexture && !aoTexture->mipData.empty())
@@ -364,6 +395,9 @@ namespace texture
         refs.metallicMip = (metallicTexture && !metallicTexture->mipData.empty())
                                ? &metallicTexture->mipData[0]
                                : &refs.emptyMip;
+        refs.heightMip = (heightTexture && !heightTexture->mipData.empty())
+                             ? &heightTexture->mipData[0]
+                             : &refs.emptyMip;
         return refs;
     }
 
@@ -372,6 +406,7 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
+        const resource::TextureData* heightTexture,
         const ChannelMipRefs& mipRefs,
         OrmPackProgressCallback progressCallback)
     {
@@ -383,8 +418,8 @@ namespace texture
 
         resource::MipLevelData ormMip;
         packPixels(ormMip, width, height,
-                   aoTexture, roughnessTexture, metallicTexture,
-                   *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip,
+                   aoTexture, roughnessTexture, metallicTexture, heightTexture,
+                   *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip, *mipRefs.heightMip,
                    progressCallback);
         ormTexture.mipData.push_back(std::move(ormMip));
 
@@ -408,8 +443,9 @@ namespace texture
         bool hasAo = !input.aoPath.empty();
         bool hasRoughness = !input.roughnessPath.empty();
         bool hasMetallic = !input.metallicPath.empty();
+        bool hasHeight = !input.heightPath.empty();
 
-        if (!hasAo && !hasRoughness && !hasMetallic)
+        if (!hasAo && !hasRoughness && !hasMetallic && !hasHeight)
         {
             result.errorMessage = "At least one texture must be provided to determine output dimensions";
             return result;
@@ -420,9 +456,10 @@ namespace texture
         std::shared_ptr<resource::TextureData> aoData;
         std::shared_ptr<resource::TextureData> roughnessData;
         std::shared_ptr<resource::TextureData> metallicData;
+        std::shared_ptr<resource::TextureData> heightData;
 
-        loadTextures(input, hasAo, hasRoughness, hasMetallic,
-                     aoData, roughnessData, metallicData, progressCallback);
+        loadTextures(input, hasAo, hasRoughness, hasMetallic, hasHeight,
+                     aoData, roughnessData, metallicData, heightData, progressCallback);
 
         if (progressCallback) progressCallback(0.5f);
 
@@ -438,9 +475,13 @@ namespace texture
         {
             return result;
         }
+        if (hasHeight && !decompressIfNeeded(heightData, "Height", input.decompressCallback, result.errorMessage))
+        {
+            return result;
+        }
 
-        if (!validateLoadedTextures(hasAo, hasRoughness, hasMetallic,
-                                    aoData, roughnessData, metallicData,
+        if (!validateLoadedTextures(hasAo, hasRoughness, hasMetallic, hasHeight,
+                                    aoData, roughnessData, metallicData, heightData,
                                     input, result.errorMessage))
         {
             return result;
@@ -449,7 +490,7 @@ namespace texture
         if (progressCallback) progressCallback(0.6f);
 
         return packORMFromData(
-            aoData.get(), roughnessData.get(), metallicData.get(),
+            aoData.get(), roughnessData.get(), metallicData.get(), heightData.get(),
             input.outputPath, progressCallback, input.compressCallback);
     }
 
@@ -457,6 +498,7 @@ namespace texture
         const resource::TextureData* aoTexture,
         const resource::TextureData* roughnessTexture,
         const resource::TextureData* metallicTexture,
+        const resource::TextureData* heightTexture,
         const std::string& outputPath,
         OrmPackProgressCallback progressCallback,
         TextureCompressCallback compressCallback)
@@ -467,6 +509,7 @@ namespace texture
         if (aoTexture) providedTextures.push_back(aoTexture);
         if (roughnessTexture) providedTextures.push_back(roughnessTexture);
         if (metallicTexture) providedTextures.push_back(metallicTexture);
+        if (heightTexture) providedTextures.push_back(heightTexture);
 
         uint32_t width, height;
         if (!validateTextureDimensions(providedTextures, width, height, result.errorMessage))
@@ -476,17 +519,17 @@ namespace texture
 
         if (progressCallback) progressCallback(0.65f);
 
-        auto mipRefs = getChannelMipRefs(aoTexture, roughnessTexture, metallicTexture);
+        auto mipRefs = getChannelMipRefs(aoTexture, roughnessTexture, metallicTexture, heightTexture);
 
-        if (!validateMipData(aoTexture, roughnessTexture, metallicTexture,
-                             *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip,
+        if (!validateMipData(aoTexture, roughnessTexture, metallicTexture, heightTexture,
+                             *mipRefs.aoMip, *mipRefs.roughnessMip, *mipRefs.metallicMip, *mipRefs.heightMip,
                              result.errorMessage))
         {
             return result;
         }
 
         auto ormTexture = buildOrmTexture(width, height,
-                                          aoTexture, roughnessTexture, metallicTexture,
+                                          aoTexture, roughnessTexture, metallicTexture, heightTexture,
                                           mipRefs, progressCallback);
 
         if (progressCallback) progressCallback(0.85f);

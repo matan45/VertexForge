@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../terrain/TerrainSerializer.hpp"
 #include "../threading/JobSystem.hpp"
+#include "../resource/AtomicFileReplace.hpp"
 #include "../resource/VFSHelpers.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -287,103 +288,16 @@ namespace asset
         }
     }
 
-    static std::vector<char> buildTerrainFileWithNewPath(
-        const std::vector<char>& fileData, size_t pathLenOffset,
-        uint32_t oldPathLen, const std::string& newPath)
-    {
-        size_t oldPathEnd = pathLenOffset + 4 + oldPathLen;
-        int32_t delta = static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
-        uint32_t newPathLen = static_cast<uint32_t>(newPath.size());
-
-        std::vector<char> newFileData;
-        newFileData.reserve(fileData.size() + delta);
-        newFileData.insert(newFileData.end(), fileData.begin(), fileData.begin() + pathLenOffset);
-
-        newFileData.push_back(static_cast<char>(newPathLen & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 8) & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 16) & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 24) & 0xFF));
-
-        newFileData.insert(newFileData.end(), newPath.begin(), newPath.end());
-        newFileData.insert(newFileData.end(), fileData.begin() + oldPathEnd, fileData.end());
-        return newFileData;
-    }
-
-    static void adjustTerrainIndexOffsets(
-        std::vector<char>& newFileData, size_t indexTableOffset,
-        const std::vector<terrain::TileIndexEntry>& index, int32_t delta)
-    {
-        auto adjustOffset = [&](size_t pos, uint64_t originalValue) {
-            if (originalValue == 0) return;
-            uint64_t adjusted = static_cast<uint64_t>(static_cast<int64_t>(originalValue) + delta);
-            for (int b = 0; b < 8; ++b)
-                newFileData[pos + b] = static_cast<char>((adjusted >> (b * 8)) & 0xFF);
-        };
-
-        for (size_t i = 0; i < index.size(); ++i) {
-            size_t entryOffset = indexTableOffset + i * 44;
-            adjustOffset(entryOffset + 8, index[i].heightDataOffset);
-            adjustOffset(entryOffset + 20, index[i].weightDataOffset);
-            adjustOffset(entryOffset + 28, index[i].meshletDataOffset);
-            adjustOffset(entryOffset + 36, index[i].holeMaskDataOffset);
-        }
-    }
-
     bool AssetReferenceScanner::updateTerrainFile(const fs::path& filePath, const std::string& oldPath,
                                                    const std::string& newPath)
     {
-        try
-        {
-            terrain::TerrainFileHeader header;
-            std::vector<terrain::TileIndexEntry> index;
-            if (!terrain::TerrainSerializer::readHeader(filePath.string(), header, index))
-                return false;
-
-            std::string oldPathNorm = normalizePath(oldPath);
-            std::string materialNorm = normalizePath(header.materialPath);
-            if (header.materialPath != oldPath && materialNorm != oldPathNorm)
-                return false;
-
-            std::ifstream inFile(filePath, std::ios::binary | std::ios::ate);
-            if (!inFile.is_open()) return false;
-            auto fileSize = inFile.tellg();
-            inFile.seekg(0);
-            std::vector<char> fileData(static_cast<size_t>(fileSize));
-            inFile.read(fileData.data(), fileSize);
-            inFile.close();
-
-            constexpr size_t pathLenOffset = 4 + 12 + 4 + 4 + 1 + 16 + 16 + 16;
-            uint32_t oldPathLen = static_cast<uint32_t>(header.materialPath.size());
-            int32_t delta = static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
-
-            auto newFileData = buildTerrainFileWithNewPath(fileData, pathLenOffset, oldPathLen, newPath);
-
-            if (delta != 0 && !index.empty()) {
-                size_t physicsSize = 0;
-                if (terrain::hasFlag(header.flags, terrain::TerrainFormatFlags::HAS_PHYSICS_DATA))
-                    physicsSize = 1 + 1 + 4 + 4;
-
-                uint32_t newPathLen = static_cast<uint32_t>(newPath.size());
-                size_t indexTableOffset = pathLenOffset + 4 + newPathLen + physicsSize;
-                adjustTerrainIndexOffsets(newFileData, indexTableOffset, index, delta);
-            }
-
-            std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);
-            if (!outFile.is_open()) {
-                vfLogError("Failed to open terrain file for writing: {}", filePath.string());
-                return false;
-            }
-            outFile.write(newFileData.data(), static_cast<std::streamsize>(newFileData.size()));
-            outFile.close();
-
-            vfLogInfo("Updated terrain material path in: {}", filePath.string());
-            return true;
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Failed to update terrain file {}: {}", filePath.string(), e.what());
-            return false;
-        }
+        // Delegated rather than done here. Changing the stored material path resizes the VFTR
+        // header and shifts every absolute tile offset in the index, so the whole read-modify-write
+        // has to sit inside terrain::terrainFileMutex() — otherwise a TerrainStreamManager worker
+        // holding a pre-shift TileIndexEntry seeks into the post-shift file and decodes a different
+        // tile's bytes. That lock is not recursive and is taken by the TerrainSerializer entry
+        // points themselves, so the operation belongs behind one of them.
+        return terrain::TerrainSerializer::rewriteMaterialPath(filePath.string(), oldPath, newPath);
     }
 
     ReferenceScanResult AssetReferenceScanner::updateReferences(

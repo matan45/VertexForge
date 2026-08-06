@@ -43,6 +43,10 @@ namespace render::gpudriven
             uint32_t pagesPerFrame = 32;
             uint32_t evictionAgeFrames = 60;
             bool detailMaps = false;
+            // VK-1620: append the R16_UNORM world-height plane. Must be the ALREADY-RESOLVED flag
+            // (GPUDrivenRenderer::syncTerrainRVTWorldHeight), not the raw render setting — the pool
+            // built here and the baker's MRT attachment count have to agree exactly.
+            bool worldHeight = false;
         };
 
         // A scheduled page bake: fill physical `tile` for virtual page `page`, whose world
@@ -70,6 +74,31 @@ namespace render::gpudriven
             uint64_t readbackUs = 0;   // feedback->readback() (device->host memcpy)
             uint64_t decodeUs = 0;     // set-bit walk + decode + request sort
             uint64_t residencyUs = 0;  // planFrame + evict/allocate + map/unmap
+
+            // VK-1610 residency accounting. The point of these is to tell the two ways a page can
+            // fail to become resident apart, because they call for opposite fixes:
+            //   budgetLimited - planFrame capped allocations at `pagesPerFrame`, so the pool is
+            //                   simply catching up. Benign and self-correcting; raise pagesPerFrame
+            //                   only if it never catches up.
+            //   poolLimited   - planFrame could not even reach that cap, because free + evictable
+            //                   tiles ran out. THIS is thrash: the atlas cannot hold the camera's
+            //                   footprint, so pages evict and re-bake every frame. The fix is a
+            //                   bigger poolBudgetMB (or fewer planes - see terrainRVTPoolGeometry).
+            //
+            // Both are derived from VTResidencyPlan::missCount, NOT from a failed allocateTile():
+            // planFrame already clamps toAllocate to what the pool can hold, so allocation inside
+            // updateResidency effectively never fails and a pool that is far too small would
+            // otherwise look completely idle.
+            //
+            // `uncoveredSkipped` is neither: those pages sit outside loaded terrain and are left
+            // non-resident on purpose, so counting them as failures would read as permanent thrash.
+            uint32_t requestedPages = 0;
+            uint32_t allocatedPages = 0;
+            uint32_t evictedPages = 0;
+            uint32_t uncoveredSkipped = 0;
+            uint32_t unmetPages = 0;   // wanted this frame but left non-resident (either cause)
+            bool budgetLimited = false;
+            bool poolLimited = false;
         };
 
         explicit TerrainRVTManager(core::Device& device);

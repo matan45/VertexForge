@@ -3,6 +3,7 @@
 #include "threading/TaskProfiler.hpp"
 #include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
 #include "stats/GpuPassStats.hpp"   // render::GpuFrameStats sink (published by graphics)
+#include "stats/TerrainRVTStats.hpp" // VK-1610: render::TerrainRVTFrameStats sink
 #include "resource/ResourceLoadScheduler.hpp" // ActiveLoadInfo / CompletedLoadRecord
 
 #include <array>
@@ -98,6 +99,11 @@ namespace windows
 		// Shared by the graph-pass and sub-scope tables. `rows` indexes into
 		// gpuStats.passTimings; `denomMs` is the share-of-frame denominator.
 		void drawGpuPassTable(const char* id, const std::vector<size_t>& rows, float denomMs);
+		// VK-1610: terrain RVT page residency. Drawn above the per-pass timing toggle because it
+		// is CPU-side bookkeeping published every frame — it needs no timestamp capture, and it is
+		// the only way to tell an expensive "VT/RVT Bake" row caused by thrash apart from one
+		// caused by the pool simply streaming in.
+		void drawTerrainRVTSection();
 		void drawLoading();
 		std::string loadDisplayName(const asset::AssetGUID& guid, const std::string& debugName);
 	};

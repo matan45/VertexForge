@@ -3,6 +3,11 @@
 #include "../vegetation/WindSystem.hpp" // VK-1580: complete type for windSystem->getBuffer()
 #include "SelectionMaskPipeline.hpp" // VK-1490
 #include "../virtualtexture/svt/SVTManager.hpp"
+#include "terrain/TerrainRVTLayout.hpp"  // VK-1620: terrainRVTWorldHeightPlaneIndex
+#include "terrain/TerrainRVTManager.hpp" // VK-1620: getPool()/getImageInfo() for the blend params
+#include "../../core/BufferUtilities.hpp" // VK-1620: the blend params buffer
+#include "../../core/Device.hpp"          // VK-1620: getLogicalDevice/getPhysicalDevice/getMemoryManager
+#include <cstring>
 #include "../occlusion/HiZBuffer.hpp"
 #include "../occlusion/DepthPrepass.hpp"
 #include "../mesh/MeshTypes.hpp"
@@ -141,8 +146,20 @@ namespace render::gpudriven
             return {0, 0};
         };
 
+        // VK-1620/VK-1648: same defaultMaterialPath fallback as shadingResolver, so a blend
+        // authored on the mesh's own material applies on the object-streaming path too — not just
+        // in the editor viewport, which reads pbrCache directly.
+        TerrainBlendResolver terrainBlendResolver = [this](const std::string& materialPath)
+            -> TerrainBlendParams {
+            if (materialPath.empty()) return {};
+            auto it = materials.pbrCache.find(materialPath);
+            if (it == materials.pbrCache.end()) return {};
+            return {it->second.blendToTerrain, it->second.terrainBlendBand,
+                    it->second.terrainBlendContrast};
+        };
+
         ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver,
-                                  shadingResolver, time, cameraPosition};
+                                  shadingResolver, terrainBlendResolver, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;
@@ -627,6 +644,139 @@ namespace render::gpudriven
         wire(wboitMeshShaderPipeline.get());
     }
 
+    // --- VK-1620 mesh-into-terrain blending ---------------------------------------------------
+    //
+    // The scene mesh pipeline is at the 16-bound-set ceiling (see MeshShaderPipeline.cpp's set-13
+    // collapse note), and its set 5 is bone matrices, so the terrain's own set-5 RVT block cannot
+    // simply be bound here. This follows VK-1209's SVT precedent instead: the atlas planes go in
+    // the bindless heap and only the page table + params ride set 1.
+    void GPUDrivenRenderer::createRVTBlendParamsBuffer()
+    {
+        if (rvtBlendParamsBuffer)
+            return;
+
+        core::BufferInfoRequest request(device.getLogicalDevice(), device.getPhysicalDevice());
+        request.size = 64; // mirrors RVTBlendParams in mesh_shader_gpudriven.glsl
+        request.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        request.properties = vk::MemoryPropertyFlagBits::eHostVisible |
+                             vk::MemoryPropertyFlagBits::eHostCoherent;
+        core::BufferUtilities::createBuffer(request, rvtBlendParamsBuffer, rvtBlendParamsAllocation,
+                                            device.getMemoryManager());
+        rvtBlendParamsMapped = rvtBlendParamsAllocation.mappedPtr;
+        if (rvtBlendParamsMapped)
+            std::memset(rvtBlendParamsMapped, 0, request.size);
+    }
+
+    void GPUDrivenRenderer::wireRVTBlendPipelines()
+    {
+        if (!terrainRVT || !bindlessTextures || !terrain.rvtWorldHeight)
+            return;
+        const vt::VTPhysicalPool* pool = terrainRVT->getPool();
+        if (!pool)
+            return;
+
+        createRVTBlendParamsBuffer();
+        if (!rvtBlendParamsMapped)
+            return;
+
+        // Which pool plane holds the world height depends on whether the detail planes are there.
+        const uint32_t heightPlane = terrainRVTWorldHeightPlaneIndex(terrain.detailMaps);
+        if (pool->planeCount() <= heightPlane)
+            return; // the pool was built without the plane — nothing to blend against
+
+        // Register with the POOL's sampler, not the heap's default: BindlessTextureManager keeps a
+        // sampler per slot, so this reproduces the terrain's own set-5 filtering exactly (linear,
+        // mipmapMode eNearest, ClampToEdge, no anisotropy). vtLookup returns raw atlas UVs inside a
+        // page's bordered interior, so any other addressing mode would bleed across tiles.
+        struct PlaneReg { const char* key; uint32_t plane; };
+        const PlaneReg planes[3] = {
+            {"__rvt_atlas_albedo__", 0},
+            {"__rvt_atlas_orm__", 1},
+            {"__rvt_atlas_height__", heightPlane},
+        };
+        uint32_t slots[3]{};
+        for (uint32_t i = 0; i < 3; ++i)
+        {
+            slots[i] = bindlessTextures->registerTexture(planes[i].key,
+                                                          pool->planeView(planes[i].plane),
+                                                          pool->getSampler());
+            // registerTexture dedups by key and returns the existing slot WITHOUT rewriting the
+            // descriptor, so on an RVT rebuild the slot would still point at the destroyed view.
+            // Same hazard VK-1482 finding #1 documents for the SVT atlas, same fix.
+            bindlessTextures->updateTexture(slots[i], pool->planeView(planes[i].plane),
+                                            pool->getSampler());
+        }
+
+        struct alignas(16) RVTBlendParamsCPU
+        {
+            vt::GPUVTImageInfo img;
+            float worldMinX, worldMinZ;
+            float invExtentX, invExtentZ;
+            float virtualResTexels;
+            float heightMin, heightRange;
+            float pad;
+        } params{};
+        static_assert(sizeof(RVTBlendParamsCPU) == 64, "must match RVTBlendParams in the mesh shader");
+
+        params.img = terrainRVT->getImageInfo();
+        // The atlas bindless slots ride the image-info padding, exactly as SVT carries its atlas
+        // slot in pad0 — no struct growth, and they travel with the image they describe.
+        params.img.pad0 = slots[0];
+        params.img.pad1 = slots[1];
+        params.img.pad2 = slots[2];
+        params.worldMinX = rvtWorldMin.x;
+        params.worldMinZ = rvtWorldMin.y;
+        const glm::vec2 extent = glm::max(rvtWorldMax - rvtWorldMin, glm::vec2(1.0f));
+        params.invExtentX = 1.0f / extent.x;
+        params.invExtentZ = 1.0f / extent.y;
+        params.virtualResTexels = terrainRVT->virtualResTexelsX();
+        params.heightMin = rvtHeightMin;
+        params.heightRange = rvtHeightRange;
+        std::memcpy(rvtBlendParamsMapped, &params, sizeof(params));
+
+        auto wire = [&](MeshShaderPipeline* p)
+        {
+            if (p && p->isRVTBlendEnabled())
+                p->updateRVTBlendResources(terrainRVT->getPageTableBuffer(), rvtBlendParamsBuffer);
+        };
+        wire(meshShaderPipeline.get());
+        wire(transparentMeshShaderPipeline.get());
+        wire(wboitMeshShaderPipeline.get());
+    }
+
+    void GPUDrivenRenderer::applyRVTBlendToggle()
+    {
+        if (!initialized || !meshShaderPipeline)
+            return;
+
+        // The blend needs a live RVT manager AND a pool that actually carries the height plane.
+        // Anything less and the macro must be off, because bindings 8/9 become statically used the
+        // moment it is on and would point at buffers a terrainRVT.reset() has already destroyed.
+        const bool enable = vtCache.rvtEnabled && terrain.rvtWorldHeight && terrainRVT != nullptr;
+        if (meshShaderPipeline->isRVTBlendEnabled() == enable)
+        {
+            // Already in the right mode; still re-point the descriptors, because the manager may
+            // have been rebuilt underneath us (detail-maps permutation change) and the old page
+            // table / atlas views are gone.
+            if (enable)
+                wireRVTBlendPipelines();
+            return;
+        }
+
+        meshShaderPipeline->setRVTBlendEnabled(enable);
+        if (transparentMeshShaderPipeline) transparentMeshShaderPipeline->setRVTBlendEnabled(enable);
+        if (wboitMeshShaderPipeline) wboitMeshShaderPipeline->setRVTBlendEnabled(enable);
+
+        // Reuses the SVT recreate: it rebuilds all three scene mesh pipelines from their current
+        // flags, which now include this one.
+        recreateScenePipelinesForSVT();
+
+        if (enable)
+            wireRVTBlendPipelines();
+
+        vfLogInfo("VK-1620 mesh-into-terrain blending: {}", enable ? "ON" : "OFF");
+    }
+
     void GPUDrivenRenderer::wireToonProfilePipelines()
     {
         if (!toonProfileTable)
@@ -1090,7 +1240,8 @@ namespace render::gpudriven
             terrain.meshBuffer->isInitialized())
         {
             terrain.pipeline->updateTerrainBufferDescriptors(*terrain.meshBuffer);
-            terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer());
+            terrain.pipeline->updateWeightMapDescriptor(terrain.meshBuffer->getWeightMapBuffer(),
+                                                        terrain.meshBuffer->getHeightFieldBuffer());
 
             auto [hiZView, hiZSampler] = getHiZViewSampler();
             if (hiZView && hiZSampler)

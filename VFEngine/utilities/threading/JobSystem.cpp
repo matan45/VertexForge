@@ -221,6 +221,21 @@ namespace threading {
 	{
 		if (count == 0) return;
 
+		// Same fallback submitTask() has, and for the same reason: enkiTS is only safe to touch
+		// once init() has built the worker pool. Without it, AddTaskSetToPipe below dereferences a
+		// scheduler that was never initialized (or has been shut down) and takes the process out.
+		//
+		// It went unnoticed because the count <= minBatchSize fast path below covers the common
+		// small case: TerrainGrid::createGrid passes minBatchSize 1, so a ONE-tile terrain ran
+		// inline and a multi-tile one did not. The editor initializes the JobSystem at startup and
+		// never shuts it down mid-session, so only a host that tears it down (the test binary, an
+		// export tool) reaches this at all.
+		if (!pImpl->initialized.load(std::memory_order_acquire))
+		{
+			body(0, count);
+			return;
+		}
+
 		if (count <= minBatchSize)
 		{
 			body(0, count);
@@ -243,6 +258,14 @@ namespace threading {
 		uint32_t minBatchSize, JobPriority priority)
 	{
 		if (count == 0) return;
+
+		// See the two-argument overload above. Thread index 0 is the honest answer when the work
+		// runs on the calling thread: with no pool, there is no enkiTS thread number to report.
+		if (!pImpl->initialized.load(std::memory_order_acquire))
+		{
+			body(0, count, 0);
+			return;
+		}
 
 		if (count <= minBatchSize)
 		{

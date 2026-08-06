@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../virtualtexture/VTPhysicalPool.hpp"
+#include "TerrainCompositePermutation.hpp"
 #include <glm/glm.hpp>
 #include <vulkan/vulkan.hpp>
 #include <vector>
@@ -38,10 +39,15 @@ namespace render::gpudriven
             float tileWorldSize = 1.0f;
             uint32_t fragTileIndex = 0;      // terrain tile GPU index
             float textureScale = 0.1f;
-            float pad0 = 0.0f;
-            float pad1 = 0.0f;
+            // VK-1620: the world-height plane's normalization range, from the terrain's AUTHORED
+            // TerrainTileConfig::minHeight/maxHeight rather than from loaded tile bounds — pages
+            // bake once and outlive the streaming state that produced them. Took two of the three
+            // spare floats, so the 64-byte block did not grow.
+            float heightMin = 0.0f;
+            float invHeightRange = 0.0f;
             float pad2 = 0.0f;
         };
+        static_assert(sizeof(TilePush) == 64, "TilePush must match BakePC in terrain_rvt_bake.glsl");
 
         explicit TerrainRVTBaker(core::Device& device);
         ~TerrainRVTBaker();
@@ -53,7 +59,12 @@ namespace render::gpudriven
                   vk::DescriptorSetLayout bindlessLayout,    // set 1 (bindless b0)
                   vk::DescriptorSetLayout terrainDataLayout, // set 2 (tiles b0)
                   const std::vector<vk::Format>& planeFormats,
-                  bool detailMaps);
+                  // MUST be TerrainMeshShaderPipeline::getCompositePermutation(). The bake and the
+                  // live fallback compile the same generated composite; a mismatch shows up as a
+                  // hard seam wherever a page is resident, and is invisible with RVT off. Taking
+                  // the whole struct rather than loose bools is what makes that impossible to get
+                  // half-right when a new permutation is added.
+                  const TerrainCompositePermutation& permutation);
         void cleanup();
         [[nodiscard]] bool isReady() const { return graphicsPipeline != nullptr; }
 

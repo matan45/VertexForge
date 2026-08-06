@@ -22,6 +22,9 @@ namespace terrain
         bool tilesAddedOrRemoved = false;
         size_t currentRAMUsage = 0;
     public:
+        // Precondition: TerrainSerializer::recoverPending() has already run for this path. The
+        // header and index passed in are snapshots, and an unsettled save journal would make them
+        // describe a generation that is about to change underneath the cache.
         explicit TerrainFileCache(const std::string& filePath,
                          const TerrainFileHeader& header,
                          const std::vector<TileIndexEntry>& index,

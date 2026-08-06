@@ -46,9 +46,11 @@ namespace components
         float shoreFoamRange = 3.0f;
         float shoreFoamIntensity = 0.8f;
         float shoreBreakingStrength = 0.8f;
+        // VK-1614: shoreWetDarkening / shoreWetRoughness retired. The shoreline now contributes to the
+        // single terrain wetness signal instead of applying its own darkening + roughness model
+        // immediately before applyWetness applied a contradictory one. shoreWetRange stays — it is the
+        // extent knob and still shapes the contribution.
         float shoreWetRange = 5.0f;
-        float shoreWetDarkening = 0.3f;
-        float shoreWetRoughness = 0.15f;
 
         // VK-1604: screen-space reflections. In-fragment march in water.glsl against the scene
         // depth + pre-water color copy (set 9) — the generic SSR chain cannot see water, which

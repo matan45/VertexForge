@@ -1,5 +1,6 @@
 #include "TerrainRVTManager.hpp"
 #include "TerrainRVTLayout.hpp"
+#include "terrain/TerrainRVTBudget.hpp" // VK-1610: shared page-capacity math + the warn threshold
 #include "../../virtualtexture/VTFeedbackWords.hpp"
 #include "../../../core/Device.hpp"
 #include "print/Log.hpp"
@@ -54,8 +55,8 @@ namespace render::gpudriven
         imageId = 0;
 
         // Budget the heterogeneous plane set by its aggregate bytes/texel (8 B legacy,
-        // 20 B with RGBA8 normal + RGBA16F emission).
-        const TerrainRVTLayout layout = terrainRVTLayout(config.detailMaps);
+        // 20 B with RGBA8 normal + RGBA16F emission, +2 B with the VK-1620 world-height plane).
+        const TerrainRVTLayout layout = terrainRVTLayout(config.detailMaps, config.worldHeight);
         const uint32_t poolDim = vtPoolDimForBudget(
             config.poolBudgetMB, /*planes*/ 1, layout.bytesPerTexel);
         VTPoolDesc poolDesc;
@@ -84,9 +85,24 @@ namespace render::gpudriven
         scheduledBakes.clear();
 
         initialized = true;
-        vfLogInfo("TerrainRVTManager: {}x{} mip-0 pages, {} mips, pool {}x{} ({} tiles), world {:.0f}x{:.0f} m @ {:.1f} texels/m",
+        vfLogInfo("TerrainRVTManager: {}x{} mip-0 pages, {} mips, pool {}x{} ({} tiles, {} planes @ {} B/texel "
+                  "from {} MB), world {:.0f}x{:.0f} m @ {:.1f} texels/m",
                   image.pagesX0, image.pagesY0, image.mipCount, poolDim, poolDim,
-                  pool->maxTiles(), worldExtent.x, worldExtent.y, density);
+                  pool->maxTiles(), layout.planeFormats.size(), layout.bytesPerTexel,
+                  config.poolBudgetMB, worldExtent.x, worldExtent.y, density);
+
+        // VK-1610: the MB budget is stable across layouts but the PAGE COUNT it buys is not - the
+        // 4-plane detail layout costs 20 B/texel against the legacy 8, so the same 128 MB drops
+        // from 1024 tiles to 400. A pool too small to hold the camera's footprint evicts and
+        // re-bakes every frame, and the only symptom is GPU time inside the bake scope. Say so at
+        // init rather than leaving it to be discovered as "the terrain got slower".
+        if (pool->maxTiles() < ::terrain::TERRAIN_RVT_MIN_HEALTHY_PAGES)
+        {
+            vfLogWarning("TerrainRVTManager: only {} resident pages fit in {} MB at {} B/texel. Expect "
+                         "page thrash (constant re-bakes) as the camera moves; raise the RVT pool budget "
+                         "under Render Config > Virtual Texturing.",
+                         pool->maxTiles(), config.poolBudgetMB, layout.bytesPerTexel);
+        }
     }
 
     void TerrainRVTManager::cleanup()
@@ -188,8 +204,20 @@ namespace render::gpudriven
     {
         scheduledBakes.clear();
         cpuStats.residencyUs = 0;
+        // VK-1610: reset the residency accounting every frame, INCLUDING on the early-out below, so
+        // an uninitialized manager reports zeroes rather than the last live frame's numbers.
+        cpuStats.requestedPages = static_cast<uint32_t>(requestedPages.size());
+        cpuStats.allocatedPages = 0;
+        cpuStats.evictedPages = 0;
+        cpuStats.uncoveredSkipped = 0;
+        cpuStats.unmetPages = 0;
+        cpuStats.budgetLimited = false;
+        cpuStats.poolLimited = false;
         if (!initialized)
+        {
+            cpuStats.requestedPages = 0;
             return;
+        }
 
         const auto resStart = std::chrono::high_resolution_clock::now();
 
@@ -211,6 +239,16 @@ namespace render::gpudriven
             requestedPages, frame, pool->freeTileCount(),
             config.pagesPerFrame, config.evictionAgeFrames);
 
+        // VK-1610. planFrame clamps toAllocate TWICE - first to config.pagesPerFrame, then to the
+        // tiles it can actually free up - and the clamped result alone cannot say which bound bit.
+        // Comparing against the unclamped miss count can: falling short of the per-frame cap means
+        // the pool ran out of room, which is the real thrash signal.
+        const uint32_t planned = static_cast<uint32_t>(plan.toAllocate.size());
+        const uint32_t idealAlloc = std::min(config.pagesPerFrame, plan.missCount);
+        cpuStats.unmetPages = plan.missCount - planned;
+        cpuStats.poolLimited = planned < idealAlloc;
+        cpuStats.budgetLimited = !cpuStats.poolLimited && plan.missCount > planned;
+
         // Evict first so freed tiles are available to the allocations planFrame accounted for.
         for (const auto& e : plan.toEvict)
         {
@@ -219,21 +257,34 @@ namespace render::gpudriven
             {
                 pool->freeTile(tile);
                 unmapEntry(e);
+                ++cpuStats.evictedPages;
             }
         }
-        for (const auto& a : plan.toAllocate)
+        for (size_t ai = 0; ai < plan.toAllocate.size(); ++ai)
         {
+            const auto& a = plan.toAllocate[ai];
             // Skip pages with no loaded-terrain coverage: baking them yields a fully "uncovered"
             // (alpha 0) tile the shader ignores anyway, so leave them non-resident and spend the
             // budget on pages that carry real detail. (The pinned coarse page above is exempt.)
             if (covered && !covered(pageWorldRect(a)))
+            {
+                ++cpuStats.uncoveredSkipped;
                 continue;
+            }
             const uint32_t tile = pool->allocateTile();
             if (tile == VT_INVALID_TILE)
+            {
+                // Safety break only - NOT the thrash signal. planFrame already clamped toAllocate to
+                // freeTiles + evictCount, so reaching this means an eviction it counted on did not
+                // free its tile. cpuStats.poolLimited (derived from plan.missCount above) is what
+                // actually reports a pool too small for the camera's footprint.
+                ++cpuStats.unmetPages;
                 break;
+            }
             mapEntry(a, tile);
             residency.commitAllocation(a, tile, frame, /*pinned*/ false);
             schedule(a, tile);
+            ++cpuStats.allocatedPages;
         }
 
         const auto resEnd = std::chrono::high_resolution_clock::now();
@@ -302,6 +353,21 @@ namespace render::gpudriven
                     }
                 }
         }
+
+        // VK-1613. updateResidency built this frame's bake list EARLIER in the frame (it runs from the
+        // light-occlusion readback, well before updateTerrain calls us), and recordBakes consumes it
+        // LATER during command recording — so anything we just evicted above is still sitting in
+        // scheduledBakes pointing at a pool tile that no longer belongs to it. Baking into a freed
+        // tile corrupts whatever page is handed that tile next.
+        //
+        // Filtering on residency rather than on the world rect is exact by construction: the loop
+        // above is what dropped these pages, so "no longer resident" is precisely "its tile was
+        // freed". Evicted pages get re-requested by feedback and re-baked on a later frame.
+        //
+        // Pre-existing, but VK-1613 turns this from a rare material-change event into something that
+        // fires on every layer-visibility toggle, which is what makes it worth closing here.
+        std::erase_if(scheduledBakes,
+                      [this](const ScheduledBake& b) { return !residency.isResident(b.page); });
 
         // The pinned coarsest mip is skipped by the loop above but must also refresh after a material
         // change (finding #8) — flag it for an in-place re-bake in the next updateResidency.

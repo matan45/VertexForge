@@ -7,6 +7,7 @@
 #include "decal/DecalPipeline.hpp"
 #include "atmosphere/AtmospherePipeline.hpp"
 #include "atmosphere/SunTransmittance.hpp"
+#include "stats/TerrainRVTStats.hpp" // VK-1610: clear the residency readout when RVT is inactive
 #include "print/Log.hpp"
 #include <optional>
 #include <algorithm>
@@ -106,6 +107,11 @@ namespace render
             // VK-1209: terrain RVT feedback readback + residency planning (same fence-gated point).
             if (gpuDrivenRenderer->isTerrainRVTActive())
                 gpuDrivenRenderer->updateTerrainRVTResidency();
+            else
+                // VK-1610: RVT off, or the manager was torn down by a plane-layout change. The
+                // residency readout is published from inside updateTerrainRVTResidency, so without
+                // this the profiler would keep showing the last live frame as if it were current.
+                render::TerrainRVTStats::instance().clear();
 
             // VK-1209: material SVT feedback readback (same point).
             if (gpuDrivenRenderer->isSVTActive())

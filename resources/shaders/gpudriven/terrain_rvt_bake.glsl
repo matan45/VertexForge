@@ -22,7 +22,13 @@ layout(push_constant) uniform BakePC {
     float tileWorldSize;
     uint  fragTileIndex;  // terrain tile GPU index
     float textureScale;   // world-space UV tiling scale
-    float pad0; float pad1; float pad2;
+    // VK-1620 world-height plane normalization. Deliberately the terrain's AUTHORED height range
+    // (TerrainTileConfig::minHeight/maxHeight), not the bounds of whatever tiles happen to be
+    // loaded: pages bake once and are then read for as long as they stay resident, so a range that
+    // drifted with streaming would leave every already-baked page decoding to a wrong world Y.
+    float heightMin;
+    float invHeightRange;
+    float pad2;
 } pc;
 
 layout(location = 0) out vec2 vWorldXZ;
@@ -63,6 +69,16 @@ layout(location = 1) out vec4 outORM;
 layout(location = 2) out vec4 outNormal;
 layout(location = 3) out vec4 outEmission;
 #endif
+#ifdef TERRAIN_RVT_WORLD_HEIGHT
+// VK-1620. The world-height plane is always appended LAST, so its MRT location follows the detail
+// planes rather than displacing them. The ladder mirrors terrainRVTWorldHeightPlaneIndex() on the
+// C++ side; if the two disagree the bake writes height into the emission plane.
+#ifdef TERRAIN_DETAIL_MAPS
+layout(location = 4) out float outWorldHeight;
+#else
+layout(location = 2) out float outWorldHeight;
+#endif
+#endif
 
 // Compact set layout (bake pipeline is independent of the terrain pipeline's 12-set
 // layout): set 0 = weightmap+layers, set 1 = bindless, set 2 = tiles. The underlying
@@ -73,10 +89,30 @@ layout(std430, set = 0, binding = 0) readonly buffer WeightMapBuffer {
 layout(std430, set = 0, binding = 1) readonly buffer TerrainLayerBuffer {
     TerrainLayerGPUData terrainLayers[];
 };
+// VK-1611: the same weight-map descriptor set the live pipeline binds at set 1 — the bake is
+// handed that identical vk::DescriptorSet object — so the shared composite reads the same
+// material-global anti-tiling scalars in both paths.
+layout(std430, set = 0, binding = 2) readonly buffer TerrainAntiTilingBuffer {
+    TerrainAntiTilingGPUData terrainAntiTiling;
+};
+// VK-1620: per-tile terrain heights, a row-major (res x res) float grid on the SAME grid as the
+// splat weights above — so the height sample and the composite sample are co-located by
+// construction. Lives on this set because it is the only one the bake pipeline binds.
+#ifdef TERRAIN_RVT_WORLD_HEIGHT
+layout(std430, set = 0, binding = 3) readonly buffer TerrainHeightBuffer {
+    float terrainHeights[];
+};
+#endif
 layout(set = 1, binding = 0) uniform sampler2D bindlessTextures[];
 layout(std430, set = 2, binding = 0) readonly buffer TerrainTileBuffer {
     TerrainTileGPUData tiles[];
 };
+
+#include "../common/terrain_value_noise.glsl"
+#ifdef TERRAIN_HEX_TILING
+// Must follow bindlessTextures — the hex helpers index it directly.
+#include "../common/hex_tiling_terrain.glsl"
+#endif
 
 layout(push_constant) uniform BakePC {
     vec2 pageWorldMin;
@@ -87,7 +123,10 @@ layout(push_constant) uniform BakePC {
     float tileWorldSize;
     uint  fragTileIndex;
     float textureScale;
-    float pad0; float pad1; float pad2;
+    // VK-1620 — MUST stay identical to the vertex stage's copy of this block above.
+    float heightMin;
+    float invHeightRange;
+    float pad2;
 } pc;
 
 // Weight-map helpers — identical to mesh_terrain.glsl (byte-packed 8-channel splat).
@@ -118,6 +157,44 @@ float sampleTileWeight(uint tileOffset, uint res, uint channel, vec2 uv) {
     return mix(mix(w00, w10, sx), mix(w01, w11, sx), sz);
 }
 
+#ifdef TERRAIN_RVT_WORLD_HEIGHT
+// VK-1620 --- terrain surface height at a tile UV -------------------------------------------
+//
+// NOT bilinear. TerrainTileGenerator::generateIndices splits every quad on the ANTI-DIAGONAL
+// (topLeft, bottomLeft, topRight) + (topRight, bottomLeft, bottomRight), so the rendered surface
+// over a quad is two planes hinged on the (x+1,z)-(x,z+1) edge. Bilinear would return
+// (h00+h11)/2 down that hinge where the surface gives (h10+h01)/2 — on a ridge that is metres of
+// error, and it shows up as props floating above or sinking into the crest they sit on.
+//
+// Reproducing the split costs one compare and matches the triangle the rasterizer actually drew.
+float sampleTileHeight(uint offsetElements, uint res, vec2 uv)
+{
+    if (res < 2u) return pc.heightMin;
+    uv = clamp(uv, 0.0, 1.0);
+
+    // Vertex (x,z) sits at UV (x/(res-1), z/(res-1)) — the texCoords generateVertices writes, and
+    // the same mapping sampleTileWeight uses, so both samples land on one grid.
+    float gx = uv.x * float(res - 1u);
+    float gz = uv.y * float(res - 1u);
+    uint x0 = min(uint(floor(gx)), res - 2u);
+    uint z0 = min(uint(floor(gz)), res - 2u);
+    float fx = gx - float(x0);
+    float fz = gz - float(z0);
+
+    uint row0 = offsetElements + z0 * res + x0;
+    uint row1 = row0 + res;
+    float h00 = terrainHeights[row0];
+    float h10 = terrainHeights[row0 + 1u];
+    float h01 = terrainHeights[row1];
+    float h11 = terrainHeights[row1 + 1u];
+
+    // Lower-left triangle is (0,0),(0,1),(1,0) => the fx + fz <= 1 half.
+    return (fx + fz <= 1.0)
+        ? h00 + fx * (h10 - h00) + fz * (h01 - h00)
+        : h11 + (1.0 - fx) * (h01 - h11) + (1.0 - fz) * (h10 - h11);
+}
+#endif
+
 void main()
 {
     uint fragTileIndex = vTileIndex;
@@ -127,6 +204,19 @@ void main()
     // uniform control flow, so the gradients are well-defined either way — kept for a single contract).
     vec2 triplanarWorldUVdx = dFdx(triplanarWorldUV);
     vec2 triplanarWorldUVdy = dFdy(triplanarWorldUV);
+
+    // VK-1611 composite contract, the bake's half.
+    // terrainWorldXZ is unscaled world XZ, so macro variation is anchored identically here and in
+    // the live path — that is what makes it view-independent and therefore safe to bake.
+    vec2 terrainWorldXZ = vWorldXZ;
+    // Same footprint formula as mesh_terrain.glsl. There is no camera in this pass; the value it
+    // produces is the PAGE's texel density, which rises with the page's virtual-texture mip. That
+    // is precisely the quantity the live path's distance rescale keys off, because VT residency
+    // picks the page mip so a page texel is about a screen pixel — so bake and live agree by
+    // construction rather than by tuning. (Epic solves the same problem the same way: RVT shading
+    // is camera-independent, so distance effects are expressed as mip-level-dependent shading.)
+    float terrainFootprintLog2 = 0.5 * log2(max(max(dot(triplanarWorldUVdx, triplanarWorldUVdx),
+                                                    dot(triplanarWorldUVdy, triplanarWorldUVdy)), 1e-30));
 
     // The composite declares the material properties and legacy scalar emission accumulator.
 #include "../material/terrain_material_generated.glsl"
@@ -141,5 +231,16 @@ void main()
     outNormal = vec4(mat_normalTS * 0.5 + 0.5, 1.0);
     // The detail-map RVT uses a floating-point plane; preserve emission above 1.0.
     outEmission = vec4(mat_emission, 1.0);
+#endif
+#ifdef TERRAIN_RVT_WORLD_HEIGHT
+    // caveMeshletData.w is heightFieldOffset + 1, so 0 means this tile has no height data
+    // (never uploaded, or the arena was full). Writing heightMin there puts the surface at the
+    // bottom of the range, which reads as "terrain far below" and makes props NOT blend — the
+    // safe failure. aabbMin.w is the weight-map resolution, which is also the height grid's.
+    uint heightSlot = tiles[fragTileIndex].caveMeshletData.w;
+    float worldY = (heightSlot != 0u)
+        ? sampleTileHeight(heightSlot - 1u, uint(tiles[fragTileIndex].aabbMin.w), fragTexCoord)
+        : pc.heightMin;
+    outWorldHeight = clamp((worldY - pc.heightMin) * pc.invHeightRange, 0.0, 1.0);
 #endif
 }

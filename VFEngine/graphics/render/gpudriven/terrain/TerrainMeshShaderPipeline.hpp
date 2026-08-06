@@ -7,6 +7,9 @@
 #include <vector>
 #include <array>
 #include "../GPUDrivenTypes.hpp"
+#include "TerrainCompositePermutation.hpp"
+#include "TerrainParallaxParams.hpp"
+#include "TerrainSurfaceMaskTexture.hpp"
 
 namespace core
 {
@@ -59,6 +62,11 @@ namespace render::gpudriven
         vk::Pipeline graphicsPipeline;
         vk::PipelineLayout pipelineLayout;
 
+        // VK-1614: the surface mask's image, sampler and params UBO live here because this class owns
+        // set 11, and bindings 5/6 must be written before the set is ever bound. Declared after
+        // `device` so the reference is bound before this member is constructed.
+        TerrainSurfaceMaskTexture surfaceMask{device};
+
         vk::DescriptorSetLayout terrainDataLayout;
         vk::DescriptorPool terrainDataPool;
         vk::DescriptorSet terrainDataDescriptorSet;
@@ -93,7 +101,14 @@ namespace render::gpudriven
         // them + compiles the RVT_ENABLED shader path when rvtSampleEnabled is set, so terrain
         // keeps the disabled render/sampling path equivalent with RVT off.
         bool rvtSampleEnabled = false;
-        bool detailMapsEnabled = false;
+        // Which arm of the generated terrain composite this pipeline compiles. Every flag in here
+        // is derived from CONTENT (what the loaded terrain material actually uses), not from a
+        // render setting, so a project that never uses a feature compiles the token stream it
+        // would have compiled before that feature existed and pays nothing for it.
+        //
+        // TerrainRVTBaker::init is handed this whole struct — never individual flags — because the
+        // bake #includes the same generated composite and a mismatch is a page-boundary seam.
+        TerrainCompositePermutation compositePermutation{};
         // VK-1577: compile the reflection-probe path into the terrain shader. Terrain shares the
         // set-0 IBL layout with meshes, so this needs no extra descriptor set — but terrain MUST
         // track the mesh path, or a cave floor and the crates standing on it disagree exactly where
@@ -142,6 +157,23 @@ namespace render::gpudriven
         // (and thus the shader cost) is only compiled in once a mask is bound.
         bool worldMaskEnabled = false;
 
+        // VK-1614 local weather. Three LIVE-ONLY macros: everything they gate runs after the
+        // RVT-resolve / live-composite join, so none of them belongs in TerrainCompositePermutation
+        // and none of them can change a byte the RVT bake writes. That is what lets the caller skip
+        // the baker teardown + full page invalidation when one of these toggles.
+        //   surfaceMask      resource-derived: a mask asset is assigned (sampler + params UBO on 5/6)
+        //   weatherResponse  content-derived: some layer authored porosity / snow retention
+        //   puddles          content-derived: the material asked for standing water
+        bool surfaceMaskEnabled = false;
+        bool weatherResponseEnabled = false;
+        bool puddlesEnabled = false;
+        // VK-1625 POM-lite, a fourth live-only macro on the same terms. It gates code that runs
+        // BEFORE the RVT-resolve join rather than after — the offset it produces steers both sampling
+        // paths — but the conclusion is identical: the bake shader never sees it, so terrain_rvt_bake
+        // still writes exactly what it wrote before (measured: all 16 arms byte-identical), and no
+        // resident page is invalidated when an artist drags the depth slider.
+        bool parallaxEnabled = false;
+
         // Weight map + layer info descriptor (Set 1)
         vk::DescriptorSetLayout weightMapLayout;
         vk::DescriptorPool weightMapPool;
@@ -151,6 +183,13 @@ namespace render::gpudriven
         vk::Buffer terrainLayerBuffer;
         core::VulkanAllocation terrainLayerBufferAllocation;
         void* terrainLayerBufferMapped = nullptr;
+
+        // VK-1611 material-global anti-tiling scalars (Set 1, binding 2 — the one set the RVT
+        // bake pipeline also binds, so the shared generated composite reads the same values in
+        // the baked and live paths).
+        vk::Buffer terrainAntiTilingBuffer;
+        core::VulkanAllocation terrainAntiTilingBufferAllocation;
+        void* terrainAntiTilingBufferMapped = nullptr;
 
         // Shared descriptor sets (owned elsewhere)
         vk::DescriptorSet iblDescriptorSet;
@@ -176,6 +215,14 @@ namespace render::gpudriven
         float brushShape = 0.0f;
         float terrainMaxDrawDistSq = 0.0f;
         glm::mat4 viewProjection{1.0f};
+
+        // VK-1625 parallax params UBO (set 11, binding 7). Owned here rather than by a helper class
+        // because, unlike the weather block, it has no image and no dummy to manage — the height it
+        // marches comes from the layer ORM textures the composite already binds, so the whole feature
+        // is one 32-byte buffer.
+        vk::Buffer parallaxParamsBuffer;
+        core::VulkanAllocation parallaxParamsAllocation;
+        TerrainParallaxUBOData parallaxParams{};
 
         // Stamp overlay
         vk::Buffer stampDummyBuffer;
@@ -223,9 +270,14 @@ namespace render::gpudriven
         void updateTerrainBufferDescriptors(TerrainMeshBuffer& terrainBuffer);
         void updateHiZDescriptor(vk::ImageView hiZView, vk::Sampler hiZSampler);
 
-        void updateWeightMapDescriptor(vk::Buffer weightMapBuffer);
+        // VK-1620: `heightFieldBuffer` may be null when the world-height plane is off — binding 3
+        // then takes the weight-map buffer as a bound-but-unread stand-in.
+        void updateWeightMapDescriptor(vk::Buffer weightMapBuffer, vk::Buffer heightFieldBuffer);
 
         void updateTerrainLayerInfo(const std::vector<TerrainLayerGPUData>& layers);
+        // VK-1611. Host-coherent mapped write, same as updateTerrainLayerInfo — the buffer is 32
+        // bytes and changes only when a terrain material is (re)loaded.
+        void updateTerrainAntiTiling(const TerrainAntiTilingGPUData& params);
 
         void updateSharedDescriptors(vk::DescriptorSet iblDescSet,
                                      vk::DescriptorSet bindlessDescSet,
@@ -278,13 +330,58 @@ namespace render::gpudriven
         bool isRVTSampleEnabled() const { return rvtSampleEnabled; }
         void setDetailMapsEnabled(bool enabled)
         {
-            if (detailMapsEnabled == enabled)
+            if (compositePermutation.detailMaps == enabled)
                 return;
-            detailMapsEnabled = enabled;
+            compositePermutation.detailMaps = enabled;
             if (rvtSampleEnabled)
                 rvtSampleResourcesReady = false;
         }
-        bool areDetailMapsEnabled() const { return detailMapsEnabled; }
+        bool areDetailMapsEnabled() const { return compositePermutation.detailMaps; }
+        // VK-1609: compile the height-blend arm of the generated terrain composite into the shader.
+        // Returns true when the flag actually changed, so the caller knows a pipeline recreate is
+        // required (the macro is baked into the compiled shader).
+        bool setHeightBlendEnabled(bool enabled)
+        {
+            if (compositePermutation.heightBlend == enabled)
+                return false;
+            compositePermutation.heightBlend = enabled;
+            return true;
+        }
+        bool isHeightBlendEnabled() const { return compositePermutation.heightBlend; }
+        // VK-1611: compile the second, larger-scale albedo tap. Behind a macro rather than a
+        // uniform because it costs a texture fetch per layer, not ALU — MicroSplat's equivalent is
+        // documented as taking a worked example from 100 to 196 samples per pixel.
+        bool setDistanceRescaleEnabled(bool enabled)
+        {
+            if (compositePermutation.distanceRescale == enabled)
+                return false;
+            compositePermutation.distanceRescale = enabled;
+            return true;
+        }
+        bool isDistanceRescaleEnabled() const { return compositePermutation.distanceRescale; }
+        // VK-1612: compile the hex stochastic-sampling arm.
+        bool setHexTilingEnabled(bool enabled)
+        {
+            if (compositePermutation.hexTiling == enabled)
+                return false;
+            compositePermutation.hexTiling = enabled;
+            return true;
+        }
+        bool isHexTilingEnabled() const { return compositePermutation.hexTiling; }
+        // VK-1611: compile the macro-variation tail. Pure ALU, but a measured 4032 bytes of SPIR-V
+        // per shader, so it is gated rather than left to a runtime strength of 0.
+        bool setMacroVariationEnabled(bool enabled)
+        {
+            if (compositePermutation.macroVariation == enabled)
+                return false;
+            compositePermutation.macroVariation = enabled;
+            return true;
+        }
+        bool isMacroVariationEnabled() const { return compositePermutation.macroVariation; }
+        // The ONLY way callers should build TerrainRVTBaker::init's permutation argument: passing
+        // the whole struct is what makes "the bake and the live pipeline compile the same arm" a
+        // property of the type rather than of remembering to update two call sites.
+        const TerrainCompositePermutation& getCompositePermutation() const { return compositePermutation; }
         // VK-1577: returns true when the flag actually changed, so the caller knows a pipeline
         // recreate is required (the macro is baked into the compiled shader).
         bool setReflectionProbesEnabled(bool enabled)
@@ -303,6 +400,69 @@ namespace render::gpudriven
                                       vk::Buffer feedbackBuffer, const void* params, vk::DeviceSize paramsSize);
         void updateWorldMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
                                       vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
+        // VK-1614: set 11 bindings 5/6. Unlike the world mask above this is written EAGERLY at set
+        // creation (with the owner's 1x1 dummy) and rewritten on every resource change, because the
+        // layout has eUpdateAfterBind but not ePartiallyBound.
+        void updateSurfaceMaskResources(vk::ImageView maskView, vk::Sampler maskSampler,
+                                        vk::Buffer paramsBuffer, vk::DeviceSize paramsSize);
+
+        // VK-1614 live-only permutation flags. Each returns true when the flag actually changed, so
+        // the caller knows a pipeline recreate is required — but NOT an RVT re-bake, because none of
+        // these macros reaches the bake shader.
+        bool setSurfaceMaskEnabled(bool enabled)
+        {
+            if (surfaceMaskEnabled == enabled)
+                return false;
+            surfaceMaskEnabled = enabled;
+            return true;
+        }
+        bool isSurfaceMaskEnabled() const { return surfaceMaskEnabled; }
+        bool setWeatherResponseEnabled(bool enabled)
+        {
+            if (weatherResponseEnabled == enabled)
+                return false;
+            weatherResponseEnabled = enabled;
+            return true;
+        }
+        bool isWeatherResponseEnabled() const { return weatherResponseEnabled; }
+        bool setPuddlesEnabled(bool enabled)
+        {
+            if (puddlesEnabled == enabled)
+                return false;
+            puddlesEnabled = enabled;
+            return true;
+        }
+        bool arePuddlesEnabled() const { return puddlesEnabled; }
+        bool setParallaxEnabled(bool enabled)
+        {
+            if (parallaxEnabled == enabled)
+                return false;
+            parallaxEnabled = enabled;
+            return true;
+        }
+        bool isParallaxEnabled() const { return parallaxEnabled; }
+
+        // VK-1625 - upload the resolved parallax scalars to set 11, binding 7. Cheap enough to call
+        // every frame: the buffer is host-visible/coherent and 32 bytes, and the write is skipped when
+        // nothing changed. The descriptor itself never needs rewriting — the buffer is created once
+        // and written eagerly at set creation, which this layout requires (createUpdateAfterBindLayout
+        // sets only eUpdateAfterBind, never ePartiallyBound, so a statically-used binding must always
+        // hold a valid descriptor).
+        void setParallaxParams(const TerrainParallaxUBOData& params);
+
+        // VK-1614 surface-mask resource access. The pipeline owns the texture (it owns set 11), so
+        // the renderer drives it through here rather than holding a second reference.
+        TerrainSurfaceMaskTexture& getSurfaceMask() { return surfaceMask; }
+        // Rewrites bindings 5/6 if — and only if — the owner reports a resource change. Cheap to call
+        // every frame.
+        void syncSurfaceMaskDescriptor()
+        {
+            if (!surfaceMask.consumeDescriptorDirty()) return;
+            updateSurfaceMaskResources(surfaceMask.getImageView(), surfaceMask.getSampler(),
+                                       surfaceMask.getParamsBuffer(), surfaceMask.getParamsSize());
+        }
+        // MUST be recorded outside any render pass — see TerrainSurfaceMaskTexture::flushUploads.
+        void flushSurfaceMaskUploads(const vk::CommandBuffer& cmd) { surfaceMask.flushUploads(cmd); }
 
         void dispatch(vk::CommandBuffer cmd,
                       uint32_t imageIndex,
@@ -395,6 +555,7 @@ namespace render::gpudriven
         void createRVTSampleDescriptor();
         void createWeightMapDescriptor();
         void createTerrainLayerBuffer();
+        void createTerrainAntiTilingBuffer();
         void createTileDataBuffer();
         void createStatsBuffer();
         void createTerrainDataDescriptor();
