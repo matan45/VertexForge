@@ -81,16 +81,23 @@ namespace services
         if (outstanding == 0)
         {
             latch.peak = 0;
+            latch.reportedProgress = 0.0f;
             return result; // progress 1.0, active false
         }
 
-        // Latched high-water mark, so the fraction is monotone even though a recompose marks fresh
-        // mesh work as it goes and new invalidations can arrive mid-drain.
+        // Latched high-water mark, so the DENOMINATOR is monotone even though a recompose marks
+        // fresh mesh work as it goes and new invalidations can arrive mid-drain.
         latch.peak = std::max(latch.peak, outstanding);
 
+        // VK-1648: and the fraction is latched on top of it. The peak alone does not stop the bar
+        // rewinding — work arriving mid-drain raises `outstanding` and `peak` together, which sends
+        // 1 - outstanding/peak straight back to 0. A progress bar that runs backwards reads as a
+        // restart, so the reported value only ever moves forward until the backlog clears.
+        const float raw = 1.0f - static_cast<float>(outstanding) / static_cast<float>(latch.peak);
+        latch.reportedProgress = std::max(latch.reportedProgress, raw);
+
         result.totalAtStart = latch.peak;
-        result.progress =
-            1.0f - static_cast<float>(outstanding) / static_cast<float>(latch.peak);
+        result.progress = latch.reportedProgress;
         result.active = true;
         return result;
     }

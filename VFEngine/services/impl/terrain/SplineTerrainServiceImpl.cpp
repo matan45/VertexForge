@@ -505,6 +505,17 @@ namespace services
             [id](const terrain::SplineData& s) { return s.id == id; });
         if (it != appliedSplines.end())
             appliedSplines.erase(it);
+
+        // VK-1648. Last, and only on an actual removal. The road entities this layer's apply
+        // spawned live Editor-side, so the Editor has to retire them — otherwise the terrain
+        // recomposes back to its unflattened base and leaves the ribbon floating over it. Gated on
+        // `removed` for the same reason the undo entry is: a refused delete must retire nothing.
+        if (removed)
+        {
+            events::splineTerrain::SplineDeletedNotification deleted;
+            deleted.splineId = id;
+            dispatcher.publish(deleted);
+        }
     }
 
 }

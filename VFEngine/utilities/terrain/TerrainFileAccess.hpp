@@ -41,6 +41,22 @@ namespace terrain
     // helpers must never re-acquire it, which is why the locking lives at the API boundary only.
     VF_TERRAIN_API std::shared_mutex& terrainFileMutex();
 
+    // Monotonic counter bumped by every commit that RELOCATES tile records: a full save, a
+    // compaction, a material-path rewrite, a journal replay. Bumped under the exclusive lock and
+    // after the replacement, so any read that saw the new bytes also sees the new value.
+    //
+    // terrainFileMutex() makes each individual read atomic with respect to a rewrite, but it
+    // cannot make a SNAPSHOT current: TerrainStreamManager copies a TileIndexEntry on the main
+    // thread and reads the file on a worker some frames later, and tile payload offsets are
+    // absolute. Capturing the epoch beside the snapshot and re-reading it after the load is what
+    // detects a rewrite that landed in that gap — the load is then discarded and re-queued.
+    //
+    // Deliberately process-wide rather than per-path: a spurious retry because an unrelated
+    // terrain was rewritten costs one re-queued tile load, while a missed bump costs a tile
+    // decoded from another tile's bytes.
+    VF_TERRAIN_API uint64_t terrainFileRelocationEpoch();
+    VF_TERRAIN_API void bumpTerrainFileRelocationEpoch();
+
     VF_TERRAIN_API std::optional<TerrainFileLocation> locateTerrainFile(const std::string& path);
     VF_TERRAIN_API std::vector<uint8_t> readTerrainFileBytes(const std::string& path);
     VF_TERRAIN_API bool terrainFileExists(const std::string& path);

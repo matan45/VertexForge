@@ -161,10 +161,30 @@ namespace terrain
                     const float target = params.invert
                         ? (std::max)(current - influence, 0.0f)
                         : (std::min)(current + influence, 1.0f);
-                    if (std::abs(target - current) <= 0.0f)
+
+                    // The mask stores 8-bit channels, and `current` is re-read from the byte on
+                    // every dab -- so unlike the float-backed weight brush this one cannot
+                    // accumulate below the quantisation step. Any influence under half an LSB
+                    // rounds straight back to the byte it started from and the stroke is dead:
+                    // influence is falloff * strength * opacity * deltaTime, which at the panel's
+                    // own Strength 1 / Opacity 0.5 at 60 fps is 0.008 * falloff, so everything
+                    // outside the innermost quarter of the falloff curve would never move.
+                    //
+                    // Advance by a whole LSB instead. Slower than proportional at those settings,
+                    // but a brush that paints slowly is a brush; one that paints nothing is a bug
+                    // report. Above the step this changes nothing.
+                    constexpr float lsb = 1.0f / 255.0f;
+                    float applied = target;
+                    if (std::abs(target - current) < lsb)
+                        applied = params.invert ? current - lsb : current + lsb;
+                    applied = std::clamp(applied, 0.0f, 1.0f);
+
+                    // Already railed at 0 or 1: no byte would change, so claiming the texel would
+                    // grow the upload region and push an undo entry for a stroke that wrote nothing.
+                    if (applied == current)
                         continue;
 
-                    mask.setChannel(x, z, params.channel, target);
+                    mask.setChannel(x, z, params.channel, applied);
                     dirty.add(x, z);
                 }
             }

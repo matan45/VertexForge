@@ -129,6 +129,16 @@ namespace services
         return true;
     }
 
+    bool TerrainService::ownsSurfaceMask(uint64_t terrainEntityId) const
+    {
+        // A valid mask with no owner cannot exist -- createSurfaceMask and loadSurfaceMask both set
+        // surfaceMaskOwner, and clearSurfaceMask resets the pair together -- so an id compare is a
+        // complete answer. Entity 0 is never a valid terrain, so a caller that forgot to name one
+        // gets "no", not somebody else's mask.
+        return surfaceMask != nullptr && surfaceMask->isValid() &&
+               surfaceMaskOwner != 0 && surfaceMaskOwner == terrainEntityId;
+    }
+
     bool TerrainService::saveSurfaceMask(const std::string& path)
     {
         if (!surfaceMask || !surfaceMask->isValid())

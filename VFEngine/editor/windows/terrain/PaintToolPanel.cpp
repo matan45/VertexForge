@@ -178,7 +178,16 @@ namespace windows
         ImGui::Text("Paint Target");
         ImGui::Separator();
 
-        const bool hasMask = dispatcher.query(events::terrain::HasSurfaceMaskQuery{});
+        // Scoped to the terrain the brush would actually write into, not "any mask in the scene":
+        // the service holds one mask and only its owner may paint it. Same source of truth as
+        // loadMaterialFromTarget().
+        bool hasMask = false;
+        if (const auto targetEntity = dispatcher.query(events::paint::GetPaintTargetEntityQuery{}))
+        {
+            events::terrain::HasSurfaceMaskQuery hasMaskQuery;
+            hasMaskQuery.terrainEntity = *targetEntity;
+            hasMask = dispatcher.query(hasMaskQuery);
+        }
 
         const char* targetLabels[] = {"Layers", "Wetness", "Snow"};
         bool targetChanged = false;

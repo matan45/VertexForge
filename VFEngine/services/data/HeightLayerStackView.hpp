@@ -48,6 +48,11 @@ namespace services
     struct RecomposeProgressLatch
     {
         uint32_t peak = 0;
+        // VK-1648. Latching the DENOMINATOR is not enough to keep the fraction monotone: when new
+        // work lands mid-drain, `outstanding` and `peak` rise together and 1 - outstanding/peak
+        // snaps back toward 0 — the bar visibly rewinds. So the reported fraction is latched too,
+        // and reset with the peak when the backlog reaches zero.
+        float reportedProgress = 0.0f;
     };
 
     // Turns the grid's three raw counts into the progress DTO, latching the peak so the fraction

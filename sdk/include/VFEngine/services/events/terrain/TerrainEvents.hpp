@@ -129,19 +129,30 @@ namespace events::terrain
 
     struct SaveSurfaceMaskCommand : ICommand<bool>
     {
+        services::EntityHandle terrainEntity;
         std::string path;
 
         std::string_view getName() const override { return "SaveSurfaceMask"; }
     };
 
+    // VK-1648. Every surface-mask event carries its terrain, because the service holds ONE mask
+    // and remembers which terrain owns it (TerrainService::surfaceMaskOwner). Without the entity
+    // the panel drawn for terrain B reports and clears terrain A's mask — including blanking A's
+    // TerrainComponent.surfaceMaskPath, which loses the artist's painted puddles on the next scene
+    // save. Handlers no-op when the entity is not the current owner.
     struct ClearSurfaceMaskCommand : ICommand<>
     {
+        services::EntityHandle terrainEntity;
+
         std::string_view getName() const override { return "ClearSurfaceMask"; }
     };
 
-    // Has a mask been created/loaded this session? Drives the editor's paint-target availability.
+    // Has a mask been created/loaded this session FOR THIS TERRAIN? Drives the editor's
+    // paint-target availability.
     struct HasSurfaceMaskQuery : IQuery<bool>
     {
+        services::EntityHandle terrainEntity;
+
         std::string_view getName() const override { return "HasSurfaceMask"; }
     };
 
@@ -167,6 +178,16 @@ namespace events::terrain
         bool locked = false;
 
         std::string_view getName() const override { return "SetTerrainSaveLock"; }
+    };
+
+    // VK-1648. Applies whatever a finished save worker parked for the main thread — the component's
+    // savePath/terrainRef/bounds, and the TerrainSavedNotification. SaveTerrainCommand is dispatched
+    // on a JobSystem worker (TerrainDrawer::startSave), and TerrainComponent is main-thread state:
+    // terrainRef owns a std::string that ScenePersistenceService and SceneSerializeLights resolve
+    // while a save is in flight. Dispatch this from the main thread once the save future is ready.
+    struct FlushTerrainSaveResultsCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "FlushTerrainSaveResults"; }
     };
 
     // VK-1646. True when this terrain claimed a `.vfterrainlayers` sidecar that could not be

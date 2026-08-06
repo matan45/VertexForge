@@ -524,7 +524,11 @@ namespace windows::details {
         if (!ImGui::CollapsingHeader("Surface Mask"))
             return;
 
-        const bool hasMask = dispatcher.query(events::terrain::HasSurfaceMaskQuery{});
+        // Scoped to the terrain this panel is drawn for. The service holds one mask; asking without
+        // the entity would report another terrain's mask here and offer to clear it.
+        events::terrain::HasSurfaceMaskQuery hasMaskQuery;
+        hasMaskQuery.terrainEntity = handle;
+        const bool hasMask = dispatcher.query(hasMaskQuery);
 
         static constexpr const char* resLabels[] = {"512", "1024", "2048", "4096"};
         static constexpr uint32_t resValues[] = {512u, 1024u, 2048u, 4096u};
@@ -573,6 +577,7 @@ namespace windows::details {
             if (!path.empty())
             {
                 events::terrain::SaveSurfaceMaskCommand cmd;
+                cmd.terrainEntity = handle;
                 cmd.path = path;
                 dispatcher.execute(cmd);
             }
@@ -581,7 +586,9 @@ namespace windows::details {
         if (ImGui::Button("Clear Mask"))
         {
             // Discards unsaved paint; the mask is only persisted on an explicit Save As.
-            dispatcher.execute(events::terrain::ClearSurfaceMaskCommand{});
+            events::terrain::ClearSurfaceMaskCommand cmd;
+            cmd.terrainEntity = handle;
+            dispatcher.execute(cmd);
         }
         if (ImGui::IsItemHovered())
         {
@@ -629,6 +636,14 @@ namespace windows::details {
                 isSaving = false;
 
                 auto& dispatcher = events::EventDispatcher::instance();
+
+                // VK-1648. The save ran on a JobSystem worker and parked its component writes and
+                // its TerrainSavedNotification rather than applying them there — TerrainComponent
+                // is main-thread state. This is the main thread, and the worker is provably done
+                // (its future was just consumed), so apply them now, before the save lock drops
+                // and anything else can start writing to the same component.
+                dispatcher.execute(events::terrain::FlushTerrainSaveResultsCommand{});
+
                 events::terrain::SetTerrainSaveLockCommand lockCmd;
                 lockCmd.locked = false;
                 dispatcher.execute(lockCmd);

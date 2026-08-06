@@ -2,6 +2,7 @@
 #include "TerrainGrid.hpp"
 #include "../threading/JobSystem.hpp"
 #include <algorithm>
+#include <iterator>
 #include <chrono>
 #include <unordered_set>
 
@@ -264,6 +265,17 @@ namespace terrain
             if (anyRegenerated)
                 ++tileRegenCount;
         }
+
+        // VK-1648. Retire the layer-owed rebuilds that are done (or whose tile streamed out), so
+        // the Height Layers progress bar reaches 100% and the panel re-enables. Bounded by the
+        // affected set of the last layer op, so this is a handful of lookups per frame.
+        for (auto it = layerMeshPending.begin(); it != layerMeshPending.end();)
+        {
+            const auto tileIt = tiles.find(*it);
+            const bool stillOwed = tileIt != tiles.end() && tileIt->second &&
+                                   tileIt->second->isDirty && tileIt->second->dirtyLODMask != 0;
+            it = stillOwed ? std::next(it) : layerMeshPending.erase(it);
+        }
     }
 
     bool TerrainGrid::ensureTileHeights(TerrainTile& tile)
@@ -308,9 +320,18 @@ namespace terrain
         // recompose is the cheap half: it marks isDirty + every LOD dirty, and the geometry the
         // user actually sees is rebuilt eight tiles per frame afterwards. Reporting only the
         // recompose backlog would show 100% while the terrain was still visibly re-meshing.
-        for (const auto& [coord, tile] : tiles)
+        //
+        // VK-1648: scoped to the tiles a LAYER recompose dirtied, not every dirty tile in the
+        // grid. isDirty is also set by sculpting, painting, hole punching and plain stream-in, so
+        // counting them all made this report a backlog — and, through
+        // HeightLayerPanel's `interactive = !locked && !progress.active`, grey out hide/show,
+        // reorder, rename and delete — for work the layer stack had nothing to do with, for as
+        // long as a sculpt brush was held down.
+        for (const TileCoord& coord : layerMeshPending)
         {
-            if (tile && tile->isDirty && tile->dirtyLODMask != 0)
+            const auto it = tiles.find(coord);
+            if (it != tiles.end() && it->second && it->second->isDirty &&
+                it->second->dirtyLODMask != 0)
                 ++status.meshBacklog;
         }
 
@@ -423,6 +444,7 @@ namespace terrain
 
             tile->isDirty = true;
             tile->setAllLODsDirty();
+            layerMeshPending.insert(coord); // VK-1648: this rebuild is owed to the layer stack
 
             if (fileCache)
                 fileCache->markDirty(coord);
@@ -500,6 +522,7 @@ namespace terrain
             {
                 t.isDirty = true;
                 t.setAllLODsDirty();
+                layerMeshPending.insert(t.coord); // VK-1648: owed to the layer stack, same as above
                 if (fileCache)
                     fileCache->markDirty(t.coord);
             };

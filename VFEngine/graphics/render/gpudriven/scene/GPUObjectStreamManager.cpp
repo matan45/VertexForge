@@ -470,15 +470,33 @@ namespace render::gpudriven
                     // only in MergedMeshBuffer::populateObjectData, so foliage wind silently does
                     // nothing in play mode. Blending must not inherit that.
                     //
-                    // Reads the per-submesh material only: unlike toon there is no resolver for
-                    // defaultMaterialPath, so a blend authored on a default material rather than on
-                    // the mesh's own would not apply. Worth a resolver if that case ever comes up;
-                    // props that blend into terrain carry their own material in practice.
-                    if (subMat && subMat->blendToTerrain)
+                    // VK-1648: which is why the defaultMaterialPath fallback is here too, exactly
+                    // as for toon above. Reading `subMat` alone made a blend authored on the mesh's
+                    // own material work in the viewport and silently stop the moment you pressed
+                    // Play — the prop's base popping out of the ground.
                     {
-                        obj.flags |= ObjectFlags::BlendToTerrain;
-                        obj.instanceData.z = material::packTerrainBlendParams(
-                            subMat->terrainBlendBand, subMat->terrainBlendContrast);
+                        bool blendToTerrain = false;
+                        float band = material::DEFAULT_TERRAIN_BLEND_BAND;
+                        float contrast = material::DEFAULT_TERRAIN_BLEND_CONTRAST;
+                        if (subMat)
+                        {
+                            blendToTerrain = subMat->blendToTerrain;
+                            band = subMat->terrainBlendBand;
+                            contrast = subMat->terrainBlendContrast;
+                        }
+                        else if (resolvers.terrainBlendResolver && !materialPath.empty())
+                        {
+                            const auto blend = resolvers.terrainBlendResolver(materialPath);
+                            blendToTerrain = blend.blendToTerrain;
+                            band = blend.band;
+                            contrast = blend.contrast;
+                        }
+
+                        if (blendToTerrain)
+                        {
+                            obj.flags |= ObjectFlags::BlendToTerrain;
+                            obj.instanceData.z = material::packTerrainBlendParams(band, contrast);
+                        }
                     }
 
                     buffer.updateObjectAtSlot(slot, obj);

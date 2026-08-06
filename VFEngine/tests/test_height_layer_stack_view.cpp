@@ -252,8 +252,14 @@ TEST_SUITE("HeightLayerStackView")
             // A second invalidation lands: 60 outstanding against a peak that was 40.
             const auto surge = services::advanceRecomposeProgress(latch, 0, 0, 60);
             CHECK(surge.totalAtStart == 60);
-            CHECK(surge.progress == doctest::Approx(0.0f));
-            CHECK(surge.progress <= half.progress); // it may stall, but it must not go backwards
+
+            // VK-1648: the subcase name says "never rewinds", and these used to assert the exact
+            // opposite — that the bar snapped back to 0.0. Latching the peak keeps the DENOMINATOR
+            // monotone but not the fraction: outstanding and peak rise together, so
+            // 1 - outstanding/peak goes straight back to zero. The reported value is latched too,
+            // so it holds at what the drain had already reached.
+            CHECK(surge.progress == doctest::Approx(0.5f));
+            CHECK(surge.progress >= half.progress); // it may stall, but it must not go backwards
 
             const auto later = services::advanceRecomposeProgress(latch, 0, 0, 15);
             CHECK(later.totalAtStart == 60);

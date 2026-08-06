@@ -4,13 +4,35 @@
 
 #include <glm/glm.hpp>
 
+#include <stdexcept>
+#include <string>
+
 namespace
 {
+    // VK-1648. Every primitive below can legitimately REFUSE -- the terrain grid is gone, the
+    // snapshot names a layer type this build cannot restore, an op is already in flight. Their
+    // bool return used to be discarded, so a refused undo still moved the command onto the redo
+    // stack: the user saw "undone" with nothing restored, and every later undo applied to a
+    // history that no longer described reality.
+    //
+    // Throwing is what fixes it without touching the IUndoableCommand vtable. UndoRedoServiceImpl
+    // wraps every execute()/undo() in try/catch, logs, and pushes the command back onto the stack
+    // it came from -- which is exactly the "records only on success, so a refusal leaves the
+    // history untouched" discipline SplineTerrainServiceImpl documents on the recording side.
+    void requireApplied(bool applied, const char* what, uint64_t splineId)
+    {
+        if (!applied)
+            throw std::runtime_error(std::string(what) + " was refused for height layer " +
+                                     std::to_string(splineId));
+    }
+
     void removeHeightLayer(uint64_t splineId)
     {
         events::splineTerrain::RemoveSplineHeightLayerCommand cmd;
         cmd.splineId = splineId;
         // ICommand<> -- the one member of this family with a real command handler, so execute().
+        // It returns void, so there is nothing to check: a remove that finds no layer has already
+        // reached the state the caller wanted.
         events::EventDispatcher::instance().execute(cmd);
     }
 
@@ -18,7 +40,7 @@ namespace
     {
         events::splineTerrain::RestoreHeightLayerCommand cmd;
         cmd.snapshot = snapshot;
-        events::EventDispatcher::instance().query(cmd);
+        requireApplied(events::EventDispatcher::instance().query(cmd), "Restore", snapshot.id);
     }
 
     void setHeightLayerVisible(uint64_t splineId, bool visible)
@@ -26,7 +48,7 @@ namespace
         events::splineTerrain::SetSplineHeightLayerVisibleCommand cmd;
         cmd.splineId = splineId;
         cmd.visible = visible;
-        events::EventDispatcher::instance().query(cmd);
+        requireApplied(events::EventDispatcher::instance().query(cmd), "Visibility change", splineId);
     }
 
     void moveHeightLayer(uint64_t splineId, uint32_t newIndex)
@@ -34,7 +56,7 @@ namespace
         events::splineTerrain::MoveHeightLayerCommand cmd;
         cmd.splineId = splineId;
         cmd.newIndex = newIndex;
-        events::EventDispatcher::instance().query(cmd);
+        requireApplied(events::EventDispatcher::instance().query(cmd), "Reorder", splineId);
     }
 
     void setHeightLayerName(uint64_t splineId, const std::string& name)
@@ -42,7 +64,7 @@ namespace
         events::splineTerrain::SetHeightLayerNameCommand cmd;
         cmd.splineId = splineId;
         cmd.name = name;
-        events::EventDispatcher::instance().query(cmd);
+        requireApplied(events::EventDispatcher::instance().query(cmd), "Rename", splineId);
     }
 
     [[nodiscard]] size_t footprintOf(const events::splineTerrain::HeightLayerSnapshot& snapshot)

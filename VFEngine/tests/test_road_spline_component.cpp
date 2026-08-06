@@ -176,4 +176,53 @@ TEST_SUITE("RoadSplineComponent")
         const auto& out = loaded.GetRoot().getComponent<components::RoadSplineComponent>();
         CHECK(out.params.road.columns.size() == 4);
     }
+
+    // VK-1648 regression. deserializeRoadSpline documents "tolerant reads throughout" and every
+    // other field checks is_number() before converting -- but the control points did not, so
+    // nlohmann's get<float>() threw json::type_error out of a call chain with no try/catch and the
+    // WHOLE scene failed to load. A hand edit, an interrupted save, or any writer that emits null
+    // for a NaN was enough. The malformed point is skipped; the rest of the scene survives.
+    TEST_CASE("a malformed road control point does not fail the scene load")
+    {
+        const auto loadWithPoints = [](const char* fileName, json controlPoints)
+        {
+            resetRoadTestRoot();
+            const fs::path scenePath = roadTestRoot() / fileName;
+            writeScene(scenePath, json{{"controlPoints", std::move(controlPoints)},
+                                       {"roadName", "Bridge"}});
+
+            scene::SceneGraphSystem loaded;
+            REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+            REQUIRE(loaded.GetRoot().hasComponent<components::RoadSplineComponent>());
+            return loaded.GetRoot().getComponent<components::RoadSplineComponent>().controlPoints.size();
+        };
+
+        SUBCASE("a null member skips only that point")
+        {
+            const auto count = loadWithPoints(
+                "NullMember.vfScene",
+                json::array({json::array({0.0f, 0.0f, 0.0f}),
+                             json::array({10.0f, nullptr, 0.0f}),
+                             json::array({20.0f, 0.0f, 0.0f})}));
+            CHECK(count == 2);
+        }
+
+        SUBCASE("a string member skips only that point")
+        {
+            const auto count = loadWithPoints(
+                "StringMember.vfScene",
+                json::array({json::array({0.0f, 0.0f, 0.0f}),
+                             json::array({"x", 0.0f, 0.0f})}));
+            CHECK(count == 1);
+        }
+
+        SUBCASE("well-formed points are unaffected")
+        {
+            const auto count = loadWithPoints(
+                "AllGood.vfScene",
+                json::array({json::array({0.0f, 0.0f, 0.0f}),
+                             json::array({10.0f, 1.0f, 0.0f})}));
+            CHECK(count == 2);
+        }
+    }
 }

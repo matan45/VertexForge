@@ -10,6 +10,7 @@
 #include "render/gpudriven/terrain/TerrainLayerPBRResolver.hpp"
 
 #include <export/ShaderCompiler.hpp>
+#include <resource/EndianUtils.hpp>
 #include <resource/ShaderResource.hpp>
 
 #include <algorithm>
@@ -389,6 +390,141 @@ TEST_SUITE("TerrainWeatherResponse")
             const auto none = SurfaceMaskBrushApplicator::apply(*fresh, params);
             CHECK(none.isEmpty());
         }
+    }
+
+    // VK-1648 regression. The mask stores 8-bit channels and the brush re-reads `current` from the
+    // byte on every dab, so a per-dab influence below half an LSB used to round straight back to
+    // the byte it started from -- the stroke was a literal no-op while still marking texels dirty
+    // and pushing an undo entry. These are the panel's OWN slider ranges at ordinary frame rates,
+    // so this is not a corner case: it is what the tool did by default.
+    TEST_CASE("the surface-mask brush advances at sub-LSB influence rather than stalling")
+    {
+        using namespace terrain;
+
+        const auto strokeAt = [](float strength, float opacity, float deltaTime, bool invert,
+                                 float startValue) -> float
+        {
+            auto mask = TerrainSurfaceMaskAsset::createEmpty(SURFACE_MASK_MIN_RESOLUTION);
+            REQUIRE(mask);
+            const uint32_t cx = mask->width / 2;
+            mask->setChannel(cx, cx, SURFACE_MASK_WETNESS_CHANNEL, startValue);
+
+            SurfaceMaskBrushApplicator::ApplyParams params;
+            params.maskWorldRect = glm::vec4(0.0f, 0.0f, 64.0f, 64.0f);
+            params.brushCenter = glm::vec2(32.0f, 32.0f);
+            params.brushRadius = 8.0f;
+            params.brushStrength = strength;
+            params.brushOpacity = opacity;
+            params.falloff = BrushFalloff::Constant;
+            params.channel = SURFACE_MASK_WETNESS_CHANNEL;
+            params.deltaTime = deltaTime;
+            params.invert = invert;
+
+            SurfaceMaskBrushApplicator::apply(*mask, params);
+            return mask->getChannel(cx, cx, SURFACE_MASK_WETNESS_CHANNEL);
+        };
+
+        // Strength 1, Opacity 0.1 at 240 fps: influence = 1 * 0.1 * (1/240) = 0.000417. Above the
+        // applicator's own 0.0001 "nothing to do" floor, and below half an LSB (1/255 = 0.00392),
+        // which is precisely the band where the byte used to round back to where it started.
+        SUBCASE("a sub-LSB dab advances the byte by exactly one LSB")
+        {
+            const float after = strokeAt(1.0f, 0.1f, 1.0f / 240.0f, false, 0.0f);
+            CHECK(after > 0.0f); // the whole bug: this was 0.0f forever
+            CHECK(after == doctest::Approx(1.0f / 255.0f).epsilon(0.01));
+        }
+
+        SUBCASE("inverting at a sub-LSB influence erases by one LSB")
+        {
+            const float after = strokeAt(1.0f, 0.1f, 1.0f / 240.0f, true, 10.0f / 255.0f);
+            CHECK(after == doctest::Approx(9.0f / 255.0f).epsilon(0.01));
+        }
+
+        SUBCASE("an above-LSB dab keeps its proportional value, not a nudge")
+        {
+            // Strength 1, Opacity 0.5 at 60 fps = 0.00833, just over one LSB, so the quantised
+            // result is 2/255 and the nudge must not have touched it.
+            const float after = strokeAt(1.0f, 0.5f, 1.0f / 60.0f, false, 0.0f);
+            CHECK(after == doctest::Approx(2.0f / 255.0f).epsilon(0.01));
+        }
+
+        SUBCASE("a texel already at the rail is not claimed")
+        {
+            // The nudge must not manufacture work: clamping puts it back where it started, so the
+            // texel would otherwise be marked dirty and undone for zero changed bytes.
+            auto mask = TerrainSurfaceMaskAsset::createEmpty(SURFACE_MASK_MIN_RESOLUTION);
+            REQUIRE(mask);
+            for (uint32_t z = 0; z < mask->height; ++z)
+                for (uint32_t x = 0; x < mask->width; ++x)
+                    mask->setChannel(x, z, SURFACE_MASK_WETNESS_CHANNEL, 1.0f);
+
+            SurfaceMaskBrushApplicator::ApplyParams params;
+            params.maskWorldRect = glm::vec4(0.0f, 0.0f, 64.0f, 64.0f);
+            params.brushCenter = glm::vec2(32.0f, 32.0f);
+            params.brushRadius = 8.0f;
+            params.brushStrength = 1.0f;
+            params.brushOpacity = 0.1f;
+            params.falloff = BrushFalloff::Constant;
+            params.channel = SURFACE_MASK_WETNESS_CHANNEL;
+            params.deltaTime = 1.0f / 240.0f;
+
+            CHECK(SurfaceMaskBrushApplicator::apply(*mask, params).isEmpty());
+        }
+
+        SUBCASE("a large influence is unaffected by the nudge")
+        {
+            // Above the quantisation step the value must still be the proportional one.
+            CHECK(strokeAt(10.0f, 1.0f, 0.05f, false, 0.0f) == doctest::Approx(0.5f).epsilon(0.01));
+        }
+    }
+
+    // VK-1648 regression. `dataSize` is a raw 32-bit field out of the file; it used to size a
+    // std::vector directly, so a corrupt or unrelated file asking for ~4 GB either threw
+    // std::bad_alloc out of an editor command handler or thrashed into swap before the truncation
+    // check rejected it anyway. A short value was worse: BC7Decoder walks a block count derived
+    // from the dimensions, so it read past the end of the buffer.
+    TEST_CASE("a BC7 surface mask with an implausible dataSize is rejected before allocating")
+    {
+        namespace endian = resource::endian;
+
+        const auto writeMask = [](const fs::path& path, uint32_t resolution, uint32_t dataSize)
+        {
+            std::ofstream f(path, std::ios::binary);
+            REQUIRE(f.is_open());
+            endian::writeLE<uint8_t>(f, 0);           // fileType: texture
+            endian::writeLE<uint32_t>(f, 1);          // major
+            endian::writeLE<uint32_t>(f, 0);          // minor
+            endian::writeLE<uint32_t>(f, 0);          // patch
+            endian::writeLE<uint32_t>(f, resolution); // width
+            endian::writeLE<uint32_t>(f, resolution); // height
+            endian::writeLE<uint32_t>(f, 4);          // channels
+            endian::writeLE<uint32_t>(f, 1);          // mipLevels
+            endian::writeLE<uint8_t>(f, 1);           // compressionFormat: BC7
+            endian::writeLE<uint32_t>(f, resolution); // mip0 width
+            endian::writeLE<uint32_t>(f, resolution); // mip0 height
+            endian::writeLE<uint32_t>(f, dataSize);
+        };
+
+        const uint32_t res = terrain::SURFACE_MASK_MIN_RESOLUTION;
+        const fs::path out = fs::temp_directory_path() / "vk1648_bc7_datasize.vfImage";
+        std::error_code ec;
+
+        SUBCASE("a gigantic dataSize never reaches the allocation")
+        {
+            fs::remove(out, ec);
+            writeMask(out, res, 0xFFFFFFF0u);
+            CHECK(terrain::TerrainSurfaceMaskAsset::load(out.string()) == nullptr);
+        }
+
+        SUBCASE("a dataSize short of the block count is rejected too")
+        {
+            // Not merely truncated: decompress would have walked ((res+3)/4)^2 blocks regardless.
+            fs::remove(out, ec);
+            writeMask(out, res, 16);
+            CHECK(terrain::TerrainSurfaceMaskAsset::load(out.string()) == nullptr);
+        }
+
+        fs::remove(out, ec);
     }
 
     TEST_CASE("paint targets map to the documented mask channels")

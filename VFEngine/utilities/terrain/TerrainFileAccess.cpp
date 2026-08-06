@@ -1,6 +1,7 @@
 #include "TerrainFileAccess.hpp"
 #include "../print/Log.hpp"
 
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -51,11 +52,25 @@ namespace terrain
         // Distinct from accessMutex, which only guards the callback bundle above. This one guards
         // the terrain files themselves — see the comment on terrainFileMutex().
         std::shared_mutex fileMutex;
+
+        // Atomic rather than fileMutex-guarded: the reader side is a worker thread comparing the
+        // value AFTER its locked reads have finished, precisely when it is holding no lock.
+        std::atomic<uint64_t> relocationEpoch{0};
     }
 
     std::shared_mutex& terrainFileMutex()
     {
         return fileMutex;
+    }
+
+    uint64_t terrainFileRelocationEpoch()
+    {
+        return relocationEpoch.load();
+    }
+
+    void bumpTerrainFileRelocationEpoch()
+    {
+        relocationEpoch.fetch_add(1);
     }
 
     bool setTerrainFileAccess(TerrainFileAccess access)

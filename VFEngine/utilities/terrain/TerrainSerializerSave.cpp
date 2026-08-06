@@ -716,6 +716,11 @@ namespace terrain
                 return false;
             }
 
+            // A full save re-lays every record, so every absolute offset in the index moved. Bumped
+            // under the exclusive lock and after the replacement, so a reader that saw the new
+            // bytes also sees the new epoch — see terrainFileRelocationEpoch().
+            bumpTerrainFileRelocationEpoch();
+
             // Past this point the save HAS happened: the terrain everything else consumes is the
             // new generation, and the caller must go on to refresh its cached index against it. So
             // a sidecar failure below is reported loudly but never turns into a false return — that

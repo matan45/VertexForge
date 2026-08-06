@@ -146,8 +146,20 @@ namespace render::gpudriven
             return {0, 0};
         };
 
+        // VK-1620/VK-1648: same defaultMaterialPath fallback as shadingResolver, so a blend
+        // authored on the mesh's own material applies on the object-streaming path too — not just
+        // in the editor viewport, which reads pbrCache directly.
+        TerrainBlendResolver terrainBlendResolver = [this](const std::string& materialPath)
+            -> TerrainBlendParams {
+            if (materialPath.empty()) return {};
+            auto it = materials.pbrCache.find(materialPath);
+            if (it == materials.pbrCache.end()) return {};
+            return {it->second.blendToTerrain, it->second.terrainBlendBand,
+                    it->second.terrainBlendContrast};
+        };
+
         ObjectResolvers resolvers{textureResolver, shaderGroupResolver, boneOffsetResolver,
-                                  shadingResolver, time, cameraPosition};
+                                  shadingResolver, terrainBlendResolver, time, cameraPosition};
 
         bool useStreaming = objectStreamingEnabled && objectStreamManager
                            && objectStreamManager->getStats().totalRegistered > 0;

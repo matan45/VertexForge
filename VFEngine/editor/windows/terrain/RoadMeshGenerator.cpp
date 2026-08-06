@@ -60,8 +60,11 @@ namespace windows
 {
     RoadMeshGenerator::~RoadMeshGenerator()
     {
+        auto& dispatcher = events::EventDispatcher::instance();
         if (appliedToken.isValid())
-            events::EventDispatcher::instance().unsubscribe(appliedToken);
+            dispatcher.unsubscribe(appliedToken);
+        if (deletedToken.isValid())
+            dispatcher.unsubscribe(deletedToken);
     }
 
     void RoadMeshGenerator::subscribe()
@@ -69,7 +72,9 @@ namespace windows
         if (subscribed)
             return;
 
-        appliedToken = events::EventDispatcher::instance()
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        appliedToken = dispatcher
             .subscribe<events::splineTerrain::SplineAppliedNotification>(
                 [this](const events::splineTerrain::SplineAppliedNotification& applied)
                 {
@@ -77,7 +82,49 @@ namespace windows
                         generate(applied);
                 });
 
+        // VK-1648. The road entities are spawned here, so they have to be retired here too. The
+        // Height Layers panel's Delete only removes the layer and recomposes the terrain; without
+        // this the ribbon survives its own corridor and ends up floating over restored ground.
+        //
+        // KNOWN GAP: this retire is not itself undoable, so undoing the layer delete brings the
+        // layer back without the road. That is still strictly better than the previous behaviour
+        // (road left floating over restored ground, with no way to remove it), but closing it
+        // properly means a RoadEntityUndoCommand with the roles inverted, pushed into the same
+        // batch deleteSpline records its HeightLayerRecordUndoCommand in — which needs the spawn
+        // desc reconstructed from the component plus its children's chunk origins.
+        deletedToken = dispatcher
+            .subscribe<events::splineTerrain::SplineDeletedNotification>(
+                [this](const events::splineTerrain::SplineDeletedNotification& deleted)
+                {
+                    retireRoadForSpline(deleted.splineId);
+                });
+
         subscribed = true;
+    }
+
+    void RoadMeshGenerator::retireRoadForSpline(uint64_t splineId)
+    {
+        if (splineId == 0)
+            return;
+
+        // splineId is persisted on the component (VK-1647), so this also finds roads spawned in an
+        // earlier session — the same reason deleteSpline stopped gating on its session-only
+        // appliedSplines list.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<std::pair<services::EntityHandle, asset::AssetRef>> doomed;
+        for (auto entity : registry.view<components::RoadSplineComponent>())
+        {
+            const auto& road = registry.get<components::RoadSplineComponent>(entity);
+            if (road.splineId == splineId)
+                doomed.emplace_back(services::internal::toHandle(entity), road.generatedMeshRef);
+        }
+
+        // Collected before deleting: retireRoad destroys entities, and doing that while iterating
+        // an EnTT view over the component being removed invalidates the iteration.
+        for (const auto& [entity, meshRef] : doomed)
+            retireRoad(entity, meshRef);
+
+        revisionBySpline.erase(splineId);
     }
 
     void RoadMeshGenerator::update()

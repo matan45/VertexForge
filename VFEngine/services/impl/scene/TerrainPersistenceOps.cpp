@@ -235,13 +235,78 @@ namespace services
     void TerrainService::warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid)
     {
         const terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
-        if (store.empty() || !store.isEditingLocked())
+        if (!store.isEditingLocked())
             return;
+
+        // Deliberately NOT gated on store.empty(). Locked-and-empty is the outcome of a sidecar
+        // that failed to load at all, which is exactly the case where this save silently carries
+        // no authoring state -- the one the artist most needs told about.
+        if (store.empty())
+        {
+            vfLogWarning("TerrainService: layer editing is locked and no authoring state was "
+                         "loaded, so this save carries none. The existing .vfterrainlayers sidecar "
+                         "is left untouched on disk; repair or remove it and reopen the terrain to "
+                         "recover the layer stack.");
+            return;
+        }
 
         vfLogWarning("TerrainService: {} reserved height layer(s) over {} authoritative base "
                      "block(s) are present but editing is locked; they will not be re-persisted "
                      "until the terrain's .vfterrainlayers sidecar is repaired or removed.",
                      store.layers().size(), store.baseCount());
+    }
+
+    const terrain::TerrainHeightLayerStore*
+    TerrainService::persistableHeightLayers(const terrain::TerrainGrid& grid)
+    {
+        const terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
+        return store.isEditingLocked() ? nullptr : &store;
+    }
+
+    void TerrainService::flushSaveResults()
+    {
+        std::vector<PendingSaveResult> drained;
+        {
+            std::lock_guard<std::mutex> lock(pendingSaveResultsMutex);
+            if (pendingSaveResults.empty())
+                return;
+            drained.swap(pendingSaveResults);
+        }
+
+        // Drained before any of it is applied: publish() dispatches subscribers OUTSIDE the lock,
+        // and a subscriber that triggers another save must not deadlock on a mutex we still hold.
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        for (const auto& parked : drained)
+        {
+            const entt::entity ent = internal::fromHandle(EntityHandle{parked.terrainEntityId});
+
+            // The terrain can have been deleted while its save was in flight. The file on disk is
+            // still correct and still worth announcing; only the component write is skipped.
+            if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
+            {
+                auto& comp = registry.get<components::TerrainComponent>(ent);
+                comp.savePath = parked.path;
+                comp.saveDirty = false;
+
+                if (parked.writesBounds)
+                {
+                    comp.gridMinX = parked.gridMinX;
+                    comp.gridMinZ = parked.gridMinZ;
+                    comp.gridMaxX = parked.gridMaxX;
+                    comp.gridMaxZ = parked.gridMaxZ;
+                    comp.activeTileCount = parked.activeTileCount;
+                }
+
+                if (parked.metaGuid.isValid())
+                    comp.terrainRef = asset::AssetRef::fromGUIDAndPath(parked.metaGuid, parked.path);
+            }
+
+            events::terrain::TerrainSavedNotification savedNotification;
+            savedNotification.terrainEntity = EntityHandle{parked.terrainEntityId};
+            savedNotification.path = parked.path;
+            events::EventDispatcher::instance().publish(savedNotification);
+        }
     }
 
     // VK-1646. Every outcome below keeps the terrain itself loadable — the flattened VFTR is
@@ -325,9 +390,14 @@ namespace services
             // VK-1648. Deliberately not phrased as damage. VFTL has no backward compatibility by
             // design, so every format bump makes every sidecar on disk land here at once — and
             // "corrupt or truncated" would send the artist hunting a disk fault that is not there.
+            //
+            // It does NOT promise migration either: nothing was read, so a re-save has no stack to
+            // write back. The sidecar is left on disk untouched (persistableHeightLayers withholds
+            // the empty store from the serializer) and the layers have to be re-authored.
             vfLogWarning("TerrainService: {} was written by a different build of the editor "
-                         "(VFTL format {}.{}.{} expected). The terrain loads flattened with layer "
-                         "editing disabled; re-save it to migrate the layer stack.",
+                         "(VFTL format {}.{}.{} expected) and cannot be read. The terrain loads "
+                         "flattened with layer editing disabled; the sidecar is left in place but "
+                         "its layers must be re-authored.",
                          sidecarPath.string(), terrain::TERRAIN_LAYER_VERSION_MAJOR,
                          terrain::TERRAIN_LAYER_VERSION_MINOR, terrain::TERRAIN_LAYER_VERSION_PATCH);
             break;
@@ -428,7 +498,9 @@ namespace services
         // VK-1646. Same opt-in as the full save: the sidecar is rewritten whole on every commit
         // that carries authoring state, and the generation id in the header is re-stamped with it.
         const auto incrementalGuid = peekOrMintTerrainGuid(path);
-        incParams.heightLayers = &gridIt->second->getHeightLayers();
+        // Withheld when editing is locked -- see persistableHeightLayers(). Passing an empty
+        // store here would clear bit 6 AND delete the sidecar the failed load could not read.
+        incParams.heightLayers = persistableHeightLayers(*gridIt->second);
         incParams.terrainGuid = incrementalGuid.getValue();
 
         const auto result = terrain::TerrainSerializer::saveIncremental(incParams);
@@ -457,8 +529,6 @@ namespace services
         saveVegetation(terrainEntityId, path);
         saveFoliage(terrainEntityId, path);
 
-        comp.saveDirty = false;
-
         // Reclaim the records superseded by this and earlier incremental saves, once enough of them
         // have piled up. Deliberately after the commit succeeded and deliberately unable to fail
         // the save: compaction is atomic, so a failure leaves a valid — merely fat — file, and
@@ -474,13 +544,18 @@ namespace services
 
         // Same metadata contract as the full save — see refreshTerrainSidecar().
         const auto metaGuid = refreshTerrainSidecar(path, incrementalGuid);
-        if (metaGuid.isValid())
-            comp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
-        events::terrain::TerrainSavedNotification savedNotification;
-        savedNotification.terrainEntity = EntityHandle{terrainEntityId};
-        savedNotification.path = path;
-        events::EventDispatcher::instance().publish(savedNotification);
+        // VK-1648. Parked, not applied: this runs on a JobSystem worker. See PendingSaveResult.
+        // The incremental path leaves the bounds and tile count alone, so writesBounds stays false.
+        {
+            PendingSaveResult parked;
+            parked.terrainEntityId = terrainEntityId;
+            parked.path = path;
+            parked.metaGuid = metaGuid;
+
+            std::lock_guard<std::mutex> lock(pendingSaveResultsMutex);
+            pendingSaveResults.push_back(std::move(parked));
+        }
 
         vfLogInfo("TerrainService: Incremental save completed ({} tiles updated)", savedCount);
         return true;
@@ -565,7 +640,8 @@ namespace services
         // refreshTerrainSidecar() below cannot supply it on a first save, where no .vfmeta exists
         // yet. Both calls agree on one value by passing it through.
         const auto terrainGuid = peekOrMintTerrainGuid(path);
-        saveParams.heightLayers = &gridIt->second->getHeightLayers();
+        // Withheld when editing is locked -- see persistableHeightLayers().
+        saveParams.heightLayers = persistableHeightLayers(*gridIt->second);
         saveParams.terrainGuid = terrainGuid.getValue();
 
         bool result = terrain::TerrainSerializer::save(saveParams);
@@ -574,15 +650,6 @@ namespace services
         {
             saveVegetation(terrainEntityId, path);
             saveFoliage(terrainEntityId, path);
-
-            auto& mutableComp = registry.get<components::TerrainComponent>(ent);
-            mutableComp.savePath = path;
-            mutableComp.saveDirty = false;
-            mutableComp.gridMinX = boundsMinX;
-            mutableComp.gridMinZ = boundsMinZ;
-            mutableComp.gridMaxX = boundsMaxX;
-            mutableComp.gridMaxZ = boundsMaxZ;
-            mutableComp.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
 
             auto cacheIt = fileCaches.find(terrainEntityId);
             if (cacheIt != fileCaches.end() && cacheIt->second)
@@ -605,13 +672,23 @@ namespace services
             // Create or update .vfmeta sidecar, persisting the GUID the layer sidecar was stamped
             // with so the two never disagree about which asset this is.
             const auto metaGuid = refreshTerrainSidecar(path, terrainGuid);
-            if (metaGuid.isValid())
-                mutableComp.terrainRef = asset::AssetRef::fromGUIDAndPath(metaGuid, path);
 
-            events::terrain::TerrainSavedNotification savedNotification;
-            savedNotification.terrainEntity = EntityHandle{terrainEntityId};
-            savedNotification.path = path;
-            events::EventDispatcher::instance().publish(savedNotification);
+            // VK-1648. Parked, not applied: this runs on a JobSystem worker. See PendingSaveResult.
+            {
+                PendingSaveResult parked;
+                parked.terrainEntityId = terrainEntityId;
+                parked.path = path;
+                parked.metaGuid = metaGuid;
+                parked.writesBounds = true;
+                parked.gridMinX = boundsMinX;
+                parked.gridMinZ = boundsMinZ;
+                parked.gridMaxX = boundsMaxX;
+                parked.gridMaxZ = boundsMaxZ;
+                parked.activeTileCount = static_cast<uint32_t>(gridIt->second->getTileCount());
+
+                std::lock_guard<std::mutex> lock(pendingSaveResultsMutex);
+                pendingSaveResults.push_back(std::move(parked));
+            }
 
             vfLogInfo("TerrainService: Saved terrain to {}", path);
         }

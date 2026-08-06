@@ -36,6 +36,175 @@ namespace terrain
             return location.has_value() && location->baseOffset != 0;
         }
 
+        // Separator- and trailing-slash-insensitive compare, so a reference stored as
+        // "Assets\Mat.vfTerrainMat" still matches the "Assets/Mat.vfTerrainMat" being renamed.
+        std::string normalizeAssetPath(std::string_view path)
+        {
+            std::string normalized(path);
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+            while (!normalized.empty() && normalized.back() == '/')
+                normalized.pop_back();
+            return normalized;
+        }
+
+        std::vector<char> buildFileWithNewMaterialPath(const std::vector<char>& fileData,
+                                                       size_t pathLenOffset, uint32_t oldPathLen,
+                                                       std::string_view newPath)
+        {
+            const size_t oldPathEnd = pathLenOffset + 4 + oldPathLen;
+            const auto newPathLen = static_cast<uint32_t>(newPath.size());
+
+            std::vector<char> out;
+            out.reserve(fileData.size() - oldPathLen + newPathLen);
+            out.insert(out.end(), fileData.begin(), fileData.begin() + pathLenOffset);
+
+            out.push_back(static_cast<char>(newPathLen & 0xFF));
+            out.push_back(static_cast<char>((newPathLen >> 8) & 0xFF));
+            out.push_back(static_cast<char>((newPathLen >> 16) & 0xFF));
+            out.push_back(static_cast<char>((newPathLen >> 24) & 0xFF));
+
+            out.insert(out.end(), newPath.begin(), newPath.end());
+            out.insert(out.end(), fileData.begin() + oldPathEnd, fileData.end());
+            return out;
+        }
+
+        // Only the absolute offsets move; the sizes are lengths, not positions. Both the stride and
+        // the positions within an entry come from the serializer's own constants — hand-copied
+        // arithmetic went stale once already and silently corrupted every file it rewrote.
+        void shiftIndexOffsets(std::vector<char>& fileData, size_t indexTableOffset,
+                               const std::vector<TileIndexEntry>& index, int32_t delta)
+        {
+            const auto shift = [&](size_t pos, uint64_t originalValue) {
+                if (originalValue == 0) return;
+                if (pos + 8 > fileData.size()) return;
+                const auto adjusted =
+                    static_cast<uint64_t>(static_cast<int64_t>(originalValue) + delta);
+                for (int b = 0; b < 8; ++b)
+                    fileData[pos + b] = static_cast<char>((adjusted >> (b * 8)) & 0xFF);
+            };
+
+            for (size_t i = 0; i < index.size(); ++i)
+            {
+                const size_t entryOffset = indexTableOffset + i * TILE_INDEX_ENTRY_SIZE;
+                shift(entryOffset + TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET, index[i].heightDataOffset);
+                shift(entryOffset + TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET, index[i].weightDataOffset);
+                shift(entryOffset + TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET, index[i].meshletDataOffset);
+                shift(entryOffset + TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET, index[i].holeMaskDataOffset);
+                shift(entryOffset + TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET, index[i].caveSdfDataOffset);
+            }
+        }
+    }
+
+    bool TerrainSerializer::rewriteMaterialPath(std::string_view path,
+                                                std::string_view expectedOldPath,
+                                                std::string_view newPath)
+    {
+        if (terrainArchiveMode() || isPackedTerrain(path))
+            return false;
+
+        std::unique_lock lock(terrainFileMutex());
+
+        // This rewrite shifts every absolute offset in the file. A save journal left by an
+        // interrupted edit holds the pre-shift offsets, so replaying it afterwards would write them
+        // back over the shifted file — settle it first, and then none can exist. Under the same
+        // lock as the rewrite, so nothing can open a new one in between.
+        if (recoverPendingLocked(path) == TerrainRecoveryResult::Failed)
+        {
+            vfLogError("TerrainSerializer: Could not recover an interrupted save for {}", path);
+            return false;
+        }
+
+        TerrainFileHeader header;
+        std::vector<TileIndexEntry> index;
+        if (!readHeaderLocked(path, header, index, nullptr))
+            return false;
+
+        if (header.materialPath != expectedOldPath &&
+            normalizeAssetPath(header.materialPath) != normalizeAssetPath(expectedOldPath))
+            return false;
+
+        const fs::path filePath(path);
+        std::error_code ec;
+
+        try
+        {
+            std::ifstream inFile(filePath, std::ios::binary | std::ios::ate);
+            if (!inFile.is_open())
+                return false;
+            const auto fileSize = inFile.tellg();
+            inFile.seekg(0);
+            std::vector<char> fileData(static_cast<size_t>(fileSize));
+            inFile.read(fileData.data(), fileSize);
+            inFile.close();
+
+            constexpr size_t pathLenOffset = TERRAIN_HEADER_PATH_LENGTH_OFFSET;
+            const auto oldPathLen = static_cast<uint32_t>(header.materialPath.size());
+            const auto delta =
+                static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
+
+            if (pathLenOffset + 4 + oldPathLen > fileData.size())
+            {
+                vfLogError("TerrainSerializer: {} is too small to hold its own material path",
+                           filePath.string());
+                return false;
+            }
+
+            auto newFileData =
+                buildFileWithNewMaterialPath(fileData, pathLenOffset, oldPathLen, newPath);
+
+            if (delta != 0 && !index.empty())
+            {
+                TerrainFileHeader newHeader = header;
+                newHeader.materialPath = std::string(newPath);
+                shiftIndexOffsets(newFileData, static_cast<size_t>(serializedHeaderSize(newHeader)),
+                                  index, delta);
+            }
+
+            // Never truncate the live terrain in place: a failure part-way through would leave a
+            // half-rewritten .vfTerrain with no way back. Build the new file beside it and swap.
+            //
+            // Deliberately NOT terrainTempPath(): recoverPendingLocked() sweeps `<path>.tmp`
+            // unconditionally as an interrupted save's leftovers, and would delete this one out
+            // from under the write.
+            fs::path tempPath = filePath;
+            tempPath += ".matpath.tmp";
+
+            {
+                std::ofstream outFile(tempPath, std::ios::binary | std::ios::trunc);
+                if (!outFile.is_open())
+                {
+                    vfLogError("TerrainSerializer: Failed to open {} for writing", tempPath.string());
+                    return false;
+                }
+                outFile.write(newFileData.data(), static_cast<std::streamsize>(newFileData.size()));
+                outFile.close();
+                if (outFile.fail())
+                {
+                    vfLogError("TerrainSerializer: Failed to write {}", tempPath.string());
+                    fs::remove(tempPath, ec);
+                    return false;
+                }
+            }
+
+            if (!resource::replaceFileAtomically(tempPath, filePath))
+            {
+                vfLogError("TerrainSerializer: Failed to replace {}", filePath.string());
+                fs::remove(tempPath, ec);
+                return false;
+            }
+
+            // Every absolute offset shifted by `delta` — see terrainFileRelocationEpoch().
+            bumpTerrainFileRelocationEpoch();
+
+            vfLogInfo("TerrainSerializer: Updated the material path in {}", filePath.string());
+            return true;
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("TerrainSerializer: Failed to rewrite the material path in {}: {}",
+                       filePath.string(), e.what());
+            return false;
+        }
     }
 
     TerrainRecoveryResult TerrainSerializer::recoverPending(std::string_view path)
@@ -152,6 +321,10 @@ namespace terrain
             return TerrainRecoveryResult::Failed;
         }
         fs::remove(tmpPath, ec);
+
+        // The replayed index re-points the tiles the interrupted save appended, so any snapshot
+        // taken against the pre-replay index is stale — see terrainFileRelocationEpoch().
+        bumpTerrainFileRelocationEpoch();
 
         vfLogInfo("TerrainSerializer: Replayed an interrupted save for {}", path);
         return TerrainRecoveryResult::Redone;
@@ -367,7 +540,14 @@ namespace terrain
             // stays bound. That is precisely why the binding is an opaque id rather than a hash of
             // the file's bytes: a hash would call a perfectly good sidecar stale after a pure
             // byte-shuffle, and cost the artist their layer stack for reclaiming disk space.
-            return resource::replaceFileAtomically(tmpPath, live);
+            if (!resource::replaceFileAtomically(tmpPath, live))
+                return false;
+
+            // The byte-shuffle the sidecar can ignore is exactly what an in-flight tile read cannot:
+            // every record moved, so every snapshotted absolute offset is now wrong. This is the
+            // bump terrainFileRelocationEpoch() exists for.
+            bumpTerrainFileRelocationEpoch();
+            return true;
         }
         catch (const std::exception& e)
         {

@@ -1770,22 +1770,32 @@ namespace services
                 return loadSurfaceMask(cmd.terrainEntity.id, cmd.path);
             });
 
+        // VK-1648. The three below act on the ONE mask the service holds, so each is gated on the
+        // caller naming the terrain that owns it — otherwise the panel drawn for terrain B saves
+        // over, reports, or destroys terrain A's mask.
         dispatcher.registerCommandHandler<events::terrain::SaveSurfaceMaskCommand>(
             [this](const events::terrain::SaveSurfaceMaskCommand& cmd)
             {
-                return saveSurfaceMask(cmd.path);
+                return ownsSurfaceMask(cmd.terrainEntity.id) && saveSurfaceMask(cmd.path);
             });
 
         dispatcher.registerCommandHandler<events::terrain::ClearSurfaceMaskCommand>(
-            [this](const events::terrain::ClearSurfaceMaskCommand&)
+            [this](const events::terrain::ClearSurfaceMaskCommand& cmd)
             {
-                clearSurfaceMask();
+                if (ownsSurfaceMask(cmd.terrainEntity.id))
+                    clearSurfaceMask();
             });
 
         dispatcher.registerQueryHandler<events::terrain::HasSurfaceMaskQuery>(
-            [this](const events::terrain::HasSurfaceMaskQuery&)
+            [this](const events::terrain::HasSurfaceMaskQuery& cmd)
             {
-                return surfaceMask != nullptr && surfaceMask->isValid();
+                return ownsSurfaceMask(cmd.terrainEntity.id);
+            });
+
+        dispatcher.registerCommandHandler<events::terrain::FlushTerrainSaveResultsCommand>(
+            [this](const events::terrain::FlushTerrainSaveResultsCommand&)
+            {
+                flushSaveResults();
             });
 
         dispatcher.registerCommandHandler<events::terrain::PrepareTerrainSaveCommand>(

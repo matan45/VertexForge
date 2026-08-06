@@ -20,6 +20,7 @@
 
 #include <glm/glm.hpp>
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -349,5 +350,80 @@ TEST_SUITE("TerrainLayerUndoCommands")
         }
 
         CHECK(log.pushCount == 0);
+    }
+
+    // VK-1648 regression. Every primitive these commands drive can legitimately refuse — the
+    // terrain grid is gone, the snapshot names a layer type this build cannot restore, an op is
+    // already in flight. Their bool used to be discarded, so a refused undo still moved the command
+    // onto the redo stack: the user saw "undone" with nothing restored, and every later undo
+    // applied to a history that no longer described reality.
+    //
+    // Throwing is the fix, and it needs no vtable change: UndoRedoServiceImpl already wraps every
+    // execute()/undo() in try/catch and pushes the command back onto the stack it came from.
+    TEST_CASE("height_layer_undo: a refused primitive throws instead of reporting success")
+    {
+        PrimitiveLog log;
+        PrimitiveGuard guard(log);
+        auto& d = events::EventDispatcher::instance();
+
+        // Take the slots back off the guard and answer "refused" instead.
+        const auto refuseRestore = [&d] {
+            d.unregisterQueryHandler<Restore>();
+            d.registerQueryHandler<Restore>([](const Restore&) { return false; });
+        };
+        const auto refuseVisible = [&d] {
+            d.unregisterQueryHandler<SetVisible>();
+            d.registerQueryHandler<SetVisible>([](const SetVisible&) { return false; });
+        };
+        const auto refuseMove = [&d] {
+            d.unregisterQueryHandler<Move>();
+            d.registerQueryHandler<Move>([](const Move&) { return false; });
+        };
+        const auto refuseName = [&d] {
+            d.unregisterQueryHandler<SetName>();
+            d.registerQueryHandler<SetName>([](const SetName&) { return false; });
+        };
+
+        SUBCASE("a refused restore throws out of undo")
+        {
+            refuseRestore();
+            const auto before = makeSnapshot(1, 0, true, "Road", 5.0f);
+            services::HeightLayerRecordUndoCommand command(
+                "Delete Height Layer", before, events::splineTerrain::HeightLayerSnapshot{});
+            CHECK_THROWS_AS(command.undo(), std::runtime_error);
+        }
+
+        SUBCASE("a refused visibility change throws on both directions")
+        {
+            refuseVisible();
+            services::HeightLayerVisibilityUndoCommand command("Hide Layer", 1, true, false);
+            CHECK_THROWS_AS(command.execute(), std::runtime_error);
+            CHECK_THROWS_AS(command.undo(), std::runtime_error);
+        }
+
+        SUBCASE("a refused reorder throws")
+        {
+            refuseMove();
+            services::HeightLayerOrderUndoCommand command("Reorder Layer", 1, 0, 2);
+            CHECK_THROWS_AS(command.undo(), std::runtime_error);
+        }
+
+        SUBCASE("a refused rename throws")
+        {
+            refuseName();
+            services::HeightLayerNameUndoCommand command("Rename Layer", 1, "Old", "New");
+            CHECK_THROWS_AS(command.undo(), std::runtime_error);
+        }
+
+        SUBCASE("a removal that finds nothing is NOT a refusal")
+        {
+            // RemoveSplineHeightLayerCommand returns void: reaching the state the caller asked for
+            // by a different route is success, not failure, so this must stay silent.
+            services::HeightLayerRecordUndoCommand command(
+                "Add Height Layer", events::splineTerrain::HeightLayerSnapshot{},
+                makeSnapshot(9, 0, true, "Road", 5.0f));
+            CHECK_NOTHROW(command.undo());
+            CHECK(log.removes.size() == 1);
+        }
     }
 }

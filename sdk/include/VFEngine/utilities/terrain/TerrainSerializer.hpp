@@ -383,6 +383,20 @@ namespace terrain
         // Must run before anything reads the file for real work — see the note on TerrainFileCache.
         static TerrainRecoveryResult recoverPending(std::string_view path);
 
+        // Points a terrain at a moved/renamed .vfTerrainMat. The stored path is length-prefixed
+        // inside the header, so changing it resizes the header and shifts every absolute tile
+        // offset in the index — which is why this lives here and holds terrainFileMutex()
+        // exclusively across the whole read-modify-write, exactly like compact(). Doing the same
+        // rewrite from outside the lock would let a streaming tile read seek to a pre-shift offset
+        // in the post-shift file.
+        //
+        // Returns false and leaves the file untouched when the header does not name
+        // `expectedOldPath` (compared both verbatim and with separators normalised), when the
+        // terrain is packed inside a .vfpak, or on any IO or format failure.
+        static bool rewriteMaterialPath(std::string_view path,
+                                        std::string_view expectedOldPath,
+                                        std::string_view newPath);
+
         static bool readTileHeights(
             std::string_view path,
             const TileIndexEntry& entry,

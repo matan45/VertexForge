@@ -8,6 +8,7 @@
 #include "TerrainHeightLayerStore.hpp"
 #include "TerrainQuadtree.hpp"
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 
@@ -127,11 +128,20 @@ namespace terrain
         {
             uint32_t pendingResident = 0; // covered + stale + resident -- work the budget will do
             uint32_t pendingUnloaded = 0; // covered + stale + streamed out -- waiting on streaming
-            uint32_t meshBacklog = 0;     // tiles whose geometry the 8-per-frame loop still owes
+            // VK-1648: tiles whose geometry the 8-per-frame loop still owes BECAUSE OF A LAYER
+            // RECOMPOSE. Scoped deliberately -- isDirty is also set by sculpting, painting, hole
+            // punching and stream-in, and counting those made the Height Layers panel disable
+            // itself for unrelated work.
+            uint32_t meshBacklog = 0;
         };
         [[nodiscard]] HeightLayerRecomposeStatus heightLayerRecomposeStatus() const;
 
     private:
+        // VK-1648. Coords that recomposeDirtyDerived (or its seam pass) marked dirty, drained in
+        // regenerateDirtyTiles once the mesh is rebuilt or the tile streams out. This is what makes
+        // meshBacklog answer "how much of THIS layer op is left" rather than "is any tile dirty".
+        std::unordered_set<TileCoord, TileCoordHash> layerMeshPending;
+
         // Composes one covered tile in place. Returns false when it is not covered, has no base,
         // or the base no longer matches the tile's resolution.
         bool recomposeTile(TerrainTile& tile);

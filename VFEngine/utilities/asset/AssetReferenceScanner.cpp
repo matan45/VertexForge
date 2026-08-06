@@ -288,149 +288,16 @@ namespace asset
         }
     }
 
-    static std::vector<char> buildTerrainFileWithNewPath(
-        const std::vector<char>& fileData, size_t pathLenOffset,
-        uint32_t oldPathLen, const std::string& newPath)
-    {
-        size_t oldPathEnd = pathLenOffset + 4 + oldPathLen;
-        uint32_t newPathLen = static_cast<uint32_t>(newPath.size());
-
-        std::vector<char> newFileData;
-        newFileData.reserve(fileData.size() - oldPathLen + newPathLen);
-        newFileData.insert(newFileData.end(), fileData.begin(), fileData.begin() + pathLenOffset);
-
-        newFileData.push_back(static_cast<char>(newPathLen & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 8) & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 16) & 0xFF));
-        newFileData.push_back(static_cast<char>((newPathLen >> 24) & 0xFF));
-
-        newFileData.insert(newFileData.end(), newPath.begin(), newPath.end());
-        newFileData.insert(newFileData.end(), fileData.begin() + oldPathEnd, fileData.end());
-        return newFileData;
-    }
-
-    static void adjustTerrainIndexOffsets(
-        std::vector<char>& newFileData, size_t indexTableOffset,
-        const std::vector<terrain::TileIndexEntry>& index, int32_t delta)
-    {
-        auto adjustOffset = [&](size_t pos, uint64_t originalValue) {
-            if (originalValue == 0) return;
-            if (pos + 8 > newFileData.size()) return;
-            uint64_t adjusted = static_cast<uint64_t>(static_cast<int64_t>(originalValue) + delta);
-            for (int b = 0; b < 8; ++b)
-                newFileData[pos + b] = static_cast<char>((adjusted >> (b * 8)) & 0xFF);
-        };
-
-        // Only the absolute offsets move; the sizes are lengths, not positions. Both the stride and
-        // the positions within an entry come from the serializer's own constants — hand-copied
-        // arithmetic here went stale once already and silently corrupted every file it rewrote.
-        for (size_t i = 0; i < index.size(); ++i) {
-            size_t entryOffset = indexTableOffset + i * terrain::TILE_INDEX_ENTRY_SIZE;
-            adjustOffset(entryOffset + terrain::TILE_INDEX_HEIGHT_OFFSET_FIELD_OFFSET,
-                         index[i].heightDataOffset);
-            adjustOffset(entryOffset + terrain::TILE_INDEX_WEIGHT_OFFSET_FIELD_OFFSET,
-                         index[i].weightDataOffset);
-            adjustOffset(entryOffset + terrain::TILE_INDEX_MESHLET_OFFSET_FIELD_OFFSET,
-                         index[i].meshletDataOffset);
-            adjustOffset(entryOffset + terrain::TILE_INDEX_HOLE_MASK_OFFSET_FIELD_OFFSET,
-                         index[i].holeMaskDataOffset);
-            adjustOffset(entryOffset + terrain::TILE_INDEX_CAVE_SDF_OFFSET_FIELD_OFFSET,
-                         index[i].caveSdfDataOffset);
-        }
-    }
-
     bool AssetReferenceScanner::updateTerrainFile(const fs::path& filePath, const std::string& oldPath,
                                                    const std::string& newPath)
     {
-        try
-        {
-            // This rewrite shifts every absolute offset in the file. A save journal left by an
-            // interrupted edit holds the pre-shift offsets, so replaying it afterwards would write
-            // them back over the shifted file — settle it first, and then none can exist.
-            if (terrain::TerrainSerializer::recoverPending(filePath.string()) ==
-                terrain::TerrainRecoveryResult::Failed)
-            {
-                vfLogError("Could not recover an interrupted save for terrain file: {}",
-                           filePath.string());
-                return false;
-            }
-
-            terrain::TerrainFileHeader header;
-            std::vector<terrain::TileIndexEntry> index;
-            if (!terrain::TerrainSerializer::readHeader(filePath.string(), header, index))
-                return false;
-
-            std::string oldPathNorm = normalizePath(oldPath);
-            std::string materialNorm = normalizePath(header.materialPath);
-            if (header.materialPath != oldPath && materialNorm != oldPathNorm)
-                return false;
-
-            std::ifstream inFile(filePath, std::ios::binary | std::ios::ate);
-            if (!inFile.is_open()) return false;
-            auto fileSize = inFile.tellg();
-            inFile.seekg(0);
-            std::vector<char> fileData(static_cast<size_t>(fileSize));
-            inFile.read(fileData.data(), fileSize);
-            inFile.close();
-
-            // Derive every offset from the serializer's own definitions — hand-rolled copies of
-            // this arithmetic went stale once already (lodDistances grew from 4 to 6 floats, the
-            // index entry from 44 to 52 bytes) and silently corrupted the files they rewrote.
-            constexpr size_t pathLenOffset = terrain::TERRAIN_HEADER_PATH_LENGTH_OFFSET;
-            uint32_t oldPathLen = static_cast<uint32_t>(header.materialPath.size());
-            int32_t delta = static_cast<int32_t>(newPath.size()) - static_cast<int32_t>(oldPathLen);
-
-            if (pathLenOffset + 4 + oldPathLen > fileData.size())
-            {
-                vfLogError("Terrain file too small to hold its own material path: {}",
-                           filePath.string());
-                return false;
-            }
-
-            auto newFileData = buildTerrainFileWithNewPath(fileData, pathLenOffset, oldPathLen, newPath);
-
-            if (delta != 0 && !index.empty()) {
-                terrain::TerrainFileHeader newHeader = header;
-                newHeader.materialPath = newPath;
-                adjustTerrainIndexOffsets(
-                    newFileData,
-                    static_cast<size_t>(terrain::serializedHeaderSize(newHeader)),
-                    index, delta);
-            }
-
-            // Never truncate the live terrain in place: a failure part-way through would leave a
-            // half-rewritten .vfTerrain with no way back. Build the new file beside it and swap.
-            fs::path tempPath = filePath;
-            tempPath += ".tmp";
-
-            std::ofstream outFile(tempPath, std::ios::binary | std::ios::trunc);
-            if (!outFile.is_open()) {
-                vfLogError("Failed to open terrain file for writing: {}", tempPath.string());
-                return false;
-            }
-            outFile.write(newFileData.data(), static_cast<std::streamsize>(newFileData.size()));
-            outFile.close();
-            if (outFile.fail()) {
-                vfLogError("Failed to write terrain file: {}", tempPath.string());
-                std::error_code removeEc;
-                fs::remove(tempPath, removeEc);
-                return false;
-            }
-
-            if (!resource::replaceFileAtomically(tempPath, filePath))
-            {
-                vfLogError("Failed to replace terrain file: {}", filePath.string());
-                return false;
-            }
-
-            vfLogInfo("Updated terrain material path in: {}", filePath.string());
-            return true;
-        }
-        catch (const std::exception& e)
-        {
-            vfLogError("Failed to update terrain file {}: {}", filePath.string(), e.what());
-            return false;
-        }
+        // Delegated rather than done here. Changing the stored material path resizes the VFTR
+        // header and shifts every absolute tile offset in the index, so the whole read-modify-write
+        // has to sit inside terrain::terrainFileMutex() — otherwise a TerrainStreamManager worker
+        // holding a pre-shift TileIndexEntry seeks into the post-shift file and decodes a different
+        // tile's bytes. That lock is not recursive and is taken by the TerrainSerializer entry
+        // points themselves, so the operation belongs behind one of them.
+        return terrain::TerrainSerializer::rewriteMaterialPath(filePath.string(), oldPath, newPath);
     }
 
     ReferenceScanResult AssetReferenceScanner::updateReferences(

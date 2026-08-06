@@ -18,10 +18,12 @@
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
 #include "world/WorldTypes.hpp"
+#include "asset/AssetRef.hpp"
 #include <glm/glm.hpp>
 #include <atomic>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -102,6 +104,32 @@ namespace services
 
         std::unordered_map<uint64_t, std::shared_ptr<terrain::TerrainFileCache>> fileCaches;
         std::unordered_map<uint64_t, std::unique_ptr<terrain::TerrainWorldStreamer>> worldStreamers;
+
+        // VK-1648. saveTerrain()/saveTerrainIncremental() run on a JobSystem worker -- TerrainDrawer
+        // submits SaveTerrainCommand there -- but TerrainComponent is main-thread state. terrainRef
+        // and savePath both own a std::string, and the main thread reads them while a save is in
+        // flight (ScenePersistenceService resolves terrainRef on scene reload and PIE,
+        // SceneSerializeLights resolves it during a scene save). Assigning them from the worker is
+        // a torn read waiting to happen: a truncated terrainRefPath that fails to load next
+        // session, or a dereference of a freed buffer.
+        //
+        // So the worker parks what it learned and the main thread applies it, drained by
+        // FlushTerrainSaveResultCommand from TerrainDrawer::pollSaveResult(). The IO all stays on
+        // the worker; only the component mutation and the TerrainSavedNotification move.
+        struct PendingSaveResult
+        {
+            uint64_t terrainEntityId = 0;
+            std::string path;
+            asset::AssetGUID metaGuid;
+            bool writesBounds = false; // full save only; the incremental path leaves bounds alone
+            int32_t gridMinX = 0;
+            int32_t gridMinZ = 0;
+            int32_t gridMaxX = 0;
+            int32_t gridMaxZ = 0;
+            uint32_t activeTileCount = 0;
+        };
+        std::mutex pendingSaveResultsMutex;
+        std::vector<PendingSaveResult> pendingSaveResults;
 
         // VK-1614 world-anchored wetness/snow mask. ONE mask, not one per terrain entity: it is
         // world-anchored by definition, the graphics side has a single binding for it, and scenes
@@ -252,6 +280,11 @@ namespace services
         bool hasTerrainTileComponent(EntityHandle entity) const;
         std::optional<TerrainTileData> getTerrainTileData(EntityHandle entity) const;
 
+        // VK-1648. Applies every result a save worker parked to its TerrainComponent and publishes
+        // the matching TerrainSavedNotification. MAIN THREAD ONLY — that is the whole point; see
+        // PendingSaveResult. Safe to call when nothing is pending (one mutex acquisition).
+        void flushSaveResults();
+
         std::vector<terrain::TerrainTile*> getRawVisibleTiles(
             const math::Frustum& frustum,
             const glm::vec3& cameraPosition);
@@ -313,6 +346,12 @@ namespace services
         bool loadSurfaceMask(uint64_t terrainEntityId, const std::string& path);
         bool saveSurfaceMask(const std::string& path);
         void clearSurfaceMask();
+
+        // VK-1648. True when `terrainEntityId` is the terrain the one live mask belongs to. Every
+        // surface-mask command and query is gated on this: the service holds a single mask, so an
+        // ungated Clear issued from terrain B's details panel destroys terrain A's painted mask
+        // and blanks A's TerrainComponent.surfaceMaskPath along with it.
+        [[nodiscard]] bool ownsSurfaceMask(uint64_t terrainEntityId) const;
         [[nodiscard]] const terrain::TerrainSurfaceMaskData* getSurfaceMask() const { return surfaceMask.get(); }
         [[nodiscard]] glm::vec4 getSurfaceMaskWorldRect() const { return surfaceMaskWorldRect; }
         [[nodiscard]] const std::string& getSurfaceMaskPath() const { return surfaceMaskPath; }
@@ -419,9 +458,20 @@ namespace services
         static bool anyTileCovered(terrain::TerrainGrid* grid,
                                    const std::vector<terrain::TileCoord>& coords);
 
-        // Logs once per save when reserved height layers exist but editing is locked, i.e. when
-        // this save cannot re-persist them (VK-1646).
+        // Logs once per save when this save cannot re-persist the layer stack, i.e. whenever
+        // editing is locked (VK-1646).
         static void warnUnpersistedHeightLayers(const terrain::TerrainGrid& grid);
+
+        // VK-1646. The store to hand TerrainSerializer, or nullptr when this process is not
+        // entitled to speak for what is on disk.
+        //
+        // The serializer reads a non-null store as authoritative: non-empty means "write the
+        // sidecar", EMPTY means "the stack was deliberately cleared, delete the sidecar". A store
+        // left empty by a FAILED sidecar load is neither -- its emptiness means "unknown" -- and
+        // handing it over would answer a read error by destroying the file that caused it. So a
+        // locked store is withheld, which routes the serializer to its leave-it-alone branch.
+        [[nodiscard]] static const terrain::TerrainHeightLayerStore*
+        persistableHeightLayers(const terrain::TerrainGrid& grid);
 
         // VK-1646. Resolves the `.vfterrainlayers` sidecar for a terrain being loaded and applies
         // the documented outcome: load the bases and stack when the pair matches, otherwise leave

@@ -2,6 +2,7 @@
 #include "TerrainMeshBuffer.hpp"
 #include "terrain/TerrainTile.hpp"
 #include "terrain/CaveMeshGenerator.hpp"
+#include "terrain/TerrainFileAccess.hpp"
 #include "terrain/TerrainSerializer.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
@@ -504,8 +505,16 @@ namespace render::gpudriven
         auto ctx = tileLoadContextProvider(key);
         if (!ctx.valid) return;
 
+        // The index entry below is a SNAPSHOT of absolute file offsets, read on a worker some
+        // frames from now. terrainFileMutex() makes each read atomic against a rewrite, but it
+        // cannot keep the snapshot current: a full save, a compaction or a material-path rewrite
+        // landing in the gap relocates every record, and the worker would decode a different
+        // tile's bytes at these offsets. Capture the epoch here and re-check it once the reads are
+        // done — see terrain::terrainFileRelocationEpoch().
+        const uint64_t submitEpoch = terrain::terrainFileRelocationEpoch();
+
         // Phase 2 (worker thread): perform actual file I/O
-        auto future = std::async(std::launch::async, [ctx = std::move(ctx)]() -> TileLODLoadResult {
+        auto future = std::async(std::launch::async, [ctx = std::move(ctx), submitEpoch]() -> TileLODLoadResult {
             TileLODLoadResult result;
             result.key = ctx.key;
 
@@ -523,6 +532,17 @@ namespace render::gpudriven
                 if (ctx.indexEntry.holeMaskDataOffset != 0)
                     if (terrain::TerrainSerializer::readTileHoleMask(ctx.filePath, ctx.indexEntry, result.holeMask))
                         result.hasHoleMask = true;
+            }
+
+            // Checked after the reads rather than before: every relocating commit bumps the epoch
+            // under the exclusive lock and after its replacement, so a read that saw the new bytes
+            // necessarily sees the new epoch too. Anything decoded from stale offsets is discarded
+            // whole — a partially-correct tile is worse than a re-queued one.
+            if (terrain::terrainFileRelocationEpoch() != submitEpoch)
+            {
+                TileLODLoadResult stale;
+                stale.key = ctx.key;
+                return stale;
             }
 
             return result;

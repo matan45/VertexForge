@@ -73,6 +73,11 @@ namespace windows
         // Deletes a superseded road and its generated asset.
         void retireRoad(services::EntityHandle entity, const asset::AssetRef& meshRef) const;
 
+        // VK-1648. Retires every road entity carrying `splineId`, for a height layer that has just
+        // been deleted. Plural because nothing enforces one road per layer, and a scene that ended
+        // up with two must not keep the survivor.
+        void retireRoadForSpline(uint64_t splineId);
+
         // Writes the chunks as one multi-submesh .vfMesh and registers it with the asset database.
         // Returns an empty string on failure.
         [[nodiscard]] std::string writeRoadAsset(const terrain::RoadMeshData& road,
@@ -80,6 +85,7 @@ namespace windows
                                                  uint32_t revision) const;
 
         events::SubscriptionToken appliedToken;
+        events::SubscriptionToken deletedToken;
         bool subscribed = false;
 
         // Regenerating a road writes a NEW file rather than overwriting: ResourceManager caches

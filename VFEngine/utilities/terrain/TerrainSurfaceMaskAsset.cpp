@@ -27,6 +27,9 @@ namespace terrain
         constexpr uint8_t VFIMAGE_BC7 = 1;
         constexpr uint32_t VFIMAGE_MIP_LEVELS = 1;
 
+        // One BC7 block covers 4x4 texels in 16 bytes, for every mode.
+        constexpr size_t BC7_BLOCK_BYTES = 16;
+
         [[nodiscard]] bool plausibleDimension(uint32_t value)
         {
             return value >= SURFACE_MASK_MIN_RESOLUTION && value <= SURFACE_MASK_MAX_RESOLUTION;
@@ -177,6 +180,20 @@ namespace terrain
         }
         else if (compressionFormat == VFIMAGE_BC7)
         {
+            // dataSize is a raw 32-bit field out of the file and must be validated BEFORE it sizes
+            // an allocation — the dimensions above go through plausibleDimension() for exactly this
+            // reason. A BC7 payload is a fixed size for a given resolution, so anything else is a
+            // file this loader has no business reading: too large asks for a multi-gigabyte
+            // allocation, too small makes BC7Decoder walk blocks past the end of the buffer.
+            const size_t expected = static_cast<size_t>((mipWidth + 3) / 4) *
+                                    static_cast<size_t>((mipHeight + 3) / 4) * BC7_BLOCK_BYTES;
+            if (dataSize != expected)
+            {
+                vfLogError("TerrainSurfaceMaskAsset: {} declares {} BC7 bytes but {}x{} needs "
+                           "exactly {}", filePath, dataSize, mipWidth, mipHeight, expected);
+                return nullptr;
+            }
+
             std::vector<uint8_t> compressed(dataSize);
             file.read(reinterpret_cast<char*>(compressed.data()), dataSize);
             if (static_cast<size_t>(file.gcount()) != dataSize)

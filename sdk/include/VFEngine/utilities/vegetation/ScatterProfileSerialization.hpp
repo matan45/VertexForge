@@ -8,12 +8,17 @@
 // the original VK-1581 scene-inline layout, so old scenes round-trip unchanged; the curvature
 // keys are VK-1585 additions and reads are missing-key tolerant (no scene-format bump).
 //
-// Header-only + inline (nlohmann/json is header-only, the functions are pure) so it links from
-// the Serialization DLL, Utilities, Editor, and Tests with no cross-module link dependency.
-
+// Header-only + inline (nlohmann/json is header-only, the functions are pure).
+//
+// VK-1648: file access goes through serialization::, NOT resource::VirtualFileSystem::instance().
+// This header is compiled into the Serialization DLL (SceneSerializeGrass.cpp), which statically
+// links Utilities and therefore holds its OWN VirtualFileSystem singleton -- one nothing ever
+// mounts the .vfpak into. Asking it directly made every scatter profile in an exported game miss
+// the archive, fall back to a loose path that does not exist, and silently load as defaults, so
+// every grass patch authored with a custom profile rendered wrong. Every consumer
+// (Serialization, Services, Editor, Tests) links Serialization, so the bridge always resolves.
 #include "VegetationScatterTypes.hpp"
-#include "../resource/VFSHelpers.hpp"
-#include "../resource/VirtualFileSystem.hpp"
+#include "../serialization/SerializationFileAccess.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <fstream>
@@ -197,7 +202,7 @@ namespace vegetation
     // Reads are missing-key tolerant, so older/newer files load with defaults for absent fields.
     inline bool saveScatterProfileFile(const std::string& path, const ScatterProfile& p)
     {
-        if (resource::VirtualFileSystem::instance().isArchiveMode())
+        if (serialization::serializationArchiveMode())
             return false;
 
         nlohmann::json j;
@@ -215,7 +220,7 @@ namespace vegetation
         nlohmann::json j;
         try
         {
-            j = resource::readJsonFile(path);
+            j = serialization::readSerializationJsonFile(path);
             if (!j.is_object())
                 return false;
             // Inside the try: deserializeScatterProfile is now type-tolerant (readScatterField),

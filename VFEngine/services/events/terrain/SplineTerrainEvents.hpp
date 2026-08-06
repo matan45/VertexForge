@@ -45,6 +45,20 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "DeleteSpline"; }
     };
 
+    // VK-1648. The mirror of SplineAppliedNotification, and for the same reason: an apply spawns
+    // the road entity subtree Editor-side, so only the Editor can retire it. Without this, deleting
+    // a layer from the Height Layers panel recomposed the terrain back to its unflattened base and
+    // left the road ribbon floating above (or buried inside) the restored hillside, with no way to
+    // remove it — the panel offers none, and undoing the delete only brings the layer back.
+    //
+    // Published only when a layer was actually removed, so a refused delete retires nothing.
+    struct SplineDeletedNotification : INotification
+    {
+        uint64_t splineId = 0;
+
+        std::string_view getName() const override { return "SplineDeleted"; }
+    };
+
     struct SetSplineParamsCommand : ICommand<>
     {
         ::terrain::SplineParams params;

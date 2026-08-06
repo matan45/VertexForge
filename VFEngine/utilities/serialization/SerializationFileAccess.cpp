@@ -33,7 +33,8 @@ namespace serialization
                 {
                     std::error_code ec;
                     return std::filesystem::exists(path, ec) && !ec;
-                }};
+                },
+                [] { return false; }};
         }
 
         std::shared_mutex accessMutex;
@@ -42,7 +43,7 @@ namespace serialization
 
     bool setSerializationFileAccess(SerializationFileAccess access)
     {
-        if (!access.readBytes || !access.exists)
+        if (!access.readBytes || !access.exists || !access.isArchiveMode)
         {
             vfLogError("SerializationFileAccess: rejected incomplete callback bundle");
             return false;
@@ -89,6 +90,17 @@ namespace serialization
             callback = fileAccess.exists;
         }
         try { return callback(path); }
+        catch (...) { return false; }
+    }
+
+    bool serializationArchiveMode()
+    {
+        decltype(SerializationFileAccess::isArchiveMode) callback;
+        {
+            std::shared_lock lock(accessMutex);
+            callback = fileAccess.isArchiveMode;
+        }
+        try { return callback(); }
         catch (...) { return false; }
     }
 }

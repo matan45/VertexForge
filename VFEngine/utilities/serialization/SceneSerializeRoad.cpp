@@ -70,7 +70,13 @@ namespace serialization
             road.controlPoints.reserve(it->size());
             for (const json& p : *it)
             {
-                if (p.is_array() && p.size() >= 3)
+                // The members are checked, not just the array shape. get<float>() on a string,
+                // bool, null or object throws json::type_error, and deserializeRoadSpline's caller
+                // (SceneSerializeDispatchDeserialize.cpp) has no try/catch — so one `null` from a
+                // hand edit or an interrupted save would fail the WHOLE scene load, while every
+                // other malformed road field here quietly falls back to its default.
+                if (p.is_array() && p.size() >= 3 &&
+                    p[0].is_number() && p[1].is_number() && p[2].is_number())
                     road.controlPoints.emplace_back(p[0].get<float>(), p[1].get<float>(), p[2].get<float>());
             }
         }

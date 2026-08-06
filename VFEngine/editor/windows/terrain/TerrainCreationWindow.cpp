@@ -437,6 +437,10 @@ namespace windows
 
             auto& dispatcher = events::EventDispatcher::instance();
 
+            // VK-1648. Same contract as TerrainDrawer::pollSaveResult(): the save ran on a
+            // JobSystem worker and parked its TerrainComponent writes for the main thread.
+            dispatcher.execute(events::terrain::FlushTerrainSaveResultsCommand{});
+
             events::terrain::SetTerrainSaveLockCommand lockCmd;
             lockCmd.locked = false;
             dispatcher.execute(lockCmd);

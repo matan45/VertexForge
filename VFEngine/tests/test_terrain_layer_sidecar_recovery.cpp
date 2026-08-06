@@ -19,12 +19,22 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
 namespace
 {
+    // Whole-file compare, so "left alone" means byte-identical rather than merely still present.
+    std::vector<uint8_t> readTerrainLayerSidecarBytes(const terrain_test_fs::path& path)
+    {
+        std::ifstream in(path, std::ios::binary);
+        return std::vector<uint8_t>(std::istreambuf_iterator<char>(in),
+                                    std::istreambuf_iterator<char>());
+    }
+
     terrain::HeightLayerRecord makeRecoveryTestLayer(uint64_t id,
                                                      const std::vector<terrain::TileCoord>& affected)
     {
@@ -167,6 +177,60 @@ TEST_CASE("A terrain with no authoring state neither claims nor keeps a sidecar"
         REQUIRE(terrain::TerrainSerializer::save(params));
         CHECK_FALSE(terrainClaimsSidecar(file.string()));
         CHECK_FALSE(terrain_test_fs::exists(terrain::terrainLayerSidecarPath(file.path())));
+    }
+}
+
+// VK-1648 regression, and the reason TerrainService::persistableHeightLayers exists.
+//
+// The serializer reads a NON-NULL store as authoritative, so an empty one means "the stack was
+// deliberately cleared -- delete the sidecar". A store left empty by a FAILED sidecar load is not
+// that: its emptiness means "unknown". Handing it over answered a read error by destroying the
+// file that caused it -- and because this branch bumps VFTL, every existing sidecar hits
+// VersionMismatch at once, so the first re-save after an update was the data loss.
+//
+// The distinction below is what the service's guard relies on. Collapsing these two cases into one
+// (treating nullptr like empty, "for simplicity") silently re-arms the bug.
+TEST_CASE("A save that carries no store leaves an existing sidecar alone")
+{
+    const auto config = makeTerrainTestConfig(terrain::TileResolution::Low);
+    const std::vector<terrain::TileCoord> coords{{0, 0}, {1, 0}};
+    auto grid = makePopulatedTerrainTestGrid(config, coords, true);
+    seedGridLayers(*grid, {{0, 0}});
+
+    ScopedTerrainTestFile file("layers-withheld-store");
+    const auto sidecarPath = terrain::terrainLayerSidecarPath(file.path());
+
+    auto params = makeTerrainTestSaveParams(file.string(), *grid, config);
+    params.heightLayers = &grid->getHeightLayers();
+    params.terrainGuid = 0x1648164816481648ull;
+
+    REQUIRE(terrain::TerrainSerializer::save(params));
+    REQUIRE(terrain_test_fs::exists(sidecarPath));
+    const auto committed = readTerrainLayerSidecarBytes(sidecarPath);
+    REQUIRE_FALSE(committed.empty());
+
+    SUBCASE("nullptr preserves the file, byte for byte")
+    {
+        // What TerrainService now passes when the store is editingLocked. The terrain is saved,
+        // bit 6 is cleared so the unreadable stack is not applied over freshly sculpted ground,
+        // and the artist's file is still on disk to repair or restore from.
+        params.heightLayers = nullptr;
+        REQUIRE(terrain::TerrainSerializer::save(params));
+
+        CHECK_FALSE(terrainClaimsSidecar(file.string()));
+        REQUIRE(terrain_test_fs::exists(sidecarPath));
+        CHECK(readTerrainLayerSidecarBytes(sidecarPath) == committed);
+    }
+
+    SUBCASE("an empty store still deletes it, which is why the two must stay distinct")
+    {
+        terrain::TerrainHeightLayerStore emptied;
+        REQUIRE(emptied.empty());
+        params.heightLayers = &emptied;
+        REQUIRE(terrain::TerrainSerializer::save(params));
+
+        CHECK_FALSE(terrainClaimsSidecar(file.string()));
+        CHECK_FALSE(terrain_test_fs::exists(sidecarPath));
     }
 }
 

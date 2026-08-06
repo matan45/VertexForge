@@ -823,11 +823,23 @@ void main() {
 
                     VTSample sx = vtLookupRVT(rvt.img, uvRaw + vec2(duv.x, 0.0), s.residentMip);
                     VTSample sz = vtLookupRVT(rvt.img, uvRaw + vec2(0.0, duv.y), s.residentMip);
-                    float hx = sx.valid
-                        ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sx.uv).r * rvt.heightRange + rvt.heightMin
+
+                    // Each tap renormalises by ITS OWN coverage, not the centre's: they are
+                    // different texels and a tap one step away can straddle a bake-quad seam or a
+                    // page border the centre does not. Reading them raw while the centre is divided
+                    // by cov mixes two normalisations into one difference, tilting the gradient by
+                    // tens of degrees and ringing every blended prop with a lighting seam aligned
+                    // to the page grid — the exact artifact the note above says cov exists to stop.
+                    //
+                    // Below the same 0.5 threshold the outer guard uses, the tap carries no real
+                    // content, so fall back to the centre height and let that side read flat.
+                    float covX = sx.valid ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad1)], sx.uv).a : 0.0;
+                    float covZ = sz.valid ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad1)], sz.uv).a : 0.0;
+                    float hx = covX >= 0.5
+                        ? (texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sx.uv).r / covX) * rvt.heightRange + rvt.heightMin
                         : terrainY;
-                    float hz = sz.valid
-                        ? texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sz.uv).r * rvt.heightRange + rvt.heightMin
+                    float hz = covZ >= 0.5
+                        ? (texture(bindlessTextures[nonuniformEXT(rvt.img.pad2)], sz.uv).r / covZ) * rvt.heightRange + rvt.heightMin
                         : terrainY;
                     vec3 terrainN = normalize(vec3(terrainY - hx, stepWorld, terrainY - hz));
 

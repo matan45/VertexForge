@@ -37,6 +37,37 @@ namespace
             }
         }
     }
+
+    // VK-1648. An asset's sidecars have to travel with it on EVERY path that moves it -- the
+    // original move, its redo, and its undo. Splitting them is silent and expensive: a terrain
+    // whose header still has HAS_EDIT_LAYER_SIDECAR set but no `.vfterrainlayers` beside it opens
+    // flattened with layer editing disabled, and the artist's whole reserved-layer stack (every
+    // road corridor) is unrecoverable. Undo used to move only the main file, so Ctrl+Z after a
+    // move was itself the data loss.
+    //
+    // Best-effort per sidecar: the asset itself has already moved by the time this runs, and
+    // failing the whole operation over a sidecar would leave a worse mess than warning about it.
+    void moveAssetSidecars(const fs::path& from, const fs::path& to)
+    {
+        const std::pair<fs::path, fs::path> sidecars[] = {
+            {asset::AssetMetadataSerializer::getMetaPath(from),
+             asset::AssetMetadataSerializer::getMetaPath(to)},
+            {terrain::terrainLayerSidecarPath(from), terrain::terrainLayerSidecarPath(to)},
+        };
+
+        for (const auto& [sidecarFrom, sidecarTo] : sidecars)
+        {
+            std::error_code ec;
+            if (!fs::exists(sidecarFrom, ec) || ec)
+                continue;
+
+            fs::rename(sidecarFrom, sidecarTo, ec);
+            if (ec)
+                vfLogWarning("Moved {} but its sidecar {} did not follow: {}. The asset and its "
+                             "sidecar are now split; move it by hand.",
+                             from.string(), sidecarFrom.string(), ec.message());
+        }
+    }
 }
 
 namespace services
@@ -201,29 +232,10 @@ namespace services
             return result;
         }
 
-        // Move .vfmeta sidecar if it exists
-        auto sourceMeta = asset::AssetMetadataSerializer::getMetaPath(source);
-        if (fs::exists(sourceMeta, ec))
-        {
-            auto destMeta = asset::AssetMetadataSerializer::getMetaPath(dest);
-            fs::rename(sourceMeta, destMeta, ec);
-        }
-
-        // VK-1646: a terrain's edit-layer sidecar follows it. Nothing inside needs rewriting — the
-        // GUID and the generation id both still describe the same asset and the same bytes; only
-        // the name it hangs off changed.
-        auto sourceLayers = terrain::terrainLayerSidecarPath(source);
-        if (fs::exists(sourceLayers, ec))
-        {
-            fs::rename(sourceLayers, terrain::terrainLayerSidecarPath(dest), ec);
-            if (ec)
-            {
-                vfLogWarning("Moved {} but its edit-layer sidecar did not follow: {}. Layer "
-                             "editing will be disabled until it is moved by hand.",
-                             sourcePath, ec.message());
-                ec.clear();
-            }
-        }
+        // The `.vfmeta` and (VK-1646) the terrain's `.vfterrainlayers` follow the asset. Nothing
+        // inside either needs rewriting — the GUID and the generation id both still describe the
+        // same asset and the same bytes; only the name they hang off changed.
+        moveAssetSidecars(source, dest);
 
         if (!projRoot.empty())
         {
@@ -534,6 +546,9 @@ namespace services
             throw std::runtime_error("Failed to redo move: " + ec.message());
         }
 
+        // Same sidecar contract as moveFile() — see moveAssetSidecars().
+        moveAssetSidecars(sourcePath, destPath);
+
         if (!projectRoot.empty())
         {
             asset::AssetReferenceScanner::updateReferences(sourcePath, destPath, projectRoot);
@@ -562,6 +577,11 @@ namespace services
         {
             throw std::runtime_error("Failed to undo move: " + ec.message());
         }
+
+        // The sidecars come back too. Without this, Ctrl+Z after moving a .vfTerrain left the
+        // layer sidecar at the destination and the terrain opened flattened — see
+        // moveAssetSidecars().
+        moveAssetSidecars(destPath, sourcePath);
 
         asset::AssetReferenceScanner::restoreOriginalContents(
             std::vector<std::pair<std::string, std::string>>(

@@ -25,7 +25,8 @@ namespace services
 
         const bool serializationConfigured = serialization::setSerializationFileAccess({
             [vfsPtr](const std::string& path) { return vfsPtr->readFile(path); },
-            [vfsPtr](const std::string& path) { return vfsPtr->exists(path); }});
+            [vfsPtr](const std::string& path) { return vfsPtr->exists(path); },
+            [vfsPtr] { return vfsPtr->isArchiveMode(); }});
         return terrainConfigured && serializationConfigured;
     }
 }
