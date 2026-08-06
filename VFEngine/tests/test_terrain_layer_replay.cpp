@@ -269,6 +269,44 @@ namespace
     {
         return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin());
     }
+
+    // Compares two planes while ignoring one vertex column.
+    //
+    // A covered tile's boundary column is not a product of its own composition: normalizeDerivedSeams
+    // averages it with the covered neighbour across that seam. So when the neighbour's composite
+    // legitimately changes -- a reorder that reshuffles ITS contributors, or an edit that un-claims
+    // it -- this tile's shared column moves with it even though its own contributor list never
+    // changed. The invariant worth asserting is therefore over the interior, and the seam column is
+    // covered separately by the corners-and-seams cases.
+    void checkPlanesEqualIgnoringColumn(const std::vector<float>& actual,
+                                        const std::vector<float>& expected,
+                                        uint32_t vertCount, uint32_t ignoredX)
+    {
+        REQUIRE(actual.size() == expected.size());
+        for (uint32_t z = 0; z < vertCount; ++z)
+        {
+            for (uint32_t x = 0; x < vertCount; ++x)
+            {
+                if (x == ignoredX)
+                    continue;
+
+                const size_t i = static_cast<size_t>(z) * vertCount + x;
+                if (actual[i] != expected[i])
+                {
+                    CHECK(actual[i] == expected[i]); // first interior mismatch only
+                    return;
+                }
+            }
+        }
+        CHECK(true);
+    }
+
+    uint32_t vertCountOf(terrain::TerrainGrid& grid, const terrain::TileCoord& coord)
+    {
+        const terrain::TerrainTile* tile = grid.getTile(coord);
+        REQUIRE(tile != nullptr);
+        return tile->config.getVertexCount();
+    }
 }
 
 TEST_SUITE("TerrainLayerReplay")
@@ -428,15 +466,22 @@ TEST_SUITE("TerrainLayerReplay")
             CHECK(impact.count(terrain::TileCoord{2, 0}) == 0); // east only -- likewise
         }
 
-        SUBCASE("a tile only the moved layer claims is bit-unchanged by the move")
+        // The composition of a tile claimed by only ONE of the two layers cannot change, because
+        // the moved layer either is not in its contributor list or slides past layers that are not.
+        // Its shared seam column still moves, and must: (1,0) is the tile the reorder genuinely
+        // changed, and a covered<->covered weld averages both sides.
+        SUBCASE("a tile only the moved layer claims composes identically after the move")
         {
+            const uint32_t verts = vertCountOf(*grid, {0, 0});
+
             const std::vector<float> westOnlyBefore = planeOf(*grid, {0, 0});
             const std::vector<float> eastOnlyBefore = planeOf(*grid, {2, 0});
 
             moveLayer(*grid, 1, 1);
 
-            checkPlanesEqual(planeOf(*grid, {0, 0}), westOnlyBefore);
-            checkPlanesEqual(planeOf(*grid, {2, 0}), eastOnlyBefore);
+            // (0,0) shares its LAST column with (1,0); (2,0) shares its FIRST.
+            checkPlanesEqualIgnoringColumn(planeOf(*grid, {0, 0}), westOnlyBefore, verts, verts - 1);
+            checkPlanesEqualIgnoringColumn(planeOf(*grid, {2, 0}), eastOnlyBefore, verts, 0);
         }
 
         SUBCASE("an unknown id or an out-of-range bracket yields an empty set")
@@ -556,12 +601,18 @@ TEST_SUITE("TerrainLayerReplay")
             applyLayer(*grid, 1, both, layerParams(westSpline()));
             REQUIRE_FALSE(planesEqual(planeOf(*grid, {1, 0}), untouchedNeighbour));
 
+            const uint32_t verts = vertCountOf(*grid, {1, 0});
             editLayer(*grid, 1, {{0, 0}}, layerParams(westSpline()));
 
             // Sticky coverage keeps (1,0)'s base, and with no layer claiming it any more compose
             // yields derived == base. Getting the OLD affected set invalidated is the whole point:
             // miss it and the narrowed-off corridor stays baked in forever.
-            checkPlanesEqual(planeOf(*grid, {1, 0}), untouchedNeighbour);
+            //
+            // Its FIRST column is excluded: (0,0) still carries the road right up to the boundary,
+            // and both tiles are covered, so the seam pass averages the two. That the road now stops
+            // dead at the tile edge is what the artist asked for by narrowing the layer; smoothing
+            // the step is the seam rule doing its job, not the corridor surviving.
+            checkPlanesEqualIgnoringColumn(planeOf(*grid, {1, 0}), untouchedNeighbour, verts, 0);
         }
     }
 
