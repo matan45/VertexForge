@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -54,6 +55,19 @@ namespace terrain
     {
         uint64_t id = 0;
         bool visible = true;
+
+        // VK-1648. What the artist calls this layer. Pure metadata: nothing composes differently
+        // for it, so setLayerName invalidates nothing.
+        //
+        // It lives HERE rather than being read off the road entity that created the layer. A
+        // sculpt-only spline has no road entity at all; `appliedSplines` is session-only and is
+        // never repopulated on load, so after a reload most rows have no spline behind them; and a
+        // name held in the scene would be silently reverted by a scene revert while the layer it
+        // named survived. The stack is the authoring model, so the name belongs to the stack.
+        //
+        // Truncated to MAX_LAYER_NAME_LENGTH by the sidecar writer (TerrainLayerSidecar.hpp).
+        std::string name;
+
         HeightLayerTileEval eval;
 
         // VK-1646. The serializable half of the record. `eval` is a std::function and cannot be
@@ -154,9 +168,23 @@ namespace terrain
         // the sidecar WRITER, which refuses the whole save -- so the terrain silently became
         // unsaveable, and a duplicate id made removeLayer/setLayerVisible (both first-match)
         // address the wrong record. Rejecting here keeps the in-RAM stack always persistable.
+        //
+        // VK-1648 extended the lock to removeLayer/setLayerVisible/moveLayer. VK-1646 gated only
+        // the two mutators that ADD authored data, which was latent-correct because a locked store
+        // is empty -- but the asymmetry meant that the moment anything let a locked store carry a
+        // stack, three of the five stack mutators would quietly edit it. All five now agree.
         bool addLayer(HeightLayerRecord record);
         bool removeLayer(uint64_t id);
         bool setLayerVisible(uint64_t id, bool visible);
+
+        // VK-1648. Metadata only: no invalidation, no recompose, no coverage change. A rename on a
+        // layer covering a thousand tiles must cost nothing, and composition never reads the name.
+        //
+        // Unlike removeLayer/setLayerVisible/moveLayer this is NOT gated on `editingLocked` even
+        // now that those are: a locked store holds no layers, and if a later change ever lets one
+        // carry layers under a lock, renaming still cannot write ground nobody authored -- which is
+        // the only thing the lock exists to prevent.
+        bool setLayerName(uint64_t id, std::string name);
         [[nodiscard]] const std::vector<HeightLayerRecord>& layers() const { return stack; }
         [[nodiscard]] bool hasLayer(uint64_t id) const;
 

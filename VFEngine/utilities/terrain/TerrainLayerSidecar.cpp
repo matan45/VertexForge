@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <random>
+#include <string_view>
 #include <unordered_set>
 
 namespace terrain
@@ -121,6 +122,17 @@ namespace terrain
                       [](const TileCoord& a, const TileCoord& b)
                       { return a.z != b.z ? a.z < b.z : a.x < b.x; });
 
+            // VK-1648. Truncated, never refused: losing a whole save because a name is long is a
+            // far worse outcome than losing the tail of the name. std::string_view over the
+            // original avoids a copy for the overwhelmingly common short case.
+            std::string_view name(layer.name);
+            if (name.size() > MAX_LAYER_NAME_LENGTH)
+            {
+                vfLogWarning("TerrainLayerSidecar: Truncating layer {}'s name from {} to {} bytes",
+                             layer.id, name.size(), MAX_LAYER_NAME_LENGTH);
+                name = name.substr(0, MAX_LAYER_NAME_LENGTH);
+            }
+
             const uint64_t bodySize =
                 sizeof(uint32_t) +                                  // recordByteLength
                 sizeof(uint64_t) +                                  // id
@@ -129,6 +141,8 @@ namespace terrain
                 sizeof(uint32_t) +                                  // order
                 sizeof(uint32_t) +                                  // affectedCount
                 affected.size() * 2 * sizeof(int32_t) +
+                sizeof(uint32_t) +                                  // VK-1648: nameLength
+                name.size() +
                 sizeof(uint32_t) +                                  // paramByteLength
                 params.size();
 
@@ -147,6 +161,19 @@ namespace terrain
                 appendLE<int32_t>(record, coord.x);
                 appendLE<int32_t>(record, coord.z);
             }
+
+            // VK-1648. The name goes HERE -- after `affected`, BEFORE paramByteLength -- and the
+            // placement is load-bearing, not stylistic. The reader's unknown-type path steps over a
+            // record it cannot evaluate with skip(paramByteLength + crc), so anything that lives
+            // after the params is outside that arithmetic: a name there would leave the cursor
+            // inside a string and mis-parse every following record of a Degraded sidecar. Read in
+            // the common prologue, it costs that path nothing.
+            appendLE<uint32_t>(record, static_cast<uint32_t>(name.size()));
+            // Byte for byte, with no encoding step of any kind: the format stores a count and
+            // those bytes, so whatever UTF-8 the artist typed comes back identical.
+            for (const char c : name)
+                record.push_back(static_cast<uint8_t>(c));
+
             appendLE<uint32_t>(record, static_cast<uint32_t>(params.size()));
             record.insert(record.end(), params.begin(), params.end());
 
@@ -207,10 +234,15 @@ namespace terrain
             const uint32_t major = reader.read<uint32_t>();
             const uint32_t minor = reader.read<uint32_t>();
             const uint32_t patch = reader.read<uint32_t>();
-            if (!reader.good() || major != TERRAIN_LAYER_VERSION_MAJOR ||
-                minor != TERRAIN_LAYER_VERSION_MINOR || patch != TERRAIN_LAYER_VERSION_PATCH)
-            {
+            if (!reader.good())
                 return TerrainLayerSidecarStatus::Invalid;
+
+            // VK-1648. Distinct from Invalid: the magic already matched, so this is a readable file
+            // from another build rather than damage. Same recovery, far better diagnostic.
+            if (major != TERRAIN_LAYER_VERSION_MAJOR || minor != TERRAIN_LAYER_VERSION_MINOR ||
+                patch != TERRAIN_LAYER_VERSION_PATCH)
+            {
+                return TerrainLayerSidecarStatus::VersionMismatch;
             }
 
             outMeta.terrainGuid = reader.read<uint64_t>();
@@ -556,6 +588,19 @@ namespace terrain
                 const int32_t z = reader.read<int32_t>();
                 record.affected.insert(TileCoord(x, z));
             }
+
+            // VK-1648. Read in the common prologue, so the unknown-type skip below -- which knows
+            // only about paramByteLength -- stays correct for a record this build cannot evaluate.
+            const uint32_t nameLength = reader.read<uint32_t>();
+            if (!reader.good() || nameLength > MAX_LAYER_NAME_LENGTH)
+                return TerrainLayerSidecarStatus::Invalid;
+
+            // position() before skip(): skip bounds-checks and only advances on success, so the
+            // pointer is provably in range by the time it is dereferenced.
+            const uint8_t* nameBytes = reader.position();
+            if (!reader.skip(nameLength))
+                return TerrainLayerSidecarStatus::Invalid;
+            record.name.assign(reinterpret_cast<const char*>(nameBytes), nameLength);
 
             const uint32_t paramByteLength = reader.read<uint32_t>();
             if (!reader.good())

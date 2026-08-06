@@ -19,6 +19,7 @@
 #include "animation/AnimationDebugWindow.hpp"
 #include "terrain/SculptToolPanel.hpp"
 #include "terrain/SplineToolPanel.hpp"
+#include "terrain/HeightLayerPanel.hpp"
 #include "terrain/RoadMeshGenerator.hpp"
 #include "terrain/PaintToolPanel.hpp"
 #include "terrain/HoleToolPanel.hpp"
@@ -84,6 +85,9 @@ namespace windows
         AnimationDebugWindow animationDebugWindow;
         SculptToolPanel sculptToolPanel;
         SplineToolPanel splineToolPanel;
+        // VK-1648: the reserved height-layer stack. Deliberately independent of spline mode — the
+        // stack survives a reload with no spline behind any of its rows.
+        HeightLayerPanel heightLayerPanel;
         // VK-1621: no UI of its own — it listens for applied splines and builds the road asset.
         RoadMeshGenerator roadMeshGenerator;
         PaintToolPanel paintToolPanel;

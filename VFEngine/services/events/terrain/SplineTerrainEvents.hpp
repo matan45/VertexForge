@@ -240,6 +240,58 @@ namespace events::splineTerrain
         std::string_view getName() const override { return "HeightLayerStackChanged"; }
     };
 
+    // VK-1648. Sets a layer's display name. Pure metadata: nothing is invalidated and nothing
+    // recomposes, so renaming a layer that covers a thousand tiles costs nothing.
+    //
+    // A non-recording primitive, like the four above it. Returns false when no layer carries the id.
+    struct SetHeightLayerNameCommand : ICommand<bool>
+    {
+        uint64_t splineId = 0;
+        std::string name;
+
+        std::string_view getName() const override { return "SetHeightLayerName"; }
+    };
+
+    // VK-1648. The Editor-facing stack edits. Each one RECORDS a single undo entry and then
+    // delegates to the matching primitive above.
+    //
+    // A second family rather than a `recordUndo` flag on the primitives. A flag's default value
+    // would silently decide whether history is written, and getting it wrong on the reverse path
+    // does not just duplicate an entry: UndoRedoServiceImpl::pushCommand clears the redo stack, so
+    // an undo that recorded would leave the user unable to redo. A separate name makes the two
+    // paths impossible to confuse, which is the same answer TerrainStrokeEvents.hpp gives with
+    // RestoreStrokeStateCommand.
+    //
+    // There is deliberately no delete member here: DeleteSplineCommand at the top of this file is
+    // already the Editor-facing delete, and it is the one place that also maintains the service's
+    // applied-spline bookkeeping.
+    //
+    // Each returns whatever its primitive returned, so a UI can tell a refusal (editing locked,
+    // unknown id, index out of range) from a success. Nothing is recorded on a refusal.
+    struct SetHeightLayerVisibleWithUndoCommand : ICommand<bool>
+    {
+        uint64_t splineId = 0;
+        bool visible = true;
+
+        std::string_view getName() const override { return "SetHeightLayerVisibleWithUndo"; }
+    };
+
+    struct MoveHeightLayerWithUndoCommand : ICommand<bool>
+    {
+        uint64_t splineId = 0;
+        uint32_t newIndex = 0;
+
+        std::string_view getName() const override { return "MoveHeightLayerWithUndo"; }
+    };
+
+    struct RenameHeightLayerWithUndoCommand : ICommand<bool>
+    {
+        uint64_t splineId = 0;
+        std::string name;
+
+        std::string_view getName() const override { return "RenameHeightLayerWithUndo"; }
+    };
+
     // VK-1621. Builds the road ribbon from an already-applied spline. Handled by TerrainService
     // because it owns the tile grid: the mesh must be conformed with terrain::terrainQuadHeight
     // against live tile height data, not with GetTerrainHeightAtQuery, which interpolates

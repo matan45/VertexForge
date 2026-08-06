@@ -321,6 +321,17 @@ namespace services
                        sidecarPath.string());
             break;
 
+        case terrain::TerrainLayerSidecarStatus::VersionMismatch:
+            // VK-1648. Deliberately not phrased as damage. VFTL has no backward compatibility by
+            // design, so every format bump makes every sidecar on disk land here at once — and
+            // "corrupt or truncated" would send the artist hunting a disk fault that is not there.
+            vfLogWarning("TerrainService: {} was written by a different build of the editor "
+                         "(VFTL format {}.{}.{} expected). The terrain loads flattened with layer "
+                         "editing disabled; re-save it to migrate the layer stack.",
+                         sidecarPath.string(), terrain::TERRAIN_LAYER_VERSION_MAJOR,
+                         terrain::TERRAIN_LAYER_VERSION_MINOR, terrain::TERRAIN_LAYER_VERSION_PATCH);
+            break;
+
         case terrain::TerrainLayerSidecarStatus::Invalid:
             vfLogError("TerrainService: {} is corrupt or truncated. The terrain loads flattened "
                        "and layer editing is disabled.", sidecarPath.string());

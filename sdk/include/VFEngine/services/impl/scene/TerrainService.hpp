@@ -2,6 +2,7 @@
 #include "../../interfaces/terrain/ITerrainService.hpp"
 #include "../../providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../data/HeightLayerStackView.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
@@ -466,7 +467,17 @@ namespace services
         // High-water mark of outstanding recompose + mesh work since the last time both reached
         // zero, so GetHeightLayerRecomposeProgressQuery's fraction only ever moves forward. Reset
         // by that same handler; nothing else touches it.
-        uint32_t heightLayerRecomposePeak = 0;
+        //
+        // VK-1648 moved the arithmetic to services::advanceRecomposeProgress and left the state
+        // here — the function is pure so a CPU-only test can drive the transitions.
+        services::RecomposeProgressLatch heightLayerRecomposeLatch;
+
+        // VK-1648. True for the duration of one stack mutation (apply, restore, remove, visibility,
+        // reorder). Layer ops compose synchronously and unbudgeted, so nothing can interleave from
+        // another frame — but publishHeightLayerStackChanged dispatches to its subscribers INSIDE
+        // the handler, and a subscriber that mutated the stack from that callback would reenter a
+        // half-finished operation. The guard turns that into a refusal instead of corruption.
+        bool heightLayerOpInFlight = false;
         void applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                        const glm::vec3& startPos, const glm::vec3& endPos,
                        const terrain::BrushParams& params);

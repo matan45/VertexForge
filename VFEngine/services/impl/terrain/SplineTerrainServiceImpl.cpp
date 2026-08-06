@@ -2,12 +2,15 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/terrain/SplineTerrainEvents.hpp"
 #include "../../events/terrain/SplineTerrainUndoEvents.hpp"
+#include "../../events/terrain/HeightLayerUndoEvents.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 #include "../../data/SplineApplyUndoCommands.hpp"
+#include "../../data/TerrainLayerUndoCommands.hpp"
 #include "terrain/SplineSampling.hpp"
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <memory>
 
 namespace services
 {
@@ -57,6 +60,103 @@ namespace services
             [this](const events::splineTerrain::DeleteSplineCommand& cmd)
             {
                 deleteSpline(cmd.splineId);
+            });
+
+        // VK-1648. The Editor-facing stack edits: record one undo entry, then delegate to the
+        // non-recording primitive TerrainService owns.
+        //
+        // They live HERE rather than beside those primitives on purpose. TerrainServiceHandlers.cpp
+        // must stay free of undo entirely — every one of its handlers doubles as a reverse path,
+        // and a reverse path that recorded would clear the redo stack the user is halfway through
+        // (UndoRedoServiceImpl::pushCommand calls clearStackBytes(redoStack)). This file is already
+        // the one that pushes spline undo entries and already owns deleteSpline.
+        //
+        // Every one captures the prior value BEFORE the mutation and records only on success, so a
+        // refusal (editing locked, unknown id, index out of range) leaves the history untouched.
+        dispatcher.registerQueryHandler<events::splineTerrain::SetHeightLayerVisibleWithUndoCommand>(
+            [](const events::splineTerrain::SetHeightLayerVisibleWithUndoCommand& cmd) -> bool
+            {
+                auto& d = events::EventDispatcher::instance();
+
+                events::splineTerrain::GetHeightLayerSnapshotQuery snapshotQuery;
+                snapshotQuery.splineId = cmd.splineId;
+                const auto before = d.query(snapshotQuery);
+                if (!before.present)
+                    return false;
+
+                events::splineTerrain::SetSplineHeightLayerVisibleCommand primitive;
+                primitive.splineId = cmd.splineId;
+                primitive.visible = cmd.visible;
+                if (!d.query(primitive))
+                    return false;
+
+                // A no-op toggle still succeeded, but recording it would cost the user a Ctrl+Z
+                // that changes nothing on screen.
+                if (before.visible == cmd.visible)
+                    return true;
+
+                events::undoredo::PushUndoableCommand pushCmd;
+                pushCmd.command = std::make_shared<HeightLayerVisibilityUndoCommand>(
+                    cmd.visible ? "Show Height Layer" : "Hide Height Layer", cmd.splineId,
+                    before.visible, cmd.visible);
+                d.execute(pushCmd);
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<events::splineTerrain::MoveHeightLayerWithUndoCommand>(
+            [](const events::splineTerrain::MoveHeightLayerWithUndoCommand& cmd) -> bool
+            {
+                auto& d = events::EventDispatcher::instance();
+
+                // The prior INDEX is the whole undo payload, and MoveHeightLayerCommand returns
+                // only a bool — so it has to be read before the move or it is unrecoverable.
+                events::splineTerrain::GetHeightLayerSnapshotQuery snapshotQuery;
+                snapshotQuery.splineId = cmd.splineId;
+                const auto before = d.query(snapshotQuery);
+                if (!before.present)
+                    return false;
+
+                events::splineTerrain::MoveHeightLayerCommand primitive;
+                primitive.splineId = cmd.splineId;
+                primitive.newIndex = cmd.newIndex;
+                if (!d.query(primitive))
+                    return false;
+
+                if (before.index == cmd.newIndex)
+                    return true; // the handler treats this as success; it is not history
+
+                events::undoredo::PushUndoableCommand pushCmd;
+                pushCmd.command = std::make_shared<HeightLayerOrderUndoCommand>(
+                    "Reorder Height Layer", cmd.splineId, before.index, cmd.newIndex);
+                d.execute(pushCmd);
+                return true;
+            });
+
+        dispatcher.registerQueryHandler<events::splineTerrain::RenameHeightLayerWithUndoCommand>(
+            [](const events::splineTerrain::RenameHeightLayerWithUndoCommand& cmd) -> bool
+            {
+                auto& d = events::EventDispatcher::instance();
+
+                events::splineTerrain::GetHeightLayerSnapshotQuery snapshotQuery;
+                snapshotQuery.splineId = cmd.splineId;
+                const auto before = d.query(snapshotQuery);
+                if (!before.present)
+                    return false;
+
+                if (before.name == cmd.name)
+                    return true; // committing an unedited text field must not fill the history
+
+                events::splineTerrain::SetHeightLayerNameCommand primitive;
+                primitive.splineId = cmd.splineId;
+                primitive.name = cmd.name;
+                if (!d.query(primitive))
+                    return false;
+
+                events::undoredo::PushUndoableCommand pushCmd;
+                pushCmd.command = std::make_shared<HeightLayerNameUndoCommand>(
+                    "Rename Height Layer", cmd.splineId, before.name, cmd.name);
+                d.execute(pushCmd);
+                return true;
             });
 
         dispatcher.registerCommandHandler<events::splineTerrain::SetSplineParamsCommand>(
@@ -248,7 +348,8 @@ namespace services
         dispatcher.execute(beginBatch);
 
         bool anyApplied = false;
-        bool heightLayerRegistered = false;
+        events::splineTerrain::HeightLayerSnapshot layerBefore;
+        events::splineTerrain::HeightLayerSnapshot layerAfter;
         events::splineTerrain::SplineWeightSnapshot originalWeights;
         events::splineTerrain::SplineWeightSnapshot appliedWeights;
 
@@ -256,15 +357,34 @@ namespace services
         // corridor is flattened, so running it later would drape the road over the old ground.
         if (wantsSculpt)
         {
-            // VK-1645: no before/after height snapshots any more. The deform registers a reserved
-            // layer over each covered tile's authoritative base, so undo/redo is a visibility
-            // flip on that layer and the result is recomputed rather than replayed from bytes.
+            // VK-1645: no per-tile height snapshots. The deform registers a reserved layer over
+            // each covered tile's authoritative base, so undo replays a DEFINITION rather than
+            // writing bytes back.
+            //
+            // VK-1648 captures that definition on both sides of the apply. Deliberately through a
+            // separate query rather than by widening ApplySplineDeformCommand's result: the forward
+            // mutation sequence stays byte-for-byte what it was, which is what keeps the
+            // hand-mirrored replay tests a faithful model of this path. It is the same shape the
+            // paint branch below already uses for weights.
+            //
+            // `before` is absent on a first apply and present on a re-author, and that single bit
+            // is what makes undo remove the layer in one case and restore the older corridor in
+            // the other.
+            events::splineTerrain::GetHeightLayerSnapshotQuery snapshotQuery;
+            snapshotQuery.splineId = splineId;
+            layerBefore = dispatcher.query(snapshotQuery);
+
             events::splineTerrain::ApplySplineDeformCommand deformCmd;
             deformCmd.splineSamples = samples;
             deformCmd.params = currentParams;
             deformCmd.splineId = splineId;
-            heightLayerRegistered = dispatcher.query(deformCmd);
+            const bool heightLayerRegistered = dispatcher.query(deformCmd);
             anyApplied |= heightLayerRegistered;
+
+            if (heightLayerRegistered)
+                layerAfter = dispatcher.query(snapshotQuery);
+            else
+                layerBefore = {}; // the apply was refused; there is nothing to undo
         }
 
         if (wantsPaint)
@@ -314,7 +434,7 @@ namespace services
         }
 
         auto undoCommand = std::make_shared<SplineApplyUndoCommand>(
-            beginBatch.description, splineId, heightLayerRegistered,
+            beginBatch.description, splineId, std::move(layerBefore), std::move(layerAfter),
             std::move(originalWeights), std::move(appliedWeights));
         if (undoCommand->hasSnapshots())
         {
@@ -352,9 +472,34 @@ namespace services
         // VK-1645: dropping the layer recomposes the tiles it covered from their authoritative
         // bases. Overlapping splines and ordinary sculpt edits made underneath both survive,
         // because neither was ever folded into the base.
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // VK-1648. Captured BEFORE the removal — afterwards the record is gone and with it the
+        // only copy of the layer's parameters, affected set and stack position, so there would be
+        // nothing left to restore from. This is the reason the undo entry is built here in Services
+        // rather than by the Editor: the Editor does not link Terrain.dll and cannot hold a layer.
+        events::splineTerrain::GetHeightLayerSnapshotQuery snapshotQuery;
+        snapshotQuery.splineId = id;
+        events::splineTerrain::HeightLayerSnapshot before = dispatcher.query(snapshotQuery);
+
         events::splineTerrain::RemoveSplineHeightLayerCommand removeCmd;
         removeCmd.splineId = id;
-        events::EventDispatcher::instance().execute(removeCmd);
+        dispatcher.execute(removeCmd);
+
+        // Only once the layer is actually gone. If the removal was refused (editing locked) the
+        // record is still in the stack, and an undo entry claiming otherwise would re-add a
+        // duplicate id on redo.
+        const bool removed = before.present && !dispatcher.query(snapshotQuery).present;
+        if (removed)
+        {
+            auto undoCommand = std::make_shared<HeightLayerRecordUndoCommand>(
+                "Delete Height Layer", std::move(before),
+                events::splineTerrain::HeightLayerSnapshot{});
+
+            events::undoredo::PushUndoableCommand pushCmd;
+            pushCmd.command = undoCommand;
+            dispatcher.execute(pushCmd);
+        }
 
         auto it = std::find_if(appliedSplines.begin(), appliedSplines.end(),
             [id](const terrain::SplineData& s) { return s.id == id; });

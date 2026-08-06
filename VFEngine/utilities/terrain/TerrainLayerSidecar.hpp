@@ -30,8 +30,13 @@ namespace terrain
     // 1.1.0 (VK-1647) added `nextLayerId` to the header and made the per-record `order` field
     // authoritative on read. Like every other format here there is no backward compatibility: the
     // reader rejects any version triple that is not identical to its own.
+    //
+    // 1.2.0 (VK-1648) added a length-prefixed `name` to each record. The HEADER is untouched, so
+    // TERRAIN_LAYER_HEADER_SIZE, both patch offsets and rebindTerrainLayerSidecar are unaffected --
+    // but the record body moved, so the version still had to move with it. A 1.1.0 file therefore
+    // reads as Invalid and the terrain comes up with layer editing locked until it is re-saved.
     inline constexpr uint32_t TERRAIN_LAYER_VERSION_MAJOR = 1;
-    inline constexpr uint32_t TERRAIN_LAYER_VERSION_MINOR = 1;
+    inline constexpr uint32_t TERRAIN_LAYER_VERSION_MINOR = 2;
     inline constexpr uint32_t TERRAIN_LAYER_VERSION_PATCH = 0;
 
     inline constexpr std::string_view TERRAIN_LAYER_EXTENSION = ".vfterrainlayers";
@@ -74,6 +79,15 @@ namespace terrain
     // that would have rejected it is ever reached.
     inline constexpr uint32_t MAX_LAYER_SPLINE_SAMPLES = 1u << 20;
 
+    // VK-1648. Same reasoning one field along: a display name is authored, so a corrupt length
+    // must not drive an allocation before the CRC that would have rejected it is reached.
+    //
+    // The WRITER truncates rather than refusing -- a save that fails because a name is long is a
+    // terrible way to lose an afternoon's work -- while the READER treats an over-cap length as
+    // Invalid, exactly as it does an over-cap sample count. The asymmetry is deliberate: the writer
+    // can fix the problem, the reader can only distrust the bytes.
+    inline constexpr uint32_t MAX_LAYER_NAME_LENGTH = 128;
+
     // MAX_TERRAIN_EDIT_LAYERS moved to TerrainHeightLayerStore.hpp in VK-1647 (this header includes
     // it, so the store could not see it here). It is a store invariant enforced at addLayer(); the
     // writer below still checks it, because a stack can also arrive from a caller that built one by
@@ -114,9 +128,16 @@ namespace terrain
     {
         Ok,        // parsed, checksums clean, generation matches — the store was populated
         Absent,    // no file beside the terrain
-        Invalid,   // wrong magic/version, truncated, or a checksum failed
+        Invalid,   // wrong magic, truncated, or a checksum failed
         Stale,     // structurally sound, but written against a different VFTR generation
         Degraded,  // structurally sound, but carries a layer type this build cannot evaluate
+
+        // VK-1648. The magic matched but the version triple did not. Split out of Invalid because
+        // it is not damage: the file is intact and was written by a different build, and every
+        // format bump makes every sidecar on the artist's disk take this path at once. Reported as
+        // "re-save to migrate" rather than as "corrupt or truncated", which is a different and much
+        // more alarming bug report. The recovery is identical — nothing is applied, editing locks.
+        VersionMismatch,
     };
 
     // `<terrainPath>.vfterrainlayers`. Appended, never substituted — the same rule .vfmeta,

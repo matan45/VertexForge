@@ -26,6 +26,7 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/terrain/SplineTerrainEvents.hpp"
 #include "../../events/terrain/SplineTerrainUndoEvents.hpp"
+#include "../../events/terrain/HeightLayerUndoEvents.hpp"
 #include "../../events/editor/SculptModeEvents.hpp"
 #include "terrain/BrushSampler.hpp"
 #include "terrain/TerrainTile.hpp"
@@ -44,6 +45,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace
@@ -67,6 +69,24 @@ namespace
         tile.foliageInstancesDirty = true;
         tile.foliageInstancesGPUDirty = true;
     }
+
+    // VK-1648. Holds a flag true for one scope. Used to make a height-layer stack mutation refuse
+    // to reenter itself: every such handler ends by publishing HeightLayerStackChangedNotification,
+    // which dispatches to its subscribers SYNCHRONOUSLY and still inside the handler, so a
+    // subscriber that edited the stack from that callback would run against a half-finished
+    // operation whose invalidation set has already been consumed.
+    class ScopedFlag
+    {
+    public:
+        explicit ScopedFlag(bool& target) : flag(target) { flag = true; }
+        ~ScopedFlag() { flag = false; }
+
+        ScopedFlag(const ScopedFlag&) = delete;
+        ScopedFlag& operator=(const ScopedFlag&) = delete;
+
+    private:
+        bool& flag;
+    };
 }
 
 namespace services
@@ -558,6 +578,14 @@ namespace services
                 if (terrainGrids.empty() || cmd.splineSamples.size() < 2)
                     return false;
 
+                if (heightLayerOpInFlight)
+                {
+                    vfLogError("TerrainService: Spline deform refused — a height-layer stack "
+                               "operation is already in flight on this thread.");
+                    return false;
+                }
+                ScopedFlag opGuard(heightLayerOpInFlight);
+
                 auto& grid = terrainGrids.begin()->second;
                 terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
 
@@ -691,10 +719,24 @@ namespace services
 
                     invalidateHeightLayerCoords(*grid, previousAffected);
                 }
-                else if (!store.addLayer(std::move(record)))
+                else
                 {
-                    // Duplicate id or an over-cap stack; the store has already said why.
-                    return false;
+                    // VK-1648. The name is minted on CREATE only. The update branch above leaves it
+                    // alone for the same reason it leaves `visible` alone: renaming a layer and then
+                    // regenerating its road must not silently throw the rename away.
+                    //
+                    // roadName is the artist's own label when there is one; otherwise the id, which
+                    // is at least stable and unique. A sculpt-only spline reaches here with an empty
+                    // roadName, which is exactly the case that has no road entity to borrow from.
+                    record.name = cmd.params.roadName.empty()
+                                      ? ("Layer " + std::to_string(cmd.splineId))
+                                      : cmd.params.roadName;
+
+                    if (!store.addLayer(std::move(record)))
+                    {
+                        // Duplicate id or an over-cap stack; the store has already said why.
+                        return false;
+                    }
                 }
 
                 // Deliberately no syncBrushBoundaryHeights here. Seam welding for covered tiles
@@ -712,8 +754,9 @@ namespace services
         dispatcher.registerQueryHandler<events::splineTerrain::SetSplineHeightLayerVisibleCommand>(
             [this](const events::splineTerrain::SetSplineHeightLayerVisibleCommand& cmd) -> bool
             {
-                if (terrainGrids.empty())
+                if (terrainGrids.empty() || heightLayerOpInFlight)
                     return false;
+                ScopedFlag opGuard(heightLayerOpInFlight);
 
                 auto& grid = terrainGrids.begin()->second;
                 terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
@@ -737,8 +780,9 @@ namespace services
         dispatcher.registerQueryHandler<events::splineTerrain::MoveHeightLayerCommand>(
             [this](const events::splineTerrain::MoveHeightLayerCommand& cmd) -> bool
             {
-                if (terrainGrids.empty())
+                if (terrainGrids.empty() || heightLayerOpInFlight)
                     return false;
+                ScopedFlag opGuard(heightLayerOpInFlight);
 
                 auto& grid = terrainGrids.begin()->second;
                 terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
@@ -795,7 +839,8 @@ namespace services
                     info.order = static_cast<uint32_t>(i);
                     info.visible = stack[i].visible;
                     info.affectedTileCount = static_cast<uint32_t>(stack[i].affected.size());
-                    result.push_back(info);
+                    info.name = stack[i].name; // VK-1648
+                    result.push_back(std::move(info));
                 }
 
                 return result;
@@ -806,8 +851,9 @@ namespace services
         dispatcher.registerCommandHandler<events::splineTerrain::RemoveSplineHeightLayerCommand>(
             [this](const events::splineTerrain::RemoveSplineHeightLayerCommand& cmd)
             {
-                if (terrainGrids.empty())
+                if (terrainGrids.empty() || heightLayerOpInFlight)
                     return;
+                ScopedFlag opGuard(heightLayerOpInFlight);
 
                 auto& grid = terrainGrids.begin()->second;
                 terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
@@ -818,6 +864,153 @@ namespace services
                 store.removeLayer(cmd.splineId);
                 grid->recomposeDirtyDerived(0);
                 publishHeightLayerStackChanged(terrainGrids.begin()->first);
+            });
+
+        // VK-1648. Reads one layer out as a plain snapshot, so the code that is about to destroy or
+        // overwrite it can put an undo entry on the stack first. Never mutates anything, and is
+        // deliberately NOT part of any mutating handler: the handlers stay free of history so the
+        // reverse path can reuse them without recording a second time.
+        dispatcher.registerQueryHandler<events::splineTerrain::GetHeightLayerSnapshotQuery>(
+            [this](const events::splineTerrain::GetHeightLayerSnapshotQuery& query)
+                -> events::splineTerrain::HeightLayerSnapshot
+            {
+                events::splineTerrain::HeightLayerSnapshot snapshot;
+                if (terrainGrids.empty())
+                    return snapshot; // present == false
+
+                const terrain::TerrainHeightLayerStore& store =
+                    terrainGrids.begin()->second->getHeightLayers();
+
+                const terrain::HeightLayerRecord* record = store.layer(query.splineId);
+                const std::optional<size_t> index = store.layerIndex(query.splineId);
+                if (!record || !index)
+                    return snapshot;
+
+                snapshot.present = true;
+                snapshot.id = record->id;
+                snapshot.index = static_cast<uint32_t>(*index);
+                snapshot.visible = record->visible;
+                snapshot.name = record->name;
+                snapshot.type = record->type;
+                snapshot.spline = record->spline;
+                snapshot.affected = record->affected;
+                return snapshot;
+            });
+
+        // VK-1648. The reverse of a delete, and of the create half of an apply. Puts the record
+        // back with its parameters, name, visibility and stack position intact.
+        dispatcher.registerQueryHandler<events::splineTerrain::RestoreHeightLayerCommand>(
+            [this](const events::splineTerrain::RestoreHeightLayerCommand& cmd) -> bool
+            {
+                // id 0 is the "no spline" sentinel and addLayer refuses it, so catching it here --
+                // before the remove below -- is what stops a malformed snapshot destroying the live
+                // record and then failing to put anything back in its place.
+                if (terrainGrids.empty() || !cmd.snapshot.present || cmd.snapshot.id == 0
+                    || heightLayerOpInFlight)
+                {
+                    return false;
+                }
+                ScopedFlag opGuard(heightLayerOpInFlight);
+
+                auto& grid = terrainGrids.begin()->second;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+
+                // Only SplineCorridor has an evaluator this build can rebuild. A snapshot of any
+                // other type could only have come from a future build, and composing a layer whose
+                // contribution we cannot reproduce would write ground nobody authored.
+                if (cmd.snapshot.type != terrain::HeightLayerType::SplineCorridor)
+                {
+                    vfLogError("TerrainService: Refusing to restore layer {} — its type cannot be "
+                               "evaluated by this build.", cmd.snapshot.id);
+                    return false;
+                }
+
+                // Read BEFORE the mutation: after the add there is no way to ask what the layer
+                // used to cover, and an id that is currently live (the update-undo case) is about
+                // to have its old corridor replaced.
+                std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> invalidate;
+                if (const terrain::HeightLayerRecord* existing = store.layer(cmd.snapshot.id))
+                    invalidate = existing->affected;
+
+                terrain::HeightLayerRecord record;
+                record.id = cmd.snapshot.id;
+                record.visible = cmd.snapshot.visible;
+                record.name = cmd.snapshot.name;
+                record.type = terrain::HeightLayerType::SplineCorridor;
+                record.spline = cmd.snapshot.spline;
+
+                // Filtered on hasBase, not copied verbatim. A tile deliberately deleted while this
+                // entry sat on the undo stack lost its base, and TerrainService::removeTile scrubbed
+                // the coord from every LIVE layer — but not from a snapshot. Re-introducing it would
+                // recreate the claimed-but-baseless state where isCovered says yes, recomposeTile
+                // refuses the tile forever, and normalizeDerivedSeams still welds its boundary
+                // column against a neighbour's composed value.
+                //
+                // Streamed-out tiles are unaffected: bases are keyed by coord and survive eviction,
+                // which is precisely why the store keys them that way rather than by TerrainTile*.
+                for (const terrain::TileCoord& coord : cmd.snapshot.affected)
+                {
+                    if (store.hasBase(coord))
+                        record.affected.insert(coord);
+                }
+
+                // The ONE construction site, so a restored layer cannot drift from one applied live
+                // or one reloaded off disk.
+                record.eval = terrain::makeSplineCorridorEval(record.spline);
+
+                for (const terrain::TileCoord& coord : record.affected)
+                    invalidate.insert(coord);
+
+                // An id that is still live means this is the undo of an in-place UPDATE, so the
+                // current record has to go before the old one can take its place — same id, same
+                // stack slot, different parameters.
+                const bool replacing = store.hasLayer(cmd.snapshot.id);
+                if (replacing && !store.removeLayer(cmd.snapshot.id))
+                    return false;
+
+                if (!store.addLayer(std::move(record)))
+                {
+                    // Unreachable in practice -- every one of addLayer's refusals was excluded
+                    // above, and `replacing` freed a slot before it could hit the cap. Logged as
+                    // an error rather than swallowed because if it ever DOES fire while replacing,
+                    // the artist has just lost a layer with no undo entry pointing at it.
+                    vfLogError("TerrainService: Failed to restore height layer {}{}.",
+                               cmd.snapshot.id,
+                               replacing ? " — the record it replaced is gone" : "");
+                    return false;
+                }
+
+                // addLayer appends, so the saved position has to be re-applied. Always in range:
+                // the stack now holds N+1 records and a snapshot index taken from an N-record stack
+                // is at most N.
+                const size_t target =
+                    std::min(static_cast<size_t>(cmd.snapshot.index), store.layers().size() - 1);
+                store.moveLayer(cmd.snapshot.id, target);
+
+                invalidateHeightLayerCoords(*grid, invalidate);
+                grid->recomposeDirtyDerived(0);
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
+                return true;
+            });
+
+        // VK-1648. Metadata only. No invalidation and no recompose: composition never reads the
+        // name, so a rename on a layer covering a thousand tiles must cost nothing. It still
+        // publishes, because the list panel is a cache and would otherwise show the old label.
+        dispatcher.registerQueryHandler<events::splineTerrain::SetHeightLayerNameCommand>(
+            [this](const events::splineTerrain::SetHeightLayerNameCommand& cmd) -> bool
+            {
+                if (terrainGrids.empty())
+                    return false;
+
+                auto& grid = terrainGrids.begin()->second;
+                if (!grid->getHeightLayers().setLayerName(cmd.splineId, cmd.name))
+                    return false;
+
+                // No tile is dirtied, and none needs to be: the sidecar is written in full on every
+                // terrain save (TerrainSerializer::save takes the whole store), so the next save
+                // carries the name whether or not a height ever changed.
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
+                return true;
             });
 
         // VK-1621: the weight-map mirror of the height snapshot/restore pair above, so a painted
@@ -1635,38 +1828,20 @@ namespace services
             [this](const events::terrain::GetHeightLayerRecomposeProgressQuery&)
                 -> services::HeightLayerRecomposeProgress
             {
-                services::HeightLayerRecomposeProgress result;
+                // VK-1648 moved the latch arithmetic into services::advanceRecomposeProgress so the
+                // AC's "progress-state transitions" coverage can reach it: it needs no grid, and
+                // the state transitions it has to get right (monotone fraction, peak reset, an
+                // unloaded-only backlog staying inactive) are exactly the ones a live terrain makes
+                // awkward to stage. Behaviour is unchanged, including the no-terrain reset — that
+                // now falls out of feeding it three zeros.
                 if (terrainGrids.empty())
-                {
-                    heightLayerRecomposePeak = 0;
-                    return result;
-                }
+                    return services::advanceRecomposeProgress(heightLayerRecomposeLatch, 0, 0, 0);
 
-                const auto status =
-                    terrainGrids.begin()->second->heightLayerRecomposeStatus();
-                result.pendingResident = status.pendingResident;
-                result.pendingUnloaded = status.pendingUnloaded;
-                result.meshBacklog = status.meshBacklog;
-
-                // Only the two that actually drain feed the fraction. pendingUnloaded is waiting on
-                // the streamer, and a tile the camera never revisits would otherwise hold the bar
-                // short of 100% forever.
-                const uint32_t outstanding = status.pendingResident + status.meshBacklog;
-                if (outstanding == 0)
-                {
-                    heightLayerRecomposePeak = 0;
-                    return result; // progress 1.0, active false
-                }
-
-                // Latched high-water mark, so the fraction is monotone even though a recompose
-                // marks fresh mesh work as it goes and new invalidations can arrive mid-drain.
-                heightLayerRecomposePeak = std::max(heightLayerRecomposePeak, outstanding);
-
-                result.totalAtStart = heightLayerRecomposePeak;
-                result.progress = 1.0f - static_cast<float>(outstanding) /
-                                             static_cast<float>(heightLayerRecomposePeak);
-                result.active = true;
-                return result;
+                const auto status = terrainGrids.begin()->second->heightLayerRecomposeStatus();
+                return services::advanceRecomposeProgress(heightLayerRecomposeLatch,
+                                                          status.pendingResident,
+                                                          status.pendingUnloaded,
+                                                          status.meshBacklog);
             });
 
         dispatcher.registerCommandHandler<events::physics::AddTerrainColliderCommand>(

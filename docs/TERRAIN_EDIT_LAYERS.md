@@ -599,6 +599,135 @@ nothing left on disk to recompute it from. Both prepare paths now recompose unbu
 the stream-in loop in the full path, and before anything reads the dirty set in the incremental one,
 since a recompose calls `markDirty` on every tile it touches.
 
+## 4e. VK-1648 as built
+
+The list panel, and operation-level undo for every stack edit. Also the story where two latent
+defects in the undo half surfaced, because a UI that can see the stack makes both visible.
+
+### Undoing a spline apply was throwing, not hiding
+
+`SplineApplyUndoCommand::undo()` reached the layer through
+`dispatcher.execute(SetSplineHeightLayerVisibleCommand{...})`. That command is `ICommand<bool>`, and
+a command with a non-void result is registered with `registerQueryHandler` — so it lives in the
+query table. `EventDispatcher::execute` searches only the command table and **throws** on a miss;
+`UndoRedoServiceImpl::undo()` catches the exception, pushes the entry back onto the undo stack and
+returns `false`. The symptom was "Ctrl+Z after applying a spline does nothing", with no log line.
+
+Anything reaching a non-void command must use `query()`. The rule now has a comment at both ends.
+
+### Hiding was the wrong inverse twice over
+
+Even once it dispatched, a visibility flip was not the inverse of an apply.
+
+For a **first** apply it left the layer in the stack, merely hidden — invisible when nothing could
+enumerate the stack, and a ghost row the moment something could. For a **re-apply**, which updates
+the record in place (§4d), hiding reverts past the artist's previous corridor rather than back to
+it: undoing a road regeneration erased the road's deformation entirely.
+
+`SplineApplyUndoCommand` now carries a `HeightLayerSnapshot` for each side of the apply. An absent
+`before` means "this layer did not exist", so undo removes it; a present one restores the earlier
+parameters. Determinism is unaffected — a restore rebuilds `eval` through the same
+`makeSplineCorridorEval` every other path uses, the removal keeps the base, and coverage is sticky,
+so the tile recomposes to exactly the plane it had.
+
+It costs roughly 32 KB per apply (a 1 km polyline plus its affected coords) against the `bool` it
+replaced. That is a real regression, and three orders of magnitude below the per-tile float planes
+VK-1645 removed.
+
+### Two command families, because a recording reverse path breaks REDO
+
+`UndoRedoServiceImpl::pushCommand` calls `clearStackBytes(redoStack)`, which ends in `stack.clear()`.
+So a reverse-path command that recorded would not merely double the history — it would destroy the
+redo stack the user is halfway through. The split is therefore load-bearing, not tidiness:
+
+- `TerrainServiceHandlers.cpp` **never** pushes undo. Every handler in it is a reverse path.
+- The Editor calls `DeleteSplineCommand` and the three `*WithUndo` commands, which live in
+  `SplineTerrainServiceImpl` — already the file that pushes spline undo entries and owns
+  `deleteSpline`.
+- `HeightLayerUndoEvents.hpp` (Services-only, like `SplineTerrainUndoEvents.hpp`) adds
+  `GetHeightLayerSnapshotQuery` and `RestoreHeightLayerCommand`.
+
+A `bool recordUndo` flag on the existing commands was rejected for the same reason: its default
+would silently decide whether history is written, and getting it wrong is invisible until someone
+tries to redo.
+
+### The snapshot is not the record
+
+`HeightLayerSnapshot` carries the serializable half plus the stack index. It deliberately is not a
+`terrain::HeightLayerRecord`: `eval` is a `std::function` whose closure captures the polyline **by
+value**, so a record copy holds the samples twice behind a heap block that
+`IUndoableCommand::getMemoryFootprint()` cannot measure — and the undo service recomputes footprints
+under `_DEBUG` and logs on drift. Rebuilding through `makeSplineCorridorEval` also keeps the
+one-construction-site rule, so a restored layer cannot drift from a reloaded one.
+
+`RestoreHeightLayerCommand` filters the snapshot's `affected` on `store.hasBase(coord)`. A tile
+deliberately deleted while the entry sat on the stack lost its base and was scrubbed from every
+*live* layer by `dropCoordFromLayers` — but a snapshot is invisible to that, and re-introducing the
+coord recreates the claimed-but-baseless state of §4b. Streamed-out tiles are unaffected: bases are
+keyed by coord and survive eviction.
+
+Restore is `addLayer` + `moveLayer`, not a new store insert. After the add the stack holds N+1
+records and a snapshot index taken from an N-record stack is at most N, so the bounds check cannot
+fire.
+
+### The lock now covers all five mutators
+
+VK-1646 gated `addLayer`/`updateLayer` on `editingLocked` and left `removeLayer`,
+`setLayerVisible` and `moveLayer` open. Latent-correct, because the reader populates the store only
+on `Ok` and a locked store is empty — but the asymmetry meant the first change that let a locked
+store carry a stack would silently allow three of the five mutators to edit it. All five agree now.
+
+A `heightLayerOpInFlight` latch guards the mutating handlers as well. Not a thread guard: layer ops
+are synchronous and unbudgeted, so nothing can interleave from another frame. It exists because
+`publishHeightLayerStackChanged` dispatches to its subscribers *inside* the handler, and a
+subscriber that edited the stack from that callback would run against an operation whose
+invalidation set has already been consumed.
+
+### VFTL 1.2.0: a name, and where it had to go
+
+A layer had no name at all. It now carries one, on the LAYER rather than looked up from the road
+entity that created it — a sculpt-only spline has no road entity, `appliedSplines` is session-only
+so after a reload most rows have no live spline behind them, and a name held in the scene would be
+reverted by a scene revert while the layer it named survived.
+
+The field is length-prefixed and sits **after `affected`, before `paramByteLength`**. That placement
+is load-bearing: the reader steps over a record of an unknown type with
+`skip(paramByteLength + crc)`, so anything living after the params falls outside that arithmetic and
+would leave the cursor inside a string, mis-parsing every subsequent record of a `Degraded` sidecar.
+The existing degraded test discriminates on exactly this — it expects `Degraded`, and a
+misplacement makes it `Invalid`.
+
+The header is untouched, so `TERRAIN_LAYER_HEADER_SIZE` stays 85, both patch offsets hold, and
+`rebindTerrainLayerSidecar` needed no work. The writer truncates at `MAX_LAYER_NAME_LENGTH` (128)
+rather than refusing the save; the reader treats an over-cap length as `Invalid`, matching
+`MAX_LAYER_SPLINE_SAMPLES`.
+
+Version skew also stopped lying. A non-matching triple used to report through the `Invalid` branch
+as "corrupt or truncated" — and after a format bump that is every sidecar on the artist's disk at
+once. A new `VersionMismatch` status carries the same recovery with an accurate message.
+
+### Progress is honest about what it measures
+
+The panel polls `GetHeightLayerRecomposeProgressQuery` and disables the stack controls while it is
+active. Because a layer op composes synchronously (§4d), `pendingResident` is already zero by the
+time anything polls: what drains is the eight-tiles-per-frame mesh queue behind it. So the bar is a
+UX affordance over that tail, and the disable stops an artist stacking a second wide invalidation
+onto an unsettled one. It is **not** a race guard, and the code says so — a stack op has no frame
+boundary inside it for a race to happen in.
+
+The latch arithmetic moved to `services::advanceRecomposeProgress`, alongside `selectionAfterDelete`
+and `moveTargetForInsertZone`, purely so the acceptance criteria could be tested: Tests links
+Services but not the Editor, so logic left inside an ImGui `draw()` is unreachable.
+`moveTargetForInsertZone` earns its place — an insert zone is not a destination index, because
+dragging downwards lifts the row out before re-inserting it, and that off-by-one is invisible to
+manual testing in one direction out of two.
+
+### Paint is excluded visibly, not by omission
+
+The panel states it, with the reason in a tooltip: a weight brush can evict a material channel and
+renormalize the whole tile, so a paint contribution is not a pure function of its parameters and
+cannot be replayed as a layer. §1 remains the gate.
+
 ## 5. Follow-up backlog
 
 VK-1619 already owns VFTR 2.4.0 round-trip coverage. It should be extended with

@@ -136,6 +136,9 @@ namespace terrain
 
     bool TerrainHeightLayerStore::removeLayer(uint64_t id)
     {
+        if (editingLocked)
+            return false;
+
         auto it = std::find_if(stack.begin(), stack.end(),
                                [id](const HeightLayerRecord& r) { return r.id == id; });
         if (it == stack.end())
@@ -147,12 +150,26 @@ namespace terrain
 
     bool TerrainHeightLayerStore::setLayerVisible(uint64_t id, bool visible)
     {
+        if (editingLocked)
+            return false;
+
         auto it = std::find_if(stack.begin(), stack.end(),
                                [id](const HeightLayerRecord& r) { return r.id == id; });
         if (it == stack.end())
             return false;
 
         it->visible = visible;
+        return true;
+    }
+
+    bool TerrainHeightLayerStore::setLayerName(uint64_t id, std::string name)
+    {
+        auto it = std::find_if(stack.begin(), stack.end(),
+                               [id](const HeightLayerRecord& r) { return r.id == id; });
+        if (it == stack.end())
+            return false;
+
+        it->name = std::move(name);
         return true;
     }
 
@@ -181,6 +198,9 @@ namespace terrain
 
     bool TerrainHeightLayerStore::moveLayer(uint64_t id, size_t newIndex)
     {
+        if (editingLocked)
+            return false;
+
         const std::optional<size_t> current = layerIndex(id);
         if (!current)
             return false;

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -135,6 +136,10 @@ namespace
         terrain::HeightLayerRecord record;
         record.id = id;
         record.visible = true;
+        // VK-1648. The handler's ADD branch mints a name here (roadName, else "Layer <id>"), so the
+        // mirror does too. It has no effect on composition — nothing below reads it — but leaving
+        // it out would make this a mirror of a branch that no longer exists.
+        record.name = "Layer " + std::to_string(id);
         record.type = terrain::HeightLayerType::SplineCorridor;
         record.spline = std::move(params);
         record.eval = terrain::makeSplineCorridorEval(record.spline);

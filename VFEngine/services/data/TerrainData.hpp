@@ -45,6 +45,14 @@ namespace services
         uint32_t order = 0; // position in composition order; 0 composes first
         bool visible = true;
         uint32_t affectedTileCount = 0;
+
+        // VK-1648. What the artist calls this layer. Empty is legal and common — it is what a layer
+        // applied from a spline with no road name gets, and the panel falls back to the id then.
+        //
+        // Carried on the LAYER rather than looked up from the road entity that created it: a
+        // sculpt-only spline has no road entity, and after a reload most rows have no live spline
+        // behind them at all.
+        std::string name;
     };
 
     // What a wide layer invalidation still owes. Polled per frame, in the shape the navmesh and
