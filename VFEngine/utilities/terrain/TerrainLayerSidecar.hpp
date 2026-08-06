@@ -26,8 +26,12 @@ namespace terrain
     inline constexpr std::array<char, 4> TERRAIN_LAYER_MAGIC = {'V', 'F', 'T', 'L'};
 
     // Independent of VFTR's version on purpose — the two formats change for different reasons.
+    //
+    // 1.1.0 (VK-1647) added `nextLayerId` to the header and made the per-record `order` field
+    // authoritative on read. Like every other format here there is no backward compatibility: the
+    // reader rejects any version triple that is not identical to its own.
     inline constexpr uint32_t TERRAIN_LAYER_VERSION_MAJOR = 1;
-    inline constexpr uint32_t TERRAIN_LAYER_VERSION_MINOR = 0;
+    inline constexpr uint32_t TERRAIN_LAYER_VERSION_MINOR = 1;
     inline constexpr uint32_t TERRAIN_LAYER_VERSION_PATCH = 0;
 
     inline constexpr std::string_view TERRAIN_LAYER_EXTENSION = ".vfterrainlayers";
@@ -52,8 +56,9 @@ namespace terrain
         sizeof(uint8_t) +           // resolution
         sizeof(float) +             // worldTileSize
         2 * sizeof(uint32_t) +      // layerCount / baseBlockCount
-        2 * sizeof(uint64_t);       // layerTableOffset / baseIndexOffset
-    static_assert(TERRAIN_LAYER_GUID_OFFSET == 16 && TERRAIN_LAYER_HEADER_SIZE == 77,
+        2 * sizeof(uint64_t) +      // layerTableOffset / baseIndexOffset
+        sizeof(uint64_t);           // VK-1647: nextLayerId
+    static_assert(TERRAIN_LAYER_GUID_OFFSET == 16 && TERRAIN_LAYER_HEADER_SIZE == 85,
                   "VFTL header layout changed — update rebindTerrainLayerSidecar and the tests");
 
     // coordX, coordZ, blockOffset, byteLength, vertexCount, blockCrc32.
@@ -69,10 +74,11 @@ namespace terrain
     // that would have rejected it is ever reached.
     inline constexpr uint32_t MAX_LAYER_SPLINE_SAMPLES = 1u << 20;
 
-    // NOT `MAX_TERRAIN_LAYERS` — that name is taken, by the material palette's cap of 32
-    // (`TerrainMaterialTypes.hpp`). The two "layers" are unrelated: that one bounds how many
-    // material entries a tile can blend, this one how many edit-layer records a sidecar may carry.
-    inline constexpr uint32_t MAX_TERRAIN_EDIT_LAYERS = 4096;
+    // MAX_TERRAIN_EDIT_LAYERS moved to TerrainHeightLayerStore.hpp in VK-1647 (this header includes
+    // it, so the store could not see it here). It is a store invariant enforced at addLayer(); the
+    // writer below still checks it, because a stack can also arrive from a caller that built one by
+    // hand rather than through the store.
+
     // Mirrors TerrainSerializer.hpp's MAX_REASONABLE_TERRAIN_TILES rather than including it: the
     // serializer includes THIS header, so the dependency has to run one way only.
     inline constexpr uint32_t MAX_LAYER_AFFECTED_TILES = 10000;

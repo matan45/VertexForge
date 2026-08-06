@@ -102,6 +102,32 @@ namespace services
         }
     }
 
+    void TerrainService::invalidateHeightLayerCoords(
+        terrain::TerrainGrid& grid,
+        const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash>& coords)
+    {
+        terrain::TerrainHeightLayerStore& store = grid.getHeightLayers();
+
+        for (const terrain::TileCoord& coord : coords)
+        {
+            store.markDerivedStale(coord);
+            for (uint8_t i = 0; i < 4; ++i)
+            {
+                store.markDerivedStale(
+                    coord + terrain::TileCoord::getNeighborOffset(static_cast<terrain::TileEdge>(i)));
+            }
+        }
+    }
+
+    void TerrainService::invalidateHeightLayerReorder(terrain::TerrainGrid& grid, uint64_t movedId,
+                                                      size_t lo, size_t hi)
+    {
+        // The set itself is pure stack arithmetic and lives with the stack, so a CPU-only test can
+        // pin the "exactly the shared tiles" rule without constructing a TerrainService. All that
+        // is left here is turning changed tiles into stale ones, ring included.
+        invalidateHeightLayerCoords(grid, grid.getHeightLayers().reorderImpactSet(movedId, lo, hi));
+    }
+
     bool TerrainService::anyTileCovered(terrain::TerrainGrid* grid,
                                         const std::vector<terrain::TileCoord>& coords)
     {

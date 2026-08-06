@@ -447,6 +447,158 @@ about, never renamed or deleted. A load path has no business destroying a file i
 cannot identify, and the content browser shows `.vfterrainlayers` — like `.vfCollider`
 and unlike `.vfmeta` — precisely so the user can act on that warning.
 
+## 4d. VK-1647 as built
+
+VK-1647 made the stack of definitions *editable* rather than merely appendable. Five things the
+earlier sections did not anticipate.
+
+### The apply path cannot be budgeted, and does not need to be
+
+The AC asked for wide invalidations to "schedule regeneration through the existing tile budget" and
+"remain responsive". Half of that was already true: a recompose marks `isDirty` and every LOD dirty,
+and the geometry those tiles need is rebuilt eight per frame by the loop that has always been there.
+Regeneration was already paced; only the compose itself was not.
+
+Budgeting the compose as well turned out to be the wrong trade. `BuildSplineRoadMeshQuery` samples
+`tile->heightData` per road vertex, and it runs inside the *synchronously* published
+`SplineAppliedNotification` — so a deferred recompose drapes the ribbon over unflattened ground.
+Worse in general: `normalizeDerivedSeams` welds a tile against **any** resident neighbour, not only
+the ones in the list it was handed. Correctness today rests on the working set's boundary falling on
+*uncovered* tiles, where the one-sided rule is idempotent, and that holds only because every layer
+op invalidates `affected ∪ ring` and composes it in one pass. A budget can put that boundary through
+covered tiles and average a freshly composed plane against a neighbour still holding last cycle's
+welded values — the exact drift `recomposeDirtyDerived` recomposes the whole ring to avoid.
+
+So layer ops stay unbudgeted, and "report progress" is served by
+`GetHeightLayerRecomposeProgressQuery` over the recompose backlog *and* the eight-per-frame mesh
+queue, which is the longer half and the part the user actually watches.
+
+Be precise about what that query can show. Because a layer op composes synchronously,
+`pendingResident` is already back to zero by the time anything polls — for layer operations the
+query reports `meshBacklog` and nothing else. That is still the honest number (a 1,000-tile road
+takes ~125 frames to re-mesh, and that is what the user is waiting on), but the compose half is
+neither paced nor reported: deleting a 1,000-tile road composes roughly 5,000 tiles — seeds plus
+their rings — inside a single frame. `pendingResident` is only ever non-zero for residency-driven
+staleness, i.e. the streaming drain.
+
+### A covered tile that is not resident used to eat the budget forever
+
+`recomposeDirtyDerived`'s seed loop checked coverage but not residency, so a streamed-out covered
+coord took a slot and was then skipped in phase 1. Because `staleSorted()` is a deterministic
+`(z, x)` order and nothing clears the flag for a non-resident coord, the *same* coords were
+re-selected every frame. Past `budget` of them, no resident tile was ever reached again,
+`composedCount` stayed 0 — and the `composedCount == 0` early-out also skips the seam pass. A
+streamed world with wide coverage could stop repairing derived heights entirely.
+
+The seed loop now steps over a non-resident coord without spending budget and without clearing its
+flag. Progress reports the two populations separately for the same reason: a tile waiting on the
+streamer is not work the recompose budget will ever do, and folding it into one fraction pins a
+progress bar below 100% for as long as the camera stays away.
+
+### Reorder's exact change set is an intersection
+
+Moving layer `L` across the stack range `[lo, hi]` changes exactly
+`L.affected ∩ ⋃(affected of the crossed layers)`. A tile outside `L.affected` never lists `L` among
+its contributors and the crossed layers keep their relative order; a tile inside it but claimed by
+no crossed layer has `L` sliding past layers absent from that tile's contributor list. Both compose
+identically, so invalidating them is pure waste — and where one long road crosses another once, the
+waste is the entire length of both roads.
+
+`TerrainHeightLayerStore::reorderImpactSet` owns that arithmetic rather than the service, so a
+CPU-only test can pin the rule. Hidden crossed layers are counted deliberately: they cannot change a
+tile today, but excluding them would make the result depend on visibility state that can be flipped
+between computing the set and performing the move.
+
+### Editing in place, and why widening is safe
+
+Re-authoring a road used to allocate a new id and push a *second* record; the old corridor composed
+forever and the terrain was carved once per regeneration. `ApplySplineDeformCommand` now updates in
+place when a layer already carries the id, keeping both the id and the stack position — floating a
+re-authored corridor to the top of the stack would put every layer applied over it since underneath.
+
+Widening onto a tile that owns no base has to adopt that tile's live plane, which is only correct if
+the plane is clean. It is, for a reason worth naming precisely: a tile with no base is never
+*composed*, because `recomposeTile` refuses without one — so no layer's corridor can have been
+written into it.
+
+For a genuinely *uncovered* target that is exact, not approximate: `normalizeDerivedSeams` only ever
+assigns to the covered side of a mixed seam, so not one byte of an uncovered plane is ever touched.
+
+The stronger-sounding version of the claim — that a layer only ever claims a tile it adopted a base
+for, so a baseless tile is claimed by nobody — is very nearly true and was tempting to rely on. It
+does not quite hold: `TerrainService::removeTile` erases the base and leaves the coord in every
+layer's `affected`, so a tile deleted and later re-created at the same coord reads as covered while
+holding no base. That is the only case where an adopted plane can differ from pristine ground, and
+only in the boundary column the seam pass conformed to a neighbour — seam continuity, not somebody
+else's corridor.
+
+Narrowing needs no collapse step at all, because coverage is sticky and a dropped tile composes to
+base plus whatever remains; it only needs the **old** affected set invalidated alongside the new one.
+
+### Ids had to become monotonic, not merely unique
+
+The counter lived on `SplineTerrainServiceImpl` and restarted at 1 on every load, while the sidecar
+restored ids 1..N — and `removeLayer`/`setLayerVisible` resolve by first match, so the next spline's
+undo hid someone else's road. Uniqueness alone is not enough either: `RoadSplineComponent::splineId`
+is persisted in the *scene* and outlives the layer it names, so re-issuing a freed id re-points a
+surviving road at a different corridor.
+
+The watermark therefore lives on the store and is persisted, which took VFTL to **1.1.0**: a
+`uint64_t nextLayerId` appended at the end of the header (77 → 85 bytes). Appending kept
+`TERRAIN_LAYER_GUID_OFFSET` and `TERRAIN_LAYER_GENERATION_ID_OFFSET` valid, so
+`rebindTerrainLayerSidecar` needed no change, and unlike VFTR the sidecar stores its table offsets
+explicitly rather than recovering them from the stream position — nothing downstream had to move.
+
+The same bump made `order` authoritative on read. Be accurate about what that bought: reorder
+persists because the **writer** walks the live stack and emits its index, which was already true
+before VK-1647 — the reader consuming `order` instead of file sequence is a round-trip identity, not
+the mechanism. What it adds is a guard. An order set that is not a permutation of `[0, layerCount)`
+is `Invalid` rather than silently accepted, and since `order` sits inside each record's CRC-covered
+body a flipped bit fails the record checksum first, so that guard can only ever fire against a
+foreign writer. Cheap, and it retires a field that was otherwise decorative.
+
+### Known defect, not fixed here: the budgeted drain can leave a seam un-welded
+
+The streaming drain still calls `recomposeDirtyDerived(MAX_TILE_RECOMPOSE = 32)`, and that path has
+a hole VK-1647 did not close. With covered tiles A=(0,0), C=(1,0), B=(2,0) all stale and a budget
+that cuts after A:
+
+- Pass 1 seeds `{A}`, so the working set is `A` plus its ring — which contains C. Phase 1 composes
+  **both** and clears both stale flags; phase 2 welds A↔C.
+- Pass 2 has only B left stale. Its working set is `{B, C, …}` — A is two steps away and is not in
+  it. Phase 1 recomposes C from base, discarding pass 1's weld on C's side. Phase 2 welds C↔B, but
+  cannot weld C↔A: `normalizeDerivedSeams` only walks +X/+Z outward from members of the list it is
+  handed, and A is not one.
+
+A keeps pass 1's average, C holds its raw recomposed value, and the final bytes depend on where the
+budget cut fell. That is a real violation of "repeated evaluation is byte-stable", and it predates
+VK-1647 — VK-1645 introduced the budgeted drain.
+
+Its **magnitude, however, is normally zero**, which is why it has never been seen. The corridor
+evaluator derives a vertex's world position from the tile origin, so at a shared seam vertex both
+tiles compute the same position, the same winning segment, and the same blend; the only input that
+can differ is `in[idx]`, i.e. the two base blocks. The discrepancy is therefore exactly
+`(A_base − C_base) / 2` at that vertex, and bases are adopted from planes that were already seam-
+consistent. It takes two bases that genuinely disagree at a shared vertex for anything to show.
+
+The fix is to accumulate the working sets across passes and weld once when the drain empties, gated
+on "something was composed in the batch". Compose restarts from base and is therefore idempotent, so
+composing a ring member in two passes is harmless, and the union with its `(z, x)` sort is exactly
+what an unbudgeted run would have welded — making a budgeted result provably bit-identical to
+`budget = 0`. The cost is that seams stay un-welded while a drain is in flight, which trades a
+zero-magnitude asymmetry for visible cracks during streaming. That trade belongs in its own story,
+not in this one.
+
+### One more thing: a save now drains before it writes
+
+`prepareSave` streamed tiles in and loaded their heights but never settled `derivedStale`, so a save
+could flatten a pre-recompose plane into VFTR. In the editor that self-heals — a covered tile is
+re-marked stale when it streams back in — but `GameExporter` deliberately does not ship
+`.vfterrainlayers`, so an export taken mid-drain would carry ground the artist never authored with
+nothing left on disk to recompute it from. Both prepare paths now recompose unbudgeted first: after
+the stream-in loop in the full path, and before anything reads the dirty set in the incremental one,
+since a recompose calls `markDirty` on every tile it touches.
+
 ## 5. Follow-up backlog
 
 VK-1619 already owns VFTR 2.4.0 round-trip coverage. It should be extended with

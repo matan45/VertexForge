@@ -42,6 +42,10 @@
 #include "../../data/FoliageUndoCommands.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 
+#include <algorithm>
+#include <optional>
+#include <vector>
+
 namespace
 {
     // Assign a tile's billboard set and set BOTH dirty flags (CPU-save + GPU-rebuild).
@@ -67,6 +71,13 @@ namespace
 
 namespace services
 {
+    void TerrainService::publishHeightLayerStackChanged(uint64_t terrainEntityId) const
+    {
+        events::splineTerrain::HeightLayerStackChangedNotification notification;
+        notification.terrainEntityId = terrainEntityId;
+        events::EventDispatcher::instance().publish(notification);
+    }
+
     void TerrainService::registerEventHandlers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -616,13 +627,82 @@ namespace services
                 if (seeded.empty())
                     return false;
 
-                store.addLayer(std::move(record));
+                // VK-1647. Re-applying a spline that already owns a layer UPDATES it in place
+                // rather than registering a second one. Before this, "Regenerate Road" left the
+                // previous corridor composing forever and carved the terrain twice.
+                //
+                // Widening onto a tile that owns no base adopts that tile's live plane, which is
+                // safe because a tile with no base is never COMPOSED: recomposeTile refuses
+                // without one (TerrainGrid.cpp), so no layer's corridor can have been written into
+                // it. For a genuinely UNCOVERED target that is exact -- normalizeDerivedSeams only
+                // ever assigns to the covered side of a mixed seam, so not one byte of an
+                // uncovered plane is touched.
+                //
+                // The stronger-sounding claim -- that a baseless tile is claimed by no layer -- is
+                // very nearly true but not quite: TerrainService::removeTile erases the base and
+                // leaves the coord in every layer's `affected` (TerrainStreamingOps.cpp:147), so a
+                // tile deleted and later re-created at the same coord reads as covered while
+                // holding no base. That is the only case where the adopted plane can differ from
+                // pristine ground, and only in the boundary column the seam pass conformed to a
+                // neighbour -- seam continuity, not somebody else's corridor.
+                //
+                // Narrowing needs no collapse step. Coverage is sticky, so a tile dropped from the
+                // affected set keeps its base and recomposes to base + whatever layers remain --
+                // which is the right answer -- as long as it is invalidated, which is why the OLD
+                // set is invalidated alongside the new one.
+                if (const terrain::HeightLayerRecord* existing = store.layer(cmd.splineId))
+                {
+                    // Copied BEFORE the update, which overwrites the record `existing` points at.
+                    const auto previousAffected = existing->affected;
+
+                    // A streamed-out tile has no TerrainTile at all, so the seeding loop above
+                    // skipped it and it is missing from the new set. updateLayer replaces
+                    // `affected` WHOLESALE, so shipping that set as-is would un-claim every part of
+                    // the corridor that happens to be unloaded right now -- and since the tile
+                    // keeps its base, streaming it back in would recompose it to bare ground. Walk
+                    // to one end of a long road, hit Regenerate, and the far half is quietly
+                    // erased from the terrain as the camera returns.
+                    //
+                    // `affected` (the geometric candidate list) is computed before any residency
+                    // filtering, so it answers the question residency cannot: does the NEW spline
+                    // still reach this coord? Carrying over exactly the previously-claimed coords
+                    // it still reaches preserves the corridor while still letting a genuine
+                    // narrowing drop a tile, loaded or not.
+                    const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash> reachable(
+                        affected.begin(), affected.end());
+                    for (const terrain::TileCoord& coord : previousAffected)
+                    {
+                        if (reachable.find(coord) != reachable.end() && !grid->getTile(coord))
+                            record.affected.insert(coord);
+                    }
+
+                    // Distinct subobjects, so moving both is safe whatever order they evaluate in.
+                    if (!store.updateLayer(cmd.splineId, std::move(record.spline),
+                                           std::move(record.affected)))
+                    {
+                        return false;
+                    }
+
+                    // An apply is an explicit "put this corridor in the ground" action, so it also
+                    // un-hides. Updating a hidden layer in place is the one outcome that just looks
+                    // broken: the terrain keeps no corridor while the road mesh is rebuilt against
+                    // un-deformed ground, because BuildSplineRoadMeshQuery samples heightData.
+                    store.setLayerVisible(cmd.splineId, true);
+
+                    invalidateHeightLayerCoords(*grid, previousAffected);
+                }
+                else if (!store.addLayer(std::move(record)))
+                {
+                    // Duplicate id or an over-cap stack; the store has already said why.
+                    return false;
+                }
 
                 // Deliberately no syncBrushBoundaryHeights here. Seam welding for covered tiles
                 // is derived-only and belongs to the recompose, which knows which side of each
                 // seam is authoritative; the brush helper averages and writes BOTH sides, which
                 // would corrupt an uncovered neighbour's authoritative plane.
                 recomposeAfterAuthoritativeEdit(grid.get(), seeded);
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
                 return true;
             });
 
@@ -646,7 +726,79 @@ namespace services
                     return false;
 
                 grid->recomposeDirtyDerived(0);
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
                 return true;
+            });
+
+        // VK-1647. Reorder. Composition is order-dependent, so moving a layer is a real edit --
+        // but only over the tiles it SHARES with a layer it crossed, which is what
+        // invalidateHeightLayerReorder computes. Marked before the move, because afterwards the
+        // bracket [lo, hi] no longer describes the layers that were crossed.
+        dispatcher.registerQueryHandler<events::splineTerrain::MoveHeightLayerCommand>(
+            [this](const events::splineTerrain::MoveHeightLayerCommand& cmd) -> bool
+            {
+                if (terrainGrids.empty())
+                    return false;
+
+                auto& grid = terrainGrids.begin()->second;
+                terrain::TerrainHeightLayerStore& store = grid->getHeightLayers();
+
+                const std::optional<size_t> from = store.layerIndex(cmd.splineId);
+                if (!from)
+                    return false;
+
+                const size_t to = static_cast<size_t>(cmd.newIndex);
+                if (to >= store.layers().size())
+                    return false;
+
+                if (*from == to)
+                    return true; // nothing moved, so nothing to invalidate
+
+                invalidateHeightLayerReorder(*grid, cmd.splineId, std::min(*from, to),
+                                             std::max(*from, to));
+
+                if (!store.moveLayer(cmd.splineId, to))
+                    return false;
+
+                grid->recomposeDirtyDerived(0);
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
+                return true;
+            });
+
+        // Hands out the next layer id from the terrain that owns the stack. Allocating here rather
+        // than in SplineTerrainServiceImpl is what makes ids survive a reload: the store's
+        // watermark comes back off the sidecar, while a freshly constructed service would restart
+        // at 1 and collide with every id the sidecar just restored.
+        dispatcher.registerQueryHandler<events::splineTerrain::ReserveHeightLayerIdCommand>(
+            [this](const events::splineTerrain::ReserveHeightLayerIdCommand&) -> uint64_t
+            {
+                if (terrainGrids.empty())
+                    return 0; // no terrain to allocate from; the caller falls back to its own counter
+
+                return terrainGrids.begin()->second->getHeightLayers().reserveLayerId();
+            });
+
+        dispatcher.registerQueryHandler<events::splineTerrain::GetHeightLayerStackQuery>(
+            [this](const events::splineTerrain::GetHeightLayerStackQuery&)
+                -> std::vector<services::HeightLayerInfo>
+            {
+                std::vector<services::HeightLayerInfo> result;
+                if (terrainGrids.empty())
+                    return result;
+
+                const auto& stack = terrainGrids.begin()->second->getHeightLayers().layers();
+                result.reserve(stack.size());
+                for (size_t i = 0; i < stack.size(); ++i)
+                {
+                    services::HeightLayerInfo info;
+                    info.id = stack[i].id;
+                    info.order = static_cast<uint32_t>(i);
+                    info.visible = stack[i].visible;
+                    info.affectedTileCount = static_cast<uint32_t>(stack[i].affected.size());
+                    result.push_back(info);
+                }
+
+                return result;
             });
 
         // Permanent deletion. The base blocks the layer seeded are KEPT: they are authoritative
@@ -665,6 +817,7 @@ namespace services
                 invalidateHeightLayerTiles(*grid, cmd.splineId);
                 store.removeLayer(cmd.splineId);
                 grid->recomposeDirtyDerived(0);
+                publishHeightLayerStackChanged(terrainGrids.begin()->first);
             });
 
         // VK-1621: the weight-map mirror of the height snapshot/restore pair above, so a painted
@@ -1476,6 +1629,44 @@ namespace services
                 if (terrainGrids.empty())
                     return false;
                 return terrainGrids.begin()->second->getHeightLayers().isEditingLocked();
+            });
+
+        dispatcher.registerQueryHandler<events::terrain::GetHeightLayerRecomposeProgressQuery>(
+            [this](const events::terrain::GetHeightLayerRecomposeProgressQuery&)
+                -> services::HeightLayerRecomposeProgress
+            {
+                services::HeightLayerRecomposeProgress result;
+                if (terrainGrids.empty())
+                {
+                    heightLayerRecomposePeak = 0;
+                    return result;
+                }
+
+                const auto status =
+                    terrainGrids.begin()->second->heightLayerRecomposeStatus();
+                result.pendingResident = status.pendingResident;
+                result.pendingUnloaded = status.pendingUnloaded;
+                result.meshBacklog = status.meshBacklog;
+
+                // Only the two that actually drain feed the fraction. pendingUnloaded is waiting on
+                // the streamer, and a tile the camera never revisits would otherwise hold the bar
+                // short of 100% forever.
+                const uint32_t outstanding = status.pendingResident + status.meshBacklog;
+                if (outstanding == 0)
+                {
+                    heightLayerRecomposePeak = 0;
+                    return result; // progress 1.0, active false
+                }
+
+                // Latched high-water mark, so the fraction is monotone even though a recompose
+                // marks fresh mesh work as it goes and new invalidations can arrive mid-drain.
+                heightLayerRecomposePeak = std::max(heightLayerRecomposePeak, outstanding);
+
+                result.totalAtStart = heightLayerRecomposePeak;
+                result.progress = 1.0f - static_cast<float>(outstanding) /
+                                             static_cast<float>(heightLayerRecomposePeak);
+                result.active = true;
+                return result;
             });
 
         dispatcher.registerCommandHandler<events::physics::AddTerrainColliderCommand>(

@@ -146,6 +146,14 @@ namespace services
         // destroy artist edits.
         grid.getHeightLayers().eraseBase(coord);
 
+        // VK-1647: and un-claim it, so no layer is left naming a tile that owns no base. isCovered
+        // is satisfied by EITHER a base or a claim, so a claimed-but-baseless coord reads as
+        // covered forever: recomposeTile refuses it, while normalizeDerivedSeams still welds its
+        // boundary column -- and a covered<->covered weld averages in the neighbour's composed
+        // value, so another layer's corridor bleeds into a plane nothing can rebuild. It survives a
+        // save too, because `affected` and the base index are persisted independently.
+        grid.getHeightLayers().dropCoordFromLayers(coord);
+
         // Remove from grid (clears neighbor refs, marks neighbors dirty)
         grid.removeTile(coord);
 

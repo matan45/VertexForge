@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../EventTypes.hpp"
+#include "../../data/TerrainData.hpp"
 #include "../../utilities/terrain/SplineTypes.hpp"
 #include "../../utilities/terrain/RoadMeshTypes.hpp"
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace events::splineTerrain
 {
@@ -103,6 +105,14 @@ namespace events::splineTerrain
         ::terrain::SplineParams params;
         uint64_t replacesEntityId = 0;
 
+        // VK-1647. The height layer this road already owns (RoadSplineComponent::splineId, which is
+        // persisted in the scene). Carrying it makes the next apply UPDATE that layer in place
+        // instead of registering a second one: before this, re-authoring a road left its old
+        // corridor composing forever and the terrain was carved twice.
+        //
+        // 0 means "no existing layer" — a sculpt-less road, or a spline started from scratch.
+        uint64_t editsSplineId = 0;
+
         std::string_view getName() const override { return "LoadSplineForEdit"; }
     };
 
@@ -185,6 +195,49 @@ namespace events::splineTerrain
         uint64_t splineId = 0;
 
         std::string_view getName() const override { return "RemoveSplineHeightLayer"; }
+    };
+
+    // VK-1647. Allocates the next layer id from the terrain that owns the stack, so the counter
+    // survives a reload: the stack comes back off the sidecar with ids 1..N while a
+    // freshly-constructed service would otherwise start again at 1 and collide with every one of
+    // them. Ids are monotonic and never reused — a RoadSplineComponent keeps its splineId in the
+    // SCENE and can outlive the layer it names.
+    //
+    // Returns 0 when there is no terrain to allocate from; the caller falls back to its own
+    // counter, which is enough for a paint- or mesh-only spline that registers no layer.
+    struct ReserveHeightLayerIdCommand : ICommand<uint64_t>
+    {
+        std::string_view getName() const override { return "ReserveHeightLayerId"; }
+    };
+
+    // The reserved height-layer stack, in composition order (index 0 composes first). POD only —
+    // the Editor does not link Terrain.dll. VK-1648's list panel is the intended consumer.
+    struct GetHeightLayerStackQuery : IQuery<std::vector<services::HeightLayerInfo>>
+    {
+        std::string_view getName() const override { return "GetHeightLayerStack"; }
+    };
+
+    // Moves one layer to `newIndex`, sliding the layers between its old and new position by one.
+    // Only the tiles the moved layer shares with a layer it crossed can change, so that is exactly
+    // what gets invalidated.
+    //
+    // Returns false when no layer carries that id, or when newIndex is past the end of the stack.
+    struct MoveHeightLayerCommand : ICommand<bool>
+    {
+        uint64_t splineId = 0;
+        uint32_t newIndex = 0;
+
+        std::string_view getName() const override { return "MoveHeightLayer"; }
+    };
+
+    // Published after any change to the stack's membership, order, parameters or visibility, so a
+    // list UI can refresh without polling. Carries no payload beyond the terrain: the reader is
+    // expected to re-run GetHeightLayerStackQuery, which is the single source of truth.
+    struct HeightLayerStackChangedNotification : INotification
+    {
+        uint64_t terrainEntityId = 0;
+
+        std::string_view getName() const override { return "HeightLayerStackChanged"; }
     };
 
     // VK-1621. Builds the road ribbon from an already-applied spline. Handled by TerrainService

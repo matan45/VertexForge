@@ -12,6 +12,7 @@
 #include <fstream>
 #include <limits>
 #include <random>
+#include <unordered_set>
 
 namespace terrain
 {
@@ -189,7 +190,8 @@ namespace terrain
                                                      uint32_t& outLayerCount,
                                                      uint32_t& outBaseCount,
                                                      uint64_t& outLayerTableOffset,
-                                                     uint64_t& outBaseIndexOffset)
+                                                     uint64_t& outBaseIndexOffset,
+                                                     uint64_t& outNextLayerId)
         {
             if (bytes.size() < TERRAIN_LAYER_HEADER_SIZE + TERRAIN_LAYER_TRAILER_SIZE)
                 return TerrainLayerSidecarStatus::Invalid;
@@ -223,6 +225,7 @@ namespace terrain
             outBaseCount = reader.read<uint32_t>();
             outLayerTableOffset = reader.read<uint64_t>();
             outBaseIndexOffset = reader.read<uint64_t>();
+            outNextLayerId = reader.read<uint64_t>(); // VK-1647
 
             if (!reader.good())
                 return TerrainLayerSidecarStatus::Invalid;
@@ -333,6 +336,17 @@ namespace terrain
         appendLE<uint32_t>(prefix, static_cast<uint32_t>(baseCoords.size()));
         appendLE<uint64_t>(prefix, layerTableOffset);
         appendLE<uint64_t>(prefix, baseIndexOffset);
+
+        // VK-1647. The id watermark, so a reload cannot re-issue an id that is already live — or
+        // one that was live and has since been deleted, which is the harder case: a
+        // RoadSplineComponent keeps its splineId in the SCENE and outlives the layer it names.
+        //
+        // Appended at the END of the header on purpose. TERRAIN_LAYER_GUID_OFFSET and
+        // TERRAIN_LAYER_GENERATION_ID_OFFSET are unchanged, so rebindTerrainLayerSidecar keeps
+        // patching the right bytes, and layerTableOffset/baseIndexOffset are stored explicitly
+        // rather than recovered from the stream position (as VFTR's index offset is), so growing
+        // the header shifts nothing a reader has to infer.
+        appendLE<uint64_t>(prefix, store.peekNextLayerId());
 
         if (prefix.size() != TERRAIN_LAYER_HEADER_SIZE)
         {
@@ -447,8 +461,9 @@ namespace terrain
         uint32_t baseCount = 0;
         uint64_t layerTableOffset = 0;
         uint64_t baseIndexOffset = 0;
+        uint64_t nextLayerId = 0;
         const auto status = parseSidecarHeader(bytes, outMeta, layerCount, baseCount,
-                                               layerTableOffset, baseIndexOffset);
+                                               layerTableOffset, baseIndexOffset, nextLayerId);
         if (status != TerrainLayerSidecarStatus::Ok)
             return status;
 
@@ -470,8 +485,9 @@ namespace terrain
         uint32_t baseCount = 0;
         uint64_t layerTableOffset = 0;
         uint64_t baseIndexOffset = 0;
+        uint64_t nextLayerId = 0;
         const auto headerStatus = parseSidecarHeader(bytes, outMeta, layerCount, baseCount,
-                                                     layerTableOffset, baseIndexOffset);
+                                                     layerTableOffset, baseIndexOffset, nextLayerId);
         if (headerStatus != TerrainLayerSidecarStatus::Ok)
             return headerStatus;
 
@@ -488,6 +504,13 @@ namespace terrain
         // would still make its tiles covered, because coverage is sticky.
         std::vector<HeightLayerRecord> decodedLayers;
         decodedLayers.reserve(layerCount);
+
+        // VK-1647. Parallel to decodedLayers, holding each record's `order` field so the stack can
+        // be rebuilt from it rather than from file sequence. Kept beside the records instead of on
+        // them because order is a property of the FILE, not of a live layer — once the stack is
+        // built, position is the only thing that means anything.
+        std::vector<uint32_t> decodedOrders;
+        decodedOrders.reserve(layerCount);
 
         ByteReader reader(bytes.data() + layerTableOffset,
                           static_cast<size_t>(baseIndexOffset - layerTableOffset));
@@ -518,11 +541,11 @@ namespace terrain
             record.id = reader.read<uint64_t>();
             const uint32_t rawType = reader.read<uint32_t>();
             record.visible = reader.read<uint8_t>() != 0;
-            // `order` is written but not consumed: record sequence already determines composition
-            // order today. It exists so VK-1648's reorder UI has a field to be authoritative about
-            // without a format bump, and so an out-of-sequence stack is diagnosable by eye in a
-            // hex dump. Read only to advance the cursor.
-            reader.read<uint32_t>();
+            // VK-1647: `order` is now AUTHORITATIVE. VK-1646 wrote it and discarded it, reserving
+            // it for exactly this. Consuming it means the stack is defined by a field rather than
+            // by a file position, so an out-of-sequence stack is both diagnosable in a hex dump and
+            // a fact the reader can act on — and reorder needed no format bump to persist.
+            const uint32_t order = reader.read<uint32_t>();
             const uint32_t affectedCount = reader.read<uint32_t>();
             if (!reader.good() || affectedCount > MAX_LAYER_AFFECTED_TILES)
                 return TerrainLayerSidecarStatus::Invalid;
@@ -570,6 +593,7 @@ namespace terrain
 
             record.eval = makeSplineCorridorEval(record.spline);
             decodedLayers.push_back(std::move(record));
+            decodedOrders.push_back(order);
 
             if (!reader.skip(sizeof(uint32_t))) // the record CRC, already verified above
                 return TerrainLayerSidecarStatus::Invalid;
@@ -577,6 +601,50 @@ namespace terrain
 
         if (degraded)
             return TerrainLayerSidecarStatus::Degraded;
+
+        // VK-1647. Rebuild composition order from the `order` fields. They must be a permutation of
+        // [0, layerCount): a gap or a duplicate would leave the stack order partly undefined, and
+        // composition is order-dependent, so "partly undefined" means ground nobody authored. The
+        // per-record CRCs have already passed at this point, so a bad set is not disk rot — it is a
+        // writer that disagreed with this format, which is exactly what a version exists to catch.
+        {
+            std::vector<uint32_t> seen = decodedOrders;
+            std::sort(seen.begin(), seen.end());
+            for (size_t i = 0; i < seen.size(); ++i)
+            {
+                if (seen[i] != static_cast<uint32_t>(i))
+                {
+                    vfLogError("TerrainLayerSidecar: Layer order fields are not a permutation of "
+                               "[0, {}) in {}", seen.size(), path.string());
+                    return TerrainLayerSidecarStatus::Invalid;
+                }
+            }
+
+            // Permutation-verified, so this is a pure scatter: record with order i lands at index i.
+            std::vector<HeightLayerRecord> ordered(decodedLayers.size());
+            for (size_t i = 0; i < decodedLayers.size(); ++i)
+                ordered[decodedOrders[i]] = std::move(decodedLayers[i]);
+            decodedLayers = std::move(ordered);
+        }
+
+        // VK-1647. Ids must be unique, checked HERE rather than by letting addLayer refuse one:
+        // outStore is only ever touched once the whole file has proved sound (see above), and a
+        // loop that bailed halfway would leave a partial stack whose tiles stay covered, because
+        // coverage is sticky. The count is already bounded by parseSidecarHeader's
+        // MAX_TERRAIN_EDIT_LAYERS check, so uniqueness is the only remaining store precondition.
+        {
+            std::unordered_set<uint64_t> ids;
+            ids.reserve(decodedLayers.size());
+            for (const HeightLayerRecord& record : decodedLayers)
+            {
+                if (!ids.insert(record.id).second)
+                {
+                    vfLogError("TerrainLayerSidecar: {} carries more than one layer with id {}; "
+                               "ids are unique and never reused", path.string(), record.id);
+                    return TerrainLayerSidecarStatus::Invalid;
+                }
+            }
+        }
 
         struct DecodedBase
         {
@@ -620,10 +688,26 @@ namespace terrain
             decodedBases.push_back(std::move(decoded));
         }
 
+        // Every precondition addLayer enforces — the cap, id uniqueness, an unlocked store — was
+        // established above or holds by construction on a freshly loaded terrain, so this cannot
+        // fail. Checked anyway: a silent drop here would be a layer the artist can no longer see
+        // but whose tiles stay covered.
         for (HeightLayerRecord& record : decodedLayers)
-            outStore.addLayer(std::move(record));
+        {
+            const uint64_t id = record.id;
+            if (!outStore.addLayer(std::move(record)))
+            {
+                vfLogError("TerrainLayerSidecar: {} could not be rebuilt — the store refused layer "
+                           "{}", path.string(), id);
+                return TerrainLayerSidecarStatus::Invalid;
+            }
+        }
         for (DecodedBase& decoded : decodedBases)
             outStore.adoptBase(decoded.coord, std::move(decoded.heights), decoded.vertexCount);
+
+        // After the records, so addLayer's own watermark raise cannot pull it back down, and it is
+        // raise-only anyway. A file written before any id was issued carries 1, the initial value.
+        outStore.adoptNextLayerId(nextLayerId);
 
         return TerrainLayerSidecarStatus::Ok;
     }
@@ -641,8 +725,9 @@ namespace terrain
         uint32_t baseCount = 0;
         uint64_t layerTableOffset = 0;
         uint64_t baseIndexOffset = 0;
+        uint64_t nextLayerId = 0;
         if (parseSidecarHeader(bytes, meta, layerCount, baseCount, layerTableOffset,
-                               baseIndexOffset) != TerrainLayerSidecarStatus::Ok ||
+                               baseIndexOffset, nextLayerId) != TerrainLayerSidecarStatus::Ok ||
             !verifyTrailer(bytes))
         {
             vfLogWarning("TerrainLayerSidecar: {} is not a readable sidecar; not rebinding it",

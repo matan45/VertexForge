@@ -56,6 +56,17 @@ namespace services
                 cacheIt->second->ensureLODsLoaded(*tile, generator, getTile);
         }
 
+        // VK-1647. Settle any outstanding recompose before the derived plane is written out. VFTR
+        // carries DERIVED heights; the base blocks go to the sidecar. In the editor a stale plane
+        // self-heals on the next load (a covered tile is re-marked stale when it streams in), but
+        // GameExporter deliberately does not ship .vfterrainlayers — so a build exported while
+        // tiles were still stale would carry ground the artist never authored, with nothing left
+        // on disk to recompute it from.
+        //
+        // After the loop above, never before: addTileFromFile marks covered streamed-in tiles
+        // stale, so draining first would leave exactly those tiles unsettled.
+        grid.recomposeDirtyDerived(0);
+
         return true;
     }
 
@@ -72,6 +83,12 @@ namespace services
         auto& grid = *gridIt->second;
         auto& cache = *cacheIt->second;
 
+        // VK-1647. Settle outstanding recomposes FIRST, before anything below reads the dirty set.
+        // A recompose calls fileCache->markDirty() on every tile it touches, so draining later
+        // would either grow the set mid-iteration or leave those tiles out of this save entirely.
+        // See prepareSave() for why a stale derived plane must never reach VFTR.
+        grid.recomposeDirtyDerived(0);
+
         // Detect conditions that force a full save BEFORE the background thread starts,
         // because prepareSave() adds tiles to the grid (not thread-safe). Getting this wrong is
         // not merely a slow path: saveTerrainIncremental() falls back to saveTerrain() on the
@@ -79,6 +96,18 @@ namespace services
         // currently resident in the grid — so with streaming on, every unloaded tile would be
         // silently dropped from the file.
         bool needsFullSave = cache.hasNewOrRemovedTiles();
+
+        // VK-1647. Whatever the unbudgeted drain above could NOT settle forces a full save.
+        //
+        // The remainder is exactly "covered, stale, and not resident": the seed loop clears every
+        // uncovered stale coord, and drops the flag for a covered tile it cannot compose. Unlike
+        // prepareSave, this path deliberately never pages tiles in, so those coords would be
+        // neither recomposed nor written — their on-disk bytes would stay the pre-operation
+        // composite. Invisible in the editor, which recomposes them on the next load, but
+        // GameExporter does not ship the sidecar, so an export would carry ground the artist never
+        // authored. prepareSave streams the saved set back in, which is precisely the missing step.
+        if (grid.getHeightLayers().staleCount() != 0)
+            needsFullSave = true;
 
         // Nothing to write incrementally means saveTerrainIncremental() will full-save too.
         if (cache.getDirtyCount() == 0)

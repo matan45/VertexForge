@@ -23,6 +23,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -435,6 +436,37 @@ namespace services
         // callers that are about to mutate the stack must mark first, mutate, then recompose,
         // because once the record is gone there is nothing left to ask which tiles it covered.
         static void invalidateHeightLayerTiles(terrain::TerrainGrid& grid, uint64_t layerId);
+
+        // VK-1647. Marks an explicit coord set plus each coord's ring derived-stale. Used by the
+        // in-place edit, which has to invalidate the OLD affected set as well as the new one --
+        // tiles the edit narrowed off keep their (sticky) coverage and owe a recompose back to
+        // base + the rest of the stack.
+        static void invalidateHeightLayerCoords(
+            terrain::TerrainGrid& grid,
+            const std::unordered_set<terrain::TileCoord, terrain::TileCoordHash>& coords);
+
+        // Marks exactly the tiles a reorder can change: the moved layer's affected set intersected
+        // with the union of the affected sets of the layers it crossed, plus their rings.
+        //
+        // That intersection is exact, not a conservative superset. A tile outside the moved layer's
+        // affected set never lists it among its contributors, and the crossed layers keep their
+        // relative order; a tile inside it but claimed by none of the crossed layers has the moved
+        // layer sliding past layers that do not appear in that tile's contributor list at all.
+        // Either way composition is unchanged, so invalidating them would be pure waste on a map
+        // where one road crosses another once.
+        //
+        // `lo`/`hi` are stack indices, inclusive, and must bracket the move.
+        static void invalidateHeightLayerReorder(terrain::TerrainGrid& grid, uint64_t movedId,
+                                                 size_t lo, size_t hi);
+
+        // Fire-and-forget "the stack changed", for a list UI that would otherwise have to poll.
+        // Every mutating layer handler calls it; it is the only place the notification is built.
+        void publishHeightLayerStackChanged(uint64_t terrainEntityId) const;
+
+        // High-water mark of outstanding recompose + mesh work since the last time both reached
+        // zero, so GetHeightLayerRecomposeProgressQuery's fraction only ever moves forward. Reset
+        // by that same handler; nothing else touches it.
+        uint32_t heightLayerRecomposePeak = 0;
         void applyRamp(EntityHandle targetEntity, terrain::TerrainGrid* grid,
                        const glm::vec3& startPos, const glm::vec3& endPos,
                        const terrain::BrushParams& params);

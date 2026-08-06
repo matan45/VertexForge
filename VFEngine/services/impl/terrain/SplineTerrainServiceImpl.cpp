@@ -120,6 +120,7 @@ namespace services
                 activePoints = cmd.controlPoints;
                 currentParams = cmd.params;
                 editingRoadEntityId = cmd.replacesEntityId;
+                editingSplineId = cmd.editsSplineId;
 
                 if (!splineModeActive)
                 {
@@ -186,8 +187,10 @@ namespace services
     {
         activePoints.clear();
         // Dropping the points also drops the link to the road they came from; a fresh spline must
-        // not silently replace the road that was last opened for editing.
+        // not silently replace the road that was last opened for editing -- nor reuse its height
+        // layer, which would carve the new corridor into the old road's tiles.
         editingRoadEntityId = 0;
+        editingSplineId = 0;
     }
 
     void SplineTerrainServiceImpl::finalizeSpline()
@@ -210,7 +213,25 @@ namespace services
         // Allocate the id UP FRONT. It used to be owned by the sculpt branch, so a paint-only
         // apply published `nextSplineId - 1` without ever incrementing it — id 0 for the first
         // paint, and the previous sculpt's id afterwards.
-        const uint64_t splineId = nextSplineId++;
+        //
+        // VK-1647: re-authoring a road keeps its id, so the apply below updates that layer in place
+        // rather than stacking a second corridor over the first. Otherwise the id comes from the
+        // terrain's layer store, whose watermark is persisted in the sidecar — a service-local
+        // counter restarts at 1 on every load and collides with the ids the sidecar just restored,
+        // and because removeLayer/setLayerVisible resolve by first match, the new spline's undo
+        // would then hide someone else's road.
+        uint64_t splineId = editingSplineId;
+        if (splineId == 0)
+        {
+            splineId = dispatcher.query(events::splineTerrain::ReserveHeightLayerIdCommand{});
+            if (splineId == 0)
+            {
+                // No terrain to allocate from — a paint- or mesh-only spline. The local counter is
+                // enough, because nothing will register a height layer for it.
+                splineId = nextSplineId;
+            }
+        }
+        nextSplineId = std::max(nextSplineId, splineId + 1);
 
         const float totalHalfWidth = currentParams.corridorWidth + currentParams.falloffWidth;
         const bool wantsSculpt = terrain::hasOp(currentParams.ops, terrain::SplineOps::Sculpt);
@@ -272,11 +293,25 @@ namespace services
         // Record the spline whenever anything landed, not just for sculpt. A paint-only or
         // mesh-only apply registers no height layer, so deleteSpline is a no-op for heights —
         // right, since nothing deformed them.
-        terrain::SplineData spline;
-        spline.id = splineId;
-        spline.controlPoints = activePoints;
-        spline.params = currentParams;
-        appliedSplines.push_back(std::move(spline));
+        // VK-1647: re-authoring updates the existing record rather than appending a second one with
+        // the same id. deleteSpline() and every lookup here resolve by first match, so a duplicate
+        // would shadow the newer definition for the rest of the session.
+        auto existing = std::find_if(appliedSplines.begin(), appliedSplines.end(),
+            [splineId](const terrain::SplineData& s) { return s.id == splineId; });
+
+        if (existing != appliedSplines.end())
+        {
+            existing->controlPoints = activePoints;
+            existing->params = currentParams;
+        }
+        else
+        {
+            terrain::SplineData spline;
+            spline.id = splineId;
+            spline.controlPoints = activePoints;
+            spline.params = currentParams;
+            appliedSplines.push_back(std::move(spline));
+        }
 
         auto undoCommand = std::make_shared<SplineApplyUndoCommand>(
             beginBatch.description, splineId, heightLayerRegistered,
@@ -302,25 +337,29 @@ namespace services
 
         activePoints.clear();
         editingRoadEntityId = 0;
+        editingSplineId = 0;
     }
 
     void SplineTerrainServiceImpl::deleteSpline(uint64_t id)
     {
-        auto it = std::find_if(appliedSplines.begin(), appliedSplines.end(),
-            [id](const terrain::SplineData& s) { return s.id == id; });
-
-        if (it == appliedSplines.end())
-            return;
-
-        // VK-1645: drop the reserved height layer and recompose the tiles it covered from their
-        // authoritative bases. A no-op when this spline had no sculpt op. Overlapping splines and
-        // ordinary sculpt edits made underneath both survive, because neither was ever folded
-        // into the base.
+        // VK-1647: dispatched UNCONDITIONALLY, and deliberately not gated on `appliedSplines`.
+        // That vector is session-only — it is appended to by finalizeSpline and nothing repopulates
+        // it on load, while the layer stack itself comes back off the sidecar. Returning early when
+        // the id was not applied in THIS session therefore made every layer from a previous session
+        // undeletable, which breaks "delete produces identical results for identical ordered
+        // definitions". The command is already a no-op when no layer carries the id.
+        //
+        // VK-1645: dropping the layer recomposes the tiles it covered from their authoritative
+        // bases. Overlapping splines and ordinary sculpt edits made underneath both survive,
+        // because neither was ever folded into the base.
         events::splineTerrain::RemoveSplineHeightLayerCommand removeCmd;
         removeCmd.splineId = id;
         events::EventDispatcher::instance().execute(removeCmd);
 
-        appliedSplines.erase(it);
+        auto it = std::find_if(appliedSplines.begin(), appliedSplines.end(),
+            [id](const terrain::SplineData& s) { return s.id == id; });
+        if (it != appliedSplines.end())
+            appliedSplines.erase(it);
     }
 
 }

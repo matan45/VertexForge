@@ -120,6 +120,11 @@ namespace windows
         cmd.params = road->params;
         cmd.replacesEntityId = entity.id;
 
+        // VK-1647: the height layer this road already owns, so regenerating updates that corridor
+        // in place instead of stacking a second one over it. Persisted on the component, so it
+        // survives a reload — which is also why layer ids had to stop being session-scoped.
+        cmd.editsSplineId = road->splineId;
+
         return events::EventDispatcher::instance().query(cmd);
     }
 

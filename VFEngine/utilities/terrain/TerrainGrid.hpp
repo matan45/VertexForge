@@ -117,6 +117,20 @@ namespace terrain
         // by an exact recompose from the in-RAM base.
         bool ensureTileHeights(TerrainTile& tile);
 
+        // VK-1647. What a recompose still owes, split by residency.
+        //
+        // The split is the whole point: a covered tile that is streamed out stays stale until it
+        // comes back, and it is waiting on the streamer rather than on the recompose budget. Folded
+        // into one number it would pin a progress bar below 100% for as long as the camera stays
+        // away, which reads as a hang.
+        struct HeightLayerRecomposeStatus
+        {
+            uint32_t pendingResident = 0; // covered + stale + resident -- work the budget will do
+            uint32_t pendingUnloaded = 0; // covered + stale + streamed out -- waiting on streaming
+            uint32_t meshBacklog = 0;     // tiles whose geometry the 8-per-frame loop still owes
+        };
+        [[nodiscard]] HeightLayerRecomposeStatus heightLayerRecomposeStatus() const;
+
     private:
         // Composes one covered tile in place. Returns false when it is not covered, has no base,
         // or the base no longer matches the tile's resolution.

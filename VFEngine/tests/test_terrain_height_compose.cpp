@@ -454,4 +454,171 @@ TEST_SUITE("TerrainHeightCompose")
             CHECK(block->vertexCount != highRes.getVertexCount());
         }
     }
+
+    // VK-1647 -- the ordered-stack operations the deterministic evaluator is built on.
+    TEST_CASE("the stack can be reordered and edited without losing its invariants")
+    {
+        terrain::TerrainHeightLayerStore store;
+        const terrain::TileCoord coord(0, 0);
+
+        const auto push = [&store, &coord](uint64_t id)
+        {
+            REQUIRE(store.addLayer(makeCorridorLayer(id, coord, centreSpline(), corridorParams())));
+        };
+
+        SUBCASE("moveLayer rotates: every other layer keeps its relative order")
+        {
+            push(1); push(2); push(3); push(4);
+
+            // A swap would put 4 where 1 was, reordering TWO layers for one drag.
+            CHECK(store.moveLayer(1, 3));
+
+            REQUIRE(store.layers().size() == 4);
+            CHECK(store.layers()[0].id == 2);
+            CHECK(store.layers()[1].id == 3);
+            CHECK(store.layers()[2].id == 4);
+            CHECK(store.layers()[3].id == 1);
+
+            // ...and back, in the other direction.
+            CHECK(store.moveLayer(1, 0));
+            CHECK(store.layers()[0].id == 1);
+            CHECK(store.layers()[1].id == 2);
+            CHECK(store.layers()[2].id == 3);
+            CHECK(store.layers()[3].id == 4);
+        }
+
+        SUBCASE("moveLayer refuses an unknown id and an index past the end")
+        {
+            push(1); push(2);
+
+            CHECK_FALSE(store.moveLayer(99, 0));
+            CHECK_FALSE(store.moveLayer(1, 2)); // size is 2, so 2 is past the end
+            CHECK(store.moveLayer(1, 0));       // no-op move is a success
+            CHECK(store.layers()[0].id == 1);
+        }
+
+        SUBCASE("layerIndex tracks the move")
+        {
+            push(1); push(2); push(3);
+
+            CHECK(store.layerIndex(3).value() == 2);
+            CHECK(store.moveLayer(3, 0));
+            CHECK(store.layerIndex(3).value() == 0);
+            CHECK_FALSE(store.layerIndex(99).has_value());
+        }
+
+        SUBCASE("updateLayer keeps the id and the stack position")
+        {
+            push(1); push(2);
+
+            terrain::SplineCorridorLayerParams params;
+            params.corridor = corridorParams();
+            params.samples = centreSpline();
+
+            CHECK(store.updateLayer(1, params, {coord}));
+            CHECK(store.layerIndex(1).value() == 0); // still first
+            CHECK(store.layers().size() == 2);       // not three
+
+            // The callable is rebuilt from the stored parameters, so an edited layer and a layer
+            // reloaded from the sidecar are the same evaluator by construction.
+            CHECK(store.layers()[0].type == terrain::HeightLayerType::SplineCorridor);
+            CHECK(static_cast<bool>(store.layers()[0].eval));
+
+            CHECK_FALSE(store.updateLayer(99, params, {coord}));
+        }
+
+        SUBCASE("reorderImpactSet is the intersection, not either whole set")
+        {
+            const terrain::TileCoord shared(1, 0);
+
+            terrain::HeightLayerRecord west =
+                makeCorridorLayer(1, coord, centreSpline(), corridorParams());
+            west.affected.insert(shared);
+            REQUIRE(store.addLayer(std::move(west)));
+
+            terrain::HeightLayerRecord east =
+                makeCorridorLayer(2, shared, centreSpline(), corridorParams());
+            east.affected.insert(terrain::TileCoord(2, 0));
+            REQUIRE(store.addLayer(std::move(east)));
+
+            const auto impact = store.reorderImpactSet(1, 0, 1);
+            CHECK(impact.size() == 1);
+            CHECK(impact.count(shared) == 1);
+            CHECK(impact.count(coord) == 0);                       // layer 1 only
+            CHECK(impact.count(terrain::TileCoord(2, 0)) == 0);    // layer 2 only
+
+            CHECK(store.reorderImpactSet(99, 0, 1).empty());
+            CHECK(store.reorderImpactSet(1, 7, 9).empty());
+        }
+    }
+
+    // VK-1647 -- stable ids. The bug this closes: a reload restored ids 1..N from the sidecar while
+    // the service restarted its counter at 1, and because removeLayer/setLayerVisible resolve by
+    // FIRST match, the next spline's undo hid someone else's road.
+    TEST_CASE("layer ids are unique and never reused")
+    {
+        terrain::TerrainHeightLayerStore store;
+        const terrain::TileCoord coord(0, 0);
+
+        SUBCASE("reserveLayerId is monotonic and starts at 1")
+        {
+            CHECK(store.peekNextLayerId() == 1); // 0 is the "no spline" sentinel
+            CHECK(store.reserveLayerId() == 1);
+            CHECK(store.reserveLayerId() == 2);
+            CHECK(store.peekNextLayerId() == 3);
+        }
+
+        SUBCASE("adoptNextLayerId only ever raises the watermark")
+        {
+            store.adoptNextLayerId(50);
+            CHECK(store.peekNextLayerId() == 50);
+
+            store.adoptNextLayerId(10); // a stale sidecar must not hand back live ids
+            CHECK(store.peekNextLayerId() == 50);
+
+            CHECK(store.reserveLayerId() == 50);
+        }
+
+        SUBCASE("addLayer keeps the watermark ahead of any id it accepts")
+        {
+            REQUIRE(store.addLayer(makeCorridorLayer(42, coord, centreSpline(), corridorParams())));
+
+            // Loading a sidecar hands ids straight in; the next reservation must clear them.
+            CHECK(store.peekNextLayerId() == 43);
+            CHECK(store.reserveLayerId() == 43);
+        }
+
+        SUBCASE("addLayer refuses id 0")
+        {
+            // 0 is the "no spline" sentinel on RoadSplineComponent and on every spline command, so
+            // a default-constructed RemoveSplineHeightLayerCommand must not address a real layer.
+            CHECK_FALSE(store.addLayer(makeCorridorLayer(0, coord, centreSpline(), corridorParams())));
+            CHECK(store.layers().empty());
+
+            // ...and the watermark is untouched by a rejection.
+            CHECK(store.peekNextLayerId() == 1);
+        }
+
+        SUBCASE("addLayer refuses a duplicate id")
+        {
+            REQUIRE(store.addLayer(makeCorridorLayer(5, coord, centreSpline(), corridorParams())));
+            CHECK_FALSE(store.addLayer(makeCorridorLayer(5, coord, centreSpline(), corridorParams())));
+            CHECK(store.layers().size() == 1);
+
+            // A different id over the same tile is fine -- that is an overlap, not a collision.
+            CHECK(store.addLayer(makeCorridorLayer(6, coord, centreSpline(), corridorParams())));
+            CHECK(store.layers().size() == 2);
+        }
+
+        SUBCASE("a deleted id is not handed out again")
+        {
+            REQUIRE(store.addLayer(makeCorridorLayer(store.reserveLayerId(), coord, centreSpline(),
+                                                     corridorParams())));
+            CHECK(store.removeLayer(1));
+
+            // Reuse would re-point a surviving RoadSplineComponent -- which keeps its splineId in
+            // the SCENE and outlives the layer -- at somebody else's corridor.
+            CHECK(store.reserveLayerId() == 2);
+        }
+    }
 }

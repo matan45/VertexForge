@@ -286,6 +286,37 @@ namespace terrain
         return true;
     }
 
+    TerrainGrid::HeightLayerRecomposeStatus TerrainGrid::heightLayerRecomposeStatus() const
+    {
+        HeightLayerRecomposeStatus status;
+
+        // staleSorted() would allocate and sort for nothing; ordering is irrelevant to a count.
+        // The uncovered stale coords that recomposeDirtyDerived drops are excluded for the same
+        // reason it drops them: they own no base, so no recompose is owed for them.
+        for (const TileCoord& coord : heightLayers->staleCoords())
+        {
+            if (!heightLayers->isCovered(coord))
+                continue;
+
+            if (tiles.find(coord) != tiles.end())
+                ++status.pendingResident;
+            else
+                ++status.pendingUnloaded;
+        }
+
+        // The existing MAX_TILE_REGEN = 8 queue in regenerateDirtyTiles. Counted here because a
+        // recompose is the cheap half: it marks isDirty + every LOD dirty, and the geometry the
+        // user actually sees is rebuilt eight tiles per frame afterwards. Reporting only the
+        // recompose backlog would show 100% while the terrain was still visibly re-meshing.
+        for (const auto& [coord, tile] : tiles)
+        {
+            if (tile && tile->isDirty && tile->dirtyLODMask != 0)
+                ++status.meshBacklog;
+        }
+
+        return status;
+    }
+
     bool TerrainGrid::recomposeTile(TerrainTile& tile)
     {
         const BaseHeightBlock* block = heightLayers->base(tile.coord);
@@ -322,6 +353,15 @@ namespace terrain
                 heightLayers->clearDerivedStale(coord);
                 continue;
             }
+
+            // VK-1647: a covered coord that is not resident cannot be composed, so it must not
+            // spend budget. It used to be pushed anyway and then dropped in phase 1, and because
+            // staleSorted() is a deterministic (z, x) order and the flag is never cleared for a
+            // non-resident coord, the SAME ones were re-picked every frame forever. Past `budget`
+            // of them and no resident tile was ever reached again -- composedCount stayed 0, which
+            // also skips the seam pass below. The flag stays set, so stream-in still recomposes it.
+            if (!getTile(coord))
+                continue;
 
             if (budget != 0 && seeds.size() >= budget)
                 break;

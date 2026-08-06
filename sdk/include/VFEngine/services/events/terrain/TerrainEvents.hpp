@@ -180,6 +180,18 @@ namespace events::terrain
         std::string_view getName() const override { return "IsHeightLayerEditingLocked"; }
     };
 
+    // VK-1647. What a wide layer invalidation still owes. Polled per frame rather than pushed,
+    // matching GetBakeProgressQuery and the volumetric bake: the work is drained by the terrain
+    // tick, so there is no natural moment to publish from and a poll cannot fall behind.
+    //
+    // Hiding, showing, reordering or deleting a layer over a large map invalidates its whole
+    // affected set; the recompose itself is synchronous, but the geometry those tiles need is
+    // rebuilt eight per frame, so a 1,000-tile stack takes seconds of wall clock to settle.
+    struct GetHeightLayerRecomposeProgressQuery : IQuery<services::HeightLayerRecomposeProgress>
+    {
+        std::string_view getName() const override { return "GetHeightLayerRecomposeProgress"; }
+    };
+
     struct PrepareTerrainSaveCommand : ICommand<bool>
     {
         services::EntityHandle terrainEntity;
