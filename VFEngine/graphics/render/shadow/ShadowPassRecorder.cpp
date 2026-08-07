@@ -241,7 +241,7 @@ namespace render::shadow
 
     void ShadowPassRecorder::dispatchTerrainShadow(
         vk::CommandBuffer cmd, const ShadowPassContext& ctx,
-        const glm::mat4& viewProj, float depthBias, float slopeBias)
+        const glm::mat4& viewProj, float depthBias, float slopeBias, uint32_t terrainLod)
     {
         if (ctx.terrainParams == nullptr || ctx.terrainParams->tileCount == 0 ||
             ctx.terrainShadowPipeline == nullptr || !ctx.terrainShadowPipeline->isInitialized())
@@ -256,7 +256,8 @@ namespace render::shadow
             viewProj,
             ctx.terrainParams->tileCount,
             depthBias * terrainBiasScale,
-            slopeBias * terrainBiasScale);
+            slopeBias * terrainBiasScale,
+            terrainLod);
     }
 
     void ShadowPassRecorder::clearTileDepth(
@@ -355,7 +356,7 @@ namespace render::shadow
         // re-rasterizing terrain here every frame a caster moves is pure redundant work.
         if (page.layer != ShadowLayer::Dynamic)
             dispatchTerrainShadow(cmd, ctx, page.cropViewProjection,
-                                  page.depthBias, page.slopeBias);
+                                  page.depthBias, page.slopeBias, page.terrainLod);
     }
 
     void ShadowPassRecorder::recordStaticPhase(

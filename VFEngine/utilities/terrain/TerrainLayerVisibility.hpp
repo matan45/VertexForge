@@ -78,4 +78,40 @@ namespace terrain
         }
         return isLayerEnabled(mask, weightMap.layerIndices[channel]);
     }
+
+    // Which weight channels can contribute anything at all on this tile: bit ch is set iff the
+    // channel is visibility-enabled AND at least one texel survives the same byte quantization the
+    // upload pack loop applies. The packed bytes ARE what the shader reads, and the smallest
+    // nonzero byte (1/255 ≈ 0.0039) sits safely above the composite's `w < 0.001` cull — so a
+    // cleared bit can never hide a channel the shader would have kept. The composite uses this to
+    // skip the per-channel weight fetch entirely for channels that cannot contribute.
+    [[nodiscard]] inline uint32_t computeUsedWeightChannelMask(const TileWeightMapData& weightMap,
+                                                               uint32_t layerEnabledMask) noexcept
+    {
+        uint32_t used = 0u;
+        for (uint8_t ch = 0; ch < WEIGHT_CHANNELS; ++ch)
+        {
+            if (!isWeightChannelEnabled(weightMap, ch, layerEnabledMask))
+            {
+                continue;
+            }
+            bool found = false;
+            for (uint32_t z = 0; z < weightMap.resolution && !found; ++z)
+            {
+                for (uint32_t x = 0; x < weightMap.resolution; ++x)
+                {
+                    if (static_cast<uint8_t>(weightMap.getWeight(ch, x, z) * 255.0f + 0.5f) != 0u)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (found)
+            {
+                used |= (1u << ch);
+            }
+        }
+        return used;
+    }
 }

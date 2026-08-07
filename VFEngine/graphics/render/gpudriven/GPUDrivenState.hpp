@@ -74,6 +74,11 @@ namespace render::gpudriven::detail
         std::unique_ptr<TerrainGPUAdapter> adapter;
         std::unique_ptr<TerrainStreamManager> streamManager;
         std::vector<TerrainTileGPUData> tileData;
+        // Adapter buildGPUTileData version last copied into tileData/the pipeline SSBO. 0 means
+        // "nothing uploaded" and forces the next non-empty build to upload (the adapter's version
+        // starts at 1, so 0 never collides) — required because the empty-visible-set paths clear
+        // tileData without going through buildGPUTileData.
+        uint64_t lastUploadedTileDataVersion = 0;
         bool renderingEnabled = true;
         float lodBias = 1.0f;
         float errorThreshold = 2.0f;

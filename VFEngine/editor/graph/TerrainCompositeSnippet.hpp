@@ -97,7 +97,14 @@ namespace editor::graph
         s += "float ls_TotalW = 0.0;\n";
         s += "uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);\n";
         s += "uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);\n";
+        // Skip channels that carry no weight anywhere on this tile. The mask is computed at
+        // weight-map upload (computeUsedWeightChannelMask) and rides lodGeometricErrors2.w; the
+        // cull sits BEFORE sampleTileWeight on purpose — that is where the 4 SSBO loads per
+        // unused channel disappear. 0 means "no mask": old tile data degrades to looping all 8.
+        s += "uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);\n";
+        s += "if (usedChMask == 0u) { usedChMask = 0xFFu; }\n";
         s += "for (int ch = 0; ch < 8; ch++) {\n";
+        s += "    if ((usedChMask & (1u << uint(ch))) == 0u) continue;\n";
         s += "    uint packedWord = (ch < 4) ? packedLI : packedLI2;\n";
         s += "    uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;\n";
         s += "    float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, "

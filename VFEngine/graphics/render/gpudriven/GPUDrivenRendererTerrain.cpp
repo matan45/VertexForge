@@ -915,6 +915,7 @@ namespace render::gpudriven
         if (visibleTiles.empty())
         {
             terrain.tileData.clear();
+            terrain.lastUploadedTileDataVersion = 0;
             return;
         }
 
@@ -944,8 +945,6 @@ namespace render::gpudriven
         auto streamEnd = std::chrono::high_resolution_clock::now();
         terrain.streamingUs = std::chrono::duration<float, std::micro>(streamEnd - streamStart).count();
 
-        terrain.adapter->markGPUTileDataDirty();
-
         auto buildStart = std::chrono::high_resolution_clock::now();
         const auto& newTileData = terrain.adapter->buildGPUTileData(visibleTiles);
         auto buildEnd = std::chrono::high_resolution_clock::now();
@@ -955,12 +954,18 @@ namespace render::gpudriven
 
         if (!newTileData.empty())
         {
-            terrain.tileData = newTileData;
-            terrain.pipeline->updateTileData(terrain.tileData);
+            const uint64_t builtVersion = terrain.adapter->getGPUTileDataVersion();
+            if (builtVersion != terrain.lastUploadedTileDataVersion)
+            {
+                terrain.tileData = newTileData;
+                terrain.pipeline->updateTileData(terrain.tileData);
+                terrain.lastUploadedTileDataVersion = builtVersion;
+            }
         }
         else
         {
             terrain.tileData.clear();
+            terrain.lastUploadedTileDataVersion = 0;
         }
 
         auto uploadEnd = std::chrono::high_resolution_clock::now();
@@ -1057,6 +1062,7 @@ namespace render::gpudriven
             terrain.adapter->clear();
         }
         terrain.tileData.clear();
+        terrain.lastUploadedTileDataVersion = 0;
         terrain.currentMaterialPath.clear();
         terrain.layerData.clear();
 

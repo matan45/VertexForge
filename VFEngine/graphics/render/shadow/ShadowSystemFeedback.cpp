@@ -162,6 +162,20 @@ namespace render::shadow
                     ++lastCacheStats.dynamicTilesAllocated;
     }
 
+    // Terrain analogue of the meshes' per-clipmap-level kShadowLevelLodBias (registerBinView
+    // below): terrain LODs are discrete, so each directional clipmap level steps one LOD — level 0
+    // stays LOD0, matching the mesh convention of an unbiased innermost level. Clamped to 3 to
+    // stay inside findBestAvailableLOD's coarser-search bound (shadow_terrain.glsl) and match the
+    // depth prepass's forced LOD3. Non-directional (spot/point) pages keep full detail.
+    static uint32_t terrainShadowLodForView(const ShadowView& view)
+    {
+        constexpr uint32_t kTerrainShadowMaxLod = 3u;
+        if (view.type != ShadowMapType::Directional)
+            return 0u;
+        const uint32_t level = view.cascadeIndex;
+        return level < kTerrainShadowMaxLod ? level : kTerrainShadowMaxLod;
+    }
+
     void ShadowSystem::addStaticLightPage(LightShadowData& data, uint32_t pageIdx,
                                             const glm::mat4& cropVP, const ShadowView& view,
                                             bool isDirty, bool forceRender)
@@ -180,6 +194,7 @@ namespace render::shadow
         entry.slopeBias = view.slopeBias;
         entry.normalBias = view.normalBias;
         entry.layer = ShadowLayer::All;
+        entry.terrainLod = terrainShadowLodForView(view);
         pageRenderList.push_back(entry);
         ++lastCacheStats.renderedPages;
         if (!forceRender)
@@ -233,6 +248,7 @@ namespace render::shadow
             staticEntry.slopeBias = view.slopeBias;
             staticEntry.normalBias = view.normalBias;
             staticEntry.layer = ShadowLayer::Static;
+            staticEntry.terrainLod = terrainShadowLodForView(view);
             staticPageRenderList.push_back(staticEntry);
             ++lastCacheStats.renderedPages;
             ++lastCacheStats.staticPagesRendered;
@@ -258,6 +274,7 @@ namespace render::shadow
         dynEntry.slopeBias = view.slopeBias;
         dynEntry.normalBias = view.normalBias;
         dynEntry.layer = ShadowLayer::Dynamic;
+        dynEntry.terrainLod = terrainShadowLodForView(view);
         dynamicPageRenderList.push_back(dynEntry);
         ++lastCacheStats.dynamicPagesRendered;
         uint32_t px = pageIdx % data.vsmPagesX;
@@ -433,6 +450,7 @@ namespace render::shadow
         entry.slopeBias = view.slopeBias;
         entry.normalBias = view.normalBias;
         entry.layer = ShadowLayer::All;
+        entry.terrainLod = terrainShadowLodForView(view);
         // entry.binSlot stays INVALID_BIN_SLOT until back-filled by finalizeBinPages().
         binEntryIndices.push_back(pageRenderList.size());
         pageRenderList.push_back(entry);

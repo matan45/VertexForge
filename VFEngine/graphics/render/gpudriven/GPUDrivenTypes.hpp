@@ -198,7 +198,7 @@ namespace render::gpudriven
         glm::uvec4 lod4MeshletData;
         glm::uvec4 lod5MeshletData;
         glm::vec4 lodGeometricErrors;   // Per-LOD geometric error thresholds LOD 0-3 (world units)
-        glm::vec4 lodGeometricErrors2;  // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=unused
+        glm::vec4 lodGeometricErrors2;  // x=LOD4 error, y=LOD5 error, z=packed layerIndices[4-7], w=used weight-channel mask (uintBitsToFloat; 0 read as "no mask" = all channels)
         int32_t coordX;
         int32_t coordZ;
         uint32_t flags;

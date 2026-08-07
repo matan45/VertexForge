@@ -73,6 +73,9 @@ namespace render::shadow
         // drawn from its GPU bin (baseDrawIndex = binSlot * binCapacity) instead of the legacy
         // per-page replay. Directional pages only in B1; INVALID => legacy path.
         uint32_t binSlot = INVALID_BIN_SLOT;
+        // Terrain LOD for this page's terrain raster: the view's clipmap level (clamped), 0 for
+        // non-directional lights. Terrain analogue of the meshes' per-level kShadowLevelLodBias.
+        uint32_t terrainLod = 0;
     };
 
     struct TileCopyEntry
@@ -184,7 +187,8 @@ namespace render::shadow
                                    const ShadowPassContext& ctx,
                                    const glm::mat4& viewProj,
                                    float depthBias,
-                                   float slopeBias);
+                                   float slopeBias,
+                                   uint32_t terrainLod);
 
         struct ParallelDispatchArgs
         {

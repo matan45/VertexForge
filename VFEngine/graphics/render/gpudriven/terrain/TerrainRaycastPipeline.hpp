@@ -63,6 +63,9 @@ namespace render::gpudriven
         void init();
         void cleanup();
         bool isInitialized() const { return initialized; }
+        // True while a terrain brush cursor is active — the only time dispatch/copy/readback do
+        // any work. Lets the caller skip the surrounding depth layout transitions when idle.
+        [[nodiscard]] bool hasPendingRequest() const { return hasValidCursor; }
 
         void setCursorUV(const glm::vec2& uv);
         void clearCursor();
