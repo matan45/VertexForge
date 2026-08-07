@@ -302,4 +302,64 @@ TEST_CASE("a texel painted only with hidden layers packs to nothing") {
     CHECK(total == 0u);
 }
 
+// ---- The used-channel mask (terrain composite loop gate) ----
+
+TEST_CASE("computeUsedWeightChannelMask on a default map is exactly channel 0") {
+    terrain::TileWeightMapData wm;
+    wm.initializeDefault(5);
+
+    CHECK(terrain::computeUsedWeightChannelMask(wm, terrain::ALL_TERRAIN_LAYERS_ENABLED) == 0x1u);
+}
+
+TEST_CASE("computeUsedWeightChannelMask sets exactly the painted channels' bits") {
+    terrain::TileWeightMapData wm;
+    wm.initializeDefault(9);
+    wm.setWeight(5, 3, 4, 0.25f);
+
+    const uint32_t mask =
+        terrain::computeUsedWeightChannelMask(wm, terrain::ALL_TERRAIN_LAYERS_ENABLED);
+    CHECK(mask == ((1u << 0) | (1u << 5)));
+}
+
+TEST_CASE("computeUsedWeightChannelMask clears a channel hidden by layer visibility") {
+    terrain::TileWeightMapData wm;
+    wm.initializeDefault(5);
+    wm.setWeight(1, 1, 1, 0.5f);
+
+    auto material = makeMaterial(2);
+    material.layers[1].enabled = false;
+
+    const uint32_t mask =
+        terrain::computeUsedWeightChannelMask(wm, terrain::buildLayerEnabledMask(material));
+    CHECK((mask & (1u << 1)) == 0u);
+    CHECK((mask & (1u << 0)) != 0u);
+}
+
+TEST_CASE("computeUsedWeightChannelMask matches the pack loop's byte quantization exactly") {
+    // The mask's promise is "cleared bit => every packed byte for that channel is 0". A float
+    // weight small enough to quantize to byte 0 must NOT set the bit, and the smallest weight
+    // that survives quantization must — the packed bytes are what the shader actually reads.
+    terrain::TileWeightMapData wm;
+    wm.initializeDefault(3);
+    wm.setWeight(2, 0, 0, 0.4f / 255.0f); // rounds to byte 0
+    wm.setWeight(3, 0, 0, 0.6f / 255.0f); // rounds to byte 1
+
+    const uint32_t mask =
+        terrain::computeUsedWeightChannelMask(wm, terrain::ALL_TERRAIN_LAYERS_ENABLED);
+    CHECK((mask & (1u << 2)) == 0u);
+    CHECK((mask & (1u << 3)) != 0u);
+
+    // And the packed blob agrees byte-for-byte with what the bits claim, for every channel.
+    const auto packed = packWeights(wm, terrain::ALL_TERRAIN_LAYERS_ENABLED);
+    for (uint8_t ch = 0; ch < terrain::WEIGHT_CHANNELS; ++ch)
+    {
+        bool anyByte = false;
+        for (uint32_t t = 0; t < wm.getTexelCount(); ++t)
+        {
+            if (packed[static_cast<size_t>(t) * terrain::WEIGHT_CHANNELS + ch] != 0) anyByte = true;
+        }
+        CHECK(anyByte == ((mask & (1u << ch)) != 0u));
+    }
+}
+
 } // TEST_SUITE

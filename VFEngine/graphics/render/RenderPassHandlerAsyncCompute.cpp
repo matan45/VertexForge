@@ -232,7 +232,11 @@ namespace render
 
         cameraOcclusionManager->generateHiZ(occlusion::MAIN_CAMERA_ID, commandBuffer);
 
-        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized())
+        // hasPendingRequest: the raycast's dispatch/copy/readback all early-out without a brush
+        // cursor anyway — this gate also skips the two full depth-image layout transitions
+        // dispatchTerrainRaycast issues around them, which were pure per-frame waste when idle.
+        if (terrainRaycastPipeline && terrainRaycastPipeline->isInitialized() &&
+            terrainRaycastPipeline->hasPendingRequest())
             dispatchTerrainRaycast(commandBuffer);
 
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer->getShadowSystem() &&

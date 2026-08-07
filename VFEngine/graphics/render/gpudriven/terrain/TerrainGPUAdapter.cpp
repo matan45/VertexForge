@@ -251,6 +251,7 @@ namespace render::gpudriven
         }
         allocations_.clear();
         cachedGPUTileData_.clear();
+        lastVisibleKeys.clear();
         gpuTileDataDirty_ = true;
 
         // VK-1613: the mask is material state, and this adapter no longer holds the material's
@@ -422,6 +423,9 @@ namespace render::gpudriven
         alloc.weightMapOffset = offsetElements * 4;
         alloc.weightMapUploaded = true;
         alloc.weightMaskVersion = maskVersion_;
+        // Reference implementation of the pack loop above's "any nonzero byte" question — kept in
+        // the Terrain DLL header so Tests can pin it against the quantization.
+        alloc.usedChannelMask = terrain::computeUsedWeightChannelMask(wm, layerEnabledMask_);
         gpuTileDataDirty_ = true;
 
         return true;
@@ -728,9 +732,15 @@ namespace render::gpudriven
         gpuTile.lodGeometricErrors = glm::vec4(
             tile.lodLevels[0].geometricError, tile.lodLevels[1].geometricError,
             tile.lodLevels[2].geometricError, tile.lodLevels[3].geometricError);
+        // .w carries the used-weight-channel mask (uintBitsToFloat) so the composite can skip
+        // channels with no weight anywhere on this tile. 0xFF (all 8) until the weight map has
+        // uploaded, preserving the loop-everything behaviour; the shader also treats 0 as "no
+        // mask" so stale/zero data degrades to today's path, never to a black tile.
+        const uint32_t usedChannels = alloc.weightMapUploaded ? alloc.usedChannelMask : 0xFFu;
         gpuTile.lodGeometricErrors2 = glm::vec4(
             tile.lodLevels[4].geometricError, tile.lodLevels[5].geometricError,
-            packLayerIndicesAsFloat(&tile.weightMap.layerIndices[4]), 0.0f);
+            packLayerIndicesAsFloat(&tile.weightMap.layerIndices[4]),
+            glm::uintBitsToFloat(usedChannels));
 
         gpuTile.coordX = key.coordX;
         gpuTile.coordZ = key.coordZ;
@@ -766,6 +776,19 @@ namespace render::gpudriven
     const std::vector<TerrainTileGPUData>& TerrainGPUAdapter::buildGPUTileData(
         const std::vector<terrain::TerrainTile*>& tiles)
     {
+        std::vector<TerrainTileKey> visibleKeys;
+        visibleKeys.reserve(tiles.size());
+        for (const terrain::TerrainTile* tile : tiles)
+        {
+            if (tile && tile->isVisible)
+                visibleKeys.push_back(TerrainTileKey{tile->coord.x, tile->coord.z});
+        }
+        if (visibleKeys != lastVisibleKeys)
+        {
+            gpuTileDataDirty_ = true;
+            lastVisibleKeys = std::move(visibleKeys);
+        }
+
         if (!gpuTileDataDirty_)
             return cachedGPUTileData_;
 
@@ -788,6 +811,7 @@ namespace render::gpudriven
         }
 
         gpuTileDataDirty_ = false;
+        ++gpuTileDataVersion;
         return cachedGPUTileData_;
     }
 

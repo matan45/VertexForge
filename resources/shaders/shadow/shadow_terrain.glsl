@@ -16,6 +16,7 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint tileCount;
     float depthBias;
     float slopeBias;
+    uint terrainLod;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {
@@ -96,7 +97,9 @@ void main() {
         tileVisible = aabbInFrustum(tile.aabbMin.xyz, tile.aabbMax.xyz, sharedFrustumPlanes);
 
         if (tileVisible) {
-            uint targetLOD = 0u;
+            // Per-clipmap-level LOD: level 0 renders LOD0, each coarser level steps one LOD
+            // (clamped host-side). findBestAvailableLOD still handles streaming gaps.
+            uint targetLOD = pc.terrainLod;
             selectedLOD = findBestAvailableLOD(tile, targetLOD);
 
             uvec4 meshletData = getTerrainLODMeshletData(tile, selectedLOD);
@@ -196,6 +199,7 @@ layout(push_constant) uniform TerrainShadowPushConstants {
     uint tileCount;
     float depthBias;
     float slopeBias;
+    uint terrainLod;
 } pc;
 
 layout(std430, set = 0, binding = 0) readonly buffer TerrainTileBuffer {

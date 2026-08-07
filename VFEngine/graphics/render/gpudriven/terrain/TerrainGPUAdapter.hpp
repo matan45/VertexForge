@@ -72,6 +72,10 @@ namespace render::gpudriven
 
         uint32_t weightMapOffset = 0;      // Byte offset into weight map SSBO
         bool weightMapUploaded = false;
+        // Which weight channels carry any nonzero packed byte (visibility applied), as of the last
+        // uploadWeightMap. Published via lodGeometricErrors2.w so the composite can skip channels
+        // that cannot contribute. 0xFF = "all 8 may be present" until actually computed.
+        uint32_t usedChannelMask = 0xFFu;
         // VK-1613: which layer-visibility mask this tile's uploaded weight bytes were packed for.
         // Starts at 0 while the adapter's live version starts at 1, so a tile that has never
         // uploaded can never be mistaken for one that is already current.
@@ -114,6 +118,12 @@ namespace render::gpudriven
 
         std::vector<TerrainTileGPUData> cachedGPUTileData_;
         bool gpuTileDataDirty_ = true;
+        // The visible set is camera-driven and nothing marks the cache dirty when it changes, so
+        // buildGPUTileData compares against this snapshot; every data mutation sets
+        // gpuTileDataDirty_ itself. The version counts rebuilds (starts at 1 so callers can use 0
+        // as a "nothing uploaded" sentinel) and lets callers skip re-uploading an unchanged array.
+        std::vector<TerrainTileKey> lastVisibleKeys;
+        uint64_t gpuTileDataVersion = 1;
 
         int32_t selectedCoordX_ = 0;
         int32_t selectedCoordZ_ = 0;
@@ -185,6 +195,8 @@ namespace render::gpudriven
             const std::vector<terrain::TerrainTile*>& tiles);
 
         const std::vector<TerrainTileGPUData>& getCachedGPUTileData() const { return cachedGPUTileData_; }
+
+        [[nodiscard]] uint64_t getGPUTileDataVersion() const { return gpuTileDataVersion; }
 
     private:
         bool uploadLODData(

@@ -12,6 +12,11 @@
 //
 // If you INTEND to change the linear composite, regenerate these strings in the same commit and say
 // so in the message - a silent update defeats the entire purpose of the check.
+//
+// INTENTIONAL UPDATE (terrain used-channel mask): the loop now reads a per-tile used-weight-channel
+// mask from lodGeometricErrors2.w and skips channels with no weight anywhere on the tile BEFORE the
+// sampleTileWeight fetch (32 -> 4*N SSBO loads/fragment). 0 means "no mask" and falls back to
+// looping all 8 channels, so pre-mask tile data composites bit-identically to before.
 
 namespace terrain_composite_golden
 {
@@ -26,7 +31,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -96,7 +104,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);

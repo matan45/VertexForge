@@ -13,7 +13,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -96,7 +99,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -165,7 +171,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -243,7 +252,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -307,7 +319,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -383,7 +398,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -445,7 +463,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -516,7 +537,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -573,7 +597,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -653,7 +680,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -719,7 +749,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -794,7 +827,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -855,7 +891,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -929,7 +968,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -989,7 +1031,10 @@ vec3 ls_EmissionColor = vec3(0.0);
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);
@@ -1058,7 +1103,10 @@ float ls_Emission = 0.0;
 float ls_TotalW = 0.0;
 uint packedLI = floatBitsToUint(tiles[fragTileIndex].aabbMax.w);
 uint packedLI2 = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.z);
+uint usedChMask = floatBitsToUint(tiles[fragTileIndex].lodGeometricErrors2.w);
+if (usedChMask == 0u) { usedChMask = 0xFFu; }
 for (int ch = 0; ch < 8; ch++) {
+    if ((usedChMask & (1u << uint(ch))) == 0u) continue;
     uint packedWord = (ch < 4) ? packedLI : packedLI2;
     uint paletteIdx = (packedWord >> ((ch % 4) * 8u)) & 0xFFu;
     float w = sampleTileWeight(tiles[fragTileIndex].weightMapOffset, uint(tiles[fragTileIndex].aabbMin.w), uint(ch), fragTexCoord);

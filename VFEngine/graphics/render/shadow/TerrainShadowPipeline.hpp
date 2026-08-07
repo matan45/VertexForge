@@ -18,6 +18,10 @@ namespace render::shadow
         uint32_t tileCount;
         float depthBias;
         float slopeBias;
+        // Target terrain LOD for this shadow page (clipmap level, clamped to the coarsest
+        // shadow-searchable LOD). Must stay layout-identical to BOTH push blocks in
+        // shadow_terrain.glsl.
+        uint32_t terrainLod;
     };
 
     class TerrainShadowPipeline
@@ -57,7 +61,8 @@ namespace render::shadow
                       const glm::mat4& lightViewProjection,
                       uint32_t tileCount,
                       float depthBias,
-                      float slopeBias);
+                      float slopeBias,
+                      uint32_t terrainLod);
 
         [[nodiscard]] bool isInitialized() const { return initialized; }
 

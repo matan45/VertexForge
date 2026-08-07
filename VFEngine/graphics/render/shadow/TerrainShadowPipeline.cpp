@@ -199,7 +199,8 @@ namespace render::shadow
                                           const glm::mat4& lightViewProjection,
                                           uint32_t tileCount,
                                           float depthBias,
-                                          float slopeBias)
+                                          float slopeBias,
+                                          uint32_t terrainLod)
     {
         if (!initialized || tileCount == 0)
             return;
@@ -227,6 +228,7 @@ namespace render::shadow
         pushConstants.tileCount = tileCount;
         pushConstants.depthBias = depthBias;
         pushConstants.slopeBias = slopeBias;
+        pushConstants.terrainLod = terrainLod;
 
         cmd.pushConstants(
             terrainShadowPipelineLayout,
