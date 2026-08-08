@@ -668,9 +668,12 @@ namespace {
             events::EventDispatcher::instance().execute(cmd);
         });
 
+        // VK-1588: pinned to the main thread. WorldSectorServiceImpl::update() spawns/destroys
+        // entities and edits the EntityRegistry + scene graph, unsafe from an enkiTS worker
+        // (see the VK-1588 note in EditorFrameTaskGraph).
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         frameTaskGraph->addTask("AssetLifecycle", [this]() {
             if (assetLifecycleService) {

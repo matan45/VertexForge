@@ -14,6 +14,8 @@
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "print/Log.hpp"
+#include "threading/JobSystem.hpp"
+#include <atomic>
 #include <nlohmann/json.hpp>
 
 namespace
@@ -25,6 +27,32 @@ namespace services
 {
     void WorldSectorServiceImpl::update()
     {
+#ifdef DEBUG
+        // VK-1588: this function is main-thread-only. It mutates the ResourceLoadScheduler
+        // singleton, runs a synchronous EventDispatcher::query, reads/writes scene::EntityRegistry,
+        // spawns and destroys entities through SectorEntityLoader::update, and edits the scene
+        // graph via HLOD proxy load/unload. Both hosts register the "WorldSector" frame task with
+        // mainThread=true so it runs as an enki::LambdaPinnedTask on thread 0; this catches a
+        // future caller that forgets. Checked before the worldMode guard so the editor confirms it
+        // even before a world is opened. Logged once per outcome - a per-frame line would flood the
+        // console and the ImGui log buffer.
+        {
+            static std::atomic<bool> confirmedOnMain{false};
+            static std::atomic<bool> offThreadReported{false};
+            if (threading::JobSystem::instance().isMainThread())
+            {
+                if (!confirmedOnMain.exchange(true, std::memory_order_relaxed))
+                    vfLogInfo("[WorldSector] update() confirmed on the main thread (enkiTS thread 0)");
+            }
+            else if (!offThreadReported.exchange(true, std::memory_order_relaxed))
+            {
+                vfLogError("[WorldSector] update() ran OFF the main thread. The 'WorldSector' frame "
+                           "task must be registered with mainThread=true - entity spawn/destroy, "
+                           "EntityRegistry access and scene-graph edits here are not thread-safe.");
+            }
+        }
+#endif
+
         if (!worldMode)
             return;
 

@@ -201,6 +201,20 @@ namespace threading {
 		return pImpl->workerThreadCount;
 	}
 
+	bool JobSystem::isMainThread() const
+	{
+		// Uninitialized: submitTask/parallelFor already fall back to running inline on the caller
+		// and reporting thread index 0, so "the caller is the main thread" is the consistent
+		// answer - and it keeps debug-only main-thread checks quiet in Tests.exe.
+		if (!pImpl->initialized.load(std::memory_order_acquire))
+			return true;
+
+		// enki hands thread 0 to whoever called Initialize(), 1..N to the created task threads,
+		// and NO_THREAD_NUM to unregistered foreign threads - so a plain == 0u correctly reports
+		// false for both worker and foreign threads.
+		return pImpl->scheduler.GetThreadNum() == 0u;
+	}
+
 	enki::TaskScheduler* JobSystem::getScheduler()
 	{
 		return &pImpl->scheduler;

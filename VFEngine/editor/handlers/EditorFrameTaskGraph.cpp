@@ -171,9 +171,17 @@ namespace handlers
             events::EventDispatcher::instance().execute(cmd);
         });
 
+        // VK-1588: MUST run on the main thread. WorldSectorServiceImpl::update() spawns and
+        // destroys entities via SectorEntityLoader, mutates scene::EntityRegistry and the scene
+        // graph (HLOD proxy load/unload), touches the ResourceLoadScheduler singleton and runs a
+        // synchronous EventDispatcher query for the selected entity - none of which is safe from
+        // an enkiTS worker running concurrently with Scripts/VFX/Navmesh/PhysicsSync. Pre-VK-1385
+        // per-layer barriers hid this; with native dependencies any worker can pick it up.
+        // Pinning cannot deadlock: the main thread runs its own thread-0 pinned tasks while it
+        // waits on the terminal in TaskGraph::execute().
         frameTaskGraph->addTask("WorldSector", [this]() {
             if (worldSectorService) worldSectorService->update();
-        });
+        }, threading::JobPriority::NORMAL, /*mainThread=*/true);
 
         frameTaskGraph->addTask("AssetLifecycle", [this]() {
             if (assetLifecycleService) {

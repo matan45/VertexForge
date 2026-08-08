@@ -412,6 +412,96 @@ TEST_SUITE("SectorPersistence")
         CHECK(loaded.sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
     }
 
+    // ── VK-1588: missing keys must resolve to the struct defaults ───────
+
+    TEST_CASE(".vfworld with the streaming keys absent parses to exact struct defaults")
+    {
+        resetTestRoot();
+
+        // A minimal hand-written .vfworld: no sectorConfig, no streamingConfig, no hlodConfig -
+        // i.e. a file written before those blocks existed. The loader used to fall back to
+        // hardcoded literals, and loadRadius/unloadRadius were 512/640 WORLD UNITS copy-pasted
+        // from the terrain streamer while the struct means SECTOR COUNTS, so this file produced a
+        // 512-sector load ring instead of a 4-sector one.
+        nlohmann::json minimal;
+        minimal["version"] = "1.0";
+        minimal["name"] = "LegacyWorld";
+        minimal["sectors"] = nlohmann::json::array();
+
+        std::string path = (testRoot() / "legacy.vfworld").string();
+        {
+            std::ofstream out{path};
+            REQUIRE(out.is_open());
+            out << minimal.dump(2);
+        }
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+
+        const world::SectorConfig sectorDefaults;
+        const world::SectorStreamingConfig d;
+
+        CHECK(loaded.name == "LegacyWorld");
+
+        SUBCASE("sectorConfig falls back to the struct")
+        {
+            CHECK(loaded.sectorConfig.sectorWorldSize == doctest::Approx(sectorDefaults.sectorWorldSize));
+            CHECK(loaded.sectorConfig.tilesPerSector == sectorDefaults.tilesPerSector);
+            CHECK(loaded.sectorConfig.alignedToTerrain == sectorDefaults.alignedToTerrain);
+        }
+        SUBCASE("every streamingConfig field falls back to the struct")
+        {
+            CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(d.loadRadius));
+            CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
+            CHECK(loaded.streamingConfig.maxLoadsPerFrame == d.maxLoadsPerFrame);
+            CHECK(loaded.streamingConfig.maxUnloadsPerFrame == d.maxUnloadsPerFrame);
+            CHECK(loaded.streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
+            CHECK(loaded.streamingConfig.maxTerrainLoadsPerFrame == d.maxTerrainLoadsPerFrame);
+            CHECK(loaded.streamingConfig.maxTerrainUnloadsPerFrame == d.maxTerrainUnloadsPerFrame);
+            CHECK(loaded.streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
+            CHECK(loaded.streamingConfig.editModeStreaming == d.editModeStreaming);
+            CHECK(loaded.streamingConfig.hlodTier0Radius == doctest::Approx(d.hlodTier0Radius));
+            CHECK(loaded.streamingConfig.hlodTier1Radius == doctest::Approx(d.hlodTier1Radius));
+            CHECK(loaded.streamingConfig.hlodTier2Radius == doctest::Approx(d.hlodTier2Radius));
+        }
+        SUBCASE("an absent hlodConfig still yields the three default tiers")
+        {
+            // A default-constructed HLODConfig has an EMPTY tiers vector - only
+            // HLODConfig::defaultConfig() supplies the hierarchy, so the loader must keep using it.
+            REQUIRE(loaded.hlodConfig.tiers.size() == 3);
+            CHECK(loaded.hlodConfig.tiers[0].tier == 0);
+            CHECK(loaded.hlodConfig.tiers[1].tier == 1);
+            CHECK(loaded.hlodConfig.tiers[2].tier == 2);
+        }
+    }
+
+    TEST_CASE(".vfworld with a partial streamingConfig keeps struct defaults for the absent keys")
+    {
+        resetTestRoot();
+
+        // The exact shape of the bug: the block exists, so the loader entered it, but the radius
+        // keys were missing and picked up the world-unit literals.
+        nlohmann::json partial;
+        partial["name"] = "PartialWorld";
+        partial["streamingConfig"]["loadRadius"] = 7.0f;
+
+        std::string path = (testRoot() / "partial.vfworld").string();
+        {
+            std::ofstream out{path};
+            REQUIRE(out.is_open());
+            out << partial.dump(2);
+        }
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+
+        const world::SectorStreamingConfig d;
+        CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(7.0f));
+        CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
+        CHECK(loaded.streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
+        CHECK(loaded.streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
+    }
+
     // ── VK-1587: buffer parsing + archive-mode routing ──────────────────
 
     TEST_CASE("loadSectorFromMemory matches the on-disk v3 load")

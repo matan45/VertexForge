@@ -1,8 +1,46 @@
 #include "WorldSectorManager.hpp"
+#include "../print/Log.hpp"
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace world
 {
+    namespace
+    {
+        // VK-1588: clamp in FLOAT space, before the int32 cast. Casting a NaN or an
+        // out-of-int32-range float is UB, so a post-cast range check would be checking a value the
+        // compiler was free to invent. This also absorbs a zero or negative sectorWorldSize, which
+        // makes the division inf/NaN - those collapse to sector 0 rather than dividing into
+        // garbage. Both bounds are < 2^24, so they are exactly representable as float and the
+        // clamp is lossless.
+        int32_t floorToSectorAxis(float value) noexcept
+        {
+            if (!std::isfinite(value))
+                return 0;
+
+            const float f = std::clamp(std::floor(value),
+                                       static_cast<float>(kMinSectorCoord),
+                                       static_cast<float>(kMaxSectorCoord));
+            return static_cast<int32_t>(f);
+        }
+
+        // Sectors created from an engine-derived position can no longer land out of range (see
+        // floorToSectorAxis), so this only fires for a hand-edited or corrupt .vfworld. The sector
+        // is still created - dropping it would lose data - but its streaming id aliases another's.
+        void logInvalidSectorCoordOnce(const SectorCoord& coord)
+        {
+            static std::atomic<bool> logged{false};
+            if (logged.exchange(true, std::memory_order_relaxed))
+                return;
+
+            vfLogError("[WorldSector] Sector ({}, {}) is outside the addressable range [{}, {}]. "
+                       "sectorCoordToId() packs each axis into 16 bits, so this sector aliases "
+                       "another sector's streaming id. Further occurrences suppressed.",
+                       coord.x, coord.z, kMinSectorCoord, kMaxSectorCoord);
+        }
+    }
+
     WorldSectorManager::WorldSectorManager(const SectorConfig& config)
         : config(config)
     {
@@ -16,8 +54,8 @@ namespace world
     SectorCoord WorldSectorManager::worldPositionToSectorCoord(const glm::vec3& pos) const
     {
         return SectorCoord(
-            static_cast<int32_t>(std::floor(pos.x / config.sectorWorldSize)),
-            static_cast<int32_t>(std::floor(pos.z / config.sectorWorldSize))
+            floorToSectorAxis(pos.x / config.sectorWorldSize),
+            floorToSectorAxis(pos.z / config.sectorWorldSize)
         );
     }
 
@@ -26,8 +64,8 @@ namespace world
         float worldX = static_cast<float>(tileCoord.x) * worldTileSize;
         float worldZ = static_cast<float>(tileCoord.z) * worldTileSize;
         return SectorCoord(
-            static_cast<int32_t>(std::floor(worldX / config.sectorWorldSize)),
-            static_cast<int32_t>(std::floor(worldZ / config.sectorWorldSize))
+            floorToSectorAxis(worldX / config.sectorWorldSize),
+            floorToSectorAxis(worldZ / config.sectorWorldSize)
         );
     }
 
@@ -94,6 +132,9 @@ namespace world
         auto it = sectors.find(coord);
         if (it != sectors.end())
             return it->second;
+
+        if (!isValidSectorCoord(coord))
+            logInvalidSectorCoordOnce(coord);
 
         auto& sector = sectors[coord];
         sector.coord = coord;

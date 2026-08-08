@@ -46,13 +46,34 @@ namespace world
         }
     };
 
-    inline uint32_t sectorCoordToId(const SectorCoord& coord)
+    // A sector id packs each axis into 16 bits, so a coord is only uniquely addressable over a
+    // 65536-wide window per axis. Biasing by 0x8000 centres that window on the origin - the full
+    // int16 range. Outside it two distinct sectors collapse onto the same id and silently share a
+    // GPU streaming slot, so validate with isValidSectorCoord() before creating a sector.
+    inline constexpr int32_t kMinSectorCoord = -32768;
+    inline constexpr int32_t kMaxSectorCoord = 32767;
+
+    [[nodiscard]] inline constexpr bool isValidSectorCoord(const SectorCoord& coord) noexcept
     {
-        // Encode two int32s into a single uint32 via Cantor-style pairing
-        // Shift to unsigned range first (offset by 0x4000 to support negative coords)
-        auto ux = static_cast<uint32_t>(coord.x + 0x4000);
-        auto uz = static_cast<uint32_t>(coord.z + 0x4000);
-        return (ux << 16) | (uz & 0xFFFF);
+        return coord.x >= kMinSectorCoord && coord.x <= kMaxSectorCoord
+            && coord.z >= kMinSectorCoord && coord.z <= kMaxSectorCoord;
+    }
+
+    // Bit concatenation (not a pairing function): biased x in the high 16 bits, biased z in the
+    // low 16. Injective exactly over [kMinSectorCoord, kMaxSectorCoord] on both axes.
+    //
+    // VK-1588 re-biased this from 0x4000, whose window was the lopsided [-16384, +49151]. Safe
+    // because the id is runtime-only: .vfworld/.vfsector key sectors on {x,z}, .vfsector filenames
+    // and .vfHLOD paths are coord-derived, and .vfpak is path-keyed. The only consumers are the
+    // transient in-memory maps in LightStreamManager and GPUObjectStreamManager.
+    //
+    // The int32 -> uint32 cast happens BEFORE the bias so an out-of-range coord wraps under
+    // defined unsigned arithmetic instead of overflowing a signed int (UB).
+    [[nodiscard]] inline uint32_t sectorCoordToId(const SectorCoord& coord) noexcept
+    {
+        const uint32_t ux = (static_cast<uint32_t>(coord.x) + 0x8000u) & 0xFFFFu;
+        const uint32_t uz = (static_cast<uint32_t>(coord.z) + 0x8000u) & 0xFFFFu;
+        return (ux << 16) | uz;
     }
 
     enum class SectorState : uint8_t

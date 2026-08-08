@@ -379,6 +379,43 @@ namespace windows
                 ImGui::SetTooltip("Stream GPU objects in/out based on camera distance.\nReduces GPU memory for large worlds with >65K objects.");
 
             ImGui::Spacing();
+
+            // VK-1588: validate before dispatching CreateWorldCommand. sectorSize becomes
+            // SectorConfig::sectorWorldSize, the divisor in
+            // WorldSectorManager::worldPositionToSectorCoord - a non-positive value makes every
+            // entity collapse into sector 0. The sector grid is only uniquely addressable over
+            // [kMinSectorCoord, kMaxSectorCoord], so the resulting world extent is a function of
+            // sectorSize and worth surfacing here.
+            constexpr ImVec4 errorColor(1.0f, 0.3f, 0.3f, 1.0f);
+            const bool nameValid = worldName[0] != '\0';
+            const bool sectorSizeValid = std::isfinite(sectorSize) && sectorSize > 0.0f;
+            const bool loadRadiusValid = std::isfinite(loadRadius) && loadRadius >= 1.0f;
+            const bool radiiValid = std::isfinite(unloadRadius) && unloadRadius > loadRadius;
+            const bool canCreate = nameValid && sectorSizeValid && loadRadiusValid && radiiValid;
+
+            if (!nameValid)
+                ImGui::TextColored(errorColor, "World name is required");
+            if (!sectorSizeValid)
+                ImGui::TextColored(errorColor, "Sector Size must be greater than 0");
+            if (!loadRadiusValid)
+                ImGui::TextColored(errorColor, "Load Radius must be at least 1 sector");
+            if (loadRadiusValid && !radiiValid)
+                ImGui::TextColored(errorColor,
+                                   "Unload Radius must be greater than Load Radius (streaming hysteresis)");
+
+            if (sectorSizeValid)
+            {
+                ImGui::TextDisabled("Addressable world extent: +/- %.0f units (%d sectors x %.0f)",
+                                    static_cast<double>(world::kMaxSectorCoord) * sectorSize,
+                                    world::kMaxSectorCoord, sectorSize);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Sector coordinates are packed into a 16-bit-per-axis\n"
+                                      "streaming id. Entities beyond this extent are clamped\n"
+                                      "to the boundary sector.");
+            }
+
+            ImGui::Spacing();
+            if (!canCreate) ImGui::BeginDisabled();
             if (ImGui::Button("Create"))
             {
                 nfd::FileDialog fileDialog;
@@ -399,6 +436,7 @@ namespace windows
                     showCreationWizard = false;
                 }
             }
+            if (!canCreate) ImGui::EndDisabled();
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
             {

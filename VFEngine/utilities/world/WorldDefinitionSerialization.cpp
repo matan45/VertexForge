@@ -101,29 +101,48 @@ namespace world
             outDefinition.terrainPath = worldJson.value("terrainPath", "");
             outDefinition.waterDefinitionPath = worldJson.value("waterDefinitionPath", "");
 
+            // VK-1588: the structs are the single source of truth for defaults - an absent key
+            // resolves to its in-class initializer, never to a literal repeated here. The old
+            // literals had drifted: loadRadius 512 / unloadRadius 640 are WORLD UNITS copy-pasted
+            // from TerrainWorldStreamer, but SectorStreamingConfig means SECTOR COUNTS, so a
+            // .vfworld missing those keys produced a 512-sector load ring (512 * 128 = 65536
+            // units) instead of a 4-sector one.
+            const SectorConfig sectorDefaults;
+            const SectorStreamingConfig streamingDefaults;
+
             if (worldJson.contains("sectorConfig"))
             {
                 const auto& sc = worldJson["sectorConfig"];
-                outDefinition.sectorConfig.sectorWorldSize = sc.value("sectorWorldSize", 128.0f);
-                outDefinition.sectorConfig.tilesPerSector = sc.value("tilesPerSector", 4);
-                outDefinition.sectorConfig.alignedToTerrain = sc.value("alignedToTerrain", false);
+                auto& out = outDefinition.sectorConfig;
+                out.sectorWorldSize = sc.value("sectorWorldSize", sectorDefaults.sectorWorldSize);
+                out.tilesPerSector = sc.value("tilesPerSector", sectorDefaults.tilesPerSector);
+                out.alignedToTerrain = sc.value("alignedToTerrain", sectorDefaults.alignedToTerrain);
+            }
+            else
+            {
+                outDefinition.sectorConfig = sectorDefaults;
             }
 
             if (worldJson.contains("streamingConfig"))
             {
                 const auto& stc = worldJson["streamingConfig"];
-                outDefinition.streamingConfig.loadRadius = stc.value("loadRadius", 512.0f);
-                outDefinition.streamingConfig.unloadRadius = stc.value("unloadRadius", 640.0f);
-                outDefinition.streamingConfig.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", 1);
-                outDefinition.streamingConfig.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", 1);
-                outDefinition.streamingConfig.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", 8);
-                outDefinition.streamingConfig.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", 4);
-                outDefinition.streamingConfig.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", 4);
-                outDefinition.streamingConfig.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", true);
-                outDefinition.streamingConfig.editModeStreaming = stc.value("editModeStreaming", false);
-                outDefinition.streamingConfig.hlodTier0Radius = stc.value("hlodTier0Radius", 10.0f);
-                outDefinition.streamingConfig.hlodTier1Radius = stc.value("hlodTier1Radius", 20.0f);
-                outDefinition.streamingConfig.hlodTier2Radius = stc.value("hlodTier2Radius", 40.0f);
+                auto& out = outDefinition.streamingConfig;
+                out.loadRadius = stc.value("loadRadius", streamingDefaults.loadRadius);
+                out.unloadRadius = stc.value("unloadRadius", streamingDefaults.unloadRadius);
+                out.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", streamingDefaults.maxLoadsPerFrame);
+                out.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", streamingDefaults.maxUnloadsPerFrame);
+                out.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", streamingDefaults.maxEntitiesPerFrame);
+                out.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", streamingDefaults.maxTerrainLoadsPerFrame);
+                out.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", streamingDefaults.maxTerrainUnloadsPerFrame);
+                out.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", streamingDefaults.enableGPUObjectStreaming);
+                out.editModeStreaming = stc.value("editModeStreaming", streamingDefaults.editModeStreaming);
+                out.hlodTier0Radius = stc.value("hlodTier0Radius", streamingDefaults.hlodTier0Radius);
+                out.hlodTier1Radius = stc.value("hlodTier1Radius", streamingDefaults.hlodTier1Radius);
+                out.hlodTier2Radius = stc.value("hlodTier2Radius", streamingDefaults.hlodTier2Radius);
+            }
+            else
+            {
+                outDefinition.streamingConfig = streamingDefaults;
             }
 
             // HLOD config
@@ -134,13 +153,14 @@ namespace world
                 outDefinition.hlodConfig.tiers.clear();
                 if (hc.contains("tiers") && hc["tiers"].is_array())
                 {
+                    const HLODTierConfig tierDefaults;
                     for (const auto& t : hc["tiers"])
                     {
                         HLODTierConfig tier;
-                        tier.tier = t.value("tier", uint8_t(0));
-                        tier.cellSize = t.value("cellSize", uint8_t(1));
-                        tier.displayRadius = t.value("displayRadius", 10.0f);
-                        tier.simplificationRatio = t.value("simplificationRatio", 0.1f);
+                        tier.tier = t.value("tier", tierDefaults.tier);
+                        tier.cellSize = t.value("cellSize", tierDefaults.cellSize);
+                        tier.displayRadius = t.value("displayRadius", tierDefaults.displayRadius);
+                        tier.simplificationRatio = t.value("simplificationRatio", tierDefaults.simplificationRatio);
                         outDefinition.hlodConfig.tiers.push_back(tier);
                     }
                 }
