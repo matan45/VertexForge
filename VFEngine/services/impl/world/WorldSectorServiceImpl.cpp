@@ -21,6 +21,8 @@
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
+#include "resource/VirtualFileSystem.hpp"
+#include "../common/ProjectPaths.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -804,10 +806,10 @@ namespace services
                     worldDefinition = savedWorldDefinition;
                     currentWorldPath = savedWorldPath;
 
-                    for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
+                    for (const auto& [coord, storedSectorPath] : worldDefinition.sectorFilePaths)
                     {
                         auto& sector = sectorManager.getOrCreateSector(coord);
-                        sector.filePath = sectorPath;
+                        sector.filePath = resolveProjectPath(storedSectorPath);
                         sector.state = world::SectorState::Unloaded;
                     }
 
@@ -912,13 +914,15 @@ namespace services
                 {
                     std::filesystem::path scenePath(notif.scenePath);
                     std::filesystem::path worldPath = scenePath.parent_path() / (scenePath.stem().string() + ".vfworld");
-                    if (std::filesystem::exists(worldPath))
+                    if (resource::VirtualFileSystem::instance().exists(worldPath.string()))
                     {
                         std::string wp = worldPath.string();
                         loadWorld(wp);
 
-                        // Tag root so future saves include it
-                        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = wp;
+                        // Tag root so future saves include it — stored project-relative so the
+                        // scene still names this world once it ships inside a .vfpak
+                        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+                            toProjectRelativePath(wp);
                     }
                 }
             });

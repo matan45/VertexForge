@@ -1,6 +1,6 @@
 #include "WorldDefinitionSerialization.hpp"
 #include "../print/Log.hpp"
-#include "../resource/VFSHelpers.hpp"
+#include "../serialization/SerializationFileAccess.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -90,7 +90,7 @@ namespace world
     {
         try
         {
-            json worldJson = resource::readJsonFile(filePath);
+            json worldJson = serialization::readSerializationJsonFile(filePath);
             if (worldJson.is_null())
             {
                 vfLogError("Failed to open world file for reading: {}", filePath);

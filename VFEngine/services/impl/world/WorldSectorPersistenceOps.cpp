@@ -11,6 +11,8 @@
 #include "scene/EntityRegistry.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/AssetDatabase.hpp"
+#include "resource/VirtualFileSystem.hpp"
+#include "../common/ProjectPaths.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 #include <chrono>
@@ -35,6 +37,11 @@ namespace services
                                               const world::SectorConfig& sectorConfig,
                                               const world::SectorStreamingConfig& streamingConfig)
     {
+        // Two domains, deliberately: currentWorldPath stays resolved because everything derived
+        // from it does file IO, while the copy tagged onto the scene is project-relative so it
+        // still names the right world on a player's machine.
+        const std::string worldPath = resolveProjectPath(filePath);
+
         sectorManager.clear();
         sectorManager.setConfig(sectorConfig);
 
@@ -47,7 +54,7 @@ namespace services
         streamer.setEnabled(true);
 
         worldMode = true;
-        currentWorldPath = filePath;
+        currentWorldPath = worldPath;
 
         // Enable GPU object streaming if configured
         if (streamingConfig.enableGPUObjectStreaming)
@@ -59,7 +66,8 @@ namespace services
 
         // Tag root entity so the world auto-loads with the scene
         auto& root = sceneGraph->GetRoot();
-        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = filePath;
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+            toProjectRelativePath(worldPath);
 
         // Assign existing entities to sectors (skip terrain/water/IBL/camera — they have their own systems)
         for (auto& child : root.getChildren())
@@ -131,7 +139,7 @@ namespace services
             return false;
         }
 
-        std::string path = filePath.empty() ? currentWorldPath : filePath;
+        std::string path = resolveProjectPath(filePath.empty() ? currentWorldPath : filePath);
         if (path.empty())
         {
             vfLogError("Cannot save world: no file path specified");
@@ -139,7 +147,8 @@ namespace services
         }
 
         auto& root = sceneGraph->GetRoot();
-        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = path;
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+            toProjectRelativePath(path);
         std::filesystem::path worldDir = std::filesystem::path(path).parent_path();
         std::filesystem::path sectorsDir = worldDir / "sectors";
         std::filesystem::create_directories(sectorsDir);
@@ -158,7 +167,8 @@ namespace services
                 if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
                 {
                     sector.filePath = sectorPath;
-                    worldDefinition.sectorFilePaths[sector.coord] = sectorPath;
+                    // Only the serialized copy is relativized — sector.filePath keeps doing IO
+                    worldDefinition.sectorFilePaths[sector.coord] = toProjectRelativePath(sectorPath);
 
                     // The baked HLOD no longer matches the saved content
                     if (contentChanged && !sector.hlodFilePath.empty())
@@ -204,8 +214,12 @@ namespace services
         return result;
     }
 
-    bool WorldSectorServiceImpl::loadWorld(const std::string& filePath)
+    bool WorldSectorServiceImpl::loadWorld(const std::string& rawFilePath)
     {
+        // The scene stores a project-relative world path; the file dialog hands back an absolute
+        // one. Both land here, so resolve into the IO domain the rest of this function works in.
+        const std::string filePath = resolveProjectPath(rawFilePath);
+
         world::WorldDefinition newDef;
         if (!world::WorldDefinitionSerialization::load(filePath, newDef))
             return false;
@@ -229,8 +243,12 @@ namespace services
             ::events::EventDispatcher::instance().execute(cmd);
         }
 
-        for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
+        for (const auto& [coord, storedSectorPath] : worldDefinition.sectorFilePaths)
         {
+            // Stored relative to the project; resolves to a loose file in the editor and to an
+            // "Assets/..." archive key in a shipped game
+            const std::string sectorPath = resolveProjectPath(storedSectorPath);
+
             auto& sector = sectorManager.getOrCreateSector(coord);
             sector.filePath = sectorPath;
             sector.state = world::SectorState::Unloaded;
@@ -238,13 +256,13 @@ namespace services
             // Pre-cache metadata from binary header (44 bytes, fast)
             world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
 
-            // Restore the HLOD bake if one exists on disk (the path isn't stored in
-            // the world definition; GenerateHLODCommand uses this naming convention)
+            // Restore the HLOD bake if one exists (the path isn't stored in the world
+            // definition; GenerateHLODCommand uses this naming convention)
             std::string hlodPath = sectorPath;
             if (auto dotPos = hlodPath.rfind('.'); dotPos != std::string::npos)
                 hlodPath = hlodPath.substr(0, dotPos);
             hlodPath += "_hlod0.vfHLOD";
-            if (std::filesystem::exists(hlodPath))
+            if (resource::VirtualFileSystem::instance().exists(hlodPath))
                 sector.hlodFilePath = hlodPath;
         }
 
@@ -267,7 +285,7 @@ namespace services
         bool result = world::WorldSectorSerialization::saveSector(*sector, filePath);
         if (result)
         {
-            worldDefinition.sectorFilePaths[coord] = filePath;
+            worldDefinition.sectorFilePaths[coord] = toProjectRelativePath(filePath);
         }
         return result;
     }

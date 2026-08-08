@@ -4,13 +4,24 @@
 #include <cstdint>
 #include <functional>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace serialization
 {
+    // Seekable physical bytes behind a logical path. Compressed archive entries deliberately
+    // have no location — a header-only read of one is impossible without inflating it.
+    struct SerializationFileLocation
+    {
+        std::string filePath;
+        uint64_t baseOffset = 0;
+        uint64_t size = 0;
+    };
+
     struct SerializationFileAccess
     {
+        std::function<std::optional<SerializationFileLocation>(const std::string&)> locate;
         std::function<std::vector<uint8_t>(const std::string&)> readBytes;
         std::function<bool(const std::string&)> exists;
         std::function<bool()> isArchiveMode;
@@ -18,6 +29,8 @@ namespace serialization
 
     VF_SERIALIZATION_API bool setSerializationFileAccess(SerializationFileAccess access);
     VF_SERIALIZATION_API void resetSerializationFileAccess();
+    VF_SERIALIZATION_API std::optional<SerializationFileLocation>
+        locateSerializationFile(const std::string& path);
     VF_SERIALIZATION_API std::vector<uint8_t> readSerializationFileBytes(const std::string& path);
     VF_SERIALIZATION_API nlohmann::json readSerializationJsonFile(const std::string& path);
     VF_SERIALIZATION_API bool serializationFileExists(const std::string& path);

@@ -25,9 +25,18 @@ namespace serialization
             return bytes;
         }
 
+        std::optional<SerializationFileLocation> locateLooseFile(const std::string& path)
+        {
+            std::error_code ec;
+            const uint64_t size = std::filesystem::file_size(path, ec);
+            if (ec) return std::nullopt;
+            return SerializationFileLocation{path, 0, size};
+        }
+
         SerializationFileAccess makeDefaultAccess()
         {
             return SerializationFileAccess{
+                locateLooseFile,
                 readLooseFile,
                 [](const std::string& path)
                 {
@@ -43,7 +52,7 @@ namespace serialization
 
     bool setSerializationFileAccess(SerializationFileAccess access)
     {
-        if (!access.readBytes || !access.exists || !access.isArchiveMode)
+        if (!access.locate || !access.readBytes || !access.exists || !access.isArchiveMode)
         {
             vfLogError("SerializationFileAccess: rejected incomplete callback bundle");
             return false;
@@ -57,6 +66,22 @@ namespace serialization
     {
         std::unique_lock lock(accessMutex);
         fileAccess = makeDefaultAccess();
+    }
+
+    std::optional<SerializationFileLocation> locateSerializationFile(const std::string& path)
+    {
+        decltype(SerializationFileAccess::locate) callback;
+        {
+            std::shared_lock lock(accessMutex);
+            callback = fileAccess.locate;
+        }
+        try { return callback(path); }
+        catch (const std::exception& e)
+        {
+            vfLogError("SerializationFileAccess: locate callback failed for {}: {}", path, e.what());
+            return std::nullopt;
+        }
+        catch (...) { return std::nullopt; }
     }
 
     std::vector<uint8_t> readSerializationFileBytes(const std::string& path)
