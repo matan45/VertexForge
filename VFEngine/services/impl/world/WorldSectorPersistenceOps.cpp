@@ -128,6 +128,10 @@ namespace services
             }
         });
 
+        // VK-1590: the scene being converted is already fully populated, so its cross-entity
+        // references never pass through the sector spawn path. Register them once here.
+        rescanEntityReferences();
+
         return saveWorld(filePath);
     }
 
@@ -266,6 +270,10 @@ namespace services
                 sector.hlodFilePath = hlodPath;
         }
 
+        // VK-1590: register references held by entities that were already in the scene before
+        // the world opened — they never go through the sector spawn path.
+        rescanEntityReferences();
+
         ::events::world::WorldLoadedNotification notif;
         notif.worldPath = filePath;
         ::events::EventDispatcher::instance().publish(notif);
@@ -306,6 +314,9 @@ namespace services
         pendingAsyncLoads.drain();
 
         entityLoader.clear();
+        // VK-1590: otherwise the ledger keeps entries keyed on the previous world's UUIDs.
+        referenceResolver.clear();
+        refTargetProbeQueue.clear();
         physicsSnapshots.clear();
         animationSnapshots.clear();
         vfxSnapshots.clear();

@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
+#include "serialization/SceneSerialization.hpp"
 #include "resource/ResourceLoadScheduler.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
@@ -21,6 +22,42 @@
 namespace
 {
     static constexpr uint32_t kMaxConcurrentSectorLoads = 4;
+
+    // VK-1590: WorldSector::entityUUIDs is the PARSE-TIME ROOT list. It overstates reality
+    // (entities whose spawn threw, or that were deduped away, stay in it) and understates it
+    // (nested children are absent — SectorEntityLoader only records payload roots). The
+    // reference resolver keys on "what actually exists", so filter and expand before feeding it.
+    void collectSubtreeUUIDs(entt::registry& registry, entt::entity entity,
+                             std::vector<uint64_t>& out)
+    {
+        if (entity == entt::null || !registry.valid(entity))
+            return;
+
+        if (const auto* uuidComp = registry.try_get<components::UUIDComponent>(entity))
+        {
+            out.push_back(uuidComp->id.getValue());
+        }
+
+        if (const auto* childrenComp = registry.try_get<components::ChildrenComponent>(entity))
+        {
+            for (auto child : childrenComp->children)
+            {
+                collectSubtreeUUIDs(registry, child, out);
+            }
+        }
+    }
+
+    std::vector<uint64_t> expandLiveUUIDs(const std::vector<uint64_t>& rootUUIDs)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        std::vector<uint64_t> live;
+        live.reserve(rootUUIDs.size());
+        for (uint64_t uuid : rootUUIDs)
+        {
+            collectSubtreeUUIDs(registry, scene::EntityRegistry::findByUUID(uuid), live);
+        }
+        return live;
+    }
 }
 
 namespace services
@@ -178,6 +215,16 @@ namespace services
 
         entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
 
+        // VK-1590: entities spawned this frame whose reference target was ALREADY resident.
+        // Batched by the PostLoad hook so the whole spawn budget costs one resolver pass.
+        if (!refTargetProbeQueue.empty())
+        {
+            referenceResolver.onSectorLoaded(refTargetProbeQueue);
+            refTargetProbeQueue.clear();
+        }
+
+        bool anySectorBecameLoaded = false;
+
         // Transition sectors from Loading to Loaded once all their entities are processed
         sectorManager.forEachSector([&](world::WorldSector& sector)
         {
@@ -185,6 +232,7 @@ namespace services
                 !entityLoader.hasPendingLoadsForSector(sector.coord))
             {
                 sector.state = world::SectorState::Loaded;
+                anySectorBecameLoaded = true;
 
                 // Register sector lights for streaming
                 {
@@ -278,9 +326,26 @@ namespace services
                 notif.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
                 ::events::EventDispatcher::instance().publish(notif);
 
-                referenceResolver.onSectorLoaded(sector.entityUUIDs);
+                // VK-1590: feed the resolver what is actually in the registry, expanded through
+                // each payload's nested children — not the parse-time root list.
+                referenceResolver.onSectorLoaded(expandLiveUUIDs(sector.entityUUIDs));
             }
         });
+
+        // VK-1590: single drain point, covering both the already-resident probe above and the
+        // sector-completion promotions. Main thread, after every spawn this frame has landed.
+        world::SectorRefFieldRegistry::applyResolvedReferences(
+            scene::EntityRegistry::getRegistry(), referenceResolver);
+
+        // VK-1590: streamed entities never went through a scene/prefab load, so nothing ever
+        // resolved their render-texture source names (camera / RTT entity / material slot
+        // bindings) — they were stuck at entt::null for the session. The sweep is idempotent
+        // (it only fills handles that are still null); gate it so it costs at most one pass per
+        // frame, and only in frames where a sector actually completed.
+        if (anySectorBecameLoaded)
+        {
+            serialization::SceneSerialization::resolveRenderTextureSourceNames();
+        }
     }
 
     bool WorldSectorServiceImpl::loadSector(const world::SectorCoord& coord)
@@ -417,6 +482,37 @@ namespace services
         sector->dirty = false; // Just loaded from disk — nothing to save
     }
 
+    void WorldSectorServiceImpl::rescanEntityReferences()
+    {
+        // VK-1590: entities already in the scene when world mode is entered never pass through
+        // the sector spawn path, so the PostLoad hook never sees them. Sweep the whole registry
+        // once so a main-scene entity referencing a streamed one heals the same way. Idempotent:
+        // addPendingReference dedups and applyReference just rewrites the same handle.
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        std::vector<world::PendingReference> refs;
+        world::SectorRefFieldRegistry::collectAllReferences(registry, refs);
+        if (refs.empty())
+            return;
+
+        std::vector<uint64_t> liveTargets;
+        liveTargets.reserve(refs.size());
+        for (const auto& ref : refs)
+        {
+            referenceResolver.addPendingReference(ref.sourceUUID, ref.targetUUID, ref.type);
+            if (scene::EntityRegistry::findByUUID(ref.targetUUID) != entt::null)
+            {
+                liveTargets.push_back(ref.targetUUID);
+            }
+        }
+
+        if (!liveTargets.empty())
+        {
+            referenceResolver.onSectorLoaded(liveTargets);
+        }
+        world::SectorRefFieldRegistry::applyResolvedReferences(registry, referenceResolver);
+    }
+
     void WorldSectorServiceImpl::handleSectorUnload(const world::SectorCoord& coord)
     {
         auto* sector = sectorManager.getSector(coord);
@@ -475,9 +571,15 @@ namespace services
                 staticUUIDs.push_back(uuid);
         }
 
-        referenceResolver.onSectorUnloaded(staticUUIDs);
+        // VK-1590: expand through nested children — a reference may point at, or be held by, a
+        // sub-entity that never appears in the root-keyed entityUUIDs list.
+        const std::vector<uint64_t> unloadedSubtree = expandLiveUUIDs(staticUUIDs);
+        referenceResolver.onSectorUnloaded(unloadedSubtree);   // targets leaving -> demote to pending
+        referenceResolver.removeReferencesFrom(unloadedSubtree); // sources leaving -> drop entirely
 
-        // Only unload static entities — dynamic entities persist in the scene
+        // Only unload static entities — dynamic entities persist in the scene.
+        // NOTE: the ROOT list, deliberately. sceneGraph.removeEntity already takes the whole
+        // subtree, so queueing the expanded set would try to destroy children twice.
         entityLoader.queueSectorUnload(coord, staticUUIDs);
 
         // Clear the sector's entity list, then re-add dynamic entities so they remain tracked

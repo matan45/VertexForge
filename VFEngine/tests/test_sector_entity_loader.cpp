@@ -1,6 +1,5 @@
 #include <doctest.h>
 #include <world/SectorEntityLoader.hpp>
-#include <world/PendingReferenceResolver.hpp>
 #include <scene/SceneGraphSystem.hpp>
 #include <scene/Entity.hpp>
 #include <scene/EntityRegistry.hpp>
@@ -14,7 +13,8 @@
 
 // ============================================================
 // SectorEntityLoader (deferred spawn/destroy with per-frame
-// budget + lifecycle callbacks) and PendingReferenceResolver
+// budget + lifecycle callbacks).
+// PendingReferenceResolver moved to test_pending_reference_resolver.cpp (VK-1590).
 // ============================================================
 
 namespace
@@ -325,66 +325,5 @@ TEST_SUITE("SectorEntityLoader")
         CHECK(entityExists(910501));
 
         unloadAll(loader, sceneGraph, keep, {910501});
-    }
-}
-
-TEST_SUITE("PendingReferenceResolver")
-{
-    TEST_CASE("reference resolves when its target sector loads")
-    {
-        world::PendingReferenceResolver resolver;
-        resolver.addPendingReference(100, 200, world::ReferenceType::Parent);
-        CHECK(resolver.pendingCount() == 1);
-        CHECK(resolver.resolvedCount() == 0);
-
-        resolver.onSectorLoaded({200});
-        CHECK(resolver.pendingCount() == 0);
-        REQUIRE(resolver.resolvedCount() == 1);
-
-        const auto& resolved = resolver.getResolved();
-        CHECK(resolved[0].sourceUUID == 100);
-        CHECK(resolved[0].targetUUID == 200);
-        CHECK(resolved[0].type == world::ReferenceType::Parent);
-    }
-
-    TEST_CASE("unrelated sector loads do not resolve references")
-    {
-        world::PendingReferenceResolver resolver;
-        resolver.addPendingReference(100, 200, world::ReferenceType::SocketAttachment);
-
-        resolver.onSectorLoaded({300, 400});
-        CHECK(resolver.pendingCount() == 1);
-        CHECK(resolver.resolvedCount() == 0);
-    }
-
-    TEST_CASE("resolved reference re-pends when its target unloads")
-    {
-        world::PendingReferenceResolver resolver;
-        resolver.addPendingReference(100, 200, world::ReferenceType::IKTarget);
-        resolver.onSectorLoaded({200});
-        REQUIRE(resolver.resolvedCount() == 1);
-
-        resolver.onSectorUnloaded({200});
-        CHECK(resolver.resolvedCount() == 0);
-        CHECK(resolver.pendingCount() == 1);
-
-        // Survives repeated load/unload cycles
-        resolver.onSectorLoaded({200});
-        CHECK(resolver.resolvedCount() == 1);
-        resolver.onSectorUnloaded({200});
-        CHECK(resolver.pendingCount() == 1);
-    }
-
-    TEST_CASE("clearResolved drops consumed references without touching pending")
-    {
-        world::PendingReferenceResolver resolver;
-        resolver.addPendingReference(1, 2, world::ReferenceType::Parent);
-        resolver.addPendingReference(3, 4, world::ReferenceType::Parent);
-        resolver.onSectorLoaded({2});
-        REQUIRE(resolver.resolvedCount() == 1);
-
-        resolver.clearResolved();
-        CHECK(resolver.resolvedCount() == 0);
-        CHECK(resolver.pendingCount() == 1);
     }
 }

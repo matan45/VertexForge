@@ -336,6 +336,10 @@ namespace components
 
         entt::entity parentEntity = entt::null;
         std::string parentEntityName; // For persistence across scene/prefab loads
+        // VK-1590: stable cross-sector identity. 0 == "no UUID binding" (prefab-internal
+        // attachments, or content authored before VK-1590) — resolution then falls back to
+        // parentEntityName. Never written into .vfprefab: instantiation re-mints UUIDs.
+        uint64_t parentEntityUUID = 0;
         std::string socketName;
         int32_t cachedSocketIndex = -1;
         bool isActive = true;

@@ -154,8 +154,13 @@ namespace serialization
 
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
-            out["socketAttachment"] = SceneSerialization::serializeSocketAttachment(
+            auto socketJson = SceneSerialization::serializeSocketAttachment(
                 entity.getComponent<components::SocketAttachmentComponent>());
+            // VK-1590: prefab instantiation re-mints UUIDs, so a baked scene UUID would either
+            // dangle or (worse) alias the original scene entity across every instance.
+            // Prefab-internal attachments resolve by name via the ancestor walk.
+            socketJson.erase("parentEntityUUID");
+            out["socketAttachment"] = std::move(socketJson);
         }
 
         if (entity.hasComponent<components::SocketOverrideComponent>())

@@ -8,6 +8,7 @@
 #include "world/SectorStreamer.hpp"
 #include "world/SectorEntityLoader.hpp"
 #include "world/PendingReferenceResolver.hpp"
+#include "world/SectorRefFieldRegistry.hpp"
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
 #include "streaming/AsyncLoadQueue.hpp"
@@ -80,6 +81,11 @@ namespace services
 
         std::vector<world::SectorStreamingAction> streamingActions;
         std::vector<world::HLODStreamingAction> hlodActions;
+
+        // VK-1590: targets that were already resident when their referencing entity spawned.
+        // Batched here rather than probed per-entity so a frame's whole spawn budget costs one
+        // resolver pass, not one per entity. Main-thread only, like the rest of update().
+        std::vector<uint64_t> refTargetProbeQueue;
 
         // Multiple streaming sources (camera + gameplay-registered sources)
         std::unordered_map<uint32_t, world::StreamingSource> streamingSources;
@@ -178,6 +184,11 @@ namespace services
         // Drop every gameplay-registered streaming source and restart id allocation.
         // Takes streamingSourcesMutex - do not call while already holding it.
         void clearStreamingSources();
+
+        // VK-1590: one-time full-registry sweep, for references held by entities that already
+        // exist when world mode is entered (the main scene). Those never pass through the
+        // sector spawn path, so PostLoad registration alone would miss them. Idempotent.
+        void rescanEntityReferences();
     };
 
 } // namespace services

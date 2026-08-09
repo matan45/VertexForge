@@ -85,6 +85,33 @@ namespace services
 
                 resource::acquireEntityAssets(sceneEntity, lifecycle);
 
+                // VK-1590: register this entity's outgoing cross-sector references. The subtree
+                // walk is required because sector payloads nest their children in the entity
+                // JSON, while this callback fires only for the payload root.
+                {
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto registerSubtree = [&](auto&& self, entt::entity ent) -> void
+                    {
+                        if (ent == entt::null || !registry.valid(ent)) return;
+
+                        if (const auto* uuidComp = registry.try_get<components::UUIDComponent>(ent))
+                        {
+                            world::SectorRefFieldRegistry::registerEntityReferences(
+                                registry, ent, uuidComp->id.getValue(),
+                                referenceResolver, refTargetProbeQueue);
+                        }
+
+                        if (const auto* childrenComp = registry.try_get<components::ChildrenComponent>(ent))
+                        {
+                            for (auto child : childrenComp->children)
+                            {
+                                self(self, child);
+                            }
+                        }
+                    };
+                    registerSubtree(registerSubtree, entity);
+                }
+
                 if (!meshPath.empty())
                 {
                     ::events::scene::MeshDataChangedNotification meshNotif;

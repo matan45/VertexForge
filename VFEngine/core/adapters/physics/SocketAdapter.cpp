@@ -88,6 +88,17 @@ namespace core
             attachment.parentEntityName = registry.get<components::NameComponent>(parent).name;
         }
 
+        // VK-1590: exact identity for cross-sector resolution. The else-branch matters —
+        // re-attaching to a UUID-less parent must not leave the previous parent's UUID behind.
+        if (const auto* uuidComp = registry.try_get<components::UUIDComponent>(parent))
+        {
+            attachment.parentEntityUUID = uuidComp->id.getValue();
+        }
+        else
+        {
+            attachment.parentEntityUUID = 0;
+        }
+
         if (registry.all_of<components::TransformComponent>(child))
         {
             auto& transform = registry.get<components::TransformComponent>(child);
