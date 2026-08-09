@@ -80,8 +80,15 @@ namespace services
                 cameraSrc.id = 0;
                 sources.push_back(cameraSrc);
             }
-            for (const auto& [id, src] : streamingSources)
-                sources.push_back(src);
+            // VK-1589: snapshot under the lock, then release it. streamer.update() below is the
+            // long call and takes nothing, so holding across it would serialise script
+            // registration against the whole streaming pass for no benefit.
+            {
+                std::lock_guard lock(streamingSourcesMutex);
+                sources.reserve(sources.size() + streamingSources.size());
+                for (const auto& [id, src] : streamingSources)
+                    sources.push_back(src);
+            }
 
             // Update resource load scheduler with current camera position for priority re-computation
             resource::ResourceLoadScheduler::instance().update(sources[0].position);

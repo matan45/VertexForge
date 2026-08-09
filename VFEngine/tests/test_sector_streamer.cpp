@@ -457,6 +457,137 @@ TEST_SUITE("SectorStreamer")
         }
     }
 
+    // ---- VK-1589: the two behaviours gameplay-registered sources actually rely on ----
+
+    TEST_CASE("VK-1589: a priority-1 gameplay source out-bids the priority-0 camera")
+    {
+        // The camera is always synthesised as priority 0 (WorldSectorStreamingOps), and the
+        // default budget is ONE sector per frame. This pins down the consequence: a gameplay
+        // source only has to be priority 1 to take that slot off the player's own view, even
+        // when its best candidate is strictly farther away. That is why persistent AI-base
+        // sources are registered at priority 0 and only the transient minimap pre-warm goes
+        // above it.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+        for (int x = 8; x <= 12; ++x)
+            for (int z = 8; z <= 12; ++z)
+            {
+                auto& sector = manager.getOrCreateSector({x, z});
+                sector.state = world::SectorState::Unloaded;
+                sector.filePath = "sector.vfsector";
+            }
+
+        // Camera on the centre of (0,0), which is already resident: its cheapest candidates
+        // are the four axis neighbours at distance 100 -> distSq 10000.
+        manager.getSector({0, 0})->state = world::SectorState::Loaded;
+
+        // Base plateau: (10,10) and its four axis neighbours resident, so only diagonals remain.
+        const world::SectorCoord plateau[] = {{10, 10}, {9, 10}, {11, 10}, {10, 9}, {10, 11}};
+        for (const world::SectorCoord& c : plateau)
+            manager.getSector(c)->state = world::SectorState::Loaded;
+
+        // Deliberately OFF-centre in z. Centred, the nearest diagonal would sit at distSq
+        // 20000 and priority 1 would halve it to exactly the camera's 10000 - a tie, whose
+        // winner std::sort does not define. Half a sector north puts the nearest diagonals
+        // ((11,9) and (9,9)) at distSq 12500 instead, so both subcases are decided, not tied.
+        world::StreamingSource base;
+        base.position = glm::vec3(10.5f * kSectorSize, 0.0f, 10.0f * kSectorSize);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.unloadRadius = 3.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxUnloadsPerFrame = 0;
+
+        auto isAxisNeighbourOfCamera = [](const world::SectorCoord& c)
+        { return std::abs(c.x) + std::abs(c.z) == 1; };
+        auto isDiagonalOfBase = [](const world::SectorCoord& c)
+        { return std::abs(c.x - 10) == 1 && std::abs(c.z - 10) == 1; };
+
+        SUBCASE("priority 0 (camera parity): the strictly nearer camera candidate wins")
+        {
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0), base};
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].isLoad);
+            CHECK(isAxisNeighbourOfCamera(actions[0].coord)); // 10000 < 12500
+        }
+
+        SUBCASE("priority 1 is already enough to take the slot from the camera")
+        {
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0), base};
+            sources[1].priority = 1; // 12500 / (1+1) = 6250 < the camera's 10000
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].isLoad);
+            CHECK(isDiagonalOfBase(actions[0].coord));
+        }
+    }
+
+    TEST_CASE("VK-1589: a radiusMultiplier 0.5 source pins its own sector, nothing wider")
+    {
+        // The AI-base shape: a tight source that keeps the base's own sector resident while
+        // the camera is nowhere near it, without dragging in a ring of neighbours. Relies on
+        // radiusMultiplier scaling the UNLOAD radius too - a load-only multiplier would let
+        // the camera's pass evict the very sector the source just pulled in.
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;   // camera reach 150; base reach 1.5 * 100 * 0.5 = 75
+        config.unloadRadius = 2.5f; // camera reach 250; base reach 2.5 * 100 * 0.5 = 125
+        config.maxLoadsPerFrame = 32;
+        config.maxUnloadsPerFrame = 32;
+
+        world::StreamingSource cameraSrc = sourceAtSectorCenter(0, 0);
+        world::StreamingSource baseSrc = sourceAtSectorCenter(5, 5, 0.5f);
+
+        SUBCASE("it loads its own sector and no neighbour")
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 8);
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{cameraSrc, baseSrc};
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+
+            CHECK(hasAction(actions, {5, 5}, true));
+            // 75 < 100, so the axis neighbours stay out of reach
+            CHECK_FALSE(hasAction(actions, {4, 5}, true));
+            CHECK_FALSE(hasAction(actions, {6, 5}, true));
+            CHECK_FALSE(hasAction(actions, {5, 4}, true));
+            CHECK_FALSE(hasAction(actions, {5, 6}, true));
+        }
+
+        SUBCASE("it protects that sector from the distant camera's unload pass")
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 8);
+            manager.getSector({5, 5})->state = world::SectorState::Loaded;
+
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+            std::vector<world::StreamingSource> sources{cameraSrc, baseSrc};
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            CHECK_FALSE(hasAction(actions, {5, 5}, false));
+
+            // Drop the base source (its owner died): the camera alone evicts it again.
+            sources.pop_back();
+            actions.clear();
+            streamer.update(sources, manager, actions);
+            CHECK(hasAction(actions, {5, 5}, false));
+        }
+    }
+
     TEST_CASE("setConfig enforces unloadRadius > loadRadius")
     {
         world::SectorStreamer streamer;

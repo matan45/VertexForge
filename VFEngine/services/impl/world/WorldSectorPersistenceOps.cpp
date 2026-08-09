@@ -310,9 +310,7 @@ namespace services
         animationSnapshots.clear();
         vfxSnapshots.clear();
         audioSnapshots.clear();
-        streamingSources.clear();
-        streamingSourceOwners.clear();
-        nextStreamingSourceId = 1;
+        clearStreamingSources();
         sectorManager.clear();
 
         auto& root = sceneGraph->GetRoot();

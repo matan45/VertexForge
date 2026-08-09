@@ -481,8 +481,10 @@ namespace services
             });
 
         dispatcher.registerQueryHandler<::events::world::IsWorldModeQuery>(
-            [this](const ::events::world::IsWorldModeQuery&)
+            [this](const ::events::world::IsWorldModeQuery&) -> bool
             {
+                // Explicit -> bool: without it the deduced return type is std::atomic<bool>,
+                // which is not copyable.
                 return worldMode;
             });
 
@@ -618,6 +620,14 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::RegisterStreamingSourceCommand>(
             [this](const ::events::world::RegisterStreamingSourceCommand& cmd) -> uint32_t
             {
+                // VK-1589: no world, no source. Registering outside world mode used to hand out a
+                // live id that no cleanup path could reach (both the mode-change clear and the
+                // entity-delete sweep are worldMode-gated), and it contradicted the documented
+                // script contract "returns 0 if no sector world is active".
+                if (!worldMode)
+                    return 0;
+
+                std::lock_guard lock(streamingSourcesMutex);
                 uint32_t id = nextStreamingSourceId++;
                 world::StreamingSource source;
                 source.position = cmd.position;
@@ -633,6 +643,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::UnregisterStreamingSourceCommand>(
             [this](const ::events::world::UnregisterStreamingSourceCommand& cmd)
             {
+                std::lock_guard lock(streamingSourcesMutex);
                 streamingSources.erase(cmd.sourceId);
                 streamingSourceOwners.erase(cmd.sourceId);
             });
@@ -640,6 +651,7 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::UpdateStreamingSourcePositionCommand>(
             [this](const ::events::world::UpdateStreamingSourcePositionCommand& cmd)
             {
+                std::lock_guard lock(streamingSourcesMutex);
                 auto it = streamingSources.find(cmd.sourceId);
                 if (it != streamingSources.end())
                     it->second.position = cmd.position;
@@ -648,6 +660,7 @@ namespace services
         dispatcher.registerQueryHandler<::events::world::IsStreamingSourceValidQuery>(
             [this](const ::events::world::IsStreamingSourceValidQuery& query) -> bool
             {
+                std::lock_guard lock(streamingSourcesMutex);
                 return streamingSources.contains(query.sourceId);
             });
 
@@ -741,6 +754,11 @@ namespace services
                 {
                     isPlayMode = true;
 
+                    // VK-1589: start the session with no gameplay sources, symmetric with the
+                    // Edit branch below. Anything registered in edit mode (a nav invoker, a
+                    // leftover) must not pin sectors for the play session.
+                    clearStreamingSources();
+
                     // Entering play mode — simulate runtime: unload all sectors so they
                     // stream in based on camera distance (like a fresh world load)
                     savedWorldDefinition = worldDefinition;
@@ -795,9 +813,7 @@ namespace services
                     animationSnapshots.clear();
                     vfxSnapshots.clear();
                     audioSnapshots.clear();
-                    streamingSources.clear();
-                    streamingSourceOwners.clear();
-                    nextStreamingSourceId = 1;
+                    clearStreamingSources();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     entityLoader.clear();
@@ -864,7 +880,7 @@ namespace services
         entityDeletedToken = dispatcher.subscribe<::events::scene::EntityDeletedNotification>(
             [this](const ::events::scene::EntityDeletedNotification& notif)
             {
-                if (!worldMode || streamingSourceOwners.empty()) return;
+                if (!worldMode) return;
 
                 auto& registry = scene::EntityRegistry::getRegistry();
                 auto entity = internal::fromHandle(notif.entity);
@@ -873,6 +889,9 @@ namespace services
                 auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
                 if (!uuidComp) return;
                 uint64_t uuid = uuidComp->id.getValue();
+
+                std::lock_guard lock(streamingSourcesMutex);
+                if (streamingSourceOwners.empty()) return;
 
                 auto it = streamingSourceOwners.begin();
                 while (it != streamingSourceOwners.end())
@@ -965,6 +984,14 @@ namespace services
                     sectorManager.clear();
                     worldDefinition = {};
                     streamer.setEnabled(false);
+
+                    // VK-1589: must happen BEFORE worldMode goes false. Both the mode-change
+                    // clear and the entity-delete auto-unregister are worldMode-gated, so any
+                    // source still registered here becomes permanently unreachable and would
+                    // pin sectors in the next world. This is also the only cleanup path a
+                    // shipped Runtime has - it never publishes EditorModeChangedNotification.
+                    clearStreamingSources();
+
                     worldMode = false;
                     currentWorldPath.clear();
                 }
@@ -1111,6 +1138,14 @@ namespace services
                           worldTileSize * static_cast<float>(config.tilesPerSector));
             }
         }
+    }
+
+    void WorldSectorServiceImpl::clearStreamingSources()
+    {
+        std::lock_guard lock(streamingSourcesMutex);
+        streamingSources.clear();
+        streamingSourceOwners.clear();
+        nextStreamingSourceId = 1;
     }
 
 } // namespace services

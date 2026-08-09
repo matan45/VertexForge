@@ -88,6 +88,13 @@ public class GameObject {
         return this.id;
     }
 
+    // Persistent scene UUID (0 when the entity has none). Unlike id, this survives
+    // save/load. Opaque - forward it to the API that asked for it (e.g.
+    // Streaming::registerWorldSource), do not print or compare it.
+    public function uuid(): int {
+        return Entity::getUUID(this.id);
+    }
+
     // ============================================
     // Name / active state
     // ============================================

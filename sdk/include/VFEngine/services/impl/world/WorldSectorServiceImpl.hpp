@@ -11,10 +11,12 @@
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
 #include "streaming/AsyncLoadQueue.hpp"
+#include <atomic>
 #include <chrono>
 #include <deque>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <nlohmann/json.hpp>
@@ -66,7 +68,12 @@ namespace services
         world::HLODStreamer hlodStreamer;
         world::HLODProxyManager hlodProxyManager;
 
-        bool worldMode = false;
+        // Atomic because the notification handlers that gate on it (entity-deleted,
+        // transform-changed, and the VK-1589 streaming-source commands) are published from the
+        // "Scripts" frame task, which runs on an enkiTS worker, while every write happens on
+        // the main thread. Every use is a plain load or store, so the implicit conversions
+        // keep the call sites unchanged.
+        std::atomic<bool> worldMode = false;
         bool isPlayMode = false;
         bool debugDrawSectors = false;
         std::string currentWorldPath;
@@ -79,6 +86,12 @@ namespace services
         // sourceId -> owning entity UUID, for auto-unregister on entity deletion
         std::unordered_map<uint32_t, uint64_t> streamingSourceOwners;
         uint32_t nextStreamingSourceId = 1;
+        // VK-1589: the three fields above are the only state this class shares across threads.
+        // update() is pinned to the main thread, but the "Scripts" frame task is not and has no
+        // dependency edge to "WorldSector" (EditorFrameTaskGraph.cpp), so a script calling
+        // Streaming::registerWorldSource can rehash streamingSources while update() iterates it.
+        // Hold this only around the map accesses - never across streamer.update().
+        mutable std::mutex streamingSourcesMutex;
 
         ::events::SubscriptionToken transformChangedToken;
         ::events::SubscriptionToken editorModeChangedToken;
@@ -161,6 +174,10 @@ namespace services
         void onTerrainAvailable(float worldTileSize);
         glm::vec3 getPrimaryCameraPosition() const;
         void drawDebugSectors() const;
+
+        // Drop every gameplay-registered streaming source and restart id allocation.
+        // Takes streamingSourcesMutex - do not call while already holding it.
+        void clearStreamingSources();
     };
 
 } // namespace services

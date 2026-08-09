@@ -3,7 +3,7 @@
 //
 // Usage examples:
 //   // Auto-load a scene when player enters an AABB zone
-//   var zoneId = Streaming::setTriggerZone(-100, -50, -100, 100, 50, 100, "assets/scenes/dungeon.vfScene");
+//   int zoneId = Streaming::setTriggerZone(-100, -50, -100, 100, 50, 100, "assets/scenes/dungeon.vfScene");
 //
 //   // Remove the trigger zone
 //   Streaming::removeTriggerZone(zoneId);
@@ -48,14 +48,30 @@ public class Streaming {
     // In a sector world, gameplay can register additional streaming sources so
     // sectors stream in around squads / command centers, not just the camera.
     //
-    //   int srcId = Streaming::registerWorldSource(pos.x, pos.y, pos.z, 1.0, 2, unit.getUUID());
+    //   int srcId = Streaming::registerWorldSource(pos.x, pos.y, pos.z, 0.5, 0,
+    //                                              Entity::getUUID(baseId));
     //   Streaming::updateWorldSource(srcId, newPos.x, newPos.y, newPos.z);
     //   Streaming::unregisterWorldSource(srcId);   // or automatic when the owner entity dies
+    //
+    // Two rules that are easy to get wrong:
+    //
+    //  * PRIORITY. The camera is priority 0 and the default per-frame load budget is a
+    //    single sector, so a priority > 0 source out-bids the player's own view for that
+    //    slot. Persistent gameplay sources (bases, objectives) belong at priority 0;
+    //    reserve priority > 0 for short-lived sources whose destination the camera is
+    //    about to reach anyway, such as a minimap-jump pre-warm.
+    //
+    //  * THREADING. Per-frame updateWorldSource calls belong in onLateUpdate, not onUpdate:
+    //    onUpdate runs on a worker thread concurrently with the sector streamer, while
+    //    onLateUpdate is ordered after it. The service locks its source table, so either is
+    //    correct - this only keeps a per-frame writer off the streamer's back. One-shot
+    //    register/unregister calls are fine from anywhere, including onStart.
 
     // Register a gameplay streaming source. radiusMultiplier scales the world's
-    // load/unload radii for this source; priority > 0 wins the per-frame load
-    // budget over lower-priority sources (the camera is priority 0); a non-zero
-    // ownerEntityUUID auto-unregisters the source when that entity is deleted.
+    // load AND unload radii for this source, so a source also pins the sectors it
+    // covers against eviction; priority > 0 wins the per-frame load budget over
+    // lower-priority sources (the camera is priority 0); a non-zero ownerEntityUUID
+    // (from Entity::getUUID) auto-unregisters the source when that entity is deleted.
     // Returns the source id, or 0 if no sector world is active.
     public static function registerWorldSource(float x, float y, float z,
                                                float radiusMultiplier, int priority,
