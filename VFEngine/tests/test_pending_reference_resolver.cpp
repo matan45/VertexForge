@@ -88,20 +88,35 @@ namespace
     // Serialize a throwaway entity into the JSON shape sector files store, then destroy it so
     // the loader is the one bringing it back. Mirrors test_sector_entity_loader.cpp's helper.
     std::pair<std::string, json> makeEntityPayload(const std::string& name, uint64_t uuid,
-                                                   uint64_t socketParentUUID = 0)
+                                                   uint64_t socketParentUUID = 0,
+                                                   const std::string& socketParentName = {})
     {
         scene::EntityRegistry::init();
         scene::Entity entity(name);
         entity.addOrReplaceComponent<components::UUIDComponent>(uuid);
 
-        if (socketParentUUID != 0)
+        if (socketParentUUID != 0 || !socketParentName.empty())
         {
-            attachSocket(entity.getHandle(), socketParentUUID);
+            attachSocket(entity.getHandle(), socketParentUUID, socketParentName);
         }
 
         json entityJson = serialization::SceneSerialization::serializeEntity(entity);
         scene::EntityRegistry::getRegistry().destroy(entity.getHandle());
         return {name, entityJson};
+    }
+
+    // The socket block as it lands in a .vfsector entity payload, or null if absent.
+    // Goes through the public serializeEntity dispatch — serializeSocketAttachment itself is a
+    // private member of SceneSerialization.
+    const json* socketJsonOf(const std::pair<std::string, json>& payload)
+    {
+        const json& entityJson = payload.second;
+        if (!entityJson.contains("components"))
+            return nullptr;
+        const json& components = entityJson["components"];
+        if (!components.contains("socketAttachment"))
+            return nullptr;
+        return &components["socketAttachment"];
     }
 
     const components::SocketAttachmentComponent* socketOf(uint64_t uuid)
@@ -110,6 +125,19 @@ namespace
         if (entity == entt::null)
             return nullptr;
         return scene::EntityRegistry::getRegistry().try_get<components::SocketAttachmentComponent>(entity);
+    }
+
+    // doctest's expression decomposer wraps the LHS in Expression_lhs<>, which then matches
+    // entt's templated operator==(const Entity, entt::null_t) as well as doctest's own — an
+    // ambiguity. Collapse entity/null comparisons to a plain bool before they reach CHECK.
+    bool entityExists(uint64_t uuid)
+    {
+        return scene::EntityRegistry::findByUUID(uuid) != entt::null;
+    }
+
+    bool isUnbound(const components::SocketAttachmentComponent* attachment)
+    {
+        return attachment != nullptr && attachment->parentEntity == entt::null;
     }
 
     // Mirrors the file-static helper in WorldSectorStreamingOps.cpp: the resolver must be fed
@@ -577,45 +605,39 @@ TEST_SUITE("SectorRefFieldRegistry")
         CHECK(mine == 2);
     }
 
-    TEST_CASE("serializeSocketAttachment round-trips parentEntityUUID and omits it at zero")
+    TEST_CASE("parentEntityUUID survives the sector entity payload round trip")
     {
-        components::SocketAttachmentComponent attachment;
-        attachment.parentEntityName = "Bunker";
-        attachment.socketName = "hand_r";
-
-        SUBCASE("omitted when unbound")
+        SUBCASE("a name-only attachment writes no uuid key")
         {
-            const json j = serialization::SceneSerialization::serializeSocketAttachment(attachment);
-            CHECK_FALSE(j.contains("parentEntityUUID"));
-
-            components::SocketAttachmentComponent out;
-            serialization::SceneSerialization::deserializeSocketAttachment(j, out);
-            CHECK(out.parentEntityUUID == 0);
-            CHECK(out.needsParentResolution); // armed by the name alone
+            // The prefab / pre-VK-1590 shape. The key must stay absent so those payloads keep
+            // serializing byte-identically.
+            const auto payload = makeEntityPayload("PrefabPart", 915080, 0, "RigRoot");
+            const json* socketJson = socketJsonOf(payload);
+            REQUIRE(socketJson != nullptr);
+            CHECK((*socketJson)["parentEntityName"].get<std::string>() == "RigRoot");
+            CHECK_FALSE(socketJson->contains("parentEntityUUID"));
         }
 
-        SUBCASE("round-trips when bound")
+        SUBCASE("a bound attachment writes the uuid key")
         {
-            attachment.parentEntityUUID = 915080;
-            const json j = serialization::SceneSerialization::serializeSocketAttachment(attachment);
-            REQUIRE(j.contains("parentEntityUUID"));
-
-            components::SocketAttachmentComponent out;
-            serialization::SceneSerialization::deserializeSocketAttachment(j, out);
-            CHECK(out.parentEntityUUID == 915080);
-            CHECK(out.parentEntity == entt::null); // handle is never serialized
-            CHECK(out.needsParentResolution);
+            const auto payload = makeEntityPayload("Turret", 915082, 915083);
+            const json* socketJson = socketJsonOf(payload);
+            REQUIRE(socketJson != nullptr);
+            REQUIRE(socketJson->contains("parentEntityUUID"));
+            CHECK((*socketJson)["parentEntityUUID"].get<uint64_t>() == 915083);
         }
 
-        SUBCASE("a uuid-only attachment still arms")
+        SUBCASE("the loaded component arms on the uuid with the handle still null")
         {
-            attachment.parentEntityName.clear();
-            attachment.parentEntityUUID = 915081;
-            const json j = serialization::SceneSerialization::serializeSocketAttachment(attachment);
+            StreamHarness harness;
+            // Target 915083 is never loaded, so nothing resolves the handle.
+            harness.loadSector({915, 8}, {makeEntityPayload("Turret", 915082, 915083)}, {915082});
 
-            components::SocketAttachmentComponent out;
-            serialization::SceneSerialization::deserializeSocketAttachment(j, out);
-            CHECK(out.needsParentResolution);
+            const auto* attachment = socketOf(915082);
+            REQUIRE(attachment != nullptr);
+            CHECK(attachment->parentEntityUUID == 915083);
+            CHECK(attachment->needsParentResolution); // armed even with no parentEntityName
+            CHECK(isUnbound(attachment));
         }
     }
 }
@@ -636,7 +658,7 @@ TEST_SUITE("SectorReferenceStreaming")
 
         const auto* attachment = socketOf(915100);
         REQUIRE(attachment != nullptr);
-        CHECK(attachment->parentEntity == entt::null);
+        CHECK(isUnbound(attachment));
         CHECK(harness.resolver.pendingCount() == 1);
         CHECK(harness.resolver.resolvedCount() == 0);
     }
@@ -649,7 +671,7 @@ TEST_SUITE("SectorReferenceStreaming")
         StreamHarness harness;
 
         harness.loadSector(sectorA, {makeEntityPayload("Turret", 915110, 915111)}, {915110});
-        REQUIRE(socketOf(915110)->parentEntity == entt::null);
+        REQUIRE(isUnbound(socketOf(915110)));
 
         harness.loadSector(sectorB, {makeEntityPayload("Bunker", 915111)}, {915111});
 
@@ -704,7 +726,7 @@ TEST_SUITE("SectorReferenceStreaming")
             REQUIRE(harness.resolver.resolvedCount() == 1);
 
             harness.unloadSector(sectorB);
-            CHECK(scene::EntityRegistry::findByUUID(915131) == entt::null);
+            CHECK_FALSE(entityExists(915131));
             CHECK(harness.resolver.resolvedCount() == 0);
             CHECK(harness.resolver.pendingCount() == 1); // demoted, source still alive
 
