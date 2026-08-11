@@ -47,6 +47,12 @@ namespace resource {
 		// Reusable procedural scatter profile (VK-1585), `.vfScatterProfile`.
 		// Append-only; persisted by name, so the shifted COUNT stays safe.
 		ScatterProfile = 27,
+		// Streamed world data (VK-1592): `.vfsector` payloads and `.vfHLOD` proxies,
+		// submitted to ResourceLoadScheduler by the sector streamer. Unlike every other
+		// enumerator this one never reaches a `.vfmeta` sidecar or the asset database -
+		// sectors are addressed by coord, not GUID - it exists purely to tag scheduler
+		// requests so the profiler can group them. Append-only; persisted by name.
+		WorldSector = 28,
 		COUNT
 	};
 
@@ -80,6 +86,7 @@ namespace resource {
 		case AssetType::PluginAsset:      return "PluginAsset";
 		case AssetType::ToonProfile:      return "ToonProfile";
 		case AssetType::ScatterProfile:   return "ScatterProfile";
+		case AssetType::WorldSector:      return "WorldSector";
 		default:                          return "Unknown";
 		}
 	}

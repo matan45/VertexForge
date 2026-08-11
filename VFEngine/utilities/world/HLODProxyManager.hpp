@@ -34,7 +34,13 @@ namespace world
 
         static constexpr float CROSSFADE_DURATION = 0.5f;
 
-        void loadProxy(const HLODCellCoord& cellCoord, const std::string& hlodFilePath);
+        // VK-1592: the .vfHLOD read happens caller-side, submitted to ResourceLoadScheduler by
+        // WorldSectorServiceImpl. It cannot happen here: ResourceLoadScheduler lives in Utilities
+        // (a StaticLib), so instance() inside World.dll resolves to a private copy that nothing
+        // ever pumps and the profiler never sees. Data arrives already parsed; entity creation
+        // still happens in update(), on the caller's thread, through the unchanged pending-load
+        // path.
+        void loadProxyFromData(const HLODCellCoord& cellCoord, HLODFileData data);
         void unloadProxy(const HLODCellCoord& cellCoord, scene::SceneGraphSystem& sceneGraph);
         void unloadAll(scene::SceneGraphSystem& sceneGraph);
 

@@ -16,6 +16,17 @@
 
 namespace windows
 {
+	// VK-1592: the load tables' Type column. AssetType::COUNT means the load carries no
+	// type at all (shaders, and anything submitted before VK-1434 tagging) - render a
+	// dash rather than assetTypeName's "Unknown", which reads like a lookup failure.
+	static void drawLoadTypeCell(resource::AssetType type)
+	{
+		if (type == resource::AssetType::COUNT)
+			ImGui::TextDisabled("-");
+		else
+			ImGui::TextUnformatted(resource::assetTypeName(type));
+	}
+
 	// Frame-time history plot with median-based hitch flagging, shared by
 	// the CPU (Timeline tab) and GPU (GPU Passes tab) sections.
 	static void drawFrameHistoryPlot(const char* label, const std::vector<float>& historyMs)
@@ -709,10 +720,11 @@ namespace windows
 		{
 			ImGui::TextDisabled("No loads in progress");
 		}
-		else if (ImGui::BeginTable("ActiveLoads", 5,
+		else if (ImGui::BeginTable("ActiveLoads", 6,
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 		{
 			ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+			ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 110.0f);
 			ImGui::TableSetupColumn("Stage", ImGuiTableColumnFlags_WidthFixed, 80.0f);
 			ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthFixed, 60.0f);
 			ImGui::TableSetupColumn("Wait (ms)", ImGuiTableColumnFlags_WidthFixed, 70.0f);
@@ -724,6 +736,8 @@ namespace windows
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 				ImGui::Text("%s", loadDisplayName(load.guid, load.debugName).c_str());
+				ImGui::TableNextColumn();
+				drawLoadTypeCell(load.assetType);
 				ImGui::TableNextColumn();
 				ImGui::Text("%s", resource::loadStageName(load.stage));
 				ImGui::TableNextColumn();
@@ -760,12 +774,13 @@ namespace windows
 			return;
 		}
 
-		if (ImGui::BeginTable("RecentLoads", 5,
+		if (ImGui::BeginTable("RecentLoads", 6,
 			ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit |
 			ImGuiTableFlags_ScrollY))
 		{
 			ImGui::TableSetupScrollFreeze(0, 1);
 			ImGui::TableSetupColumn("Asset", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+			ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 110.0f);
 			ImGui::TableSetupColumn("Result", ImGuiTableColumnFlags_WidthFixed, 80.0f);
 			ImGui::TableSetupColumn("Queue (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
 			ImGui::TableSetupColumn("Load (ms)", ImGuiTableColumnFlags_WidthFixed, 80.0f);
@@ -779,6 +794,8 @@ namespace windows
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
 				ImGui::Text("%s", loadDisplayName(rec.guid, rec.debugName).c_str());
+				ImGui::TableNextColumn();
+				drawLoadTypeCell(rec.assetType);
 				ImGui::TableNextColumn();
 				switch (rec.finalStage)
 				{

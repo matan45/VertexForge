@@ -43,7 +43,10 @@ namespace services
         const std::string worldPath = resolveProjectPath(filePath);
 
         // VK-1591: same coord-collision hazard as loadWorld — never carry blobs across worlds
-        pendingAsyncLoads.drain();
+        // VK-1592: drainSectorLoads, not a bare AsyncLoadQueue::drain — a request still queued in
+        // the scheduler has no worker behind it and would block the main thread forever.
+        drainSectorLoads();
+        drainHlodLoads();
         clearPrefetchedBlobs();
 
         sectorManager.clear();
@@ -245,7 +248,10 @@ namespace services
         // VK-1591: prefetch blobs are keyed on a bare SectorCoord, so without this the new world's
         // (0,0) would activate the previous world's cached bytes. Drain first — an in-flight read
         // would otherwise land in a later poll and be attributed to the new world's sector.
-        pendingAsyncLoads.drain();
+        // VK-1592: drainSectorLoads (not a bare drain) or an undispatched request hangs the main
+        // thread; drainHlodLoads applies the same cross-world argument to .vfHLOD proxy reads.
+        drainSectorLoads();
+        drainHlodLoads();
         clearPrefetchedBlobs();
 
         sectorManager.clear();
@@ -340,8 +346,9 @@ namespace services
             ::events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Drain all pending async sector loads before clearing
-        pendingAsyncLoads.drain();
+        // Drain all pending async sector and HLOD loads before clearing
+        drainSectorLoads(); // VK-1592: cancels undispatched scheduler requests first
+        drainHlodLoads();
         clearPrefetchedBlobs(); // VK-1591
 
         entityLoader.clear();

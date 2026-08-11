@@ -52,6 +52,7 @@ namespace resource {
 		std::chrono::steady_clock::time_point submitTime;
 		std::chrono::steady_clock::time_point dispatchTime;
 		std::future<void> future;
+		AssetType assetType = AssetType::COUNT;
 	};
 
 	// Snapshot of a pending or in-flight load for the profiler UI
@@ -65,6 +66,8 @@ namespace resource {
 		float fraction = 0.0f;
 		float queueWaitMs = 0.0f; // pending: time queued so far; in-flight: final queue wait
 		float runMs = 0.0f;       // in-flight: time executing so far
+		// VK-1592: COUNT for type-less loads (shaders); the UI renders those as "-"
+		AssetType assetType = AssetType::COUNT;
 	};
 
 	// Finished load (completed/failed/cancelled) kept in a small ring for
@@ -78,6 +81,9 @@ namespace resource {
 		float queueWaitMs = 0.0f;
 		float loadMs = 0.0f;
 		uint64_t bytes = 0;
+		// VK-1592: kept LAST so the existing aggregate recordCompletion({...}) call sites,
+		// which pass seven initialisers, still compile (this one value-initialises to COUNT)
+		AssetType assetType = AssetType::COUNT;
 	};
 
 	class ResourceLoadScheduler
@@ -98,6 +104,13 @@ namespace resource {
 
 		// Cancel a pending or in-flight load by GUID
 		bool cancel(const asset::AssetGUID& guid);
+
+		// VK-1592: re-tag a still-pending request with a new hint, for a load whose urgency
+		// changed after submission (a prefetched world sector promoted into the activate ring
+		// while its read was still queued). Deliberately a no-op once the load has dispatched -
+		// the work is already running, and preempting it would cost more than it saves.
+		// Returns true if a pending request with this GUID was found.
+		bool reprioritize(const asset::AssetGUID& guid, const LoadHint& hint);
 
 		// Cancel all pending loads
 		void cancelAll();

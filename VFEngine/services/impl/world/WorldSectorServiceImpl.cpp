@@ -816,7 +816,11 @@ namespace services
                     // would be orphaned. The drain is a correctness fix beyond the prefetch ring:
                     // a Loading future still in flight would otherwise land in a later poll and
                     // spawn the edit-mode sector's entities into the play scene.
-                    pendingAsyncLoads.drain();
+                    // VK-1592: must go through drainSectorLoads - a request still queued in the
+                    // scheduler has no worker behind it, so a bare AsyncLoadQueue::drain() would
+                    // block on a promise nobody will ever satisfy. HLOD proxies deliberately
+                    // survive the mode change, so their in-flight reads are left alone.
+                    drainSectorLoads();
                     clearPrefetchedBlobs();
                     entityLoader.clear();
 
@@ -873,7 +877,7 @@ namespace services
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
                     // VK-1591: sectorManager.clear() destroys every WorldSector, so blobs keyed on
                     // their coords must go with them (see the loadWorld note).
-                    pendingAsyncLoads.drain();
+                    drainSectorLoads(); // VK-1592: see the Play branch above
                     clearPrefetchedBlobs();
                     entityLoader.clear();
                     sectorManager.clear();
@@ -1041,7 +1045,10 @@ namespace services
 
                     // VK-1591: this is the only teardown path a shipped Runtime takes. Without the
                     // drain, an in-flight read outlives the sector map it was keyed against.
-                    pendingAsyncLoads.drain();
+                    // VK-1592: drainSectorLoads cancels requests the scheduler has not dispatched
+                    // (a bare drain would hang); the world is going away, so HLOD reads go too.
+                    drainSectorLoads();
+                    drainHlodLoads();
                     clearPrefetchedBlobs();
                     entityLoader.clear();
                     sectorManager.clear();
@@ -1155,6 +1162,10 @@ namespace services
         {
             int32_t cs = static_cast<int32_t>(tier.cellSize);
             world::HLODCellCoord cell(floorDiv(coord.x, cs), floorDiv(coord.z, cs), tier.tier);
+            // VK-1592: the read now lives in the scheduler, not inside HLODProxyManager, so
+            // unloadProxy no longer discards it implicitly - a load still in flight would
+            // rebuild a proxy from the bake we just deleted.
+            cancelHlodRequest(cell);
             hlodProxyManager.unloadProxy(cell, *sceneGraph);
             hlodStreamer.forgetProxy(cell);
         }

@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
+#include "world/HLODSerialization.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "serialization/SerializationFileAccess.hpp"
 #include "resource/ResourceLoadScheduler.hpp"
@@ -22,7 +23,58 @@
 
 namespace
 {
-    static constexpr uint32_t kMaxConcurrentSectorLoads = 4;
+    // ---- VK-1592: priority map for sector / HLOD LoadRequests ----
+    //
+    // ResourceLoadScheduler::computePriority is
+    //     distanceFactor * importanceWeight + hint.priority
+    // with distanceFactor = 1 / (1 + distance * 0.01) in (0, 1] and weights
+    // Critical 5 / High 3 / Normal 1 / Low 0.5 / Background 0.2.
+    //
+    // Every existing asset load in the engine passes a DEFAULT LoadHint (Normal + 0.5), so the
+    // whole texture/mesh/audio population sits at a flat 1.5; only shaders are Critical. The
+    // additive bias below is what makes "activate-ring sectors outrank speculative asset
+    // prefetch" unconditional instead of world-scale dependent: with a zero bias a sector
+    // 1000 world units out would score ~0.27 and lose to a speculative texture.
+    //
+    //   activate ring : (0, 3]   + 1.5  ->  always above 1.5, ordered by distance among sectors
+    //   HLOD proxy    : (0, 0.5] + 0.5  ->  0.5 .. 1.0, below every asset load, above prefetch
+    //   prefetch ring : (0, 0.2] + 0.0  ->  below everything
+    constexpr float kSectorActivateBias = 1.5f;
+    constexpr float kHlodProxyBias = 0.5f;
+    constexpr float kSectorPrefetchBias = 0.0f;
+
+    // Synthetic AssetGUIDs. Sectors and HLOD cells are addressed by coord, never by GUID, and
+    // never appear in the asset database - but leaving every request on AssetGUID::invalid()
+    // would make findProgress()/cancel() ambiguous across concurrent sector loads. The top 16
+    // bits mark the value as synthetic. The profiler resolves these rows through debugName
+    // (TaskGraphWindow::loadDisplayName short-circuits on a non-empty name), so they never
+    // reach a database lookup.
+    constexpr uint64_t kSectorGuidTag = 0xFFF5'0000'0000'0000ull;
+    constexpr uint64_t kHlodGuidTag = 0xFFF6'0000'0000'0000ull;
+
+    std::string sectorDebugName(const char* prefix, const world::SectorCoord& coord)
+    {
+        return std::string(prefix) + "(" + std::to_string(coord.x) + "," +
+               std::to_string(coord.z) + ")";
+    }
+
+    std::string hlodDebugName(const world::HLODCellCoord& cell)
+    {
+        return "hlod(" + std::to_string(cell.x) + "," + std::to_string(cell.z) + ",T" +
+               std::to_string(static_cast<int>(cell.tier)) + ")";
+    }
+
+    asset::AssetGUID sectorLoadGuid(const world::SectorCoord& coord)
+    {
+        return asset::AssetGUID::fromValue(kSectorGuidTag | world::sectorCoordToId(coord));
+    }
+
+    uint64_t hlodGuidValue(const world::HLODCellCoord& cell)
+    {
+        return kHlodGuidTag |
+               (static_cast<uint64_t>(cell.tier) << 32) |
+               world::sectorCoordToId(world::SectorCoord(cell.x, cell.z));
+    }
 
     // VK-1590: WorldSector::entityUUIDs is the PARSE-TIME ROOT list. It overstates reality
     // (entities whose spawn threw, or that were deduped away, stay in it) and understates it
@@ -217,15 +269,32 @@ namespace services
                         const auto* sector = sectorManager.getSector(baseSector);
                         if (sector && !sector->hlodFilePath.empty())
                         {
-                            hlodProxyManager.loadProxy(action.cellCoord, sector->hlodFilePath);
+                            // VK-1592: the read is submitted to the scheduler from here rather
+                            // than inside HLODProxyManager, which lives in World.dll and would
+                            // resolve ResourceLoadScheduler::instance() to a private, never
+                            // pumped copy of the singleton (Utilities is a StaticLib).
+                            const float sectorSize = sectorManager.getConfig().sectorWorldSize;
+                            const float half = static_cast<float>(cs) * 0.5f;
+                            const glm::vec3 cellCenter(
+                                (static_cast<float>(baseX) + half) * sectorSize, 0.0f,
+                                (static_cast<float>(baseZ) + half) * sectorSize);
+                            submitHlodLoad(action.cellCoord, sector->hlodFilePath, cellCenter);
                         }
                     }
                     else
                     {
+                        // VK-1592: an in-flight read is no longer discarded implicitly by the
+                        // proxies map (HLODProxyManager only learns about the cell once the
+                        // bytes arrive), so cancel it explicitly or it would resurrect a proxy
+                        // the streamer just dropped.
+                        cancelHlodRequest(action.cellCoord);
                         hlodProxyManager.unloadProxy(action.cellCoord, *sceneGraph);
                     }
                 }
 
+                // Poll before update() so a proxy whose bytes landed this frame still creates
+                // its entities this frame, exactly as the old in-manager std::async did.
+                pollAsyncHlodLoads();
                 hlodProxyManager.update(*sceneGraph, deltaTime);
             }
         }
@@ -449,6 +518,14 @@ namespace services
         // this state and would otherwise strand the sector in Prefetching forever.
         if (sector->state == world::SectorState::Prefetching)
         {
+            // VK-1592: that read was submitted at prefetch priority (below every asset load).
+            // The player is now waiting on it, so lift it into the activate band before it
+            // dispatches - otherwise a promoted sector would queue behind speculative texture
+            // work. A no-op once the read is already running, which is the common case.
+            resource::ResourceLoadScheduler::instance().reprioritize(
+                sectorLoadGuid(coord),
+                sectorLoadHint(coord, resource::LoadImportance::High, kSectorActivateBias));
+
             beginSectorActivation(*sector);
             return;
         }
@@ -464,9 +541,6 @@ namespace services
         {
             if (prefetchedBlobs.contains(coord))
             {
-                if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
-                    return; // retry next frame; the blob stays cached
-
                 beginSectorActivation(*sector);
                 launchParseFromCachedBlob(coord);
                 return;
@@ -475,11 +549,8 @@ namespace services
             sector->state = world::SectorState::Unloaded;
         }
 
-        // Respect concurrency limit — streamer will re-emit next frame
-        if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
-            return;
-
-        beginSectorActivation(*sector);
+        // VK-1592: no bespoke concurrency cap any more - the scheduler owns "how many at once",
+        // and the activate ring's priority keeps it ahead of prefetches and asset loads.
 
         std::string filePath = sector->filePath;
 
@@ -487,13 +558,24 @@ namespace services
         // the prefetch ring already brought in.
         vfLogDebug("Sector ({},{}) activating with a file read (not prefetched)", coord.x, coord.z);
 
-        pendingAsyncLoads.launch(coord,
-            std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
-                AsyncSectorLoadResult result;
-                result.success = world::WorldSectorSerialization::loadSector(
-                    filePath, result.entityData, &result.dataLayers);
-                return result;
-            }));
+        // Submit BEFORE publishing the activation notifications: a refused submit then leaves
+        // nothing to unwind (no SectorActivated without a matching SectorDeactivated). Nothing
+        // can observe the gap - the result is only ever consumed by pollAsyncSectorLoads, which
+        // runs at the top of the next update().
+        if (!submitSectorLoad(coord, resource::LoadImportance::High, kSectorActivateBias,
+                sector->metadata.estimatedMemory, /*prefetchReservation=*/0,
+                sectorDebugName("sector", coord),
+                [filePath]() -> AsyncSectorLoadResult {
+                    AsyncSectorLoadResult result;
+                    result.success = world::WorldSectorSerialization::loadSector(
+                        filePath, result.entityData, &result.dataLayers);
+                    return result;
+                }))
+        {
+            return; // already tracked; the streamer re-emits once it clears
+        }
+
+        beginSectorActivation(*sector);
     }
 
     void WorldSectorServiceImpl::handleSectorPrefetch(const world::SectorCoord& coord)
@@ -506,62 +588,77 @@ namespace services
         if (pendingAsyncLoads.contains(coord))
             return;
 
-        // VK-1591: reserve at least one concurrency slot for a real activation - a wide prefetch
-        // ring must never starve the ring the player is standing in. Note AsyncLoadQueue::cancel()
-        // leaves the entry in the map until its future completes, so size() conservatively counts
-        // cancelled prefetches too.
-        if (pendingAsyncLoads.size() + 1 >= kMaxConcurrentSectorLoads)
+        // VK-1592: VK-1591's "reserve one of the four concurrency slots for a real activation" is
+        // gone with the cap itself. Starvation is now prevented by priority instead - an
+        // activate-ring sector scores above 1.5 while a prefetch scores at most 0.2, so the
+        // scheduler's max-heap always dispatches activations first.
+        //
+        // The byte cap must count reads still in flight, though: without an in-flight ceiling a
+        // burst would blow past maxPrefetchBytes by (in-flight x sector size) before the first
+        // blob ever lands.
+        const uint64_t byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+        if (byteCap != 0 && prefetchedBytes + prefetchBytesInFlight >= byteCap)
             return;
 
-        const uint64_t byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
-        if (byteCap != 0 && prefetchedBytes >= byteCap)
+        std::string filePath = sector->filePath;
+
+        if (!submitSectorLoad(coord, resource::LoadImportance::Background, kSectorPrefetchBias,
+                sector->metadata.estimatedMemory, sector->metadata.estimatedMemory,
+                sectorDebugName("sector prefetch", coord),
+                [filePath]() -> AsyncSectorLoadResult {
+                    AsyncSectorLoadResult result;
+                    result.wasPrefetch = true;
+                    result.prefetchBytes = serialization::readSerializationFileBytes(filePath);
+                    result.success = !result.prefetchBytes.empty();
+                    return result;
+                }))
+        {
             return;
+        }
 
         // Deliberately publishes NOTHING. SectorAboutToLoadNotification drives navmesh tile
         // pre-warm and SectorActivatedNotification drives TERRAIN TILE ACTIVATION - a prefetched
         // sector has no entities and must not pull terrain, or the prefetch ring would cost
         // exactly what it exists to avoid. Both fire on promotion, from beginSectorActivation.
         sector->state = world::SectorState::Prefetching;
-
-        std::string filePath = sector->filePath;
-
-        pendingAsyncLoads.launch(coord,
-            std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
-                AsyncSectorLoadResult result;
-                result.wasPrefetch = true;
-                result.prefetchBytes = serialization::readSerializationFileBytes(filePath);
-                result.success = !result.prefetchBytes.empty();
-                return result;
-            }));
     }
 
     void WorldSectorServiceImpl::launchParseFromCachedBlob(const world::SectorCoord& coord)
     {
-        // Caller has already run beginSectorActivation(). Deliberately does NOT re-check
-        // kMaxConcurrentSectorLoads: by this point the sector is already Loading, and the streamer
-        // never emits an action for a Loading sector - refusing here would strand it forever with
-        // its blob. The overshoot is bounded by the prefetch in-flight cap (3).
+        // Caller has already run beginSectorActivation(). Any refusal here MUST rewind the sector
+        // to Unloaded: it is already Loading and the streamer never emits an action for a Loading
+        // sector, so leaving it would strand it forever with nothing in flight.
         auto it = prefetchedBlobs.find(coord);
         if (it == prefetchedBlobs.end())
         {
-            // Blob vanished between the caller's check and here. Rewind so the streamer re-emits
-            // rather than leaving the sector stuck in Loading with nothing in flight.
+            // Blob vanished between the caller's check and here.
             if (auto* sector = sectorManager.getSector(coord))
                 sector->state = world::SectorState::Unloaded;
             return;
         }
 
         std::vector<uint8_t> bytes = std::move(it->second);
-        prefetchedBytes -= bytes.size();
+        const uint64_t byteCount = bytes.size();
+        prefetchedBytes -= byteCount;
         prefetchedBlobs.erase(it);
 
-        pendingAsyncLoads.launch(coord,
-            std::async(std::launch::async, [bytes = std::move(bytes)]() -> AsyncSectorLoadResult {
-                AsyncSectorLoadResult result;
-                result.success = world::WorldSectorSerialization::loadSectorFromMemory(
-                    bytes, result.entityData, &result.dataLayers, "prefetched sector");
-                return result;
-            }));
+        // Same priority as a cold activation: this sector is in the activate ring either way,
+        // it just skips the file read. estimatedBytes is the parse's own headroom (the blob is
+        // already resident and was never in the gate's denominator, so this is not a double
+        // count) - the DOM this produces is several times the byte count, so it errs low but in
+        // the same spirit as ResourceLoadEstimate's conservative multipliers.
+        if (!submitSectorLoad(coord, resource::LoadImportance::High, kSectorActivateBias,
+                byteCount, /*prefetchReservation=*/0, sectorDebugName("sector parse", coord),
+                [bytes = std::move(bytes)]() -> AsyncSectorLoadResult {
+                    AsyncSectorLoadResult result;
+                    result.success = world::WorldSectorSerialization::loadSectorFromMemory(
+                        bytes, result.entityData, &result.dataLayers, "prefetched sector");
+                    return result;
+                }))
+        {
+            if (auto* sector = sectorManager.getSector(coord))
+                sector->state = world::SectorState::Unloaded;
+        }
     }
 
     void WorldSectorServiceImpl::handleSectorPrefetchDrop(const world::SectorCoord& coord)
@@ -570,10 +667,235 @@ namespace services
         if (!sector)
             return;
 
-        pendingAsyncLoads.cancel(coord);
+        cancelSectorRequest(coord);
         dropPrefetchedBlob(coord);
         sector->state = world::SectorState::Unloaded;
         // No notifications: nothing was ever activated, so nothing must be deactivated.
+    }
+
+    glm::vec3 WorldSectorServiceImpl::sectorCenterWorld(const world::SectorCoord& coord) const
+    {
+        const float sectorSize = sectorManager.getConfig().sectorWorldSize;
+        // y stays 0: the streamer's own distance test is 2D, and a uniform camera-height bias
+        // shifts every sector equally, so it cannot reorder them.
+        return glm::vec3((static_cast<float>(coord.x) + 0.5f) * sectorSize, 0.0f,
+                         (static_cast<float>(coord.z) + 0.5f) * sectorSize);
+    }
+
+    resource::LoadHint WorldSectorServiceImpl::sectorLoadHint(const world::SectorCoord& coord,
+                                                               resource::LoadImportance importance,
+                                                               float hintPriority) const
+    {
+        resource::LoadHint hint;
+        hint.worldPosition = sectorCenterWorld(coord);
+        hint.importance = importance;
+        hint.priority = hintPriority;
+        hint.sectorId = world::sectorCoordToId(coord);
+        return hint;
+    }
+
+    bool WorldSectorServiceImpl::submitSectorLoad(const world::SectorCoord& coord,
+                                                   resource::LoadImportance importance,
+                                                   float hintPriority,
+                                                   uint64_t estimatedBytes,
+                                                   uint64_t prefetchReservation,
+                                                   std::string debugName,
+                                                   std::function<AsyncSectorLoadResult()> work)
+    {
+        auto slot = std::make_shared<SectorLoadSlot>();
+
+        // Track the future FIRST. When the JobSystem is uninitialised (Tests.exe) the scheduler
+        // runs executeLoad inline inside submit(), so the slot can already be fulfilled by the
+        // time submit() returns - launch() must have taken the future before that.
+        if (!pendingAsyncLoads.launch(coord, slot->getFuture()))
+            return false;
+
+        auto cancellation = resource::CancellationToken::create();
+        sectorRequests[coord] = PendingSectorRequest{slot, cancellation, prefetchReservation};
+        prefetchBytesInFlight += prefetchReservation;
+
+        resource::LoadRequest request;
+        request.guid = sectorLoadGuid(coord);
+        request.hint = sectorLoadHint(coord, importance, hintPriority);
+        request.assetType = resource::AssetType::WorldSector;
+        request.estimatedBytes = estimatedBytes;
+        request.debugName = std::move(debugName);
+        request.cancellation = cancellation;
+        // `slot` is captured by VALUE here on purpose: this lambda holds the ONLY strong
+        // reference. Every way the scheduler can drop the request without running us - queue-full
+        // rejection, priority eviction, the cancelled-pending sweep in update() - destroys the
+        // lambda and lets ~AsyncResultSlot resolve the future, so poll()/drain() never see a
+        // broken promise.
+        request.executeLoad = [slot, cancellation, work = std::move(work)]()
+        {
+            // ResourceLoadScheduler::shutdown() moves pending lambdas out and runs them directly,
+            // bypassing the dispatch-time cancellation check - without this a teardown would pay
+            // for a full sector read on the calling thread.
+            if (cancellation->isCancelled())
+            {
+                slot->fulfil(AsyncSectorLoadResult{}); // abandoned by default
+                return;
+            }
+            AsyncSectorLoadResult result = work();
+            result.abandoned = false; // it ran; success now means what it says
+            slot->fulfil(std::move(result));
+        };
+
+        resource::ResourceLoadScheduler::instance().submit(std::move(request));
+        return true;
+    }
+
+    void WorldSectorServiceImpl::releaseSectorRequest(const world::SectorCoord& coord)
+    {
+        auto it = sectorRequests.find(coord);
+        if (it == sectorRequests.end())
+            return;
+
+        prefetchBytesInFlight -= it->second.prefetchReservation;
+        sectorRequests.erase(it);
+    }
+
+    void WorldSectorServiceImpl::cancelSectorRequest(const world::SectorCoord& coord)
+    {
+        auto it = sectorRequests.find(coord);
+        if (it != sectorRequests.end())
+        {
+            it->second.cancellation->cancel();
+            // Resolve the future NOW rather than waiting for the scheduler to notice. A request
+            // still sitting in the scheduler's pending map has no worker behind it, so a later
+            // AsyncLoadQueue::drain() would block on it forever. fulfil() is idempotent, so a
+            // worker already running concurrently simply loses the race harmlessly.
+            if (auto slot = it->second.slot.lock())
+            {
+                slot->fulfil(AsyncSectorLoadResult{}); // abandoned by default
+            }
+            prefetchBytesInFlight -= it->second.prefetchReservation;
+            sectorRequests.erase(it);
+        }
+
+        pendingAsyncLoads.cancel(coord);
+    }
+
+    void WorldSectorServiceImpl::drainSectorLoads()
+    {
+        // Every outstanding request must be resolved BEFORE AsyncLoadQueue::drain(), which blocks
+        // on future.get() for each tracked entry. Loads already executing on a worker still
+        // complete normally (exactly as the old std::async drain did); the ones this unblocks are
+        // those the scheduler has not dispatched yet, which would otherwise never satisfy their
+        // promise and would hang the main thread.
+        for (auto& [coord, request] : sectorRequests)
+        {
+            request.cancellation->cancel();
+            if (auto slot = request.slot.lock())
+            {
+                slot->fulfil(AsyncSectorLoadResult{}); // abandoned by default
+            }
+        }
+        sectorRequests.clear();
+        prefetchBytesInFlight = 0;
+
+        pendingAsyncLoads.drain();
+    }
+
+    void WorldSectorServiceImpl::submitHlodLoad(const world::HLODCellCoord& cell,
+                                                 const std::string& filePath,
+                                                 const glm::vec3& cellCenter)
+    {
+        if (hlodProxyManager.getProxy(cell) != nullptr)
+            return; // already resident
+
+        auto slot = std::make_shared<HlodLoadSlot>();
+        if (!pendingHlodLoads.launch(cell, slot->getFuture()))
+            return;
+
+        auto cancellation = resource::CancellationToken::create();
+        hlodRequests[cell] = PendingHlodRequest{slot, cancellation};
+
+        resource::LoadRequest request;
+        request.guid = asset::AssetGUID::fromValue(hlodGuidValue(cell));
+        request.hint.worldPosition = cellCenter;
+        request.hint.importance = resource::LoadImportance::Low;
+        request.hint.priority = kHlodProxyBias;
+        request.assetType = resource::AssetType::WorldSector;
+        // HLODFileHeader carries no total size and nothing caches .vfHLOD headers, so any
+        // estimate would cost a second read. 0 means "undeterminable -> ungated by design",
+        // the same convention ResourceLoadEstimate uses for an unknown size.
+        request.estimatedBytes = 0;
+        request.debugName = hlodDebugName(cell);
+        request.cancellation = cancellation;
+        request.executeLoad = [slot, cancellation, filePath]()
+        {
+            AsyncHlodLoadResult result;
+            if (cancellation->isCancelled())
+            {
+                slot->fulfil(std::move(result)); // abandoned by default
+                return;
+            }
+            result.abandoned = false;
+            result.success = world::HLODSerialization::load(filePath, result.data);
+            slot->fulfil(std::move(result));
+        };
+
+        resource::ResourceLoadScheduler::instance().submit(std::move(request));
+    }
+
+    void WorldSectorServiceImpl::cancelHlodRequest(const world::HLODCellCoord& cell)
+    {
+        auto it = hlodRequests.find(cell);
+        if (it != hlodRequests.end())
+        {
+            it->second.cancellation->cancel();
+            if (auto slot = it->second.slot.lock())
+            {
+                slot->fulfil(AsyncHlodLoadResult{}); // abandoned by default
+            }
+            hlodRequests.erase(it);
+        }
+
+        pendingHlodLoads.cancel(cell);
+    }
+
+    void WorldSectorServiceImpl::pollAsyncHlodLoads()
+    {
+        pendingHlodLoads.poll([this](const world::HLODCellCoord& cell, AsyncHlodLoadResult result)
+        {
+            hlodRequests.erase(cell);
+
+            if (!result.success)
+            {
+                // HLODStreamer claims a cell in loadedProxies the moment it emits the load action
+                // and never re-emits, so a dropped or failed read would lose this proxy for the
+                // rest of the session. forgetProxy releases the claim.
+                hlodStreamer.forgetProxy(cell);
+                if (!result.abandoned)
+                {
+                    vfLogError("HLOD proxy load failed for cell [{},{},T{}]",
+                               cell.x, cell.z, static_cast<int>(cell.tier));
+                }
+                return;
+            }
+
+            hlodProxyManager.loadProxyFromData(cell, std::move(result.data));
+        });
+    }
+
+    void WorldSectorServiceImpl::drainHlodLoads()
+    {
+        for (auto& [cell, request] : hlodRequests)
+        {
+            request.cancellation->cancel();
+            if (auto slot = request.slot.lock())
+            {
+                slot->fulfil(AsyncHlodLoadResult{}); // abandoned by default
+            }
+            // drain() below discards results without running the poll callback, so release the
+            // streamer's claim here instead - HLODStreamer inserts a cell into loadedProxies at
+            // emit time and would never re-emit an abandoned one.
+            hlodStreamer.forgetProxy(cell);
+        }
+        hlodRequests.clear();
+
+        pendingHlodLoads.drain();
     }
 
     void WorldSectorServiceImpl::dropPrefetchedBlob(const world::SectorCoord& coord)
@@ -601,9 +923,21 @@ namespace services
         pendingAsyncLoads.poll([this, &promotedPrefetches](const world::SectorCoord& coord,
                                                             AsyncSectorLoadResult result)
         {
+            releaseSectorRequest(coord);
+
             auto* sector = sectorManager.getSector(coord);
             if (!sector)
                 return;
+
+            // VK-1592: the scheduler dropped this request before it ever ran (queue eviction,
+            // scheduler shutdown). Not an error - rewind and let the streamer re-emit.
+            if (result.abandoned)
+            {
+                sector->state = world::SectorState::Unloaded;
+                vfLogDebug("Sector ({},{}) load abandoned by the scheduler; will retry",
+                           coord.x, coord.z);
+                return;
+            }
 
             if (!result.success)
             {
@@ -715,9 +1049,10 @@ namespace services
         if (!sector)
             return;
 
-        // Cancel any in-flight async file I/O for this sector — the result is
-        // discarded on the next poll (std::async has no cooperative cancellation)
-        pendingAsyncLoads.cancel(coord);
+        // Cancel any in-flight async file I/O for this sector. VK-1592: a request still queued in
+        // the scheduler is dropped outright and its future resolved immediately; one already
+        // executing runs to completion and its result is discarded on the next poll.
+        cancelSectorRequest(coord);
         // VK-1591: and drop any prefetch blob. A sector reaching this path was activated, so its
         // blob was already consumed by launchParseFromCachedBlob — but a promotion that failed
         // mid-flight can leave one behind, and a stale blob would resurrect old content.

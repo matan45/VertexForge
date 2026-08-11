@@ -2,7 +2,11 @@
 #include <streaming/FrameBudget.hpp>
 #include <streaming/StreamingPriority.hpp>
 #include <streaming/AsyncLoadQueue.hpp>
+#include <streaming/AsyncResultSlot.hpp>
 
+#include <chrono>
+#include <future>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,6 +14,17 @@
 // utilities/streaming: the shared primitives the streaming
 // systems (sector, terrain, lights, GPU objects) build on
 // ============================================================
+
+namespace
+{
+    // VK-1592: stand-in for AsyncSectorLoadResult. Its default must read as
+    // "nothing happened" - that is what AsyncResultSlot's destructor delivers.
+    struct SlotResult
+    {
+        int value = 0;
+        bool abandoned = true;
+    };
+}
 
 TEST_SUITE("StreamingPrimitives")
 {
@@ -185,5 +200,83 @@ TEST_SUITE("StreamingPrimitives")
         first.set_value(10);
         queue.poll([&](int key, int) { keys.push_back(key); });
         CHECK(keys.size() == 2);
+    }
+
+    // ---- AsyncResultSlot (VK-1592) ----
+
+    TEST_CASE("AsyncResultSlot delivers the first fulfil and ignores the rest")
+    {
+        streaming::AsyncResultSlot<SlotResult> slot;
+        auto future = slot.getFuture();
+
+        slot.fulfil({7, false});
+        slot.fulfil({99, false}); // a losing racer must not throw future_error
+
+        REQUIRE(future.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+        auto result = future.get();
+        CHECK(result.value == 7);
+        CHECK_FALSE(result.abandoned);
+    }
+
+    TEST_CASE("AsyncResultSlot destructor resolves a slot that never ran")
+    {
+        // This is the whole point: the scheduler can drop a LoadRequest without ever calling
+        // executeLoad, and a broken promise would make AsyncLoadQueue::poll() throw and
+        // drain() block forever.
+        std::future<SlotResult> future;
+        {
+            auto slot = std::make_shared<streaming::AsyncResultSlot<SlotResult>>();
+            future = slot->getFuture();
+            CHECK(future.wait_for(std::chrono::seconds(0)) != std::future_status::ready);
+        }
+
+        REQUIRE(future.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+        CHECK(future.get().abandoned); // default-constructed
+    }
+
+    TEST_CASE("AsyncResultSlot fulfilled before destruction keeps its value")
+    {
+        std::future<SlotResult> future;
+        {
+            streaming::AsyncResultSlot<SlotResult> slot;
+            future = slot.getFuture();
+            slot.fulfil({3, false});
+        } // ~AsyncResultSlot must not overwrite with the default
+
+        CHECK(future.get().value == 3);
+    }
+
+    TEST_CASE("AsyncResultSlot drives an AsyncLoadQueue end to end")
+    {
+        streaming::AsyncLoadQueue<int, SlotResult> queue;
+        auto slot = std::make_shared<streaming::AsyncResultSlot<SlotResult>>();
+        REQUIRE(queue.launch(5, slot->getFuture()));
+
+        int deliveries = 0;
+        SlotResult seen;
+        auto collect = [&](int, SlotResult r) { ++deliveries; seen = r; };
+
+        queue.poll(collect);
+        CHECK(deliveries == 0); // producer has not fulfilled yet
+
+        slot->fulfil({11, false});
+        queue.poll(collect);
+        REQUIRE(deliveries == 1);
+        CHECK(seen.value == 11);
+        CHECK(queue.empty());
+    }
+
+    TEST_CASE("AsyncResultSlot lets drain finish a request that never dispatched")
+    {
+        // Models the teardown path: the slot's only strong reference dies with the dropped
+        // request, so drain() finds a ready future instead of blocking.
+        streaming::AsyncLoadQueue<int, SlotResult> queue;
+        {
+            auto slot = std::make_shared<streaming::AsyncResultSlot<SlotResult>>();
+            REQUIRE(queue.launch(9, slot->getFuture()));
+        }
+
+        queue.drain();
+        CHECK(queue.empty());
     }
 }

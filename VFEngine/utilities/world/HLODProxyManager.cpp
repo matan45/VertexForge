@@ -7,7 +7,7 @@
 
 namespace world
 {
-    void HLODProxyManager::loadProxy(const HLODCellCoord& cellCoord, const std::string& hlodFilePath)
+    void HLODProxyManager::loadProxyFromData(const HLODCellCoord& cellCoord, HLODFileData data)
     {
         if (proxies.count(cellCoord) > 0) return;
 
@@ -16,15 +16,14 @@ namespace world
         entry.state = HLODProxyState::Loading;
         proxies[cellCoord] = std::move(entry);
 
-        // Async load the .vfHLOD file
+        // The bytes are already parsed, but they still go through the pending-load queue so
+        // update() remains the single place that touches the scene graph: creating entities here
+        // would run on whatever thread happened to deliver the data.
         PendingLoad pending;
         pending.cellCoord = cellCoord;
-        pending.future = std::async(std::launch::async, [hlodFilePath]() -> HLODFileData
-        {
-            HLODFileData data;
-            HLODSerialization::load(hlodFilePath, data);
-            return data;
-        });
+        std::promise<HLODFileData> ready;
+        ready.set_value(std::move(data));
+        pending.future = ready.get_future();
         pendingLoads.push_back(std::move(pending));
     }
 
