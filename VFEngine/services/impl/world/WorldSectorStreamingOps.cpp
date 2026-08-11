@@ -5,6 +5,7 @@
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
 #include "serialization/SceneSerialization.hpp"
+#include "serialization/SerializationFileAccess.hpp"
 #include "resource/ResourceLoadScheduler.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
@@ -157,20 +158,40 @@ namespace services
 
             for (const auto& action : streamingActions)
             {
-                if (action.isLoad)
+                const auto* actionSector = sectorManager.getSector(action.coord);
+                const world::SectorState currentState =
+                    actionSector ? actionSector->state : world::SectorState::Unloaded;
+
+                switch (action.target)
                 {
+                case world::SectorTargetState::Activated:
                     handleSectorLoad(action.coord);
-                }
-                else
-                {
+                    break;
+
+                case world::SectorTargetState::Prefetched:
+                    handleSectorPrefetch(action.coord);
+                    break;
+
+                case world::SectorTargetState::Unloaded:
+                    // VK-1591: a prefetched sector never spawned entities, never registered GPU
+                    // objects or lights, and never published SectorActivated - so it must NOT go
+                    // through handleSectorUnload, whose SectorDeactivated notification would tear
+                    // down terrain tiles this sector never activated.
+                    if (currentState == world::SectorState::Prefetching ||
+                        currentState == world::SectorState::Prefetched)
+                    {
+                        handleSectorPrefetchDrop(action.coord);
+                        break;
+                    }
                     if (selectedCoord.has_value() && action.coord == *selectedCoord)
                     {
                         // The streamer already dropped this coord from its tracking;
                         // force a reseed so it retries once the selection moves on
                         streamer.setEnabled(true);
-                        continue;
+                        break;
                     }
                     handleSectorUnload(action.coord);
+                    break;
                 }
             }
 
@@ -364,26 +385,28 @@ namespace services
     bool WorldSectorServiceImpl::unloadSector(const world::SectorCoord& coord)
     {
         auto* sector = sectorManager.getSector(coord);
-        if (!sector || sector->state != world::SectorState::Loaded)
+        if (!sector)
+            return false;
+
+        // VK-1591: an explicit Unload must reach a prefetched sector too, but through the drop
+        // path - it never activated, so it must not publish SectorDeactivated.
+        if (sector->state == world::SectorState::Prefetching ||
+            sector->state == world::SectorState::Prefetched)
+        {
+            handleSectorPrefetchDrop(coord);
+            return true;
+        }
+
+        if (sector->state != world::SectorState::Loaded)
             return false;
 
         handleSectorUnload(coord);
         return true;
     }
 
-    void WorldSectorServiceImpl::handleSectorLoad(const world::SectorCoord& coord)
+    void WorldSectorServiceImpl::beginSectorActivation(world::WorldSector& sector)
     {
-        auto* sector = sectorManager.getSector(coord);
-        if (!sector || sector->filePath.empty())
-            return;
-
-        // Already have a pending async load for this sector
-        if (pendingAsyncLoads.contains(coord))
-            return;
-
-        // Respect concurrency limit — streamer will re-emit next frame
-        if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
-            return;
+        const world::SectorCoord coord = sector.coord;
 
         // Pre-notify subsystems (e.g. navmesh) so they can begin loading tiles
         // before the sector transitions to Loading and entities begin spawning
@@ -401,7 +424,7 @@ namespace services
             ::events::EventDispatcher::instance().publish(preNotif);
         }
 
-        sector->state = world::SectorState::Loading;
+        sector.state = world::SectorState::Loading;
 
         // Notify subsystems (e.g. terrain) that this sector is now active
         {
@@ -410,8 +433,59 @@ namespace services
             notif.sectorConfig = sectorManager.getConfig();
             ::events::EventDispatcher::instance().publish(notif);
         }
+    }
+
+    void WorldSectorServiceImpl::handleSectorLoad(const world::SectorCoord& coord)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty())
+            return;
+
+        // VK-1591: a Prefetching sector's read is already on this very queue. Promote in place:
+        // publish the activation notifications the prefetch deliberately skipped and flip to
+        // Loading. pollAsyncSectorLoads then sees wasPrefetch + state == Loading and hands the
+        // arriving bytes straight to the parse hop - zero extra file IO.
+        // MUST precede the pendingAsyncLoads.contains() guard below, which is true for exactly
+        // this state and would otherwise strand the sector in Prefetching forever.
+        if (sector->state == world::SectorState::Prefetching)
+        {
+            beginSectorActivation(*sector);
+            return;
+        }
+
+        // Already have a pending async load for this sector
+        if (pendingAsyncLoads.contains(coord))
+            return;
+
+        // VK-1591: bytes already resident — activate with zero file IO. Reuses the same async
+        // queue and the same Loading -> finalizeSectorLoad -> Loaded path; only the source of the
+        // bytes differs.
+        if (sector->state == world::SectorState::Prefetched)
+        {
+            if (prefetchedBlobs.contains(coord))
+            {
+                if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
+                    return; // retry next frame; the blob stays cached
+
+                beginSectorActivation(*sector);
+                launchParseFromCachedBlob(coord);
+                return;
+            }
+            // Cache lost (mode-change drop, byte-cap eviction): fall through to a file read
+            sector->state = world::SectorState::Unloaded;
+        }
+
+        // Respect concurrency limit — streamer will re-emit next frame
+        if (pendingAsyncLoads.size() >= kMaxConcurrentSectorLoads)
+            return;
+
+        beginSectorActivation(*sector);
 
         std::string filePath = sector->filePath;
+
+        // VK-1591 AC #3 instrumentation: this is the COLD path. It must stay silent for a sector
+        // the prefetch ring already brought in.
+        vfLogDebug("Sector ({},{}) activating with a file read (not prefetched)", coord.x, coord.z);
 
         pendingAsyncLoads.launch(coord,
             std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
@@ -422,10 +496,110 @@ namespace services
             }));
     }
 
+    void WorldSectorServiceImpl::handleSectorPrefetch(const world::SectorCoord& coord)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector || sector->filePath.empty())
+            return;
+        if (sector->state != world::SectorState::Unloaded)
+            return;
+        if (pendingAsyncLoads.contains(coord))
+            return;
+
+        // VK-1591: reserve at least one concurrency slot for a real activation - a wide prefetch
+        // ring must never starve the ring the player is standing in. Note AsyncLoadQueue::cancel()
+        // leaves the entry in the map until its future completes, so size() conservatively counts
+        // cancelled prefetches too.
+        if (pendingAsyncLoads.size() + 1 >= kMaxConcurrentSectorLoads)
+            return;
+
+        const uint64_t byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+        if (byteCap != 0 && prefetchedBytes >= byteCap)
+            return;
+
+        // Deliberately publishes NOTHING. SectorAboutToLoadNotification drives navmesh tile
+        // pre-warm and SectorActivatedNotification drives TERRAIN TILE ACTIVATION - a prefetched
+        // sector has no entities and must not pull terrain, or the prefetch ring would cost
+        // exactly what it exists to avoid. Both fire on promotion, from beginSectorActivation.
+        sector->state = world::SectorState::Prefetching;
+
+        std::string filePath = sector->filePath;
+
+        pendingAsyncLoads.launch(coord,
+            std::async(std::launch::async, [filePath]() -> AsyncSectorLoadResult {
+                AsyncSectorLoadResult result;
+                result.wasPrefetch = true;
+                result.prefetchBytes = serialization::readSerializationFileBytes(filePath);
+                result.success = !result.prefetchBytes.empty();
+                return result;
+            }));
+    }
+
+    void WorldSectorServiceImpl::launchParseFromCachedBlob(const world::SectorCoord& coord)
+    {
+        // Caller has already run beginSectorActivation(). Deliberately does NOT re-check
+        // kMaxConcurrentSectorLoads: by this point the sector is already Loading, and the streamer
+        // never emits an action for a Loading sector - refusing here would strand it forever with
+        // its blob. The overshoot is bounded by the prefetch in-flight cap (3).
+        auto it = prefetchedBlobs.find(coord);
+        if (it == prefetchedBlobs.end())
+        {
+            // Blob vanished between the caller's check and here. Rewind so the streamer re-emits
+            // rather than leaving the sector stuck in Loading with nothing in flight.
+            if (auto* sector = sectorManager.getSector(coord))
+                sector->state = world::SectorState::Unloaded;
+            return;
+        }
+
+        std::vector<uint8_t> bytes = std::move(it->second);
+        prefetchedBytes -= bytes.size();
+        prefetchedBlobs.erase(it);
+
+        pendingAsyncLoads.launch(coord,
+            std::async(std::launch::async, [bytes = std::move(bytes)]() -> AsyncSectorLoadResult {
+                AsyncSectorLoadResult result;
+                result.success = world::WorldSectorSerialization::loadSectorFromMemory(
+                    bytes, result.entityData, &result.dataLayers, "prefetched sector");
+                return result;
+            }));
+    }
+
+    void WorldSectorServiceImpl::handleSectorPrefetchDrop(const world::SectorCoord& coord)
+    {
+        auto* sector = sectorManager.getSector(coord);
+        if (!sector)
+            return;
+
+        pendingAsyncLoads.cancel(coord);
+        dropPrefetchedBlob(coord);
+        sector->state = world::SectorState::Unloaded;
+        // No notifications: nothing was ever activated, so nothing must be deactivated.
+    }
+
+    void WorldSectorServiceImpl::dropPrefetchedBlob(const world::SectorCoord& coord)
+    {
+        auto it = prefetchedBlobs.find(coord);
+        if (it == prefetchedBlobs.end())
+            return;
+        prefetchedBytes -= it->second.size();
+        prefetchedBlobs.erase(it);
+    }
+
+    void WorldSectorServiceImpl::clearPrefetchedBlobs()
+    {
+        prefetchedBlobs.clear();
+        prefetchedBytes = 0;
+    }
+
     void WorldSectorServiceImpl::pollAsyncSectorLoads()
     {
-        pendingAsyncLoads.poll([this](const world::SectorCoord& coord,
-                                      AsyncSectorLoadResult result)
+        // VK-1591: a prefetch promoted to Activated mid-flight needs its parse hop launched, but
+        // AsyncLoadQueue::poll keeps using its iterator after the callback returns and launch()
+        // inserts into the same map. Collect here, drain after poll() finishes.
+        std::vector<world::SectorCoord> promotedPrefetches;
+
+        pendingAsyncLoads.poll([this, &promotedPrefetches](const world::SectorCoord& coord,
+                                                            AsyncSectorLoadResult result)
         {
             auto* sector = sectorManager.getSector(coord);
             if (!sector)
@@ -434,12 +608,34 @@ namespace services
             if (!result.success)
             {
                 sector->state = world::SectorState::Unloaded;
-                vfLogError("Async sector load failed for ({},{})", coord.x, coord.z);
+                vfLogError("Async sector {} failed for ({},{})",
+                           result.wasPrefetch ? "prefetch" : "load", coord.x, coord.z);
+                return;
+            }
+
+            if (result.wasPrefetch)
+            {
+                // Bytes only. entityUUIDs is NOT populated and no SectorDataLayerLoadedNotification
+                // is published - a prefetched sector has no entities and its data layers are not
+                // live yet. Both happen in finalizeSectorLoad, on activation.
+                // Drop first so the running total can never drift: assigning over an existing
+                // entry would silently leak its bytes out of the accounting.
+                dropPrefetchedBlob(coord);
+                prefetchedBytes += result.prefetchBytes.size();
+                prefetchedBlobs[coord] = std::move(result.prefetchBytes);
+
+                if (sector->state == world::SectorState::Loading)
+                    promotedPrefetches.push_back(coord); // promoted while the read was in flight
+                else
+                    sector->state = world::SectorState::Prefetched;
                 return;
             }
 
             finalizeSectorLoad(coord, result.entityData, result.dataLayers);
         });
+
+        for (const auto& coord : promotedPrefetches)
+            launchParseFromCachedBlob(coord);
     }
 
     void WorldSectorServiceImpl::finalizeSectorLoad(const world::SectorCoord& coord,
@@ -522,6 +718,10 @@ namespace services
         // Cancel any in-flight async file I/O for this sector — the result is
         // discarded on the next poll (std::async has no cooperative cancellation)
         pendingAsyncLoads.cancel(coord);
+        // VK-1591: and drop any prefetch blob. A sector reaching this path was activated, so its
+        // blob was already consumed by launchParseFromCachedBlob — but a promotion that failed
+        // mid-flight can leave one behind, and a stale blob would resurrect old content.
+        dropPrefetchedBlob(coord);
 
         sector->state = world::SectorState::Unloading;
 
@@ -690,6 +890,12 @@ namespace services
                 break;
             case world::SectorState::Unloading:
                 color = glm::vec4(0.9f, 0.3f, 0.3f, 1.0f); // Red
+                break;
+            case world::SectorState::Prefetching:
+                color = glm::vec4(0.2f, 0.7f, 0.8f, 0.8f); // Dim cyan — VK-1591 bytes in flight
+                break;
+            case world::SectorState::Prefetched:
+                color = glm::vec4(0.2f, 0.85f, 0.95f, 1.0f); // Cyan — VK-1591 bytes resident
                 break;
             default:
                 color = glm::vec4(0.5f, 0.5f, 0.5f, 0.6f); // Gray

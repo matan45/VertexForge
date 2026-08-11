@@ -162,6 +162,8 @@ namespace world
         std::vector<SectorCoord> result;
         for (const auto& [coord, sector] : sectors)
         {
+            // VK-1591: deliberately Loaded ONLY — callers expect live entities, and a
+            // Prefetched sector has none.
             if (sector.state == SectorState::Loaded)
                 result.push_back(coord);
         }

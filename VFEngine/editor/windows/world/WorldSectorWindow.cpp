@@ -6,6 +6,7 @@
 #include "events/render/ObjectStreamingEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include "imgui.h"
+#include <algorithm>
 #include <cmath>
 #include "nfd/FileDialog.hpp"
 
@@ -126,8 +127,8 @@ namespace windows
 
     void WorldSectorWindow::drawWorldInfo()
     {
-        ImGui::Text("Sectors: %d total | %d loaded | %d unloaded | %d loading",
-                     totalSectors, loadedSectors, unloadedSectors, loadingSectors);
+        ImGui::Text("Sectors: %d total | %d loaded | %d prefetched | %d unloaded | %d loading",
+                     totalSectors, loadedSectors, prefetchedSectors, unloadedSectors, loadingSectors);
 
         uint32_t terrainPending = events::EventDispatcher::instance().query(
             events::terrain::GetPendingSectorTileActionCountQuery{});
@@ -161,7 +162,8 @@ namespace windows
             ImGui::Text("Center: (%d, %d)", gridCenterX, gridCenterZ);
         }
 
-        ImGui::TextDisabled("Color: Green=Loaded, Gray=Unloaded, Yellow=Loading, Blue outline=Camera");
+        ImGui::TextDisabled("Color: Green=Loaded, Cyan=Prefetched, Gray=Unloaded, Yellow=Loading, "
+                            "Blue outline=Camera");
         ImGui::Spacing();
 
         auto& dispatcher = events::EventDispatcher::instance();
@@ -197,6 +199,12 @@ namespace windows
                 case world::SectorState::Unloading:
                     color = ImVec4(0.9f, 0.3f, 0.3f, 1.0f);
                     break;
+                case world::SectorState::Prefetching:
+                    color = ImVec4(0.2f, 0.6f, 0.7f, 1.0f); // VK-1591: bytes in flight
+                    break;
+                case world::SectorState::Prefetched:
+                    color = ImVec4(0.2f, 0.8f, 0.9f, 1.0f); // VK-1591: bytes resident, no entities
+                    break;
                 default:
                     color = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
                     break;
@@ -216,7 +224,11 @@ namespace windows
                         cmd.coord = info.coord;
                         dispatcher.execute(cmd);
                     }
-                    else if (info.state == world::SectorState::Unloaded)
+                    // VK-1591: a prefetched sector activates from its cached bytes, so the click
+                    // is the same LoadSectorCommand — it just costs no file read.
+                    else if (info.state == world::SectorState::Unloaded ||
+                             info.state == world::SectorState::Prefetching ||
+                             info.state == world::SectorState::Prefetched)
                     {
                         events::world::LoadSectorCommand cmd;
                         cmd.coord = info.coord;
@@ -231,6 +243,12 @@ namespace windows
                     if (info.state == world::SectorState::Loaded) stateStr = "Loaded";
                     else if (info.state == world::SectorState::Loading) stateStr = "Loading";
                     else if (info.state == world::SectorState::Unloading) stateStr = "Unloading";
+                    else if (info.state == world::SectorState::Prefetching) stateStr = "Prefetching (bytes in flight, no entities)";
+                    else if (info.state == world::SectorState::Prefetched) stateStr = "Prefetched (bytes resident, no entities)";
+
+                    const char* clickAction = "load";
+                    if (info.state == world::SectorState::Loaded) clickAction = "unload";
+                    else if (info.state == world::SectorState::Prefetched) clickAction = "activate (no file read)";
 
                     events::world::GetSectorReadinessQuery readinessQuery;
                     readinessQuery.coord = info.coord;
@@ -253,7 +271,7 @@ namespace windows
                                       readiness.entityCount, pendingStr,
                                       x * tps, z * tps,
                                       (x + 1) * tps - 1, (z + 1) * tps - 1,
-                                      info.state == world::SectorState::Loaded ? "unload" : "load");
+                                      clickAction);
                 }
 
                 // Draw blue outline for camera sector
@@ -291,9 +309,17 @@ namespace windows
 
         changed |= ImGui::SliderFloat("Load Radius", &editableStreaming.loadRadius,
                                       1.0f, 32.0f, "%.1f sectors");
+        changed |= ImGui::SliderFloat("Prefetch Radius", &editableStreaming.prefetchRadius,
+                                      0.0f, 40.0f, "%.1f sectors");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("VK-1591: sectors between the load and prefetch radii have their\n"
+                              "bytes read into memory but spawn NO entities, so crossing into the\n"
+                              "load radius costs no file read.\n"
+                              "0 means \"same as Load Radius\" - no prefetch ring.");
         changed |= ImGui::SliderFloat("Unload Radius", &editableStreaming.unloadRadius,
-                                      2.0f, 40.0f, "%.1f sectors");
+                                      2.0f, 48.0f, "%.1f sectors");
         changed |= ImGui::SliderInt("Max Loads/Frame", &editableStreaming.maxLoadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Prefetches/Frame", &editableStreaming.maxPrefetchesPerFrame, 0, 16);
         changed |= ImGui::SliderInt("Max Unloads/Frame", &editableStreaming.maxUnloadsPerFrame, 1, 16);
         changed |= ImGui::SliderInt("Max Entities/Frame", &editableStreaming.maxEntitiesPerFrame, 1, 64);
 
@@ -325,6 +351,30 @@ namespace windows
             streamingConfigLoaded = false;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Discard UI edits and re-read the active config");
+
+        ImGui::Separator();
+        {
+            // VK-1591: the streaming overlay for prefetch residency. `bytes` is the exact sum of
+            // the raw .vfsector buffers held, not an on-disk estimate.
+            auto prefetch = dispatcher.query(events::world::GetSectorPrefetchStatsQuery{});
+            const double megabytes = static_cast<double>(prefetch.bytes) / (1024.0 * 1024.0);
+            ImGui::Text("Prefetch ring: %u resident (+%u in flight) | %.2f MB",
+                        prefetch.prefetchedSectors, prefetch.prefetchingSectors, megabytes);
+            if (prefetch.byteCap != 0)
+            {
+                const double capMegabytes = static_cast<double>(prefetch.byteCap) / (1024.0 * 1024.0);
+                if (prefetch.bytes >= prefetch.byteCap)
+                    ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                                       "Prefetch byte cap reached (%.2f MB) - no new prefetches",
+                                       capMegabytes);
+                else
+                    ImGui::TextDisabled("Prefetch byte cap: %.2f MB", capMegabytes);
+            }
+            else
+            {
+                ImGui::TextDisabled("Prefetch byte cap: unlimited");
+            }
+        }
 
         ImGui::Separator();
         ImGui::Text("GPU Object Streaming: %s",
@@ -373,6 +423,11 @@ namespace windows
 
             ImGui::Separator();
             ImGui::InputFloat("Load Radius (sectors)", &loadRadius, 1.0f, 2.0f);
+            ImGui::InputFloat("Prefetch Radius (sectors, 0 = same as load)", &prefetchRadius, 1.0f, 2.0f);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("VK-1591: sectors between Load and Prefetch have their bytes read\n"
+                                  "into memory but spawn no entities, so entering the load ring\n"
+                                  "costs no file read. 0 disables the prefetch ring entirely.");
             ImGui::InputFloat("Unload Radius (sectors)", &unloadRadius, 1.0f, 2.0f);
             ImGui::Checkbox("GPU Object Streaming", &gpuObjectStreaming);
             if (ImGui::IsItemHovered())
@@ -390,8 +445,15 @@ namespace windows
             const bool nameValid = worldName[0] != '\0';
             const bool sectorSizeValid = std::isfinite(sectorSize) && sectorSize > 0.0f;
             const bool loadRadiusValid = std::isfinite(loadRadius) && loadRadius >= 1.0f;
-            const bool radiiValid = std::isfinite(unloadRadius) && unloadRadius > loadRadius;
-            const bool canCreate = nameValid && sectorSizeValid && loadRadiusValid && radiiValid;
+            // VK-1591: 0 is the "no prefetch ring" sentinel; any other value must sit at or
+            // beyond the activate ring, and hysteresis must sit beyond the OUTERMOST residency
+            // ring - which is the prefetch ring whenever one is configured.
+            const bool prefetchValid = std::isfinite(prefetchRadius) &&
+                (prefetchRadius == 0.0f || prefetchRadius >= loadRadius);
+            const bool radiiValid = std::isfinite(unloadRadius) &&
+                unloadRadius > std::max(loadRadius, prefetchRadius);
+            const bool canCreate = nameValid && sectorSizeValid && loadRadiusValid &&
+                                   prefetchValid && radiiValid;
 
             if (!nameValid)
                 ImGui::TextColored(errorColor, "World name is required");
@@ -399,9 +461,13 @@ namespace windows
                 ImGui::TextColored(errorColor, "Sector Size must be greater than 0");
             if (!loadRadiusValid)
                 ImGui::TextColored(errorColor, "Load Radius must be at least 1 sector");
-            if (loadRadiusValid && !radiiValid)
+            if (loadRadiusValid && !prefetchValid)
                 ImGui::TextColored(errorColor,
-                                   "Unload Radius must be greater than Load Radius (streaming hysteresis)");
+                                   "Prefetch Radius must be 0 (disabled) or at least Load Radius");
+            if (loadRadiusValid && prefetchValid && !radiiValid)
+                ImGui::TextColored(errorColor,
+                                   "Unload Radius must be greater than the Load and Prefetch Radii "
+                                   "(streaming hysteresis)");
 
             if (sectorSizeValid)
             {
@@ -430,6 +496,7 @@ namespace windows
                     cmd.sectorConfig.tilesPerSector = tilesPerSector;
                     cmd.sectorConfig.alignedToTerrain = aligned;
                     cmd.streamingConfig.loadRadius = loadRadius;
+                    cmd.streamingConfig.prefetchRadius = prefetchRadius;
                     cmd.streamingConfig.unloadRadius = unloadRadius;
                     cmd.streamingConfig.enableGPUObjectStreaming = gpuObjectStreaming;
                     events::EventDispatcher::instance().execute(cmd);
@@ -493,6 +560,7 @@ namespace windows
         loadedSectors = 0;
         unloadedSectors = 0;
         loadingSectors = 0;
+        prefetchedSectors = 0;
         cachedGrid.clear();
 
         for (int z = gridCenterZ + gridRange; z >= gridCenterZ - gridRange; --z)
@@ -520,6 +588,10 @@ namespace windows
                 {
                 case world::SectorState::Loaded: loadedSectors++; break;
                 case world::SectorState::Loading: loadingSectors++; break;
+                // VK-1591: own bucket - counting these as "unloaded" would be a lie, their
+                // bytes are resident and are what the prefetch MB figure is measuring.
+                case world::SectorState::Prefetching:
+                case world::SectorState::Prefetched: prefetchedSectors++; break;
                 default: unloadedSectors++; break;
                 }
             }

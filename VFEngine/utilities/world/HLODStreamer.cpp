@@ -48,6 +48,9 @@ namespace world
             {
                 SectorCoord sc(baseX + dx, baseZ + dz);
                 const auto* sector = manager.getSector(sc);
+                // VK-1591: deliberately NOT extended to Prefetching/Prefetched. Those states hold
+                // bytes and render nothing, so suppressing their HLOD proxy would punch a visible
+                // hole in the prefetch ring.
                 if (sector && (sector->state == SectorState::Loaded || sector->state == SectorState::Loading))
                 {
                     return true;

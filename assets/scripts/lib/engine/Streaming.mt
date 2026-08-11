@@ -66,6 +66,18 @@ public class Streaming {
     //    onLateUpdate is ordered after it. The service locks its source table, so either is
     //    correct - this only keeps a per-frame writer off the streamer's back. One-shot
     //    register/unregister calls are fine from anywhere, including onStart.
+    //
+    // TARGET STATE (registerWorldSourceEx). A normal source asks for sectors to be ACTIVATED:
+    // read, parsed, and spawned as live entities with physics bodies and GPU slots. A source
+    // registered with targetState 1 asks only for PREFETCH: the sector's bytes come into memory
+    // and nothing spawns, so a later activation costs no disk read. That is what a speculative
+    // pre-warm wants - a minimap hover, or a destination the player has not committed to yet -
+    // because it costs bytes instead of live objects. Use registerWorldSource (targetState 2)
+    // whenever the source represents something that actually needs the world to exist around it.
+
+    // Target states for registerWorldSourceEx
+    //   1 = prefetch only: bytes resident, no entities spawned
+    //   2 = activate: entities spawned (what registerWorldSource does)
 
     // Register a gameplay streaming source. radiusMultiplier scales the world's
     // load AND unload radii for this source, so a source also pins the sectors it
@@ -77,6 +89,16 @@ public class Streaming {
                                                float radiusMultiplier, int priority,
                                                int ownerEntityUUID): int {
         return _native_streaming_registerWorldSource(x, y, z, radiusMultiplier, priority, ownerEntityUUID);
+    }
+
+    // As registerWorldSource, but caps what this source may ask a sector to become:
+    // targetState 1 = prefetch only (bytes resident, no entities), 2 = activate.
+    // Anything else is treated as 2. Returns the source id, or 0 if no sector world is active.
+    public static function registerWorldSourceEx(float x, float y, float z,
+                                                 float radiusMultiplier, int priority,
+                                                 int ownerEntityUUID, int targetState): int {
+        return _native_streaming_registerWorldSourceEx(x, y, z, radiusMultiplier, priority,
+                                                       ownerEntityUUID, targetState);
     }
 
     // Move a streaming source (call from movement ticks)

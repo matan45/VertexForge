@@ -21,6 +21,8 @@ namespace services
     bool NavmeshWorldBaker::isSectorReady(const ::world::SectorCoord& coord) const
     {
         auto readiness = ops.getReadiness(coord);
+        // VK-1591: deliberately Loaded ONLY. A Prefetched sector holds bytes and no entities, so
+        // there is no geometry to bake against.
         return readiness.state == ::world::SectorState::Loaded &&
                !readiness.fileLoadPending && !readiness.entitySpawnsPending;
     }
@@ -124,6 +126,8 @@ namespace services
                 if (readiness.state == ::world::SectorState::Loaded ||
                     readiness.state == ::world::SectorState::Loading)
                     continue; // already (being) loaded by the world streamer
+                // VK-1591: a Prefetched neighbour deliberately falls through to loadSector(),
+                // which now activates from the cached bytes — a free speed-up, no change needed.
 
                 if (ops.loadSector && ops.loadSector(neighbor))
                     bakerLoadedSectors.insert(neighbor);

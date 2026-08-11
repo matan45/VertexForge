@@ -22,6 +22,7 @@ namespace windows
         bool autoAlignToTerrain = true;
         float terrainTileSize = 0.0f;
         float loadRadius = 4.0f;
+        float prefetchRadius = 0.0f; // VK-1591: 0 = same as loadRadius (no prefetch ring)
         float unloadRadius = 5.0f;
         bool gpuObjectStreaming = true;
 
@@ -29,6 +30,7 @@ namespace windows
         int loadedSectors = 0;
         int unloadedSectors = 0;
         int loadingSectors = 0;
+        int prefetchedSectors = 0; // VK-1591: bytes resident or in flight, no entities
 
         struct CachedSectorInfo {
             world::SectorCoord coord;

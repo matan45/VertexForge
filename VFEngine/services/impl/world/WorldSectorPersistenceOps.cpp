@@ -42,6 +42,10 @@ namespace services
         // still names the right world on a player's machine.
         const std::string worldPath = resolveProjectPath(filePath);
 
+        // VK-1591: same coord-collision hazard as loadWorld — never carry blobs across worlds
+        pendingAsyncLoads.drain();
+        clearPrefetchedBlobs();
+
         sectorManager.clear();
         sectorManager.setConfig(sectorConfig);
 
@@ -160,6 +164,16 @@ namespace services
         std::vector<world::SectorCoord> staleHLODs;
         sectorManager.forEachSector([&](world::WorldSector& sector)
         {
+            // VK-1591: a Prefetching/Prefetched sector holds bytes, not entities. Its entityUUIDs
+            // is deliberately empty, and saveSector rebuilds content by resolving those UUIDs
+            // against EntityRegistry - saving one would overwrite a good .vfsector with an empty
+            // one. Load-bearing, not belt-and-braces: assignEntityToSector dirties a sector
+            // unconditionally, so a dynamic entity wandering into a prefetched coord would
+            // otherwise pull it into this loop.
+            if (sector.state == world::SectorState::Prefetching ||
+                sector.state == world::SectorState::Prefetched)
+                return;
+
             if (sector.dirty || sector.filePath.empty())
             {
                 std::string sectorFileName = "sector_" +
@@ -228,6 +242,12 @@ namespace services
         if (!world::WorldDefinitionSerialization::load(filePath, newDef))
             return false;
 
+        // VK-1591: prefetch blobs are keyed on a bare SectorCoord, so without this the new world's
+        // (0,0) would activate the previous world's cached bytes. Drain first — an in-flight read
+        // would otherwise land in a later poll and be attributed to the new world's sector.
+        pendingAsyncLoads.drain();
+        clearPrefetchedBlobs();
+
         sectorManager.clear();
         sectorManager.setConfig(newDef.sectorConfig);
 
@@ -290,6 +310,16 @@ namespace services
             return false;
         }
 
+        // VK-1591: same data-loss guard as saveWorld — a prefetched sector has no live entities
+        // to serialize, so writing it would truncate the file to an empty entity array.
+        if (sector->state == world::SectorState::Prefetching ||
+            sector->state == world::SectorState::Prefetched)
+        {
+            vfLogWarning("Skipping save of prefetched sector ({},{}): it holds no entities",
+                         coord.x, coord.z);
+            return false;
+        }
+
         bool result = world::WorldSectorSerialization::saveSector(*sector, filePath);
         if (result)
         {
@@ -312,6 +342,7 @@ namespace services
 
         // Drain all pending async sector loads before clearing
         pendingAsyncLoads.drain();
+        clearPrefetchedBlobs(); // VK-1591
 
         entityLoader.clear();
         // VK-1590: otherwise the ledger keeps entries keyed on the previous world's UUIDs.

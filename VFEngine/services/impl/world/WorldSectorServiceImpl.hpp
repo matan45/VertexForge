@@ -121,11 +121,26 @@ namespace services
         {
             std::vector<nlohmann::json> entityData;
             world::SectorDataLayers dataLayers;
+            // VK-1591: raw .vfsector bytes when this job was a PREFETCH (read only, no parse).
+            // entityData/dataLayers stay empty in that case. The flag lives on the RESULT rather
+            // than being inferred from sector state, because the sector may have been promoted
+            // Prefetching -> Loading while the read was still in flight.
+            std::vector<uint8_t> prefetchBytes;
+            bool wasPrefetch = false;
             bool success = false;
         };
 
         streaming::AsyncLoadQueue<world::SectorCoord, AsyncSectorLoadResult,
                                   world::SectorCoordHash> pendingAsyncLoads;
+
+        // VK-1591: raw .vfsector bytes for sectors in target state Prefetched. Bytes rather than
+        // the parsed DOM: exact-size accounting and ~5-10x smaller than vector<nlohmann::json>,
+        // which directly bounds the unbounded-prefetch-memory risk. Lives here rather than on
+        // world::WorldSector because it is service-private lifecycle state - a WorldSector is a
+        // value type that plugins copy and inspect through sdk/.
+        std::unordered_map<world::SectorCoord, std::vector<uint8_t>,
+                           world::SectorCoordHash> prefetchedBlobs;
+        uint64_t prefetchedBytes = 0; // running sum of prefetchedBlobs value sizes
 
         // Physics state snapshots for velocity/sleep preservation across sector streaming
         struct PhysicsSnapshot
@@ -165,6 +180,16 @@ namespace services
 
         void handleSectorLoad(const world::SectorCoord& coord);
         void handleSectorUnload(const world::SectorCoord& coord);
+
+        // VK-1591 prefetch ring. beginSectorActivation publishes the two activation
+        // notifications and flips the sector to Loading; the prefetch path deliberately
+        // publishes nothing until that point.
+        void beginSectorActivation(world::WorldSector& sector);
+        void handleSectorPrefetch(const world::SectorCoord& coord);
+        void handleSectorPrefetchDrop(const world::SectorCoord& coord);
+        void launchParseFromCachedBlob(const world::SectorCoord& coord);
+        void dropPrefetchedBlob(const world::SectorCoord& coord);
+        void clearPrefetchedBlobs();
         void invalidateHLODForSector(const world::SectorCoord& coord);
         bool generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier);
         void processHLODRegenQueue();

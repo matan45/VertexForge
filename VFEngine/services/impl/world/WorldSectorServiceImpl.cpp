@@ -521,6 +521,25 @@ namespace services
                 return streamer.getConfig();
             });
 
+        // VK-1591: prefetch-ring residency for the streaming overlay. `bytes` is EXACT (the raw
+        // .vfsector bytes held), unlike SectorMetadata::estimatedMemory, which is the on-disk
+        // header figure.
+        dispatcher.registerQueryHandler<::events::world::GetSectorPrefetchStatsQuery>(
+            [this](const ::events::world::GetSectorPrefetchStatsQuery&)
+            {
+                ::events::world::SectorPrefetchStats stats;
+                stats.bytes = prefetchedBytes;
+                stats.byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+                sectorManager.forEachSector([&stats](const world::WorldSector& sector)
+                {
+                    if (sector.state == world::SectorState::Prefetched)
+                        ++stats.prefetchedSectors;
+                    else if (sector.state == world::SectorState::Prefetching)
+                        ++stats.prefetchingSectors;
+                });
+                return stats;
+            });
+
         dispatcher.registerQueryHandler<::events::world::GetSectorConfigQuery>(
             [this](const ::events::world::GetSectorConfigQuery&)
             {
@@ -533,6 +552,8 @@ namespace services
                 std::vector<world::SectorCoord> result;
                 sectorManager.forEachSector([&](const world::WorldSector& sector)
                 {
+                    // VK-1591: deliberately NOT extended to Prefetching/Prefetched. Callers of
+                    // this query expect sectors whose entities exist or are about to.
                     if (sector.state == world::SectorState::Loaded ||
                         sector.state == world::SectorState::Loading)
                     {
@@ -660,6 +681,7 @@ namespace services
                 source.position = cmd.position;
                 source.radiusMultiplier = cmd.radiusMultiplier;
                 source.priority = cmd.priority;
+                source.targetState = cmd.targetState; // VK-1591
                 source.id = id;
                 streamingSources[id] = source;
                 if (cmd.ownerEntityUUID != 0)
@@ -790,6 +812,12 @@ namespace services
                     // stream in based on camera distance (like a fresh world load)
                     savedWorldDefinition = worldDefinition;
                     savedWorldPath = currentWorldPath;
+                    // VK-1591: every sector is force-reset to Unloaded below, so any cached blob
+                    // would be orphaned. The drain is a correctness fix beyond the prefetch ring:
+                    // a Loading future still in flight would otherwise land in a later poll and
+                    // spawn the edit-mode sector's entities into the play scene.
+                    pendingAsyncLoads.drain();
+                    clearPrefetchedBlobs();
                     entityLoader.clear();
 
                     int loadedCount = 0;
@@ -843,6 +871,10 @@ namespace services
                     clearStreamingSources();
 
                     // Returning to edit mode — snapshot was restored, re-assign entities to sectors
+                    // VK-1591: sectorManager.clear() destroys every WorldSector, so blobs keyed on
+                    // their coords must go with them (see the loadWorld note).
+                    pendingAsyncLoads.drain();
+                    clearPrefetchedBlobs();
                     entityLoader.clear();
                     sectorManager.clear();
                     sectorManager.setConfig(savedWorldDefinition.sectorConfig);
@@ -1007,6 +1039,10 @@ namespace services
                     cmd.enabled = false;
                     ::events::EventDispatcher::instance().execute(cmd);
 
+                    // VK-1591: this is the only teardown path a shipped Runtime takes. Without the
+                    // drain, an in-flight read outlives the sector map it was keyed against.
+                    pendingAsyncLoads.drain();
+                    clearPrefetchedBlobs();
                     entityLoader.clear();
                     sectorManager.clear();
                     worldDefinition = {};

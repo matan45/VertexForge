@@ -87,6 +87,10 @@ namespace events::world
         glm::vec3 position{0.0f};
         float radiusMultiplier = 1.0f;
         uint8_t priority = 0;
+        // VK-1591: caps what this source may request. Activated (the default) keeps every existing
+        // caller - including the 6-arg _native_streaming_registerWorldSource - on exactly today's
+        // behaviour; Prefetched means "bring the bytes in, never spawn".
+        ::world::SectorTargetState targetState = ::world::SectorTargetState::Activated;
         // Optional owning entity: the source auto-unregisters when this entity is deleted
         uint64_t ownerEntityUUID = 0;
 
@@ -187,6 +191,22 @@ namespace events::world
     struct GetWorldStreamingStatsQuery : IQuery<::world::SectorStreamingConfig>
     {
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
+    };
+
+    // VK-1591: prefetch-ring residency for the streaming overlay. `bytes` is EXACT - it is the sum
+    // of the raw .vfsector byte buffers held - unlike SectorMetadata::estimatedMemory, which is the
+    // on-disk header figure.
+    struct SectorPrefetchStats
+    {
+        uint32_t prefetchedSectors = 0;  // bytes resident, no entities
+        uint32_t prefetchingSectors = 0; // read in flight
+        uint64_t bytes = 0;
+        uint64_t byteCap = 0;            // streamingConfig.maxPrefetchBytes; 0 = unlimited
+    };
+
+    struct GetSectorPrefetchStatsQuery : IQuery<SectorPrefetchStats>
+    {
+        std::string_view getName() const override { return "GetSectorPrefetchStats"; }
     };
 
     // Live-updates the streaming configuration (streamer + HLOD streamer + world

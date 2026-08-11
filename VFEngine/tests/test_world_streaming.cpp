@@ -165,8 +165,21 @@ TEST_CASE("SectorStreamingConfig: default-constructed values") {
         // fallback of 512/640 was a TerrainWorldStreamer copy-paste.
         CHECK(config.loadRadius < 32.0f);
     }
+    SUBCASE("VK-1591: prefetchRadius defaults to the 0 sentinel, not an absolute radius") {
+        // A literal default (e.g. 4.0f) would silently grow a prefetch ring for every config
+        // that sets loadRadius without mentioning prefetchRadius — which is all of them.
+        CHECK(config.prefetchRadius == doctest::Approx(0.0f));
+        CHECK(world::effectivePrefetchRadius(config) == doctest::Approx(config.loadRadius));
+
+        world::SectorStreamingConfig tighter;
+        tighter.loadRadius = 2.0f;
+        CHECK(world::effectivePrefetchRadius(tighter) == doctest::Approx(2.0f));
+
+        CHECK(config.maxPrefetchBytes == 0); // 0 = unlimited
+    }
     SUBCASE("per-frame budgets are conservative") {
         CHECK(config.maxLoadsPerFrame == 1);
+        CHECK(config.maxPrefetchesPerFrame == 1);
         CHECK(config.maxUnloadsPerFrame == 1);
         CHECK(config.maxEntitiesPerFrame == 8);
         CHECK(config.maxTerrainLoadsPerFrame == 4);

@@ -26,9 +26,15 @@ namespace world
 
             json streamingJson;
             streamingJson["loadRadius"] = definition.streamingConfig.loadRadius;
+            // VK-1591: 0 means "same as loadRadius" (no prefetch ring). Written verbatim so the
+            // sentinel round-trips - resolving it here would bake loadRadius in and make a later
+            // loadRadius edit silently stop widening the prefetch ring with it.
+            streamingJson["prefetchRadius"] = definition.streamingConfig.prefetchRadius;
             streamingJson["unloadRadius"] = definition.streamingConfig.unloadRadius;
             streamingJson["maxLoadsPerFrame"] = definition.streamingConfig.maxLoadsPerFrame;
+            streamingJson["maxPrefetchesPerFrame"] = definition.streamingConfig.maxPrefetchesPerFrame;
             streamingJson["maxUnloadsPerFrame"] = definition.streamingConfig.maxUnloadsPerFrame;
+            streamingJson["maxPrefetchBytes"] = definition.streamingConfig.maxPrefetchBytes;
             streamingJson["maxEntitiesPerFrame"] = definition.streamingConfig.maxEntitiesPerFrame;
             streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
             streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
@@ -128,9 +134,14 @@ namespace world
                 const auto& stc = worldJson["streamingConfig"];
                 auto& out = outDefinition.streamingConfig;
                 out.loadRadius = stc.value("loadRadius", streamingDefaults.loadRadius);
+                // VK-1591: absent -> the struct's 0 sentinel -> effectivePrefetchRadius() ==
+                // loadRadius, so a pre-VK-1591 .vfworld streams byte-for-byte as it did before.
+                out.prefetchRadius = stc.value("prefetchRadius", streamingDefaults.prefetchRadius);
                 out.unloadRadius = stc.value("unloadRadius", streamingDefaults.unloadRadius);
                 out.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", streamingDefaults.maxLoadsPerFrame);
+                out.maxPrefetchesPerFrame = stc.value("maxPrefetchesPerFrame", streamingDefaults.maxPrefetchesPerFrame);
                 out.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", streamingDefaults.maxUnloadsPerFrame);
+                out.maxPrefetchBytes = stc.value("maxPrefetchBytes", streamingDefaults.maxPrefetchBytes);
                 out.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", streamingDefaults.maxEntitiesPerFrame);
                 out.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", streamingDefaults.maxTerrainLoadsPerFrame);
                 out.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", streamingDefaults.maxTerrainUnloadsPerFrame);

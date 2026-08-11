@@ -122,6 +122,42 @@ namespace core::api
                 }
             }});
 
+        // _native_streaming_registerWorldSourceEx(x, y, z, radiusMultiplier, priority,
+        //                                         ownerEntityUUID, targetState) -> int
+        // VK-1591. As registerWorldSource, plus a target-state cap:
+        //   1 = prefetch only (the sector's bytes come into memory, NO entities spawn)
+        //   2 = activate (identical to registerWorldSource)
+        // Anything else clamps to 2 - target state 0 ("want nothing") is deliberately not
+        // script-reachable, since a source that requests nothing is just an unregister.
+        // A NEW native rather than a 7th argument on the existing one, so no shipped script's
+        // arity changes.
+        interpreter->registerNativeFunction("_native_streaming_registerWorldSourceEx",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (args.size() < 7)
+                {
+                    vfLogError("[Script] Streaming.registerWorldSourceEx: requires 7 arguments (x, y, z, radiusMultiplier, priority, ownerEntityUUID, targetState)");
+                    return value::Value(static_cast<int64_t>(0));
+                }
+
+                events::world::RegisterStreamingSourceCommand cmd;
+                cmd.position = glm::vec3(extractFloat(args[0]), extractFloat(args[1]), extractFloat(args[2]));
+                cmd.radiusMultiplier = extractFloat(args[3]);
+                cmd.priority = static_cast<uint8_t>(extractInt64(args[4]));
+                cmd.ownerEntityUUID = static_cast<uint64_t>(extractInt64(args[5]));
+                const int64_t targetState = extractInt64(args[6]);
+                cmd.targetState = (targetState == 1) ? world::SectorTargetState::Prefetched
+                                                     : world::SectorTargetState::Activated;
+                try
+                {
+                    uint32_t id = events::EventDispatcher::instance().execute(cmd);
+                    return value::Value(static_cast<int64_t>(id));
+                }
+                catch (const std::exception&)
+                {
+                    return value::Value(static_cast<int64_t>(0)); // no world service bound
+                }
+            }});
+
         // _native_streaming_unregisterWorldSource(sourceId) -> void
         interpreter->registerNativeFunction("_native_streaming_unregisterWorldSource",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
@@ -186,6 +222,9 @@ namespace core::api
 
                     events::world::GetSectorStateQuery stateQuery;
                     stateQuery.coord = *coordOpt;
+                    // VK-1591: deliberately Loaded ONLY. A Prefetched sector holds bytes and no
+                    // entities, so a script gating AI activation or spawning on "is it loaded"
+                    // must not be told yes.
                     return value::Value(dispatcher.query(stateQuery) == world::SectorState::Loaded);
                 }
                 catch (const std::exception&)
