@@ -17,6 +17,7 @@
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "print/Log.hpp"
+#include "math/TransformUtils.hpp"
 #include "threading/JobSystem.hpp"
 #include <atomic>
 #include <nlohmann/json.hpp>
@@ -157,6 +158,10 @@ namespace services
         // edit mode off the editor viewport camera when editModeStreaming is enabled.
         // Dirty (unsaved) sectors are never auto-unloaded by the streamer, so edit-mode
         // streaming cannot drop unsaved work.
+        // VK-1593: the entity spawn budget below sits outside the streaming gate, so it must start
+        // from the plain budget and only be widened on a frame the streamer actually bursted.
+        int entityBudget = worldDefinition.streamingConfig.maxEntitiesPerFrame;
+
         if (isPlayMode || worldDefinition.streamingConfig.editModeStreaming)
         {
             // Build streaming sources: camera is always source[0].
@@ -164,7 +169,19 @@ namespace services
             std::vector<world::StreamingSource> sources;
             {
                 world::StreamingSource cameraSrc;
-                cameraSrc.position = isPlayMode ? getPrimaryCameraPosition() : cachedCameraPos;
+                if (isPlayMode)
+                {
+                    // VK-1593: only the play camera has a look direction to offer. The editor
+                    // viewport reaches us through CameraPositionUpdatedNotification, which carries
+                    // position only, so edit-mode streaming stays omni (viewDir zero).
+                    const CameraPose pose = getPrimaryCameraPose();
+                    cameraSrc.position = pose.position;
+                    cameraSrc.viewDir = pose.forward;
+                }
+                else
+                {
+                    cameraSrc.position = cachedCameraPos;
+                }
                 cameraSrc.radiusMultiplier = 1.0f;
                 cameraSrc.priority = 0;
                 cameraSrc.id = 0;
@@ -180,10 +197,21 @@ namespace services
                     sources.push_back(src);
             }
 
+            // VK-1593: derive per-source velocity before the streamer runs. Script sources get
+            // lookahead out of this for free - Streaming::updateWorldSource only ever pushes a
+            // position, and the delta is all the lookahead needs.
+            updateStreamingSourceVelocities(sources, deltaTime);
+
             // Update resource load scheduler with current camera position for priority re-computation
             resource::ResourceLoadScheduler::instance().update(sources[0].position);
 
             streamer.update(sources, sectorManager, streamingActions);
+
+            // VK-1593: a camera jump invalidates the whole resident ring at once, so the entity
+            // spawn budget has to widen with the load budget or the sectors arrive and then
+            // trickle their entities in at 8 per frame anyway.
+            if (streamer.isBursting())
+                entityBudget = world::effectiveBurstEntities(worldDefinition.streamingConfig);
 
             // Edit-mode rail: never auto-unload the sector holding the selected entity —
             // panels and gizmos hold live references to it
@@ -303,7 +331,7 @@ namespace services
 
         processHLODRegenQueue();
 
-        entityLoader.update(*sceneGraph, worldDefinition.streamingConfig.maxEntitiesPerFrame);
+        entityLoader.update(*sceneGraph, entityBudget);
 
         // VK-1590: entities spawned this frame whose reference target was ALREADY resident.
         // Batched by the PostLoad hook so the whole spawn budget costs one resolver pass.
@@ -1150,21 +1178,64 @@ namespace services
         sectorManager.assignEntityToSector(uuid, newPosition);
     }
 
-    glm::vec3 WorldSectorServiceImpl::getPrimaryCameraPosition() const
+    WorldSectorServiceImpl::CameraPose WorldSectorServiceImpl::getPrimaryCameraPose() const
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
 
+        CameraPose pose;
+        pose.position = cachedCameraPos;
+
         auto primaryCameraOpt = dispatcher.query(::events::scene::GetPrimaryCameraQuery{});
         if (!primaryCameraOpt.has_value())
-            return cachedCameraPos;
+            return pose;
 
         ::events::scene::GetWorldTransformQuery transformQuery;
         transformQuery.entity = *primaryCameraOpt;
         auto transformOpt = dispatcher.query(transformQuery);
         if (transformOpt.has_value())
-            return transformOpt->position;
+        {
+            pose.position = transformOpt->position;
+            // VK-1593: the engine's single source of truth for forward-from-Euler-degrees,
+            // shared with AudioAPI and AudioSceneUpdater. Do not re-derive it here.
+            pose.forward = math::forwardFromEulerDegrees(transformOpt->rotation);
+        }
 
-        return cachedCameraPos;
+        return pose;
+    }
+
+    void WorldSectorServiceImpl::updateStreamingSourceVelocities(
+        std::vector<world::StreamingSource>& sources, float deltaTime)
+    {
+        sourceVelocityScratch.clear();
+
+        // Two updates inside one clock tick give a dt of a few hundred nanoseconds, which turns a
+        // one-unit drift into a velocity of millions. The streamer clamps the resulting offset to
+        // the outer ring, so the symptom is not a blow-up but something subtler and worse: the
+        // prediction silently pins at maximum range while the source is barely moving. A frame
+        // shorter than 10us is a clock artefact, not motion.
+        constexpr float kMinDeltaTime = 1e-5f;
+
+        for (auto& source : sources)
+        {
+            auto it = lastSourcePositionsForVelocity.find(source.id);
+            if (it != lastSourcePositionsForVelocity.end() && deltaTime > kMinDeltaTime)
+            {
+                // No teleport guard here on purpose: a jump produces an absurd velocity, and
+                // SectorStreamer discards it on exactly the frames it classifies as a jump. One
+                // guard, in the layer that has CPU tests.
+                source.velocity = (source.position - it->second) / deltaTime;
+            }
+            else
+            {
+                source.velocity = glm::vec3(0.0f);
+            }
+
+            sourceVelocityScratch[source.id] = source.position;
+        }
+
+        // Swap rather than erase-missing: an unregistered source is simply absent from the
+        // scratch map, so it drops out without a sweep and re-registering starts clean.
+        lastSourcePositionsForVelocity.swap(sourceVelocityScratch);
     }
 
     void WorldSectorServiceImpl::drawDebugSectors() const

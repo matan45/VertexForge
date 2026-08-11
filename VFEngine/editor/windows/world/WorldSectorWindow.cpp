@@ -331,6 +331,44 @@ namespace windows
                                     &editableStreaming.maxTerrainUnloadsPerFrame, 1, 16);
 
         ImGui::Separator();
+        ImGui::Text("Predictive Streaming (VK-1593)");
+        changed |= ImGui::SliderFloat("Lookahead", &editableStreaming.lookaheadSeconds,
+                                      0.0f, 5.0f, "%.2f s");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Score each sector against the CLOSER of the source's current\n"
+                              "position and position + velocity x lookahead, so sectors ahead\n"
+                              "of motion load before equidistant ones behind it.\n"
+                              "0 = off. Prediction never reaches past the outer ring.");
+        changed |= ImGui::SliderFloat("View Bias", &editableStreaming.viewBiasStrength,
+                                      0.0f, 4.0f, "%.2f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Push sectors outside the camera's look direction down the load\n"
+                              "ORDER (never out of the ring, never into the unload pass).\n"
+                              "0 = off - the right setting for a top-down camera, whose forward\n"
+                              "barely projects onto the XZ plane. Play mode only: the editor\n"
+                              "viewport reports no look direction.");
+        changed |= ImGui::SliderFloat("Teleport Threshold", &editableStreaming.teleportThresholdSectors,
+                                      0.0f, 16.0f, "%.1f sectors");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("A one-frame position delta beyond this is a JUMP, not motion:\n"
+                              "the frame's velocity is discarded and the burst window opens.\n"
+                              "0 means the 2-sector default - NOT \"disabled\".");
+        changed |= ImGui::SliderInt("Burst Frames", &editableStreaming.burstFrames, 0, 120);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Frames of relaxed budget after a detected jump, counted from and\n"
+                              "including the frame it was detected. 0 = no burst.");
+        changed |= ImGui::SliderInt("Burst Max Loads/Frame",
+                                    &editableStreaming.maxLoadsPerFrameBurst, 0, 64);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Activation budget while the burst window is open.\n"
+                              "0 = 4x Max Loads/Frame.");
+        changed |= ImGui::SliderInt("Burst Max Entities/Frame",
+                                    &editableStreaming.maxEntitiesPerFrameBurst, 0, 256);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Entity spawn budget while the burst window is open.\n"
+                              "0 = 4x Max Entities/Frame.");
+
+        ImGui::Separator();
         changed |= ImGui::Checkbox("Edit-Mode Streaming", &editableStreaming.editModeStreaming);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Stream sectors around the editor camera while editing.\n"
@@ -374,6 +412,15 @@ namespace windows
             {
                 ImGui::TextDisabled("Prefetch byte cap: unlimited");
             }
+
+            // VK-1593: the only way to observe the camera-jump burst from the editor. Counts down
+            // to 0 over burstFrames once a teleport is detected.
+            if (prefetch.burstFramesRemaining > 0)
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+                                   "Camera-jump burst: %d frames remaining",
+                                   prefetch.burstFramesRemaining);
+            else
+                ImGui::TextDisabled("Camera-jump burst: idle");
         }
 
         ImGui::Separator();
@@ -499,6 +546,11 @@ namespace windows
                     cmd.streamingConfig.prefetchRadius = prefetchRadius;
                     cmd.streamingConfig.unloadRadius = unloadRadius;
                     cmd.streamingConfig.enableGPUObjectStreaming = gpuObjectStreaming;
+                    // VK-1593: new worlds opt in to predictive streaming. The struct defaults stay
+                    // "off" so every .vfworld written before VK-1593 - which omits these keys -
+                    // keeps streaming exactly as it did. Tune them in the Streaming tab.
+                    cmd.streamingConfig.lookaheadSeconds = 1.0f;
+                    cmd.streamingConfig.burstFrames = 30;
                     events::EventDispatcher::instance().execute(cmd);
                     showCreationWizard = false;
                 }

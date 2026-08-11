@@ -35,6 +35,16 @@ namespace world
             streamingJson["maxPrefetchesPerFrame"] = definition.streamingConfig.maxPrefetchesPerFrame;
             streamingJson["maxUnloadsPerFrame"] = definition.streamingConfig.maxUnloadsPerFrame;
             streamingJson["maxPrefetchBytes"] = definition.streamingConfig.maxPrefetchBytes;
+            // VK-1593: predictive streaming. Like prefetchRadius above, the 0 sentinels are
+            // written VERBATIM - resolving teleportThresholdSectors or the burst budgets here
+            // would bake in the value they happen to derive from today and stop them tracking a
+            // later edit of maxLoadsPerFrame / maxEntitiesPerFrame.
+            streamingJson["lookaheadSeconds"] = definition.streamingConfig.lookaheadSeconds;
+            streamingJson["viewBiasStrength"] = definition.streamingConfig.viewBiasStrength;
+            streamingJson["teleportThresholdSectors"] = definition.streamingConfig.teleportThresholdSectors;
+            streamingJson["burstFrames"] = definition.streamingConfig.burstFrames;
+            streamingJson["maxLoadsPerFrameBurst"] = definition.streamingConfig.maxLoadsPerFrameBurst;
+            streamingJson["maxEntitiesPerFrameBurst"] = definition.streamingConfig.maxEntitiesPerFrameBurst;
             streamingJson["maxEntitiesPerFrame"] = definition.streamingConfig.maxEntitiesPerFrame;
             streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
             streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
@@ -142,6 +152,15 @@ namespace world
                 out.maxPrefetchesPerFrame = stc.value("maxPrefetchesPerFrame", streamingDefaults.maxPrefetchesPerFrame);
                 out.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", streamingDefaults.maxUnloadsPerFrame);
                 out.maxPrefetchBytes = stc.value("maxPrefetchBytes", streamingDefaults.maxPrefetchBytes);
+                // VK-1593: absent -> the struct's "off" defaults -> no lookahead, no view bias,
+                // no burst window. A pre-VK-1593 .vfworld therefore streams byte-for-byte as it
+                // did, which is what the teleport guard being inert at those defaults buys us.
+                out.lookaheadSeconds = stc.value("lookaheadSeconds", streamingDefaults.lookaheadSeconds);
+                out.viewBiasStrength = stc.value("viewBiasStrength", streamingDefaults.viewBiasStrength);
+                out.teleportThresholdSectors = stc.value("teleportThresholdSectors", streamingDefaults.teleportThresholdSectors);
+                out.burstFrames = stc.value("burstFrames", streamingDefaults.burstFrames);
+                out.maxLoadsPerFrameBurst = stc.value("maxLoadsPerFrameBurst", streamingDefaults.maxLoadsPerFrameBurst);
+                out.maxEntitiesPerFrameBurst = stc.value("maxEntitiesPerFrameBurst", streamingDefaults.maxEntitiesPerFrameBurst);
                 out.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", streamingDefaults.maxEntitiesPerFrame);
                 out.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", streamingDefaults.maxTerrainLoadsPerFrame);
                 out.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", streamingDefaults.maxTerrainUnloadsPerFrame);

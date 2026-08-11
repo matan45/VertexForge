@@ -17,6 +17,7 @@ namespace world
         activateCandidates.reserve(64);
         prefetchCandidates.reserve(64);
         unloadCandidates.reserve(32);
+        sourceEvals.reserve(8);
         ringTargets.reserve(128);
     }
 
@@ -38,6 +39,11 @@ namespace world
         // With prefetchRadius == loadRadius this reduces exactly to the old rule.
         if (config.unloadRadius <= config.prefetchRadius)
             config.unloadRadius = config.prefetchRadius + 1.0f;
+
+        // VK-1593: turning the burst off mid-window must close the window, not let it drain at a
+        // budget the config no longer describes.
+        if (config.burstFrames <= 0)
+            burstFramesRemaining = 0;
     }
 
     void SectorStreamer::setEnabled(bool value)
@@ -45,6 +51,118 @@ namespace world
         enabled = value;
         if (value)
             needsSeed = true;
+        // VK-1593: motion state is deliberately NOT reset here - see resetMotionTracking(). This
+        // is a mid-frame reseed hook, not a lifecycle event.
+    }
+
+    void SectorStreamer::resetMotionTracking()
+    {
+        lastSourcePositions.clear();
+        sourcePositionScratch.clear();
+        burstFramesRemaining = 0;
+        burstActive = false;
+    }
+
+    void SectorStreamer::buildSourceEvals(const std::vector<StreamingSource>& sources,
+                                          float sectorWorldSize)
+    {
+        sourceEvals.clear();
+
+        // Motion tracking exists only to serve the lookahead and the burst window. With both off
+        // it is pure overhead, and skipping it keeps every pre-VK-1593 caller - which had no
+        // reason to give its sources distinct ids - out of the id-keyed map entirely.
+        const bool trackMotion = config.burstFrames > 0 || config.lookaheadSeconds > 0.0f;
+        const float teleportDistance = effectiveTeleportThreshold(config) * sectorWorldSize;
+        const float teleportDistanceSq = teleportDistance * teleportDistance;
+        const float maxLookaheadOffset = effectivePrefetchRadius(config) * sectorWorldSize;
+        bool teleportDetected = false;
+
+        if (trackMotion)
+            sourcePositionScratch.clear();
+        else
+            lastSourcePositions.clear(); // stale history must not survive a config flip
+
+        for (const auto& source : sources)
+        {
+            if (source.targetState == SectorTargetState::Unloaded)
+                continue; // a source that wants nothing contributes nothing
+
+            bool teleported = false;
+            if (trackMotion)
+            {
+                if (auto it = lastSourcePositions.find(source.id); it != lastSourcePositions.end())
+                {
+                    // XZ only, to match sectorDistanceSq: a purely vertical camera move (an RTS
+                    // zoom) changes no sector distance and is not a streaming jump.
+                    const float dx = source.position.x - it->second.x;
+                    const float dz = source.position.z - it->second.z;
+                    teleported = (dx * dx + dz * dz) > teleportDistanceSq;
+                }
+                // A source seen for the first time has no delta, so it is never a teleport.
+                sourcePositionScratch[source.id] = source.position;
+                teleportDetected = teleportDetected || teleported;
+            }
+
+            SourceEval eval;
+            eval.position = source.position;
+            eval.predicted = source.position;
+            eval.radiusMultiplier = source.radiusMultiplier;
+            eval.priority = source.priority;
+            eval.targetState = source.targetState;
+
+            // Lookahead, suppressed on a teleport frame: there the caller's velocity is the jump
+            // divided by dt, which would throw the predicted ring an entire world away. This is
+            // the ONE place jump-vs-motion is decided, so callers need no guard of their own.
+            if (config.lookaheadSeconds > 0.0f && !teleported &&
+                std::isfinite(source.velocity.x) && std::isfinite(source.velocity.z))
+            {
+                float offsetX = source.velocity.x * config.lookaheadSeconds;
+                float offsetZ = source.velocity.z * config.lookaheadSeconds;
+                const float offsetLenSq = offsetX * offsetX + offsetZ * offsetZ;
+
+                // Never predict past the source's own outer ring. Unclamped, one bad velocity
+                // turns the scan box below into a grid the size of the world - the VK-1588
+                // failure mode, where a radius misread as world units became a ~1024x1024 scan.
+                // Floored at 0 so a nonsensical negative radiusMultiplier cannot flip the sign of
+                // the scale below and predict BACKWARDS.
+                const float maxOffset = std::max(0.0f, maxLookaheadOffset * source.radiusMultiplier);
+                if (offsetLenSq > maxOffset * maxOffset && offsetLenSq > 0.0f)
+                {
+                    const float scale = maxOffset / std::sqrt(offsetLenSq);
+                    offsetX *= scale;
+                    offsetZ *= scale;
+                }
+
+                eval.predicted.x += offsetX;
+                eval.predicted.z += offsetZ;
+            }
+
+            // View bias works on XZ like every other streaming distance. A top-down camera's
+            // forward projects to (near) zero here and falls through to omni - which is exactly
+            // what the RTS wants, and why viewBiasStrength defaults to 0 as well.
+            if (config.viewBiasStrength > 0.0f)
+            {
+                const float viewLenSq = source.viewDir.x * source.viewDir.x +
+                                        source.viewDir.z * source.viewDir.z;
+                if (viewLenSq > 0.0f && std::isfinite(viewLenSq))
+                {
+                    const float inv = 1.0f / std::sqrt(viewLenSq);
+                    eval.viewDirXZ = glm::vec2(source.viewDir.x * inv, source.viewDir.z * inv);
+                }
+            }
+
+            sourceEvals.push_back(eval);
+        }
+
+        if (trackMotion)
+        {
+            // Swap rather than erase-missing: a source that disappeared this frame simply is not
+            // in the scratch map, so it drops out with no mark-and-sweep and no reallocation.
+            lastSourcePositions.swap(sourcePositionScratch);
+
+            if (teleportDetected && config.burstFrames > 0)
+                burstFramesRemaining = config.burstFrames;
+        }
     }
 
     void SectorStreamer::seedTrackedSectors(const WorldSectorManager& manager)
@@ -64,6 +182,9 @@ namespace world
         std::vector<SectorStreamingAction>& outActions)
     {
         outActions.clear();
+        // Reset before the early return: update() is not called at all while streaming is gated
+        // off, and a stale true would leave the service on the burst entity budget forever.
+        burstActive = false;
 
         if (!enabled || sources.empty())
             return;
@@ -79,26 +200,35 @@ namespace world
         unloadCandidates.clear();
         ringTargets.clear();
 
+        // Pass 0 (VK-1593): teleport guard, motion lookahead and view direction, resolved once
+        // per source. Both the ring pass and the unload pass read the result, so they can never
+        // disagree about where a source effectively is.
+        buildSourceEvals(sources, sectorSize);
+
         // Pass 1: resolve each coord's target as the MAX request over ALL sources.
         // No source "claims" a coord any more, so sources need no priority ordering here: target
         // resolution is priority-INDEPENDENT. Priority only decides who wins the frame's budget,
         // never what a sector is allowed to become.
-        for (const auto& source : sources)
+        for (const auto& eval : sourceEvals)
         {
-            if (source.targetState == SectorTargetState::Unloaded)
-                continue; // a source that wants nothing contributes nothing
-
-            const float activateWorldRadius = config.loadRadius * sectorSize * source.radiusMultiplier;
-            const float prefetchWorldRadius = prefetchRadius * sectorSize * source.radiusMultiplier;
+            const float activateWorldRadius = config.loadRadius * sectorSize * eval.radiusMultiplier;
+            const float prefetchWorldRadius = prefetchRadius * sectorSize * eval.radiusMultiplier;
             const float activateRadiusSq = activateWorldRadius * activateWorldRadius;
             const float prefetchRadiusSq = prefetchWorldRadius * prefetchWorldRadius;
 
-            // The scan box covers the OUTER ring. When prefetchRadius == loadRadius these are the
-            // identical float expressions the two-ring code used.
-            const int minX = static_cast<int>(std::floor((source.position.x - prefetchWorldRadius) / sectorSize));
-            const int maxX = static_cast<int>(std::floor((source.position.x + prefetchWorldRadius) / sectorSize));
-            const int minZ = static_cast<int>(std::floor((source.position.z - prefetchWorldRadius) / sectorSize));
-            const int maxZ = static_cast<int>(std::floor((source.position.z + prefetchWorldRadius) / sectorSize));
+            // The scan box covers the OUTER ring around BOTH the current and the predicted
+            // position. Without the union a sector that is only near the predicted position is
+            // never visited and the lookahead can never fire. With lookahead off, predicted ==
+            // position and these reduce to the identical float expressions used before VK-1593.
+            const float minWorldX = std::min(eval.position.x, eval.predicted.x) - prefetchWorldRadius;
+            const float maxWorldX = std::max(eval.position.x, eval.predicted.x) + prefetchWorldRadius;
+            const float minWorldZ = std::min(eval.position.z, eval.predicted.z) - prefetchWorldRadius;
+            const float maxWorldZ = std::max(eval.position.z, eval.predicted.z) + prefetchWorldRadius;
+
+            const int minX = static_cast<int>(std::floor(minWorldX / sectorSize));
+            const int maxX = static_cast<int>(std::floor(maxWorldX / sectorSize));
+            const int minZ = static_cast<int>(std::floor(minWorldZ / sectorSize));
+            const int maxZ = static_cast<int>(std::floor(maxWorldZ / sectorSize));
 
             for (int x = minX; x <= maxX; ++x)
             {
@@ -112,7 +242,10 @@ namespace world
                     if (isSectorTracked(sector->state))
                         trackedSectors.insert(coord);
 
-                    const float distSq = sectorDistanceSq(coord, source.position, sectorSize);
+                    // VK-1593: scored against the CLOSER of where the source is and where it is
+                    // predicted to be, so a sector ahead of motion enters the ring before an
+                    // equidistant one behind it.
+                    const float distSq = sourceDistanceSq(eval, coord, sectorSize);
 
                     SectorTargetState want;
                     if (distSq <= activateRadiusSq)
@@ -123,14 +256,33 @@ namespace world
                         continue;
 
                     // A source can only ever ask for less than the ring it reaches with
-                    if (want > source.targetState)
-                        want = source.targetState;
+                    if (want > eval.targetState)
+                        want = eval.targetState;
                     if (want == SectorTargetState::Unloaded)
                         continue;
 
                     // Higher-priority sources win the per-frame budget: their candidates sort as
                     // if proportionally closer
-                    const float sortKey = distSq / (1.0f + static_cast<float>(source.priority));
+                    float sortKey = distSq / (1.0f + static_cast<float>(eval.priority));
+
+                    // VK-1593: push sectors away from the look direction down the ORDER only -
+                    // never out of the ring, and never into the unload pass. Making residency
+                    // depend on where the camera points would evict the world behind you every
+                    // time it turned. Factor runs 1 (dead ahead) .. 1 + viewBiasStrength (behind).
+                    if (eval.viewDirXZ.x != 0.0f || eval.viewDirXZ.y != 0.0f)
+                    {
+                        const float toX = (static_cast<float>(x) + 0.5f) * sectorSize - eval.position.x;
+                        const float toZ = (static_cast<float>(z) + 0.5f) * sectorSize - eval.position.z;
+                        const float toLenSq = toX * toX + toZ * toZ;
+                        // A sector the source stands in has no direction: it is in view, unbiased.
+                        if (toLenSq > 0.0f)
+                        {
+                            const float inv = 1.0f / std::sqrt(toLenSq);
+                            const float facing = (toX * inv) * eval.viewDirXZ.x +
+                                                 (toZ * inv) * eval.viewDirXZ.y;
+                            sortKey *= 1.0f + config.viewBiasStrength * (1.0f - facing) * 0.5f;
+                        }
+                    }
 
                     RingTarget& target = ringTargets[coord];
                     if (want > target.target)
@@ -196,15 +348,17 @@ namespace world
                 bool outsideAllSources = true;
                 float maxDistSq = 0.0f;
 
-                for (const auto& source : sources)
+                // sourceEvals already excludes the sources that want nothing, so a source that
+                // wants nothing still keeps nothing resident.
+                for (const auto& eval : sourceEvals)
                 {
-                    // A source that wants nothing keeps nothing resident
-                    if (source.targetState == SectorTargetState::Unloaded)
-                        continue;
-
-                    float unloadWorldRadius = config.unloadRadius * sectorSize * source.radiusMultiplier;
+                    float unloadWorldRadius = config.unloadRadius * sectorSize * eval.radiusMultiplier;
                     float unloadRadiusSq = unloadWorldRadius * unloadWorldRadius;
-                    float distSq = sectorDistanceSq(*it, source.position, sectorSize);
+                    // VK-1593: the SAME predicted metric the ring pass used. With a
+                    // current-position-only test here, a sector pulled inside loadRadius by the
+                    // lookahead while sitting beyond unloadRadius of the current position would
+                    // load and unload on alternate frames.
+                    float distSq = sourceDistanceSq(eval, *it, sectorSize);
 
                     if (distSq <= unloadRadiusSq)
                     {
@@ -243,15 +397,28 @@ namespace world
         std::sort(prefetchCandidates.begin(), prefetchCandidates.end(), nearestFirst);
         std::sort(unloadCandidates.begin(), unloadCandidates.end(), farthestFirst);
 
+        // VK-1593: consume the burst window opened by buildSourceEvals. burstActive is what
+        // isBursting() reports and it survives the decrement, so the service - which reads the
+        // burst state AFTER update() returns to size its entity budget - sees the same answer
+        // this frame. Reading the counter there would miss a burstFrames == 1 window entirely.
+        burstActive = burstFramesRemaining > 0;
+        if (burstFramesRemaining > 0)
+            --burstFramesRemaining;
+
+        // Only activation bursts. Prefetch already has its own counter, and bursting unloads
+        // would only evict faster - the opposite of what a camera jump needs.
+        const int activateLimit = burstActive ? effectiveBurstLoads(config)
+                                              : config.maxLoadsPerFrame;
+
         // Apply per-frame budgets. Prefetches draw on their own counter so a wide prefetch ring
         // can never eat the activation budget.
-        streaming::FrameBudget activateBudget(config.maxLoadsPerFrame);
+        streaming::FrameBudget activateBudget(activateLimit);
         streaming::FrameBudget prefetchBudget(config.maxPrefetchesPerFrame);
         streaming::FrameBudget unloadBudget(config.maxUnloadsPerFrame);
 
         outActions.reserve(
             std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame) +
-            std::min(static_cast<int>(activateCandidates.size()), config.maxLoadsPerFrame) +
+            std::min(static_cast<int>(activateCandidates.size()), activateLimit) +
             std::min(static_cast<int>(prefetchCandidates.size()), config.maxPrefetchesPerFrame));
 
         for (const auto& candidate : unloadCandidates)
@@ -289,6 +456,19 @@ namespace world
         float dz = sectorCenterZ - cameraPos.z;
 
         return dx * dx + dz * dz;
+    }
+
+    float SectorStreamer::sourceDistanceSq(const SourceEval& eval, const SectorCoord& coord,
+                                           float sectorWorldSize) const
+    {
+        const float current = sectorDistanceSq(coord, eval.position, sectorWorldSize);
+        // Fast path AND exactness guarantee: with the lookahead off (or suppressed by the
+        // teleport guard) predicted is a bit-for-bit copy of position, so every pre-VK-1593
+        // caller gets the identical float this function used to return.
+        if (eval.predicted == eval.position)
+            return current;
+
+        return std::min(current, sectorDistanceSq(coord, eval.predicted, sectorWorldSize));
     }
 
 } // namespace world

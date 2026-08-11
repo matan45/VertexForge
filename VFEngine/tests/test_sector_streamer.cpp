@@ -5,6 +5,8 @@
 #include <world/SectorStreamer.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <vector>
 
 // ============================================================
@@ -1079,5 +1081,734 @@ TEST_SUITE("SectorStreamer")
                 CHECK(sentinel[i].target == explicitEqual[i].target);
             }
         }
+    }
+
+    // ================================================================
+    // VK-1593: predictive + view-biased prioritization, teleport bursts
+    //
+    // Geometry recap for the numbers below: kSectorSize is 100, so sector (x,z)'s centre is
+    // ((x+0.5)*100, (z+0.5)*100) and sourceAtSectorCenter(0,0) sits at (50, 0, 50). Distances are
+    // sector-centre to source, XZ only. No dt appears anywhere - velocity is an input and the
+    // teleport guard is a pure position delta, so every case below is exactly reproducible.
+    // ================================================================
+
+    TEST_CASE("VK-1593: with lookahead off, velocity and viewDir change nothing")
+    {
+        // The "every existing case passes unchanged" AC, stated positively: the four axis
+        // neighbours of (0,0) all tie at distance 100, so the coord tiebreak picks (-1,0) - and it
+        // keeps picking (-1,0) no matter what velocity or look direction the source carries.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+        manager.getSector({0, 0})->state = world::SectorState::Loaded;
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxUnloadsPerFrame = 0;
+        // lookaheadSeconds and viewBiasStrength both stay at their 0 defaults
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(500.0f, 0.0f, 0.0f);
+        sources[0].viewDir = glm::vec3(1.0f, 0.0f, 0.0f);
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        REQUIRE(actions.size() == 1);
+        CHECK(actions[0].target == kActivate);
+        CHECK(actions[0].coord == world::SectorCoord(-1, 0));
+        CHECK_FALSE(streamer.isBursting());
+    }
+
+    TEST_CASE("VK-1593: an ahead-of-motion sector outranks an equidistant behind-of-motion one")
+    {
+        // Source at (50,50) moving +X at 50 u/s with a 1 s lookahead predicts (100,50).
+        //   (1,0)  centre (150,50): 100 from current,  50 from predicted -> scored  50
+        //   (-1,0) centre (-50,50): 100 from current, 150 from predicted -> scored 100
+        // Both are inside the ring either way; only the ORDER changes, and with one load per
+        // frame the order is the whole story.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+        manager.getSector({0, 0})->state = world::SectorState::Loaded;
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.lookaheadSeconds = 1.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxUnloadsPerFrame = 0;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(50.0f, 0.0f, 0.0f);
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        REQUIRE(actions.size() == 1);
+        CHECK(actions[0].target == kActivate);
+        // Without the lookahead the coord tiebreak would hand this to (-1,0) - see the case above.
+        CHECK(actions[0].coord == world::SectorCoord(1, 0));
+    }
+
+    TEST_CASE("VK-1593: prediction widens the ring, it does not only reorder it")
+    {
+        // loadRadius 1.5 -> a 150 unit activate ring. Sector (2,0) sits 200 units from the source
+        // and can NEVER be reached from the current position; from the predicted position (150,50)
+        // it is 100 away. This is what the scan box union exists for - without it the sector is
+        // never even visited.
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 16; // wide enough that the budget cannot mask the ring question
+        config.maxUnloadsPerFrame = 0;
+
+        auto run = [&](float lookaheadSeconds)
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 4);
+
+            world::SectorStreamingConfig runConfig = config;
+            runConfig.lookaheadSeconds = lookaheadSeconds;
+
+            world::SectorStreamer streamer(runConfig);
+            streamer.setEnabled(true);
+
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+            sources[0].id = 1;
+            sources[0].velocity = glm::vec3(100.0f, 0.0f, 0.0f);
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            return actions;
+        };
+
+        SUBCASE("lookahead on: the sector two rings out along the motion is activated")
+        {
+            CHECK(hasAction(run(1.0f), {2, 0}, kActivate));
+        }
+
+        SUBCASE("lookahead off: it is out of reach")
+        {
+            CHECK_FALSE(hasAction(run(0.0f), {2, 0}, kActivate));
+        }
+    }
+
+    TEST_CASE("VK-1593: the lookahead offset is clamped to the source's outer ring")
+    {
+        // An unclamped velocity is the VK-1588 failure mode wearing a different hat: the scan box
+        // is derived from the predicted position, so 100000 u/s would scan a thousand sectors per
+        // axis. The clamp caps the offset at the outer ring (1.5 sectors = 150 units here), so the
+        // predicted position is (200,50) and nothing past (3,0) can be in range.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 12);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.lookaheadSeconds = 1.0f;
+        config.maxLoadsPerFrame = 64;
+        config.maxUnloadsPerFrame = 0;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(100000.0f, 0.0f, 0.0f);
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        // The load-bearing assertion. WITHOUT the clamp the predicted position is 100050 units out,
+        // no real sector is anywhere near it, and the ring collapses back to the three sectors
+        // reachable from the current position - so (2,0), which is 200 units away and only
+        // reachable via prediction, is the sector that proves the offset was clamped rather than
+        // discarded. (An unclamped run also scans ~1000 sectors per axis, but that is a hang, not
+        // a wrong answer, and nothing can assert on it.)
+        CHECK(hasAction(actions, {2, 0}, kActivate));
+
+        // ...and the clamp is a ceiling, not a licence: nothing past one outer ring ahead.
+        for (const auto& action : actions)
+        {
+            CAPTURE(action.coord.x);
+            CAPTURE(action.coord.z);
+            CHECK(action.coord.x <= 3);
+            CHECK(action.coord.x >= -1);
+        }
+    }
+
+    TEST_CASE("VK-1593: a non-finite velocity is ignored, never propagated into the scan box")
+    {
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.lookaheadSeconds = 1.0f;
+        config.maxLoadsPerFrame = 8;
+        config.maxUnloadsPerFrame = 0;
+
+        auto run = [&](const glm::vec3& velocity)
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 4);
+
+            world::SectorStreamer streamer(config);
+            streamer.setEnabled(true);
+
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+            sources[0].id = 1;
+            sources[0].velocity = velocity;
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            return actions;
+        };
+
+        const auto baseline = run(glm::vec3(0.0f));
+
+        auto checkMatchesBaseline = [&](const glm::vec3& velocity)
+        {
+            const auto actions = run(velocity);
+            REQUIRE(actions.size() == baseline.size());
+            for (size_t i = 0; i < baseline.size(); ++i)
+            {
+                CHECK(actions[i].coord == baseline[i].coord);
+                CHECK(actions[i].target == baseline[i].target);
+            }
+        };
+
+        SUBCASE("NaN")
+        {
+            checkMatchesBaseline(glm::vec3(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f));
+        }
+
+        SUBCASE("infinity")
+        {
+            checkMatchesBaseline(glm::vec3(0.0f, 0.0f, std::numeric_limits<float>::infinity()));
+        }
+    }
+
+    TEST_CASE("VK-1593: view bias reorders equidistant candidates toward the look direction")
+    {
+        // All four axis neighbours of (0,0) tie at 100. With viewDir +X and strength 2 the factor
+        // is 1 + 2 * (1 - dot) / 2, i.e. 1 ahead, 2 abeam, 3 behind - so (1,0) takes the slot.
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxUnloadsPerFrame = 0;
+
+        auto run = [&](float strength, const glm::vec3& viewDir)
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 3);
+            manager.getSector({0, 0})->state = world::SectorState::Loaded;
+
+            world::SectorStreamingConfig runConfig = config;
+            runConfig.viewBiasStrength = strength;
+
+            world::SectorStreamer streamer(runConfig);
+            streamer.setEnabled(true);
+
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+            sources[0].id = 1;
+            sources[0].viewDir = viewDir;
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            return actions;
+        };
+
+        SUBCASE("looking +X pulls the +X neighbour to the front of the queue")
+        {
+            const auto actions = run(2.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].coord == world::SectorCoord(1, 0));
+        }
+
+        SUBCASE("strength 0 leaves the plain distance ordering untouched")
+        {
+            const auto actions = run(0.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].coord == world::SectorCoord(-1, 0));
+        }
+
+        SUBCASE("a straight-down camera has no XZ direction and stays omni")
+        {
+            // This is the RTS case: the projection onto XZ vanishes, so the bias cannot fire even
+            // with a non-zero strength.
+            const auto actions = run(2.0f, glm::vec3(0.0f, -1.0f, 0.0f));
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].coord == world::SectorCoord(-1, 0));
+        }
+
+        SUBCASE("a zero viewDir is omni")
+        {
+            const auto actions = run(2.0f, glm::vec3(0.0f));
+            REQUIRE(actions.size() == 1);
+            CHECK(actions[0].coord == world::SectorCoord(-1, 0));
+        }
+    }
+
+    TEST_CASE("VK-1593: a teleport opens exactly burstFrames frames of the burst load budget")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 12);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 3.0f;
+        config.maxLoadsPerFrame = 1;
+        config.burstFrames = 3;
+        // maxLoadsPerFrameBurst stays 0 -> the sentinel resolves to 4 x maxLoadsPerFrame
+        config.teleportThresholdSectors = 0.0f; // -> the 2-sector default = 200 units
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+
+        std::vector<world::SectorStreamingAction> actions;
+        auto step = [&]
+        {
+            streamer.update(sources, manager, actions);
+            // Mimic the service: an activation moves the sector to Loading so it is not re-emitted
+            for (const auto& action : actions)
+            {
+                if (action.target == kActivate)
+                    manager.getSector(action.coord)->state = world::SectorState::Loading;
+            }
+            return countTargets(actions, kActivate);
+        };
+
+        // Frame 1: the source is seen for the first time, so there is no delta and no teleport.
+        CHECK(step() == 1);
+        CHECK_FALSE(streamer.isBursting());
+
+        // Frame 2: jump ten sectors. Frames 2, 3 and 4 burst - the window is counted from and
+        // including the frame the jump is detected.
+        sources[0] = sourceAtSectorCenter(10, 10);
+        sources[0].id = 1;
+        CHECK(step() == 4);
+        CHECK(streamer.isBursting());
+
+        CHECK(step() == 4);
+        CHECK(streamer.isBursting());
+
+        CHECK(step() == 4);
+        CHECK(streamer.isBursting());
+
+        // Frame 5: the window has closed, back to the base budget.
+        CHECK(step() == 1);
+        CHECK_FALSE(streamer.isBursting());
+    }
+
+    TEST_CASE("VK-1593: burstFrames == 1 is still visible to isBursting()")
+    {
+        // burstActive is deliberately separate from the counter: the counter is decremented inside
+        // update(), and the service reads the burst state AFTER update() returns to size its entity
+        // budget. A one-frame window is where reading the counter instead would silently fail.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 12);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.maxLoadsPerFrame = 1;
+        config.maxLoadsPerFrameBurst = 5;
+        config.burstFrames = 1;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(streamer.isBursting());
+
+        sources[0] = sourceAtSectorCenter(10, 10);
+        sources[0].id = 1;
+        streamer.update(sources, manager, actions);
+        CHECK(streamer.isBursting());
+        CHECK(countTargets(actions, kActivate) == 5);
+        CHECK(streamer.getBurstFramesRemaining() == 0);
+
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(streamer.isBursting());
+    }
+
+    TEST_CASE("VK-1593: sub-threshold motion is motion, not a teleport")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 12);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 3.0f;
+        config.maxLoadsPerFrame = 1;
+        config.burstFrames = 4;
+        config.teleportThresholdSectors = 2.0f; // 200 units
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        // 150 units of travel in one frame is a fast pan, not a jump
+        sources[0].position.x += 150.0f;
+        streamer.update(sources, manager, actions);
+
+        CHECK_FALSE(streamer.isBursting());
+        CHECK(countTargets(actions, kActivate) == 1);
+    }
+
+    TEST_CASE("VK-1593: a source seen for the first time never opens a burst")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 12);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.maxLoadsPerFrame = 1;
+        config.burstFrames = 4;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(streamer.isBursting());
+
+        // A second source registers far away. It has no previous position, so there is no delta to
+        // measure and no burst - registration is not a jump.
+        sources.push_back(sourceAtSectorCenter(10, 10));
+        sources[1].id = 2;
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(streamer.isBursting());
+    }
+
+    TEST_CASE("VK-1593: a teleport discards that frame's velocity")
+    {
+        // The ticket's stated risk: a jump divided by dt is an enormous velocity, and using it
+        // would throw the predicted ring a whole world past the destination. The guard suppresses
+        // the lookahead for exactly one frame - the frame of the jump.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 14);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;  // 150 unit activate ring
+        config.lookaheadSeconds = 1.0f;
+        config.maxLoadsPerFrame = 32;
+        config.maxUnloadsPerFrame = 0;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(150.0f, 0.0f, 0.0f);
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        // Jump to (10,10). Sector (12,10) is 200 units from the destination - out of the 150 ring -
+        // but only 50 from the position the (still non-zero) velocity would predict.
+        sources[0] = sourceAtSectorCenter(10, 10);
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(150.0f, 0.0f, 0.0f);
+        streamer.update(sources, manager, actions);
+
+        CHECK(hasAction(actions, {10, 10}, kActivate));
+        CHECK_FALSE(hasAction(actions, {12, 10}, kActivate));
+
+        // The very next frame there is no jump, so the same velocity predicts normally again.
+        for (const auto& action : actions)
+        {
+            if (action.target == kActivate)
+                manager.getSector(action.coord)->state = world::SectorState::Loading;
+        }
+        streamer.update(sources, manager, actions);
+        CHECK(hasAction(actions, {12, 10}, kActivate));
+    }
+
+    TEST_CASE("VK-1593: the unload pass shares the predicted metric, so prediction cannot thrash")
+    {
+        // A sector pulled inside the activate ring by the lookahead can sit beyond unloadRadius of
+        // the CURRENT position. If the unload pass measured from the current position only, it
+        // would evict what the ring pass just loaded, every frame. Numbers: activate ring 150,
+        // unload ring 175, sector (2,0) is 200 from the source and 50 from the predicted (200,50).
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.unloadRadius = 1.75f;
+        config.maxLoadsPerFrame = 8;
+        config.maxUnloadsPerFrame = 8;
+
+        auto run = [&](float lookaheadSeconds)
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 4);
+            manager.getSector({2, 0})->state = world::SectorState::Loaded;
+
+            world::SectorStreamingConfig runConfig = config;
+            runConfig.lookaheadSeconds = lookaheadSeconds;
+
+            world::SectorStreamer streamer(runConfig);
+            streamer.setEnabled(true); // seeds (2,0) as tracked
+
+            std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+            sources[0].id = 1;
+            sources[0].velocity = glm::vec3(150.0f, 0.0f, 0.0f);
+
+            std::vector<world::SectorStreamingAction> actions;
+            streamer.update(sources, manager, actions);
+            return actions;
+        };
+
+        SUBCASE("lookahead on: the predicted-near sector is retained")
+        {
+            CHECK_FALSE(hasAction(run(1.0f), {2, 0}, kUnload));
+        }
+
+        SUBCASE("lookahead off: the same sector is genuinely out of range and is unloaded")
+        {
+            CHECK(hasAction(run(0.0f), {2, 0}, kUnload));
+        }
+    }
+
+    TEST_CASE("VK-1593: a mid-frame setEnabled reseed must not clobber motion tracking")
+    {
+        // The edit-mode selected-entity rail calls setEnabled(true) from INSIDE the action loop
+        // (WorldSectorStreamingOps.cpp), i.e. AFTER update() has already recorded this frame's
+        // positions - and it re-fires for as long as the selection sits outside the ring. Hanging
+        // the motion reset off setEnabled therefore silently disabled teleport detection and
+        // truncated any burst window in edit mode. Only resetMotionTracking() may clear it.
+        auto primeFirstFrame = [](world::SectorStreamer& streamer, world::WorldSectorManager& manager,
+                               std::vector<world::StreamingSource>& sources,
+                               std::vector<world::SectorStreamingAction>& actions)
+        {
+            streamer.setEnabled(true);
+            sources.push_back(sourceAtSectorCenter(0, 0));
+            sources[0].id = 1;
+            streamer.update(sources, manager, actions);
+        };
+
+        SUBCASE("setEnabled between frames leaves the jump detectable")
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 12);
+
+            world::SectorStreamingConfig config;
+            config.loadRadius = 2.0f;
+            config.maxLoadsPerFrame = 1;
+            config.burstFrames = 3;
+
+            world::SectorStreamer streamer(config);
+            std::vector<world::StreamingSource> sources;
+            std::vector<world::SectorStreamingAction> actions;
+            primeFirstFrame(streamer, manager, sources, actions);
+
+            streamer.setEnabled(true); // the rail, mid-frame
+
+            sources[0] = sourceAtSectorCenter(10, 10);
+            sources[0].id = 1;
+            streamer.update(sources, manager, actions);
+            CHECK(streamer.isBursting());
+        }
+
+        SUBCASE("resetMotionTracking is the one call that does forget it")
+        {
+            world::WorldSectorManager manager(makeSectorConfig());
+            populateGrid(manager, 12);
+
+            world::SectorStreamingConfig config;
+            config.loadRadius = 2.0f;
+            config.maxLoadsPerFrame = 1;
+            config.burstFrames = 3;
+
+            world::SectorStreamer streamer(config);
+            std::vector<world::StreamingSource> sources;
+            std::vector<world::SectorStreamingAction> actions;
+            primeFirstFrame(streamer, manager, sources, actions);
+
+            // What clearStreamingSources() does: the id allocator rewinds to 1, so a source
+            // registered next frame must NOT inherit the old id-1 position.
+            streamer.resetMotionTracking();
+
+            sources[0] = sourceAtSectorCenter(10, 10);
+            sources[0].id = 1;
+            streamer.update(sources, manager, actions);
+            CHECK_FALSE(streamer.isBursting());
+        }
+    }
+
+    TEST_CASE("VK-1593: a nonzero velocity with lookahead off replays every fixture identically")
+    {
+        // The production condition, and the sharpest form of the "existing cases pass unchanged"
+        // AC: after VK-1593 the service feeds a real derived velocity into EVERY world on every
+        // frame, whatever the config says. So the guarantee that matters is not "velocity zero
+        // behaves as before" but "velocity nonzero behaves as before when lookahead is off".
+        struct Fixture
+        {
+            const char* name;
+            float loadRadius;
+            float unloadRadius;
+            std::vector<world::StreamingSource> sources;
+        };
+
+        auto camera = sourceAtSectorCenter(0, 0);
+        auto twoOnOneSector = []
+        {
+            std::vector<world::StreamingSource> s{sourceAtSectorCenter(0, 0), sourceAtSectorCenter(1, 0)};
+            return s;
+        };
+        auto disjointPriorities = [](uint8_t priority)
+        {
+            std::vector<world::StreamingSource> s{sourceAtSectorCenter(0, 0), sourceAtSectorCenter(10, 10)};
+            s[1].priority = priority;
+            return s;
+        };
+
+        const std::vector<Fixture> fixtures = {
+            {"single source", 2.0f, 5.0f, {camera}},
+            {"single source, tight hysteresis", 2.0f, 3.0f, {camera}},
+            {"two equal-priority sources on adjacent sectors", 2.0f, 4.0f, twoOnOneSector()},
+            {"disjoint source, priority 1", 2.0f, 4.0f, disjointPriorities(1)},
+            {"disjoint source, priority 3", 2.0f, 4.0f, disjointPriorities(3)},
+            {"radiusMultiplier 0.5 source", 1.5f, 2.5f, {sourceAtSectorCenter(5, 5, 0.5f)}},
+        };
+
+        for (const auto& fixture : fixtures)
+        {
+            CAPTURE(fixture.name);
+
+            auto run = [&](bool withVelocity)
+            {
+                world::WorldSectorManager manager(makeSectorConfig());
+                populateGrid(manager, 12);
+
+                world::SectorStreamingConfig config;
+                config.loadRadius = fixture.loadRadius;
+                config.unloadRadius = fixture.unloadRadius;
+                config.maxLoadsPerFrame = 4;
+                config.maxUnloadsPerFrame = 4;
+                // lookaheadSeconds, viewBiasStrength and burstFrames all stay off
+
+                world::SectorStreamer streamer(config);
+                streamer.setEnabled(true);
+
+                auto sources = fixture.sources;
+                for (size_t i = 0; i < sources.size(); ++i)
+                {
+                    sources[i].id = static_cast<uint32_t>(i + 1);
+                    if (withVelocity)
+                    {
+                        sources[i].velocity = glm::vec3(250.0f, 0.0f, -175.0f);
+                        sources[i].viewDir = glm::vec3(0.0f, 0.0f, 1.0f);
+                    }
+                }
+
+                std::vector<world::SectorStreamingAction> all;
+                std::vector<world::SectorStreamingAction> actions;
+                for (int frame = 0; frame < 4; ++frame)
+                {
+                    streamer.update(sources, manager, actions);
+                    for (const auto& action : actions)
+                    {
+                        all.push_back(action);
+                        if (action.target == kActivate)
+                            manager.getSector(action.coord)->state = world::SectorState::Loading;
+                    }
+                }
+                return all;
+            };
+
+            const auto still = run(false);
+            const auto moving = run(true);
+
+            REQUIRE(still.size() == moving.size());
+            for (size_t i = 0; i < still.size(); ++i)
+            {
+                CHECK(still[i].coord == moving[i].coord);
+                CHECK(still[i].target == moving[i].target);
+            }
+        }
+    }
+
+    TEST_CASE("VK-1593: prediction and view bias compose without denormalizing each other")
+    {
+        // Exercised together rather than one at a time: the bias normalizes dirToSector by its OWN
+        // length while the ring uses min(current, predicted), and mixing the two would push the
+        // factor outside [1, 1 + viewBiasStrength].
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 4);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.lookaheadSeconds = 1.0f;
+        config.viewBiasStrength = 2.0f;
+        config.maxLoadsPerFrame = 16;
+        config.maxUnloadsPerFrame = 0;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        sources[0].id = 1;
+        sources[0].velocity = glm::vec3(100.0f, 0.0f, 0.0f);
+        sources[0].viewDir = glm::vec3(1.0f, 0.0f, 0.0f);
+
+        std::vector<world::SectorStreamingAction> actions;
+        streamer.update(sources, manager, actions);
+
+        auto indexOf = [&](const world::SectorCoord& coord)
+        {
+            for (size_t i = 0; i < actions.size(); ++i)
+            {
+                if (actions[i].coord == coord && actions[i].target == kActivate)
+                    return static_cast<int>(i);
+            }
+            return -1;
+        };
+
+        // Prediction still widens the ring...
+        CHECK(hasAction(actions, {2, 0}, kActivate));
+        // ...and both effects push the same way, so ahead strictly precedes behind.
+        const int ahead = indexOf({1, 0});
+        const int behind = indexOf({-1, 0});
+        REQUIRE(ahead >= 0);
+        REQUIRE(behind >= 0);
+        CHECK(ahead < behind);
+    }
+
+    TEST_CASE("VK-1593: the three config sentinels resolve the way the sliders promise")
+    {
+        world::SectorStreamingConfig config;
+
+        // 0 means "the 2-sector default", NEVER "disabled" - a literal 0 threshold would make
+        // every single step a teleport.
+        CHECK(world::effectiveTeleportThreshold(config) ==
+              doctest::Approx(world::kDefaultTeleportThresholdSectors));
+        config.teleportThresholdSectors = 5.0f;
+        CHECK(world::effectiveTeleportThreshold(config) == doctest::Approx(5.0f));
+
+        // 0 means "4x the matching non-burst budget", so retuning the base budget carries.
+        config.maxLoadsPerFrame = 3;
+        config.maxEntitiesPerFrame = 10;
+        CHECK(world::effectiveBurstLoads(config) == 12);
+        CHECK(world::effectiveBurstEntities(config) == 40);
+
+        config.maxLoadsPerFrameBurst = 7;
+        config.maxEntitiesPerFrameBurst = 9;
+        CHECK(world::effectiveBurstLoads(config) == 7);
+        CHECK(world::effectiveBurstEntities(config) == 9);
     }
 }

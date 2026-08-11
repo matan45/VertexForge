@@ -137,12 +137,23 @@ namespace world
     {
         glm::vec3 position{0.0f};
         float radiusMultiplier = 1.0f;
+        // VK-1593: world units per second, supplied by the CALLER (WorldSectorServiceImpl
+        // derives it from this source's position delta and the frame's delta time). Zero means
+        // no lookahead. The streamer DISCARDS this on any frame it classifies as a teleport, so
+        // callers need no jump guard of their own - see SectorStreamer::update.
+        glm::vec3 velocity{0.0f};
+        // VK-1593: look direction; only the XZ projection is used, and it is normalized by the
+        // streamer. Zero - or a straight-down camera, whose XZ projection vanishes - means omni,
+        // i.e. no view bias. Left zero in edit mode: CameraPositionUpdatedNotification carries
+        // no direction.
+        glm::vec3 viewDir{0.0f};
         uint8_t priority = 0;
         // VK-1591: caps what this source may request of any sector it reaches. Activated (the
         // default) is exactly today's behaviour. Prefetched means "bring the bytes in, never
-        // spawn" - minimap hover, speculative pre-warm. Placed here rather than after `id` so
-        // it lands in existing padding and sizeof(StreamingSource) stays 24 on x64.
+        // spawn" - minimap hover, speculative pre-warm.
         SectorTargetState targetState = SectorTargetState::Activated;
+        // MUST be unique per source: VK-1593 keys the streamer's per-source motion tracking on
+        // it. The service guarantees this - the camera is 0 and script sources start at 1.
         uint32_t id = 0;
     };
 
@@ -168,6 +179,33 @@ namespace world
         // VK-1591: hard ceiling on resident prefetch blob bytes; 0 = unlimited. Refuses new
         // prefetches at the cap - it does not evict. Interim guard until the eviction-pool story.
         uint64_t maxPrefetchBytes = 0;
+
+        // ---- VK-1593: predictive / view-biased prioritization + camera-jump bursts ----
+        // Every field below is OFF at its default, so a .vfworld written before VK-1593 (which
+        // omits all six keys) streams byte-for-byte as it did.
+        //
+        // Seconds of motion to extrapolate: a candidate is scored against the SMALLER of its
+        // distance to the source's current position and to position + velocity * this. 0 = off.
+        float lookaheadSeconds = 0.0f;
+        // How hard to push sectors outside the view direction down the load order. The sort key
+        // is scaled by 1 + viewBiasStrength * (1 - dot(dirToSector, viewDir)) / 2, so the factor
+        // runs from 1 (dead ahead) to 1 + viewBiasStrength (dead behind). 0 = off, which is the
+        // right default for a top-down RTS camera - its forward barely projects onto XZ.
+        float viewBiasStrength = 0.0f;
+        // A per-frame position delta beyond this many sectors is a JUMP, not motion: the frame's
+        // velocity is discarded and the burst window opens. 0 is a SENTINEL meaning
+        // kDefaultTeleportThresholdSectors, never "disabled" - a literal 0 threshold would make
+        // every step a teleport. Read via effectiveTeleportThreshold().
+        float teleportThresholdSectors = 0.0f;
+        // Frames of relaxed budget after a teleport, counted from (and including) the frame the
+        // teleport was detected. 0 = no burst.
+        int burstFrames = 0;
+        // Budgets used while the burst window is open. 0 is a SENTINEL meaning "4x the matching
+        // non-burst budget" - an absolute default would stop being 4x the moment a world tunes
+        // maxLoadsPerFrame / maxEntitiesPerFrame. Read via effectiveBurstLoads/Entities().
+        int maxLoadsPerFrameBurst = 0;
+        int maxEntitiesPerFrameBurst = 0;
+
         bool enableGPUObjectStreaming = true; // Use persistent GPU slots with priority-based streaming
         bool editModeStreaming = false;     // Run the streaming ring off the editor camera in edit mode
 
@@ -184,6 +222,32 @@ namespace world
     [[nodiscard]] inline float effectivePrefetchRadius(const SectorStreamingConfig& config) noexcept
     {
         return config.prefetchRadius > config.loadRadius ? config.prefetchRadius : config.loadRadius;
+    }
+
+    // VK-1593: two sectors of travel in a single frame is not travel. Small enough that a real
+    // camera pan never trips it (at 60 Hz that is 120 sectors/second), large enough to absorb a
+    // frame hitch.
+    inline constexpr float kDefaultTeleportThresholdSectors = 2.0f;
+
+    // The ONLY correct way to read the three VK-1593 sentinels. Mirrors effectivePrefetchRadius:
+    // callers that never went through SectorStreamer::normalizeConfig (editor sliders,
+    // WorldDefinitionSerialization, tests) still get coherent semantics.
+    [[nodiscard]] inline float effectiveTeleportThreshold(const SectorStreamingConfig& config) noexcept
+    {
+        return config.teleportThresholdSectors > 0.0f ? config.teleportThresholdSectors
+                                                      : kDefaultTeleportThresholdSectors;
+    }
+
+    [[nodiscard]] inline int effectiveBurstLoads(const SectorStreamingConfig& config) noexcept
+    {
+        return config.maxLoadsPerFrameBurst > 0 ? config.maxLoadsPerFrameBurst
+                                                : config.maxLoadsPerFrame * 4;
+    }
+
+    [[nodiscard]] inline int effectiveBurstEntities(const SectorStreamingConfig& config) noexcept
+    {
+        return config.maxEntitiesPerFrameBurst > 0 ? config.maxEntitiesPerFrameBurst
+                                                   : config.maxEntitiesPerFrame * 4;
     }
 
 } // namespace world

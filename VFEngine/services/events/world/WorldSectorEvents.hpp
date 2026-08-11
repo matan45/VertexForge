@@ -202,6 +202,10 @@ namespace events::world
         uint32_t prefetchingSectors = 0; // read in flight
         uint64_t bytes = 0;
         uint64_t byteCap = 0;            // streamingConfig.maxPrefetchBytes; 0 = unlimited
+        // VK-1593: frames of camera-jump burst window left. Reported here rather than through a
+        // new query because the Streaming Config tab already polls this struct every frame, and
+        // a countdown is the only way to observe the burst from the editor.
+        int burstFramesRemaining = 0;
     };
 
     struct GetSectorPrefetchStatsQuery : IQuery<SectorPrefetchStats>

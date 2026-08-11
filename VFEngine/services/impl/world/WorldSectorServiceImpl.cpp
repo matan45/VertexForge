@@ -530,6 +530,7 @@ namespace services
                 ::events::world::SectorPrefetchStats stats;
                 stats.bytes = prefetchedBytes;
                 stats.byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+                stats.burstFramesRemaining = streamer.getBurstFramesRemaining(); // VK-1593
                 sectorManager.forEachSector([&stats](const world::WorldSector& sector)
                 {
                     if (sector.state == world::SectorState::Prefetched)
@@ -1216,6 +1217,16 @@ namespace services
 
     void WorldSectorServiceImpl::clearStreamingSources()
     {
+        // VK-1593: velocity history is derived from these sources, so it has to die with them -
+        // otherwise the first frame after Edit<->Play or a scene clear derives a velocity from a
+        // position that belonged to a different world. The streamer's own motion map has to go
+        // with it for the same reason, and because nextStreamingSourceId below rewinds to 1: a
+        // newly registered source would otherwise inherit the last position of the PREVIOUS
+        // world's id-1 source and read as a teleport on its very first frame.
+        lastSourcePositionsForVelocity.clear();
+        sourceVelocityScratch.clear();
+        streamer.resetMotionTracking();
+
         std::lock_guard lock(streamingSourcesMutex);
         streamingSources.clear();
         streamingSourceOwners.clear();

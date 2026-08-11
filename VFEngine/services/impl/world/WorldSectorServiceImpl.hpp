@@ -118,6 +118,13 @@ namespace services
         glm::vec3 cachedCameraPos{0.0f};
         std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
 
+        // VK-1593: last frame's position per streaming-source id, purely to derive velocity.
+        // Rebuilt into the scratch map each frame and swapped, so a source that unregisters drops
+        // out on its own. Main-thread only (update()), unlike streamingSources above - it is
+        // never touched from the "Scripts" task, so it needs no lock.
+        std::unordered_map<uint32_t, glm::vec3> lastSourcePositionsForVelocity;
+        std::unordered_map<uint32_t, glm::vec3> sourceVelocityScratch;
+
         // Saved state for play/stop transitions
         world::WorldDefinition savedWorldDefinition;
         std::string savedWorldPath;
@@ -283,7 +290,21 @@ namespace services
                                 world::SectorDataLayers& dataLayers);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
         void onTerrainAvailable(float worldTileSize);
-        glm::vec3 getPrimaryCameraPosition() const;
+        // VK-1593: position plus the unit look direction of the play-mode camera. Replaces the
+        // position-only getter - every caller wanted the pose. `forward` is left zero when there
+        // is no primary camera, which SectorStreamer reads as "omni".
+        struct CameraPose
+        {
+            glm::vec3 position{0.0f};
+            glm::vec3 forward{0.0f};
+        };
+        CameraPose getPrimaryCameraPose() const;
+        // VK-1593: fills StreamingSource::velocity for every source from its own position delta
+        // over deltaTime. Deliberately unguarded - SectorStreamer owns the teleport guard and
+        // discards the velocity on any frame it classifies as a jump, so there is exactly one
+        // place in the engine that decides jump-vs-motion.
+        void updateStreamingSourceVelocities(std::vector<world::StreamingSource>& sources,
+                                             float deltaTime);
         void drawDebugSectors() const;
 
         // Drop every gameplay-registered streaming source and restart id allocation.
