@@ -16,6 +16,32 @@ namespace windows
     const std::vector<std::pair<std::wstring, std::wstring>> WorldSectorWindow::WORLD_FILE_TYPES = {
         {L"World Files", L"*.vfworld"}
     };
+
+    WorldSectorWindow::WorldSectorWindow()
+    {
+        // Covers every load path, including the scene-load auto-load that never touches this
+        // window. createWorld and clearWorld do not publish this, so they reset the latches at
+        // their own call sites below.
+        worldLoadedToken = events::EventDispatcher::instance()
+            .subscribe<events::world::WorldLoadedNotification>(
+                [this](const events::world::WorldLoadedNotification&)
+                {
+                    invalidateConfigCaches();
+                });
+    }
+
+    WorldSectorWindow::~WorldSectorWindow()
+    {
+        if (worldLoadedToken.isValid())
+            events::EventDispatcher::instance().unsubscribe(worldLoadedToken);
+    }
+
+    void WorldSectorWindow::invalidateConfigCaches()
+    {
+        streamingConfigLoaded = false;
+        overrideLoaded = false;
+        hlodConfigLoaded = false;
+    }
     void WorldSectorWindow::draw()
     {
         if (!visible) return;
@@ -68,6 +94,21 @@ namespace windows
                     dispatcher.execute(cmd);
                 }
 
+                // VK-1595: the toggle lives here, the panel draws in the viewport. Session-only.
+                ImGui::SameLine();
+                bool overlayVisible =
+                    dispatcher.query(events::world::GetStreamingOverlayVisibleQuery{});
+                if (ImGui::Checkbox("Streaming Overlay", &overlayVisible))
+                {
+                    events::world::SetStreamingOverlayVisibleCommand cmd;
+                    cmd.visible = overlayVisible;
+                    dispatcher.execute(cmd);
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Top-down sector state panel pinned in the viewport,\n"
+                                      "with source markers and load/prefetch/unload rings.\n"
+                                      "Works in play-in-editor.");
+
                 ImGui::Separator();
                 if (ImGui::Button("Save World"))
                 {
@@ -91,6 +132,7 @@ namespace windows
                 {
                     events::world::ClearWorldCommand cmd;
                     dispatcher.execute(cmd);
+                    invalidateConfigCaches(); // clearWorld publishes no WorldLoadedNotification
                 }
             }
             else
@@ -295,52 +337,52 @@ namespace windows
         }
     }
 
-    void WorldSectorWindow::drawStreamingConfig()
+    bool WorldSectorWindow::drawStreamingSliders(world::SectorStreamingConfig& config,
+                                                 bool sessionOverride)
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-
-        // Load once so slider edits aren't clobbered by the live query every frame
-        if (!streamingConfigLoaded)
-        {
-            editableStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
-            streamingConfigLoaded = true;
-        }
-
         bool changed = false;
 
-        changed |= ImGui::SliderFloat("Load Radius", &editableStreaming.loadRadius,
+        changed |= ImGui::SliderFloat("Load Radius", &config.loadRadius,
                                       1.0f, 32.0f, "%.1f sectors");
-        changed |= ImGui::SliderFloat("Prefetch Radius", &editableStreaming.prefetchRadius,
+        changed |= ImGui::SliderFloat("Prefetch Radius", &config.prefetchRadius,
                                       0.0f, 40.0f, "%.1f sectors");
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("VK-1591: sectors between the load and prefetch radii have their\n"
                               "bytes read into memory but spawn NO entities, so crossing into the\n"
                               "load radius costs no file read.\n"
                               "0 means \"same as Load Radius\" - no prefetch ring.");
-        changed |= ImGui::SliderFloat("Unload Radius", &editableStreaming.unloadRadius,
+        changed |= ImGui::SliderFloat("Unload Radius", &config.unloadRadius,
                                       2.0f, 48.0f, "%.1f sectors");
-        changed |= ImGui::SliderInt("Max Loads/Frame", &editableStreaming.maxLoadsPerFrame, 1, 16);
-        changed |= ImGui::SliderInt("Max Prefetches/Frame", &editableStreaming.maxPrefetchesPerFrame, 0, 16);
-        changed |= ImGui::SliderInt("Max Unloads/Frame", &editableStreaming.maxUnloadsPerFrame, 1, 16);
-        changed |= ImGui::SliderInt("Max Entities/Frame", &editableStreaming.maxEntitiesPerFrame, 1, 64);
+        changed |= ImGui::SliderInt("Max Loads/Frame", &config.maxLoadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Prefetches/Frame", &config.maxPrefetchesPerFrame, 0, 16);
+        changed |= ImGui::SliderInt("Max Unloads/Frame", &config.maxUnloadsPerFrame, 1, 16);
+        changed |= ImGui::SliderInt("Max Entities/Frame", &config.maxEntitiesPerFrame, 1, 64);
 
         ImGui::Separator();
         ImGui::Text("Terrain Tile Streaming (via Sector)");
+        // VK-1595: TerrainService caches these two once, in activateTilesForLoadedSectors(), and
+        // the session override is cleared on world load - so an overridden value can never reach
+        // it. Disabled rather than silently inert under a heading that promises live effect.
+        ImGui::BeginDisabled(sessionOverride);
         changed |= ImGui::SliderInt("Max Terrain Loads/Frame",
-                                    &editableStreaming.maxTerrainLoadsPerFrame, 1, 16);
+                                    &config.maxTerrainLoadsPerFrame, 1, 16);
         changed |= ImGui::SliderInt("Max Terrain Unloads/Frame",
-                                    &editableStreaming.maxTerrainUnloadsPerFrame, 1, 16);
+                                    &config.maxTerrainUnloadsPerFrame, 1, 16);
+        ImGui::EndDisabled();
+        if (sessionOverride && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Not overridable: TerrainService caches these at world activation,\n"
+                              "and the override never survives a world load. Use the saved config.");
 
         ImGui::Separator();
         ImGui::Text("Predictive Streaming (VK-1593)");
-        changed |= ImGui::SliderFloat("Lookahead", &editableStreaming.lookaheadSeconds,
+        changed |= ImGui::SliderFloat("Lookahead", &config.lookaheadSeconds,
                                       0.0f, 5.0f, "%.2f s");
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Score each sector against the CLOSER of the source's current\n"
                               "position and position + velocity x lookahead, so sectors ahead\n"
                               "of motion load before equidistant ones behind it.\n"
                               "0 = off. Prediction never reaches past the outer ring.");
-        changed |= ImGui::SliderFloat("View Bias", &editableStreaming.viewBiasStrength,
+        changed |= ImGui::SliderFloat("View Bias", &config.viewBiasStrength,
                                       0.0f, 4.0f, "%.2f");
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Push sectors outside the camera's look direction down the load\n"
@@ -348,33 +390,52 @@ namespace windows
                               "0 = off - the right setting for a top-down camera, whose forward\n"
                               "barely projects onto the XZ plane. Play mode only: the editor\n"
                               "viewport reports no look direction.");
-        changed |= ImGui::SliderFloat("Teleport Threshold", &editableStreaming.teleportThresholdSectors,
+        changed |= ImGui::SliderFloat("Teleport Threshold", &config.teleportThresholdSectors,
                                       0.0f, 16.0f, "%.1f sectors");
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("A one-frame position delta beyond this is a JUMP, not motion:\n"
                               "the frame's velocity is discarded and the burst window opens.\n"
                               "0 means the 2-sector default - NOT \"disabled\".");
-        changed |= ImGui::SliderInt("Burst Frames", &editableStreaming.burstFrames, 0, 120);
+        changed |= ImGui::SliderInt("Burst Frames", &config.burstFrames, 0, 120);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Frames of relaxed budget after a detected jump, counted from and\n"
                               "including the frame it was detected. 0 = no burst.");
         changed |= ImGui::SliderInt("Burst Max Loads/Frame",
-                                    &editableStreaming.maxLoadsPerFrameBurst, 0, 64);
+                                    &config.maxLoadsPerFrameBurst, 0, 64);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Activation budget while the burst window is open.\n"
                               "0 = 4x Max Loads/Frame.");
         changed |= ImGui::SliderInt("Burst Max Entities/Frame",
-                                    &editableStreaming.maxEntitiesPerFrameBurst, 0, 256);
+                                    &config.maxEntitiesPerFrameBurst, 0, 256);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Entity spawn budget while the burst window is open.\n"
                               "0 = 4x Max Entities/Frame.");
 
         ImGui::Separator();
-        changed |= ImGui::Checkbox("Edit-Mode Streaming", &editableStreaming.editModeStreaming);
+        changed |= ImGui::Checkbox("Edit-Mode Streaming", &config.editModeStreaming);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Stream sectors around the editor camera while editing.\n"
                               "Unsaved (dirty) sectors and the selected entity's sector\n"
                               "are never auto-unloaded.");
+
+        return changed;
+    }
+
+    void WorldSectorWindow::drawStreamingConfig()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // Load once so slider edits aren't clobbered by the live query every frame.
+        // VK-1595: the PERSISTED config, not the effective one — see the header note.
+        if (!streamingConfigLoaded)
+        {
+            editableStreaming = dispatcher.query(events::world::GetPersistedStreamingConfigQuery{});
+            streamingConfigLoaded = true;
+        }
+
+        ImGui::PushID("persist");
+        const bool changed = drawStreamingSliders(editableStreaming, false);
+        ImGui::PopID();
 
         if (changed)
         {
@@ -382,14 +443,14 @@ namespace windows
             cmd.config = editableStreaming;
             dispatcher.execute(cmd);
             // Re-read so UI reflects validation (e.g. unloadRadius forced above loadRadius)
-            editableStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+            editableStreaming = dispatcher.query(events::world::GetPersistedStreamingConfigQuery{});
         }
 
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 60.0f);
         if (ImGui::SmallButton("Reload"))
             streamingConfigLoaded = false;
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Discard UI edits and re-read the active config");
+            ImGui::SetTooltip("Discard UI edits and re-read the world's saved config");
 
         ImGui::Separator();
         {
@@ -436,6 +497,110 @@ namespace windows
             ImGui::Text("Uploads/Frame: %u | Evictions/Frame: %u",
                          stats.uploadsThisFrame, stats.evictionsThisFrame);
             ImGui::Text("Slot Utilization: %.1f%%", stats.slotUtilization * 100.0f);
+        }
+
+        // VK-1595: last, so the persisted config and its read-outs stay together at the top and the
+        // session-only controls read as the separate thing they are.
+        drawStreamingDebugSection();
+    }
+
+    // VK-1595: the wp.Runtime.* corner of the tab — a config that governs the live streamers but is
+    // never written to the .vfworld, plus freeze / single-step.
+    void WorldSectorWindow::drawStreamingDebugSection()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::SeparatorText("Debug - session override (not saved)");
+
+        auto activeOverride = dispatcher.query(events::world::GetStreamingConfigOverrideQuery{});
+        bool overrideEnabled = activeOverride.has_value();
+
+        if (ImGui::Checkbox("Enable session override", &overrideEnabled))
+        {
+            if (overrideEnabled)
+            {
+                // Seed from what the streamer is running right now, so switching the override on
+                // changes nothing until a slider is actually moved.
+                overrideStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+                overrideLoaded = true;
+
+                events::world::SetStreamingConfigOverrideCommand cmd;
+                cmd.config = overrideStreaming;
+                dispatcher.execute(cmd);
+            }
+            else
+            {
+                dispatcher.execute(events::world::ClearStreamingConfigOverrideCommand{});
+                overrideLoaded = false;
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Tune radii and budgets against the LIVE streamer without touching\n"
+                              "the world. Nothing here reaches the .vfworld - Save World still\n"
+                              "writes the values in the section above.\n"
+                              "Kept across play/stop; cleared when the world closes.");
+
+        if (activeOverride.has_value())
+        {
+            // Adopt the service's normalized copy the first frame the override exists, so a value
+            // the service clamped (e.g. unloadRadius pushed past the prefetch ring) is what the
+            // sliders show.
+            if (!overrideLoaded)
+            {
+                overrideStreaming = *activeOverride;
+                overrideLoaded = true;
+            }
+
+            ImGui::PushID("override");
+            const bool overrideChanged = drawStreamingSliders(overrideStreaming, true);
+            ImGui::PopID();
+
+            if (overrideChanged)
+            {
+                events::world::SetStreamingConfigOverrideCommand cmd;
+                cmd.config = overrideStreaming;
+                dispatcher.execute(cmd);
+                overrideStreaming =
+                    dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+            }
+
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+                               "Override active - the streamer is running these values.");
+        }
+        else
+        {
+            overrideLoaded = false;
+        }
+
+        ImGui::Spacing();
+
+        const bool paused = dispatcher.query(events::world::GetStreamingPausedQuery{});
+        if (ImGui::Button(paused ? "Resume Streaming" : "Pause Streaming"))
+        {
+            events::world::SetStreamingPausedCommand cmd;
+            cmd.paused = !paused;
+            dispatcher.execute(cmd);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Freeze the streamer's DECISIONS - no new sector loads, prefetches or\n"
+                              "unloads, and no new HLOD proxy load/unload. Work already in flight\n"
+                              "still completes: reads land, queued entities spawn, and in-progress\n"
+                              "HLOD crossfades finish (a proxy mid fade-out is still reaped), so a\n"
+                              "paused frame settles rather than stalling half-loaded.\n"
+                              "Resuming clears the motion history, so a pause never fakes a jump.");
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!paused);
+        if (ImGui::Button("Step 1 Frame"))
+            dispatcher.execute(events::world::StepStreamingFrameCommand{});
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Let exactly one streaming decision pass through, then freeze again");
+
+        if (paused)
+        {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.25f, 1.0f), "PAUSED");
         }
     }
 
@@ -553,6 +718,7 @@ namespace windows
                     cmd.streamingConfig.lookaheadSeconds = 1.0f;
                     cmd.streamingConfig.burstFrames = 30;
                     events::EventDispatcher::instance().execute(cmd);
+                    invalidateConfigCaches(); // createWorld publishes no WorldLoadedNotification
                     showCreationWizard = false;
                 }
             }

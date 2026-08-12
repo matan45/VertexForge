@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imguiHandler/ImguiWindow.hpp"
+#include "events/EventTypes.hpp"
 #include "world/WorldTypes.hpp"
 #include <string>
 #include <utility>
@@ -67,13 +68,25 @@ namespace windows
         int cachedHLODCount = 0;
         int cachedHLODTotal = 0;
 
-        // Editable streaming config (loaded once, pushed via SetStreamingConfigCommand)
+        // Editable streaming config (loaded once, pushed via SetStreamingConfigCommand).
+        // VK-1595: seeded from GetPersistedStreamingConfigQuery, NOT from
+        // GetWorldStreamingStatsQuery - the latter reports the effective config, so with a session
+        // override active the first slider drag would copy the override into the .vfworld.
         world::SectorStreamingConfig editableStreaming;
         bool streamingConfigLoaded = false;
 
+        // VK-1595: the session override's working copy. Never persisted.
+        world::SectorStreamingConfig overrideStreaming;
+        bool overrideLoaded = false;
+
+        // Both "loaded once" latches above describe ONE world. Opening another must invalidate
+        // them, or the next slider drag pushes the previous world's whole config into this one and
+        // Save World persists it.
+        ::events::SubscriptionToken worldLoadedToken;
+
     public:
-        WorldSectorWindow() = default;
-        ~WorldSectorWindow() override = default;
+        WorldSectorWindow();
+        ~WorldSectorWindow() override;
 
         void draw() override;
         void show() { visible = true; }
@@ -82,7 +95,14 @@ namespace windows
         void drawWorldInfo();
         void drawSectorGrid();
         void drawStreamingConfig();
+        // VK-1595: one slider block, driven twice - once for the persisted config and once for the
+        // session override - so the two can never drift apart. Callers wrap it in ImGui::PushID.
+        // `sessionOverride` disables the fields an override cannot actually reach.
+        static bool drawStreamingSliders(world::SectorStreamingConfig& config, bool sessionOverride);
+        void drawStreamingDebugSection();
         void drawHLODConfig();
+        // Drop every "loaded once" editing cache, so the next draw re-seeds from the new world.
+        void invalidateConfigCaches();
         void drawCreationWizard();
         void refreshStats();
 

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cmath>
 #include <functional>
+#include <optional>
 #include <glm/glm.hpp>
 
 namespace world
@@ -248,6 +249,36 @@ namespace world
     {
         return config.maxEntitiesPerFrameBurst > 0 ? config.maxEntitiesPerFrameBurst
                                                    : config.maxEntitiesPerFrame * 4;
+    }
+
+    // VK-1595: the ring-radius coherence rules, lifted verbatim out of
+    // SectorStreamer::normalizeConfig so a caller can validate a config it is NOT handing to the
+    // streamer. The service needs exactly that: with a session override active, the persisted
+    // config still has to be clamped even though the streamer is running the override.
+    //
+    // Everything that is streamer STATE rather than config - zeroing burstFramesRemaining when the
+    // burst is switched off - stays behind in the member function.
+    inline void normalizeStreamingConfig(SectorStreamingConfig& config) noexcept
+    {
+        // Resolve the 0 sentinel / a sub-loadRadius value into a concrete ring.
+        if (config.prefetchRadius < config.loadRadius)
+            config.prefetchRadius = config.loadRadius;
+
+        // Hysteresis must sit outside the OUTERMOST residency ring, not just the activate ring.
+        // With prefetchRadius == loadRadius this reduces exactly to the old rule.
+        if (config.unloadRadius <= config.prefetchRadius)
+            config.unloadRadius = config.prefetchRadius + 1.0f;
+    }
+
+    // VK-1595: the single rule for "which config is live". A session override (the editor's Debug
+    // section) wins over the world's persisted config; with no override the persisted config is
+    // returned BY REFERENCE and untouched, so nothing can accidentally round-trip through a copy
+    // and back into worldDefinition - which is what would leak an override into the .vfworld.
+    [[nodiscard]] inline const SectorStreamingConfig& effectiveStreamingConfig(
+        const std::optional<SectorStreamingConfig>& sessionOverride,
+        const SectorStreamingConfig& persisted) noexcept
+    {
+        return sessionOverride.has_value() ? *sessionOverride : persisted;
     }
 
 } // namespace world

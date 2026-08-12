@@ -4,6 +4,7 @@
 #include "ViewPortGizmo.hpp"
 #include "ViewPortAudioAttenuationGizmo.hpp"
 #include "ViewPortOverlay.hpp"
+#include "ViewPortStreamingOverlay.hpp"
 #include "ViewPortSelection.hpp"
 #include "../../camera/EditorCamera.hpp"
 #include <memory>
@@ -27,6 +28,7 @@ namespace windows
         ViewPortGizmo gizmo;
         ViewPortAudioAttenuationGizmo audioAttenuationGizmo;
         ViewPortOverlay overlay;
+        ViewPortStreamingOverlay streamingOverlay;  // VK-1595 sector streaming debug panel
         ViewPortSelection selector;  // VK-1490 modifier clicks + drag-marquee
 
         bool cameraLookActive = false;  // RMB-held OS mouse capture for camera look (VK-1428)

@@ -57,7 +57,10 @@ namespace services
         worldDefinition.sectorConfig = sectorConfig;
         worldDefinition.streamingConfig = streamingConfig;
 
-        streamer.setConfig(streamingConfig);
+        // VK-1595: a new world starts from its own config - a session override tuned against the
+        // previous world must not silently govern this one.
+        resetStreamingSessionState();
+        applyEffectiveStreamingConfig();
         streamer.setEnabled(true);
 
         worldMode = true;
@@ -268,9 +271,11 @@ namespace services
         sectorManager.setConfig(newDef.sectorConfig);
 
         worldDefinition = newDef;
-        streamer.setConfig(newDef.streamingConfig);
+        // VK-1595: same reasoning as createWorld - the loaded world governs itself, so any session
+        // override tuned against the previous one is dropped and the streamer is unpaused.
+        resetStreamingSessionState();
+        applyEffectiveStreamingConfig();
         streamer.setEnabled(true);
-        hlodStreamer.setConfig(newDef.streamingConfig, newDef.hlodConfig);
 
         worldMode = true;
         currentWorldPath = filePath;
@@ -406,6 +411,7 @@ namespace services
         hlodRegenQueue.clear();
 
         worldDefinition = {};
+        resetStreamingSessionState(); // VK-1595: the override and the freeze die with the world
         streamer.setEnabled(false);
         worldMode = false;
         currentWorldPath.clear();

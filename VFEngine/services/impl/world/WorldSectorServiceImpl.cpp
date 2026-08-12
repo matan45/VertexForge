@@ -26,6 +26,7 @@
 #include "../common/ProjectPaths.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 
 namespace
@@ -446,6 +447,155 @@ namespace services
         });
     }
 
+    void WorldSectorServiceImpl::applyEffectiveStreamingConfig()
+    {
+        const auto& effective = getEffectiveStreamingConfig();
+        streamer.setConfig(effective);
+        // Take the config back off the streamer: setConfig normalizes, and the HLOD streamer must
+        // see the same resolved radii the sector streamer is running.
+        hlodStreamer.setConfig(streamer.getConfig(), worldDefinition.hlodConfig);
+    }
+
+    void WorldSectorServiceImpl::resetStreamingSessionState()
+    {
+        streamingConfigOverride.reset();
+        streamer.setPaused(false);
+    }
+
+    ::events::world::StreamingOverlaySnapshot
+    WorldSectorServiceImpl::buildOverlaySnapshot(int32_t maxRadius)
+    {
+        ::events::world::StreamingOverlaySnapshot snapshot;
+        if (!worldMode)
+            return snapshot; // valid == false; the overlay draws a "no world" line instead
+
+        // The STREAMER's copy, not getEffectiveStreamingConfig(). Both name the same config, but
+        // only this one has been through normalizeConfig: worldDefinition.streamingConfig is
+        // whatever loadWorld read off disk (nothing validates a .vfworld) or whatever a script
+        // handed CreateWorldCommand. A world whose file says unloadRadius 5 with loadRadius 8
+        // actually evicts at 9, and drawing the raw 5 would put the red unload ring INSIDE the
+        // green load ring and size the grid too small to contain the band where eviction really
+        // happens - the panel would be wrong about the one thing it exists to show.
+        //
+        // Deliberately NOT fixed by normalizing worldDefinition.streamingConfig instead: that
+        // member is what Save World writes, and resolving it would bake VK-1591's prefetchRadius
+        // 0 sentinel into loadRadius on disk.
+        const auto& config = streamer.getConfig();
+        const float sectorSize = sectorManager.getConfig().sectorWorldSize;
+        if (!(sectorSize > 0.0f))
+            return snapshot;
+
+        // The ticket's ring: unloadRadius + 2, so the band the streamer is about to evict is
+        // visible rather than clipped off the edge of the panel.
+        //
+        // Sanitize in FLOAT first. unloadRadius is only slider-bounded in the editor - a script or
+        // plugin SetStreamingConfigCommand can put anything in it, and casting a NaN or an
+        // out-of-int32 float is UB rather than a large number. Likewise cap maxRadius below the
+        // half-window, or the clamp bounds below invert (std::clamp is UB when lo > hi).
+        constexpr int32_t kMaxOverlayRadius = 64;
+        const float safeUnload = std::isfinite(config.unloadRadius)
+            ? std::clamp(config.unloadRadius, 0.0f, static_cast<float>(kMaxOverlayRadius))
+            : 0.0f;
+        const int32_t wanted = static_cast<int32_t>(std::ceil(safeUnload)) + 2;
+        const int32_t cap = std::clamp(maxRadius, 1, kMaxOverlayRadius);
+        const int32_t radius = std::clamp(wanted, 1, cap);
+
+        // lastStreamingOrigin is only written on frames the streaming gate was open. With the gate
+        // shut (edit mode without editModeStreaming) the streamer never ran, so fall back to the
+        // editor viewport camera - the same position the Sector Grid tab centres on.
+        const glm::vec3 origin = (isPlayMode || config.editModeStreaming) ? lastStreamingOrigin
+                                                                          : cachedCameraPos;
+
+        snapshot.valid = true;
+        // Clamp into the addressable sector window before the loop below adds +/- radius to it:
+        // a NaN or wildly out-of-range camera position would otherwise overflow the loop bounds.
+        {
+            const world::SectorCoord raw = sectorManager.worldPositionToSectorCoord(origin);
+            snapshot.center = world::SectorCoord(
+                std::clamp(raw.x, world::kMinSectorCoord + radius, world::kMaxSectorCoord - radius),
+                std::clamp(raw.z, world::kMinSectorCoord + radius, world::kMaxSectorCoord - radius));
+        }
+        snapshot.radius = radius;
+        snapshot.radiusClamped = wanted > cap;
+        snapshot.sectorWorldSize = sectorSize;
+        snapshot.loadRadius = config.loadRadius;
+        snapshot.prefetchRadius = world::effectivePrefetchRadius(config);
+        snapshot.unloadRadius = config.unloadRadius;
+        snapshot.overrideActive = streamingConfigOverride.has_value();
+        snapshot.paused = streamer.isPaused();
+        snapshot.burstFramesRemaining = streamer.getBurstFramesRemaining();
+
+        // clear() keeps capacity, so after the first fill this whole loop allocates nothing.
+        overlayCells.clear();
+        overlaySources.clear();
+
+        const auto& tiers = worldDefinition.hlodConfig.tiers;
+        const bool hlodEnabled = worldDefinition.hlodConfig.enabled && !tiers.empty();
+
+        // z descending so the first row drawn is the northernmost, matching the Sector Grid tab.
+        for (int32_t z = snapshot.center.z + radius; z >= snapshot.center.z - radius; --z)
+        {
+            for (int32_t x = snapshot.center.x - radius; x <= snapshot.center.x + radius; ++x)
+            {
+                ::events::world::StreamingOverlayCell cell;
+                cell.coord = world::SectorCoord(x, z);
+
+                if (const world::WorldSector* sector = sectorManager.getSector(cell.coord))
+                {
+                    cell.exists = true;
+                    cell.state = sector->state;
+                    cell.dirty = sector->dirty;
+                }
+
+                if (hlodEnabled)
+                {
+                    // At most three hash lookups per cell. Deliberately not
+                    // world::cellsContainingSector, which returns a freshly allocated vector.
+                    for (const auto& tier : tiers)
+                    {
+                        const auto* proxy =
+                            hlodProxyManager.getProxy(world::sectorToCell(cell.coord, tier));
+                        if (proxy && (proxy->state == world::HLODProxyState::Loaded ||
+                                      proxy->state == world::HLODProxyState::FadingIn))
+                        {
+                            cell.hlodVisible = true;
+                            cell.hlodTier = tier.tier;
+                            break;
+                        }
+                    }
+                }
+
+                overlayCells.push_back(cell);
+            }
+        }
+
+        // Source 0 is the camera the service contributes itself; it is not in streamingSources.
+        {
+            ::events::world::StreamingOverlaySource cameraSource;
+            cameraSource.position = origin;
+            cameraSource.isCamera = true;
+            overlaySources.push_back(cameraSource);
+        }
+        {
+            std::lock_guard lock(streamingSourcesMutex);
+            for (const auto& [id, src] : streamingSources)
+            {
+                ::events::world::StreamingOverlaySource source;
+                source.position = src.position;
+                source.radiusMultiplier = src.radiusMultiplier;
+                source.priority = src.priority;
+                source.targetState = src.targetState;
+                overlaySources.push_back(source);
+            }
+        }
+
+        snapshot.cells = overlayCells.data();
+        snapshot.cellCount = static_cast<uint32_t>(overlayCells.size());
+        snapshot.sources = overlaySources.data();
+        snapshot.sourceCount = static_cast<uint32_t>(overlaySources.size());
+        return snapshot;
+    }
+
     void WorldSectorServiceImpl::registerEventHandlers()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -529,10 +679,21 @@ namespace services
                 return worldMode;
             });
 
+        // The EFFECTIVE config - what the streamer is actually running, session override included.
+        // VK-1595: the editor's persistent sliders must NOT seed from this, or an active override
+        // would be copied into worldDefinition on the next drag. They use
+        // GetPersistedStreamingConfigQuery below.
         dispatcher.registerQueryHandler<::events::world::GetWorldStreamingStatsQuery>(
             [this](const ::events::world::GetWorldStreamingStatsQuery&)
             {
                 return streamer.getConfig();
+            });
+
+        // VK-1595: the world's own config, i.e. exactly what Save World will write.
+        dispatcher.registerQueryHandler<::events::world::GetPersistedStreamingConfigQuery>(
+            [this](const ::events::world::GetPersistedStreamingConfigQuery&)
+            {
+                return worldDefinition.streamingConfig;
             });
 
         // VK-1591: prefetch-ring residency for the streaming overlay. `bytes` is EXACT (the raw
@@ -543,7 +704,7 @@ namespace services
             {
                 ::events::world::SectorPrefetchStats stats;
                 stats.bytes = prefetchedBytes;
-                stats.byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+                stats.byteCap = getEffectiveStreamingConfig().maxPrefetchBytes; // VK-1595
                 stats.burstFramesRemaining = streamer.getBurstFramesRemaining(); // VK-1593
                 sectorManager.forEachSector([&stats](const world::WorldSector& sector)
                 {
@@ -658,14 +819,82 @@ namespace services
                 return debugDrawSectors;
             });
 
+        // The PERSISTED config - this is the one Save World writes.
+        // VK-1595: it no longer borrows the streamer as its validator, because with a session
+        // override installed the streamer is running something else entirely. It normalizes the
+        // value directly and then re-pushes whichever config is effective.
         dispatcher.registerCommandHandler<::events::world::SetStreamingConfigCommand>(
             [this](const ::events::world::SetStreamingConfigCommand& cmd)
             {
                 if (!worldMode) return;
-                streamer.setConfig(cmd.config);
-                // Adopt the validated config (setConfig enforces unloadRadius > loadRadius)
-                worldDefinition.streamingConfig = streamer.getConfig();
-                hlodStreamer.setConfig(worldDefinition.streamingConfig, worldDefinition.hlodConfig);
+                worldDefinition.streamingConfig = cmd.config;
+                world::normalizeStreamingConfig(worldDefinition.streamingConfig);
+                applyEffectiveStreamingConfig(); // an active override still wins
+            });
+
+        // ---- VK-1595: session override (never persisted) ----
+        dispatcher.registerCommandHandler<::events::world::SetStreamingConfigOverrideCommand>(
+            [this](const ::events::world::SetStreamingConfigOverrideCommand& cmd)
+            {
+                if (!worldMode) return;
+                world::SectorStreamingConfig normalized = cmd.config;
+                world::normalizeStreamingConfig(normalized);
+                streamingConfigOverride = normalized;
+                applyEffectiveStreamingConfig();
+            });
+
+        dispatcher.registerCommandHandler<::events::world::ClearStreamingConfigOverrideCommand>(
+            [this](const ::events::world::ClearStreamingConfigOverrideCommand&)
+            {
+                if (!streamingConfigOverride.has_value()) return;
+                streamingConfigOverride.reset();
+                // Snap the streamers back onto the world's own config in the same frame, so
+                // "clear" is observable immediately rather than at the next config edit.
+                applyEffectiveStreamingConfig();
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetStreamingConfigOverrideQuery>(
+            [this](const ::events::world::GetStreamingConfigOverrideQuery&)
+            {
+                return streamingConfigOverride;
+            });
+
+        // ---- VK-1595: freeze / single-step ----
+        dispatcher.registerCommandHandler<::events::world::SetStreamingPausedCommand>(
+            [this](const ::events::world::SetStreamingPausedCommand& cmd)
+            {
+                streamer.setPaused(cmd.paused);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::StepStreamingFrameCommand>(
+            [this](const ::events::world::StepStreamingFrameCommand&)
+            {
+                streamer.requestStep();
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetStreamingPausedQuery>(
+            [this](const ::events::world::GetStreamingPausedQuery&)
+            {
+                return streamer.isPaused();
+            });
+
+        // ---- VK-1595: in-viewport overlay ----
+        dispatcher.registerCommandHandler<::events::world::SetStreamingOverlayVisibleCommand>(
+            [this](const ::events::world::SetStreamingOverlayVisibleCommand& cmd)
+            {
+                streamingOverlayVisible = cmd.visible;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetStreamingOverlayVisibleQuery>(
+            [this](const ::events::world::GetStreamingOverlayVisibleQuery&)
+            {
+                return streamingOverlayVisible;
+            });
+
+        dispatcher.registerQueryHandler<::events::world::GetStreamingOverlaySnapshotQuery>(
+            [this](const ::events::world::GetStreamingOverlaySnapshotQuery& query)
+            {
+                return buildOverlaySnapshot(query.maxRadius);
             });
 
         dispatcher.registerCommandHandler<::events::world::MarkEntitySectorDirtyCommand>(
@@ -739,7 +968,7 @@ namespace services
             [this](const ::events::world::hlod::SetHLODConfigCommand& cmd)
             {
                 worldDefinition.hlodConfig = cmd.config;
-                hlodStreamer.setConfig(worldDefinition.streamingConfig, worldDefinition.hlodConfig);
+                applyEffectiveStreamingConfig(); // VK-1595: honour an active session override
             });
 
         dispatcher.registerQueryHandler<::events::world::hlod::GetHLODConfigQuery>(
@@ -872,6 +1101,14 @@ namespace services
 
                     // Sector states changed wholesale — make the streamer reseed its tracking
                     streamer.setEnabled(true);
+                    // VK-1595: and drop the freeze with them. Pause promises "resume from exactly
+                    // where you froze", but every sector was just force-reset to Unloaded above, so
+                    // there is nothing left to resume into - a streamer still paused here would
+                    // leave play mode staring at a completely empty world, with the only cure
+                    // buried in the World Sectors window. Same reasoning as the world-close reset;
+                    // the session config override is deliberately NOT dropped, it survives a wipe
+                    // intact and is what the developer is mid-way through tuning.
+                    streamer.setPaused(false);
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
@@ -922,8 +1159,20 @@ namespace services
                         }
                     });
 
+                    // VK-1595: worldDefinition was just rolled back to the play-entry snapshot, so
+                    // re-push whichever config is now effective. The session override is
+                    // deliberately NOT cleared - it belongs to the tuning session, not the play
+                    // session - and it keeps winning here.
+                    //
+                    // This also closes a latent divergence that predates VK-1595: the restore
+                    // above reverts worldDefinition.streamingConfig but nothing ever re-pushed it,
+                    // so a config edited during play left the streamer running one value while the
+                    // next Save World would have written another.
+                    applyEffectiveStreamingConfig();
+
                     // Sector states changed wholesale — make the streamer reseed its tracking
                     streamer.setEnabled(true);
+                    streamer.setPaused(false); // VK-1595: symmetric with the Play branch above
                 }
             });
 
@@ -1061,6 +1310,10 @@ namespace services
                     entityLoader.clear();
                     sectorManager.clear();
                     worldDefinition = {};
+                    // VK-1595: the world is going away, and with it the session override it was
+                    // tuned against. A streamer left paused across the change would read as
+                    // "streaming is broken" in the next world.
+                    resetStreamingSessionState();
                     streamer.setEnabled(false);
 
                     // VK-1589: must happen BEFORE worldMode goes false. Both the mode-change

@@ -121,6 +121,9 @@ namespace windows
             }
 
             overlay.draw(gizmo);
+            // VK-1595: after overlay.draw so the streaming panel's own Begin/End nests the same
+            // way, and before the gizmo so ImGuizmo still owns the top of the draw order.
+            streamingOverlay.draw();
             gizmo.draw(*editorCamera);
             const bool attenuationViewportAvailable =
                 texture.isValid() && vs.x > 0.0f && vs.y > 0.0f;

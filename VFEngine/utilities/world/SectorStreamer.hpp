@@ -86,6 +86,16 @@ namespace world
         // the counter would already be back to 0 by then.
         bool burstActive = false;
 
+        // VK-1595: developer freeze. `paused` is the latch; `stepRequested` releases exactly one
+        // decision pass; `frozen` is the post-update readout the service uses to gate the HLOD
+        // streamer, mirroring burstActive/isBursting().
+        bool paused = false;
+        bool stepRequested = false;
+        bool frozen = false;
+        // Set by any frame the freeze gate skips. The next executed frame drops the VK-1593 motion
+        // history rather than reading a pause-long position delta as a teleport.
+        bool motionHistoryStale = false;
+
     public:
         explicit SectorStreamer(const SectorStreamingConfig& config = {});
 
@@ -116,6 +126,30 @@ namespace world
         [[nodiscard]] bool isBursting() const { return burstActive; }
         // Frames of burst window left AFTER the most recent update() - a UI/telemetry readout.
         [[nodiscard]] int getBurstFramesRemaining() const { return burstFramesRemaining; }
+
+        // VK-1595: freeze the streamer's DECISIONS without disturbing anything it knows. While
+        // paused, update() emits no actions and touches no ring state - trackedSectors and the
+        // burst counter survive - so unpausing resumes from exactly where the freeze started
+        // rather than reseeding.
+        //
+        // The one thing a freeze DOES discard is the VK-1593 per-source motion history, dropped on
+        // the first executed frame afterwards: a pause-long position delta is not a teleport, and
+        // treating it as one would open a burst window that spans the following steps.
+        //
+        // Deliberately NOT folded into setEnabled(): that is a mid-frame reseed hook called from
+        // the edit-mode selected-entity unload rail (WorldSectorStreamingOps.cpp), and it sets
+        // needsSeed. Pausing must not reseed.
+        void setPaused(bool value) { paused = value; }
+        [[nodiscard]] bool isPaused() const { return paused; }
+
+        // Let exactly one update() through while paused. Consumed by the next update() whether or
+        // not it produces actions, so a step can never accumulate.
+        void requestStep() { stepRequested = true; }
+
+        // True when the most recent update() made no decisions BECAUSE it was paused - false on the
+        // frame a step ran, and false when streaming is merely disabled. The service reads this
+        // after update() returns to freeze the HLOD streamer in the same breath.
+        [[nodiscard]] bool isFrozen() const { return frozen; }
 
     private:
         [[nodiscard]] float sectorDistanceSq(const SectorCoord& coord, const glm::vec3& cameraPos,

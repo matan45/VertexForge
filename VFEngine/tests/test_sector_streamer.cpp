@@ -1811,4 +1811,280 @@ TEST_SUITE("SectorStreamer")
         CHECK(world::effectiveBurstLoads(config) == 7);
         CHECK(world::effectiveBurstEntities(config) == 9);
     }
+
+    // ========================================================
+    // VK-1595: pause / step-one-frame
+    // ========================================================
+
+    TEST_CASE("VK-1595: a paused streamer emits nothing")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 16;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        // Baseline: this fixture definitely produces work.
+        streamer.update(sources, manager, actions);
+        REQUIRE_FALSE(actions.empty());
+        CHECK_FALSE(streamer.isFrozen());
+
+        world::SectorStreamer paused(config);
+        paused.setEnabled(true);
+        paused.setPaused(true);
+        paused.update(sources, manager, actions);
+
+        CHECK(actions.empty());
+        CHECK(paused.isFrozen());
+        CHECK(paused.isPaused());
+    }
+
+    TEST_CASE("VK-1595: step releases exactly one frame")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 1; // one action per frame, so "exactly one frame" is observable
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+        streamer.setPaused(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        streamer.update(sources, manager, actions);
+        CHECK(actions.empty());
+
+        streamer.requestStep();
+        streamer.update(sources, manager, actions);
+        CHECK(actions.size() == 1);
+        CHECK_FALSE(streamer.isFrozen()); // the step frame is not a frozen frame
+
+        // The step token must be consumed, not banked - the very next frame freezes again.
+        streamer.update(sources, manager, actions);
+        CHECK(actions.empty());
+        CHECK(streamer.isFrozen());
+    }
+
+    TEST_CASE("VK-1595: a step decides exactly what an unpaused frame would have")
+    {
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 16;
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+
+        world::WorldSectorManager liveManager(makeSectorConfig());
+        populateGrid(liveManager, 3);
+        world::SectorStreamer live(config);
+        live.setEnabled(true);
+        std::vector<world::SectorStreamingAction> liveActions;
+        live.update(sources, liveManager, liveActions);
+
+        world::WorldSectorManager steppedManager(makeSectorConfig());
+        populateGrid(steppedManager, 3);
+        world::SectorStreamer stepped(config);
+        stepped.setEnabled(true);
+        stepped.setPaused(true);
+        std::vector<world::SectorStreamingAction> steppedActions;
+        stepped.update(sources, steppedManager, steppedActions); // frozen, no decisions
+        stepped.requestStep();
+        stepped.update(sources, steppedManager, steppedActions);
+
+        // Without this the whole comparison below is satisfied by 0 == 0.
+        REQUIRE_FALSE(liveActions.empty());
+        REQUIRE(steppedActions.size() == liveActions.size());
+        for (size_t i = 0; i < liveActions.size(); ++i)
+        {
+            CHECK(steppedActions[i].coord == liveActions[i].coord);
+            CHECK(steppedActions[i].target == liveActions[i].target);
+        }
+    }
+
+    TEST_CASE("VK-1595: a freeze does not lose trackedSectors")
+    {
+        // trackedSectors is the ONLY route the unload pass has to a resident sector, so losing it
+        // across a freeze leaks that sector resident for the session.
+        //
+        // Asserting "resuming emits nothing" does NOT test this - re-activation is gated on sector
+        // STATE (Pass 2 only emits for Unloaded/Prefetched/Prefetching), and Pass 1 re-inserts any
+        // tracked sector it happens to visit, so a wiped set silently repairs itself inside the
+        // scan box. The sector therefore has to end up beyond unloadRadius AND outside the scan
+        // box, where only surviving bookkeeping can reach it.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 24);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.unloadRadius = 3.0f;
+        config.maxLoadsPerFrame = 16;
+        config.maxUnloadsPerFrame = 16;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        streamer.update(sources, manager, actions);
+        REQUIRE_FALSE(actions.empty());
+        for (const auto& action : actions)
+        {
+            if (action.target == kActivate)
+                manager.getOrCreateSector(action.coord).state = world::SectorState::Loaded;
+        }
+
+        // 20 sectors away: far beyond unloadRadius (3) and far outside the scan box, which only
+        // reaches prefetchRadius (== loadRadius == 1.5) around the source.
+        streamer.setPaused(true);
+        sources[0] = sourceAtSectorCenter(20, 0);
+        for (int i = 0; i < 5; ++i)
+            streamer.update(sources, manager, actions);
+        REQUIRE(actions.empty());
+
+        streamer.setPaused(false);
+        streamer.update(sources, manager, actions);
+
+        // Every sector activated at the origin is now unreachable by any other means. Wipe
+        // trackedSectors in the pause gate and this drops to zero.
+        CHECK(countTargets(actions, kUnload) > 0);
+        CHECK(hasAction(actions, {0, 0}, kUnload));
+    }
+
+    TEST_CASE("VK-1595: a step request while running does not swallow a frame")
+    {
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 16;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        // A stray step on an unpaused streamer is consumed harmlessly by that frame...
+        streamer.requestStep();
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(actions.empty());
+        CHECK_FALSE(streamer.isFrozen());
+
+        // ...and cannot leak into a later pause as a free extra frame.
+        streamer.setPaused(true);
+        streamer.update(sources, manager, actions);
+        CHECK(actions.empty());
+        CHECK(streamer.isFrozen());
+    }
+
+    TEST_CASE("VK-1595: a pause never fakes a teleport, even at the wizard's config")
+    {
+        // The other pause cases build a bare SectorStreamingConfig, where burstFrames == 0 and
+        // lookaheadSeconds == 0 make SectorStreamer's motion tracking dead code - so they cannot
+        // see this at all. The world creation wizard writes lookaheadSeconds = 1.0 and
+        // burstFrames = 30 into every NEW world, so tracking is live in the shipping config.
+        //
+        // Without the post-freeze motion-history reset, the delta accumulated across the pause
+        // reads as a teleport on the step frame: the burst opens at 4x the load budget, and since
+        // burstFramesRemaining only decrements on EXECUTED frames, the next 30 single-steps all
+        // run at 4x with the camera standing still. Stepping is for watching one decision at a
+        // time; that would defeat it.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 8);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 2;
+        config.lookaheadSeconds = 1.0f; // wizard default
+        config.burstFrames = 30;        // wizard default
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        streamer.update(sources, manager, actions);
+        REQUIRE_FALSE(streamer.isBursting()); // first sight is never a teleport
+
+        // Freeze, then fly six sectors - far beyond the two-sector teleport threshold.
+        streamer.setPaused(true);
+        for (int i = 0; i < 3; ++i)
+            streamer.update(sources, manager, actions);
+        sources[0] = sourceAtSectorCenter(6, 0);
+        for (int i = 0; i < 3; ++i)
+            streamer.update(sources, manager, actions);
+        REQUIRE(actions.empty());
+
+        streamer.requestStep();
+        streamer.update(sources, manager, actions);
+
+        // The step frame is an ordinary frame: normal budget, no burst window opened.
+        CHECK_FALSE(streamer.isBursting());
+        CHECK(streamer.getBurstFramesRemaining() == 0);
+        CHECK(countTargets(actions, kActivate) <= config.maxLoadsPerFrame);
+
+        // ...and the burst has not been banked for the following steps either.
+        streamer.requestStep();
+        streamer.update(sources, manager, actions);
+        CHECK_FALSE(streamer.isBursting());
+        CHECK(countTargets(actions, kActivate) <= config.maxLoadsPerFrame);
+    }
+
+    TEST_CASE("VK-1595: a real in-flight teleport still opens the burst")
+    {
+        // The guard above must not have disarmed teleport detection generally.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 8);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1.5f;
+        config.maxLoadsPerFrame = 2;
+        config.lookaheadSeconds = 1.0f;
+        config.burstFrames = 30;
+
+        world::SectorStreamer streamer(config);
+        streamer.setEnabled(true);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        streamer.update(sources, manager, actions);
+        REQUIRE_FALSE(streamer.isBursting());
+
+        // No pause anywhere - just a jump between two consecutive live frames.
+        sources[0] = sourceAtSectorCenter(6, 0);
+        streamer.update(sources, manager, actions);
+
+        CHECK(streamer.isBursting());
+        CHECK(countTargets(actions, kActivate) <= world::effectiveBurstLoads(config));
+    }
+
+    TEST_CASE("VK-1595: a disabled streamer is not reported as frozen")
+    {
+        // isFrozen() means "paused", not "idle" - the service uses it to gate the HLOD streamer,
+        // and conflating the two would freeze HLOD whenever streaming was merely switched off.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 2);
+
+        world::SectorStreamer streamer;
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        streamer.update(sources, manager, actions); // never enabled
+        CHECK(actions.empty());
+        CHECK_FALSE(streamer.isFrozen());
+    }
 }

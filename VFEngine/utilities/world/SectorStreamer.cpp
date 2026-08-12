@@ -29,19 +29,14 @@ namespace world
 
     void SectorStreamer::normalizeConfig()
     {
-        // Resolve the 0 sentinel / a sub-loadRadius value into a concrete ring so getConfig()
+        // VK-1595: the radius clamping moved to the free normalizeStreamingConfig() so the service
+        // can apply the same rules to a config it is not feeding to the streamer. getConfig() still
         // reports what the streamer will actually do (the editor re-reads it after
         // SetStreamingConfigCommand to show validated values).
-        if (config.prefetchRadius < config.loadRadius)
-            config.prefetchRadius = config.loadRadius;
-
-        // Hysteresis must sit outside the OUTERMOST residency ring, not just the activate ring.
-        // With prefetchRadius == loadRadius this reduces exactly to the old rule.
-        if (config.unloadRadius <= config.prefetchRadius)
-            config.unloadRadius = config.prefetchRadius + 1.0f;
+        normalizeStreamingConfig(config);
 
         // VK-1593: turning the burst off mid-window must close the window, not let it drain at a
-        // budget the config no longer describes.
+        // budget the config no longer describes. This is streamer STATE, so it stays here.
         if (config.burstFrames <= 0)
             burstFramesRemaining = 0;
     }
@@ -186,6 +181,24 @@ namespace world
         // off, and a stale true would leave the service on the burst entity budget forever.
         burstActive = false;
 
+        // VK-1595: the freeze gate sits here - ahead of the enabled/sources checks and ahead of
+        // every piece of state below - because "pause" must mean the streamer neither decides nor
+        // FORGETS anything. trackedSectors, ringTargets, burstFramesRemaining and the VK-1593
+        // lastSourcePositions map are all left exactly as the last live frame left them.
+        //
+        // The step token is consumed unconditionally so it can never accumulate across paused
+        // frames into a multi-frame burst of decisions.
+        frozen = paused && !stepRequested;
+        stepRequested = false;
+        if (frozen)
+        {
+            // The skipped frame leaves lastSourcePositions describing a frame that may be minutes
+            // old. Remember that, and discard it below rather than letting the next executed frame
+            // read the accumulated delta as a teleport - see the clear ahead of buildSourceEvals.
+            motionHistoryStale = true;
+            return;
+        }
+
         if (!enabled || sources.empty())
             return;
 
@@ -199,6 +212,24 @@ namespace world
         prefetchCandidates.clear();
         unloadCandidates.clear();
         ringTargets.clear();
+
+        // VK-1595: the first executed frame after a freeze starts from a clean motion history.
+        // Without this, the delta accumulated across the whole pause reads as a teleport, which
+        // discards the frame's velocity and - with the wizard's burstFrames = 30 - opens a 4x
+        // budget window that then spans the NEXT 30 single-steps, because burstFramesRemaining
+        // only decrements on executed frames. Stepping exists to watch one decision at a time, so
+        // manufacturing a 4x budget out of the act of pausing defeats the tool.
+        //
+        // Clearing is safe and cheap: buildSourceEvals treats a source it has not seen before as
+        // "no delta, therefore no teleport" (see its first-sight note), and the per-frame velocity
+        // the caller supplies is derived outside the streamer from real frame deltas, so lookahead
+        // is unaffected. A burst legitimately opened BEFORE the pause is left running.
+        if (motionHistoryStale)
+        {
+            lastSourcePositions.clear();
+            sourcePositionScratch.clear();
+            motionHistoryStale = false;
+        }
 
         // Pass 0 (VK-1593): teleport guard, motion lookahead and view direction, resolved once
         // per source. Both the ring pass and the unload pass read the result, so they can never

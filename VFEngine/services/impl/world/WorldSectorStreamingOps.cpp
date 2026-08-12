@@ -160,9 +160,10 @@ namespace services
         // streaming cannot drop unsaved work.
         // VK-1593: the entity spawn budget below sits outside the streaming gate, so it must start
         // from the plain budget and only be widened on a frame the streamer actually bursted.
-        int entityBudget = worldDefinition.streamingConfig.maxEntitiesPerFrame;
+        // VK-1595: read through the effective config so a session override governs the live system.
+        int entityBudget = getEffectiveStreamingConfig().maxEntitiesPerFrame;
 
-        if (isPlayMode || worldDefinition.streamingConfig.editModeStreaming)
+        if (isPlayMode || getEffectiveStreamingConfig().editModeStreaming)
         {
             // Build streaming sources: camera is always source[0].
             // The editor camera isn't an ECS entity — use the cached viewport position.
@@ -185,6 +186,9 @@ namespace services
                 cameraSrc.radiusMultiplier = 1.0f;
                 cameraSrc.priority = 0;
                 cameraSrc.id = 0;
+                // VK-1595: the overlay centres on exactly this position, so the panel and the
+                // rings it draws can never disagree with the ring the streamer resolved.
+                lastStreamingOrigin = cameraSrc.position;
                 sources.push_back(cameraSrc);
             }
             // VK-1589: snapshot under the lock, then release it. streamer.update() below is the
@@ -211,7 +215,7 @@ namespace services
             // spawn budget has to widen with the load budget or the sectors arrive and then
             // trickle their entities in at 8 per frame anyway.
             if (streamer.isBursting())
-                entityBudget = world::effectiveBurstEntities(worldDefinition.streamingConfig);
+                entityBudget = world::effectiveBurstEntities(getEffectiveStreamingConfig());
 
             // Edit-mode rail: never auto-unload the sector holding the selected entity —
             // panels and gizmos hold live references to it
@@ -279,8 +283,16 @@ namespace services
             if (worldDefinition.hlodConfig.enabled)
             {
                 hlodActions.clear();
-                hlodStreamer.update(sources, sectorManager,
-                                   worldDefinition.sectorConfig, hlodActions);
+                // VK-1595: pause freezes DECISIONS on both rails - otherwise proxies would keep
+                // popping in and out around the camera while the sector streamer sat frozen, which
+                // is exactly the sector<->HLOD handoff the freeze exists to let you inspect. The
+                // poll and the crossfade below are deliberately NOT gated: work already in flight
+                // still completes, mirroring pollAsyncSectorLoads sitting outside the gate above.
+                if (!streamer.isFrozen())
+                {
+                    hlodStreamer.update(sources, sectorManager,
+                                       worldDefinition.sectorConfig, hlodActions);
+                }
 
                 for (const auto& action : hlodActions)
                 {
@@ -663,7 +675,7 @@ namespace services
         // The byte cap must count reads still in flight, though: without an in-flight ceiling a
         // burst would blow past maxPrefetchBytes by (in-flight x sector size) before the first
         // blob ever lands.
-        const uint64_t byteCap = worldDefinition.streamingConfig.maxPrefetchBytes;
+        const uint64_t byteCap = getEffectiveStreamingConfig().maxPrefetchBytes; // VK-1595
         if (byteCap != 0 && prefetchedBytes + prefetchBytesInFlight >= byteCap)
             return;
 

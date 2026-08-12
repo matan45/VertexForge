@@ -2,6 +2,7 @@
 
 #include "../../interfaces/world/IWorldSectorService.hpp"
 #include "../../events/EventTypes.hpp"
+#include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/animation/AnimationSnapshotEvents.hpp"
 #include "world/WorldSectorManager.hpp"
 #include "world/WorldDefinition.hpp"
@@ -85,6 +86,27 @@ namespace services
         bool isPlayMode = false;
         bool debugDrawSectors = false;
         std::string currentWorldPath;
+
+        // VK-1595: a session-only streaming config for tuning radii and budgets without dirtying
+        // the world. It is NEVER serialized - saveWorld writes worldDefinition.streamingConfig,
+        // which this deliberately shadows rather than replaces. Retained across play/stop so a
+        // tuning session survives a play test; cleared when the world closes.
+        std::optional<world::SectorStreamingConfig> streamingConfigOverride;
+
+        // VK-1595: in-viewport overlay visibility. Session-only editor state, same shape as
+        // debugDrawSectors above - the toggle lives in the World Sectors window while the drawing
+        // lives in the viewport, and the service is the only thing both can reach.
+        bool streamingOverlayVisible = false;
+
+        // VK-1595: the position the streamer actually used as source 0 on the last live frame.
+        // The overlay centres on this rather than re-deriving a camera position, so the panel can
+        // never disagree with the rings it is drawing.
+        glm::vec3 lastStreamingOrigin{0.0f};
+
+        // VK-1595: reused across frames so the overlay path allocates nothing in the steady state.
+        // clear() keeps capacity; the snapshot hands out borrowed pointers into these.
+        std::vector<::events::world::StreamingOverlayCell> overlayCells;
+        std::vector<::events::world::StreamingOverlaySource> overlaySources;
 
         std::vector<world::SectorStreamingAction> streamingActions;
         std::vector<world::HLODStreamingAction> hlodActions;
@@ -345,6 +367,28 @@ namespace services
         void updateStreamingSourceVelocities(std::vector<world::StreamingSource>& sources,
                                              float deltaTime);
         void drawDebugSectors() const;
+
+        // VK-1595: the ONLY correct way to read the streaming config at runtime - a session
+        // override shadows the world's persisted one. Every former direct read of
+        // worldDefinition.streamingConfig goes through here; the persisted member is now touched
+        // only by the persistence path and by SetStreamingConfigCommand.
+        [[nodiscard]] const world::SectorStreamingConfig& getEffectiveStreamingConfig() const
+        {
+            return world::effectiveStreamingConfig(streamingConfigOverride,
+                                                   worldDefinition.streamingConfig);
+        }
+
+        // Push the effective config into both streamers. Call after ANY change to either the
+        // override or worldDefinition.streamingConfig, or the streamer keeps running a stale one.
+        void applyEffectiveStreamingConfig();
+
+        // VK-1595: clear the session override and unfreeze. Called from every path that closes a
+        // world - a tuning override belongs to the world it was tuned against, and a streamer left
+        // paused across a world change reads as "streaming is broken".
+        void resetStreamingSessionState();
+
+        // VK-1595: refill the overlay buffers and return borrowed views over them.
+        [[nodiscard]] ::events::world::StreamingOverlaySnapshot buildOverlaySnapshot(int32_t maxRadius);
 
         // Drop every gameplay-registered streaming source and restart id allocation.
         // Takes streamingSourcesMutex - do not call while already holding it.
