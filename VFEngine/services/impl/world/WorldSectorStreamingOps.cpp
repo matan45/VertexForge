@@ -286,28 +286,39 @@ namespace services
                 {
                     if (action.isLoad)
                     {
-                        // Resolve HLOD file path from the cell's sectors
-                        auto tier = action.cellCoord.tier;
-                        int32_t cs = (tier < worldDefinition.hlodConfig.tiers.size())
-                            ? worldDefinition.hlodConfig.tiers[tier].cellSize : 1;
-                        int32_t baseX = action.cellCoord.x * cs;
-                        int32_t baseZ = action.cellCoord.z * cs;
-                        world::SectorCoord baseSector(baseX, baseZ);
-
-                        const auto* sector = sectorManager.getSector(baseSector);
-                        if (sector && !sector->hlodFilePath.empty())
+                        // VK-1594: a proxy that is mid fade-out is reversed rather than reloaded.
+                        // submitHlodLoad would refuse the request (the proxy still exists) and
+                        // HLODStreamer never re-emits a cell it has already claimed, so without
+                        // this the cell would fade to nothing and stay blank for the session.
+                        if (hlodProxyManager.getProxy(action.cellCoord) != nullptr)
                         {
-                            // VK-1592: the read is submitted to the scheduler from here rather
-                            // than inside HLODProxyManager, which lives in World.dll and would
-                            // resolve ResourceLoadScheduler::instance() to a private, never
-                            // pumped copy of the singleton (Utilities is a StaticLib).
-                            const float sectorSize = sectorManager.getConfig().sectorWorldSize;
-                            const float half = static_cast<float>(cs) * 0.5f;
-                            const glm::vec3 cellCenter(
-                                (static_cast<float>(baseX) + half) * sectorSize, 0.0f,
-                                (static_cast<float>(baseZ) + half) * sectorSize);
-                            submitHlodLoad(action.cellCoord, sector->hlodFilePath, cellCenter);
+                            hlodProxyManager.beginFadeIn(action.cellCoord);
+                            continue;
                         }
+
+                        const auto* tierConfig = findHLODTier(action.cellCoord.tier);
+                        if (!tierConfig)
+                            continue;
+
+                        // VK-1594: the path comes from the per-cell inventory. The old code read
+                        // it off the cell's CORNER sector, which is only ever correct for tier 0.
+                        const std::string cellPath = resolveHLODCellPath(action.cellCoord, *tierConfig);
+                        if (cellPath.empty())
+                            continue;
+
+                        // VK-1592: the read is submitted to the scheduler from here rather
+                        // than inside HLODProxyManager, which lives in World.dll and would
+                        // resolve ResourceLoadScheduler::instance() to a private, never
+                        // pumped copy of the singleton (Utilities is a StaticLib).
+                        const int32_t cs = world::effectiveCellSize(*tierConfig);
+                        const world::SectorCoord origin =
+                            world::cellOriginSector(action.cellCoord, *tierConfig);
+                        const float sectorSize = sectorManager.getConfig().sectorWorldSize;
+                        const float half = static_cast<float>(cs) * 0.5f;
+                        const glm::vec3 cellCenter(
+                            (static_cast<float>(origin.x) + half) * sectorSize, 0.0f,
+                            (static_cast<float>(origin.z) + half) * sectorSize);
+                        submitHlodLoad(action.cellCoord, cellPath, cellCenter);
                     }
                     else
                     {
@@ -316,7 +327,24 @@ namespace services
                         // bytes arrive), so cancel it explicitly or it would resurrect a proxy
                         // the streamer just dropped.
                         cancelHlodRequest(action.cellCoord);
-                        hlodProxyManager.unloadProxy(action.cellCoord, *sceneGraph);
+
+                        const auto* proxy = hlodProxyManager.getProxy(action.cellCoord);
+                        const bool visible = proxy &&
+                            (proxy->state == world::HLODProxyState::Loaded ||
+                             proxy->state == world::HLODProxyState::FadingIn);
+
+                        if (visible)
+                        {
+                            // VK-1594: fade instead of hard-cutting. The destroy happens below,
+                            // once the fade has actually run to completion.
+                            hlodProxyManager.beginFadeOut(action.cellCoord);
+                        }
+                        else
+                        {
+                            // Nothing on screen yet (bytes still in flight, or no proxy at all),
+                            // so there is nothing to fade - drop it immediately.
+                            releaseHLODProxy(action.cellCoord);
+                        }
                     }
                 }
 
@@ -324,10 +352,21 @@ namespace services
                 // its entities this frame, exactly as the old in-manager std::async did.
                 pollAsyncHlodLoads();
                 hlodProxyManager.update(*sceneGraph, deltaTime);
+
+                // VK-1594: reap proxies whose fade-out finished on this tick.
+                expiredHlodCells.clear();
+                hlodProxyManager.collectExpiredProxies(expiredHlodCells);
+                for (const auto& expired : expiredHlodCells)
+                    releaseHLODProxy(expired);
             }
         }
 
         drawDebugSectors();
+
+        // VK-1594: pump the async all-tier bake before the incremental re-bake queue - the queue
+        // is gated on the baker being idle, so draining a finished bake here lets a queued
+        // re-bake start on the very next frame instead of a frame later.
+        hlodBaker.update();
 
         processHLODRegenQueue();
 
@@ -883,6 +922,32 @@ namespace services
         pendingHlodLoads.cancel(cell);
     }
 
+    void WorldSectorServiceImpl::releaseHLODProxy(const world::HLODCellCoord& cell)
+    {
+        // VK-1594: destroy the entities AND free the GPU geometry. Unlike a normal mesh there is
+        // no .vfMesh to re-stream from, so MeshStreamManager pins in-memory meshes and the release
+        // has to be explicit - the per-frame unrequestMesh sweep will never reclaim it.
+        std::string meshKey;
+        if (const auto* proxy = hlodProxyManager.getProxy(cell))
+            meshKey = proxy->meshKey;
+
+        hlodProxyManager.unloadProxy(cell, *sceneGraph);
+
+        if (!meshKey.empty())
+        {
+            ::events::render::objectstreaming::ReleaseHLODMeshCommand relCmd;
+            relCmd.meshKey = meshKey;
+            try
+            {
+                ::events::EventDispatcher::instance().execute(relCmd);
+            }
+            catch (const std::exception&)
+            {
+                // No handler outside the Editor - nothing was ever registered, so nothing to free.
+            }
+        }
+    }
+
     void WorldSectorServiceImpl::pollAsyncHlodLoads()
     {
         pendingHlodLoads.poll([this](const world::HLODCellCoord& cell, AsyncHlodLoadResult result)
@@ -903,7 +968,43 @@ namespace services
                 return;
             }
 
-            hlodProxyManager.loadProxyFromData(cell, std::move(result.data));
+            // VK-1594: push the geometry to the GPU before handing the data to the proxy manager.
+            // The command borrows `result.data` for the duration of a synchronous dispatch, so it
+            // has to happen before the move below. The mesh key is the .vfHLOD path, which is what
+            // the proxy entity's MeshComponent will resolve to.
+            const auto* tierConfig = findHLODTier(cell.tier);
+            const std::string meshKey = tierConfig ? resolveHLODCellPath(cell, *tierConfig) : std::string{};
+
+            bool registered = false;
+            if (!meshKey.empty())
+            {
+                ::events::render::objectstreaming::RegisterHLODMeshCommand regCmd;
+                regCmd.meshKey = meshKey;
+                regCmd.data = &result.data;
+                try
+                {
+                    registered = ::events::EventDispatcher::instance().execute(regCmd);
+                }
+                catch (const std::exception&)
+                {
+                    // EventDispatcher::execute THROWS when nothing registered the command, and
+                    // ObjectStreamingServiceImpl is wired by EditorServiceBootstrap only - so this
+                    // is the normal state in Runtime and in Tests.exe. Degrade to "no HLOD
+                    // geometry" rather than taking down the streaming update.
+                    registered = false;
+                }
+            }
+
+            if (!registered)
+            {
+                // No GPU-driven renderer (or a corrupt bake): spawning an entity whose
+                // MeshComponent resolves to nothing would just add an invisible, uncullable
+                // object, so drop the cell and let the streamer re-emit it later.
+                hlodStreamer.forgetProxy(cell);
+                return;
+            }
+
+            hlodProxyManager.loadProxyFromData(cell, meshKey, std::move(result.data));
         });
     }
 

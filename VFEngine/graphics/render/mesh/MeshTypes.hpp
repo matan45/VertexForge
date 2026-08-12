@@ -163,6 +163,9 @@ namespace render::mesh
         bool blendToTerrain = false;
         float terrainBlendBand = 0.35f;
         float terrainBlendContrast = 2.0f;
+        // VK-1594: HLOD proxy tier-handoff dither. 0 = fully visible, 1 = fully faded out;
+        // negative means "not an HLOD proxy" and no fade lane is packed at all.
+        float hlodCrossfadeAlpha = -1.0f;
     };
 
     struct MeshRenderData

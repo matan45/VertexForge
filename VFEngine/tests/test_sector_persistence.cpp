@@ -412,6 +412,102 @@ TEST_SUITE("SectorPersistence")
         CHECK(loaded.sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
     }
 
+    // ── VK-1594: per-cell HLOD bake inventory ───────────────────────────
+
+    TEST_CASE(".vfworld round-trips the hlodCells inventory across all tiers")
+    {
+        resetTestRoot();
+
+        world::WorldDefinition definition;
+        definition.name = "HlodCells";
+        definition.hlodCells[world::HLODCellCoord(4, 2, 0)] = "sectors/sector_4_2_hlod0.vfHLOD";
+        definition.hlodCells[world::HLODCellCoord(2, 1, 1)] = "worlds/w_hlod1_2_1.vfHLOD";
+        definition.hlodCells[world::HLODCellCoord(-3, -2, 2)] = "worlds/w_hlod2_-3_-2.vfHLOD";
+
+        std::string path = (testRoot() / "hlodcells.vfworld").string();
+        REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+
+        REQUIRE(loaded.hlodCells.size() == 3);
+        CHECK(loaded.hlodCells.at(world::HLODCellCoord(4, 2, 0)) == "sectors/sector_4_2_hlod0.vfHLOD");
+        CHECK(loaded.hlodCells.at(world::HLODCellCoord(2, 1, 1)) == "worlds/w_hlod1_2_1.vfHLOD");
+        // Negative cell coords survive the JSON round-trip
+        CHECK(loaded.hlodCells.at(world::HLODCellCoord(-3, -2, 2)) == "worlds/w_hlod2_-3_-2.vfHLOD");
+
+        // The tier is part of the key: same x/z at a different tier is a different cell
+        CHECK(loaded.hlodCells.find(world::HLODCellCoord(2, 1, 0)) == loaded.hlodCells.end());
+    }
+
+    TEST_CASE(".vfworld written with no bakes omits the hlodCells key entirely")
+    {
+        resetTestRoot();
+
+        // Byte-compatibility with pre-VK-1594 output: a world that was never baked must not
+        // suddenly grow a key, or every existing .vfworld shows a diff on its next save.
+        world::WorldDefinition definition;
+        definition.name = "NoBakes";
+
+        std::string path = (testRoot() / "nobakes.vfworld").string();
+        REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
+
+        std::ifstream in{path};
+        REQUIRE(in.is_open());
+        nlohmann::json parsed = nlohmann::json::parse(in);
+        CHECK_FALSE(parsed.contains("hlodCells"));
+    }
+
+    TEST_CASE(".vfworld without hlodCells loads an empty inventory, not a failure")
+    {
+        resetTestRoot();
+
+        // Every world baked before VK-1594 looks like this. The tier-0 fallback on
+        // WorldSector::hlodFilePath is what keeps those bakes resolving.
+        nlohmann::json legacy;
+        legacy["version"] = "1.0";
+        legacy["name"] = "LegacyBakes";
+        legacy["sectors"] = nlohmann::json::array();
+
+        std::string path = (testRoot() / "legacy_hlod.vfworld").string();
+        {
+            std::ofstream out{path};
+            REQUIRE(out.is_open());
+            out << legacy.dump(2);
+        }
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+        CHECK(loaded.hlodCells.empty());
+    }
+
+    TEST_CASE(".vfworld skips hlodCells entries with an empty path")
+    {
+        resetTestRoot();
+
+        // An invalidated cell clears its path rather than erasing the key in some paths; a blank
+        // entry must never come back as a bake the streamer would try to read.
+        nlohmann::json doc;
+        doc["version"] = "1.0";
+        doc["name"] = "BlankPath";
+        doc["sectors"] = nlohmann::json::array();
+        doc["hlodCells"] = nlohmann::json::array({
+            nlohmann::json{{"x", 0}, {"z", 0}, {"tier", 1}, {"path", ""}},
+            nlohmann::json{{"x", 1}, {"z", 0}, {"tier", 1}, {"path", "worlds/w_hlod1_1_0.vfHLOD"}}});
+
+        std::string path = (testRoot() / "blankpath.vfworld").string();
+        {
+            std::ofstream out{path};
+            REQUIRE(out.is_open());
+            out << doc.dump(2);
+        }
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+        REQUIRE(loaded.hlodCells.size() == 1);
+        CHECK(loaded.hlodCells.count(world::HLODCellCoord(1, 0, 1)) == 1);
+    }
+
     // ── VK-1588: missing keys must resolve to the struct defaults ───────
 
     TEST_CASE(".vfworld with the streaming keys absent parses to exact struct defaults")

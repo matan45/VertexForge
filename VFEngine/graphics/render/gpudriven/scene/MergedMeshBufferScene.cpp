@@ -8,6 +8,7 @@
 #include <material/MaterialParameterSet.hpp>
 #include <material/TerrainBlendCurve.hpp> // VK-1620: packTerrainBlendParams
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <atomic>
@@ -335,6 +336,18 @@ namespace render::gpudriven
                 obj.flags |= ObjectFlags::BlendToTerrain;
                 obj.instanceData.z = material::packTerrainBlendParams(band, contrast);
             }
+        }
+
+        // VK-1594: HLOD proxy tier-handoff dither. instanceData.x is the only free lane
+        // (.y = VK-1582 fade, .z = VK-1620 blend params, .w = instanceOffset). Tagged with
+        // 0x0001 in the high half so the cull shader can tell it apart from the
+        // INVALID_TEXTURE_INDEX reset above, and so an alpha of exactly 0 (fully visible) is
+        // still distinguishable from "no fade set". Must match gpu_cull_lod.glsl.
+        if (meshRender.hlodCrossfadeAlpha >= 0.0f)
+        {
+            const float clamped = std::clamp(meshRender.hlodCrossfadeAlpha, 0.0f, 1.0f);
+            const uint32_t alphaByte = static_cast<uint32_t>(clamped * 255.0f + 0.5f) & 0xFFu;
+            obj.instanceData.x = (0x0001u << 16) | alphaByte;
         }
     }
 

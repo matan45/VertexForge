@@ -26,5 +26,8 @@ namespace core::adapters
         void registerSectorObjects(uint32_t sectorId,
                                    const std::vector<std::pair<uint64_t, entt::entity>>& entities) override;
         void unregisterSectorObjects(uint32_t sectorId) override;
+
+        bool registerHLODMesh(const std::string& meshKey, const ::world::HLODFileData& data) override;
+        void releaseHLODMesh(const std::string& meshKey) override;
     };
 }

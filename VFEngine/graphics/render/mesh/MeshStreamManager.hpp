@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <vector>
 #include <queue>
@@ -61,6 +62,33 @@ namespace render::mesh
         std::unique_ptr<resource::MeshStreamHandle> handle;
         uint32_t referenceCount = 0;
         bool headerParsed = false;
+
+        // VK-1594: geometry that was pushed in from memory rather than streamed from a file.
+        // There is no file to re-stream from, so unrequestMesh must not evict it - only an
+        // explicit releaseInMemoryMesh may.
+        bool inMemory = false;
+    };
+
+    // VK-1594: non-owning view of one LOD of an in-memory mesh. Valid only for the duration of
+    // the registerInMemoryMesh call - the buffer is copied straight to the GPU.
+    struct InMemoryLODData
+    {
+        const resource::Vertex* vertices = nullptr;
+        uint32_t vertexCount = 0;
+        const uint32_t* indices = nullptr;  // indices are LOD-local, not global
+        uint32_t indexCount = 0;
+    };
+
+    struct InMemorySubmeshData
+    {
+        std::string name;
+        std::array<InMemoryLODData, gpudriven::LOD_LEVEL_COUNT> lods;
+    };
+
+    struct InMemoryMeshData
+    {
+        std::string meshKey;
+        std::vector<InMemorySubmeshData> submeshes;
     };
 
     class MeshStreamManager
@@ -105,6 +133,23 @@ namespace render::mesh
         void requestMesh(const std::string& meshPath);
 
         void unrequestMesh(const std::string& meshPath);
+
+        // VK-1594: register geometry the caller already holds in RAM (baked HLOD proxies) under a
+        // synthetic key, so it draws through the normal MeshComponent -> MergedMeshBuffer path.
+        //
+        // The state is created with headerParsed = true and no file handle, which is what makes
+        // this work without touching the rest of the pipeline: update() only calls openMeshStream
+        // for entries whose header is unparsed, scheduleInitialLODs early-outs on a null handle,
+        // and GPUDrivenRenderer::updateMeshStreaming's unconditional per-frame requestMesh simply
+        // bumps the refcount on the existing entry.
+        //
+        // Idempotent: re-registering an already-registered key is a no-op returning true.
+        bool registerInMemoryMesh(const InMemoryMeshData& mesh);
+
+        // Releases geometry registered by registerInMemoryMesh. Nothing will re-stream it.
+        void releaseInMemoryMesh(const std::string& meshKey);
+
+        [[nodiscard]] bool isInMemoryMesh(const std::string& meshKey) const;
 
         void update(const glm::vec3& cameraPos);
 

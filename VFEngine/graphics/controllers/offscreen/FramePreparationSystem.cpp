@@ -7,6 +7,7 @@
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/mesh/StaticMeshPipeline.hpp"
 #include "../../render/mesh/MeshTypes.hpp"
+#include "../../render/mesh/MeshStreamManager.hpp"
 #include "../../render/gpudriven/GPUDrivenRenderer.hpp"
 #include "../../animation/RuntimeAnimatorSystem.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -224,6 +225,19 @@ namespace controllers::offscreen
         bool useGPUDrivenCulling = renderHandler->isGPUDrivenRendererInitialized()
             && gpuDrivenRenderer && gpuDrivenRenderer->isEnabled();
 
+        // VK-1594: baked HLOD proxies push their geometry straight into MergedMeshBuffer from
+        // memory, so they never appear in the classic MeshGPUCache that isMeshLoaded consults.
+        // They are only renderable under GPU-driven culling - the legacy StaticMeshPipeline draws
+        // out of MeshGPUCache buffers that an HLOD proxy simply does not have - so the extra
+        // clause is deliberately gated on useGPUDrivenCulling and the fallback branches below
+        // keep skipping HLOD entities.
+        auto* meshStreamManager = gpuDrivenRenderer ? gpuDrivenRenderer->getMeshStreamManager() : nullptr;
+        auto isMeshRenderable = [&](const std::string& meshPath)
+        {
+            if (meshPipeline->isMeshLoaded(meshPath)) return true;
+            return useGPUDrivenCulling && meshStreamManager && meshStreamManager->isInMemoryMesh(meshPath);
+        };
+
         auto buildRenderData = [&](entt::entity entity, const components::MeshComponent& meshComp,
                                    const components::WorldTransformComponent& worldTransform) ->
             render::mesh::MeshRenderData
@@ -244,6 +258,10 @@ namespace controllers::offscreen
 
             if (registry.all_of<components::TransformComponent>(entity))
                 rd.isStatic = registry.get<components::TransformComponent>(entity).isStatic;
+
+            // VK-1594: HLOD proxies dither in and out across a tier handoff instead of popping.
+            if (registry.all_of<components::HLODProxyComponent>(entity))
+                rd.hlodCrossfadeAlpha = registry.get<components::HLODProxyComponent>(entity).crossfadeAlpha;
 
             if (registry.all_of<components::MaterialComponent>(entity))
             {
@@ -424,7 +442,7 @@ namespace controllers::offscreen
             {
                 if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
+                if (!meshComp.meshRef.isValid() || !isMeshRenderable(meshComp.meshRef.resolve())) continue;
                 collectEntity(entity, meshComp, meshView.get<components::WorldTransformComponent>(entity));
             }
         }
@@ -439,7 +457,7 @@ namespace controllers::offscreen
                 if (!registry.all_of<components::MeshComponent, components::WorldTransformComponent>(entity)) continue;
                 if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
                 const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
+                if (!meshComp.meshRef.isValid() || !isMeshRenderable(meshComp.meshRef.resolve())) continue;
                 collectEntity(entity, meshComp, registry.get<components::WorldTransformComponent>(entity));
             }
         }
@@ -450,7 +468,7 @@ namespace controllers::offscreen
                 if (!scene::Entity::isEffectivelyActive(registry, entity)) continue;
                 const auto& meshComp = meshView.get<components::MeshComponent>(entity);
                 const auto& worldTransform = meshView.get<components::WorldTransformComponent>(entity);
-                if (!meshComp.meshRef.isValid() || !meshPipeline->isMeshLoaded(meshComp.meshRef.resolve())) continue;
+                if (!meshComp.meshRef.isValid() || !isMeshRenderable(meshComp.meshRef.resolve())) continue;
                 if (frustumReady)
                 {
                     const math::AABB* boundingBox = meshPipeline->getMeshBoundingBox(meshComp.meshRef.resolve());

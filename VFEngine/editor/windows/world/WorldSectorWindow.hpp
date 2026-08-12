@@ -58,13 +58,10 @@ namespace windows
         float hlodTier2Ratio = 0.01f;
         bool hlodConfigLoaded = false;
 
-        // Async HLOD generation
-        bool hlodGenerating = false;
-        float hlodGenerationProgress = 0.0f;
-        std::string hlodGenerationStage;
-        std::vector<world::SectorCoord> hlodPendingSectors;
-        int hlodTotalToGenerate = 0;
-        int hlodDoneCount = 0;
+        // VK-1594: the bake now runs on the JobSystem behind GenerateAllHLODCommand, so the window
+        // only polls GetHLODBakeProgressQuery. The old per-sector, one-command-per-frame loop that
+        // lived here still ran each bake synchronously on the UI thread.
+        bool hlodBakeWasRunning = false;
 
         // Cached HLOD status (refreshed on timer, not per-frame)
         int cachedHLODCount = 0;

@@ -50,6 +50,12 @@ namespace render::gpudriven
     class HydraulicErosionPipeline;
 }
 
+// VK-1594: taken by const reference only, so the definition stays in the .cpp
+namespace render::mesh
+{
+    struct InMemoryMeshData;
+}
+
 namespace services
 {
     class IVFXRuntimeProvider;
@@ -333,6 +339,10 @@ namespace controllers
         void registerSectorObjects(uint32_t sectorId,
                                    const std::vector<std::pair<uint64_t, entt::entity>>& entities);
         void unregisterSectorObjects(uint32_t sectorId);
+
+        // VK-1594: baked HLOD proxy geometry pushed into MergedMeshBuffer from memory
+        bool registerHLODMesh(const render::mesh::InMemoryMeshData& meshData);
+        void releaseHLODMesh(const std::string& meshKey);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

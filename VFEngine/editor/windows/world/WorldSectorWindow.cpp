@@ -8,6 +8,7 @@
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include "nfd/FileDialog.hpp"
 
 namespace windows
@@ -733,85 +734,73 @@ namespace windows
         ImGui::Separator();
         ImGui::Text("Generation");
 
-        if (hlodGenerating)
+        const auto bake = dispatcher.query(events::world::hlod::GetHLODBakeProgressQuery{});
+
+        if (bake.running)
         {
-            // Process one sector per frame to avoid blocking the UI thread
-            if (!hlodPendingSectors.empty())
-            {
-                const auto& coord = hlodPendingSectors.back();
-                events::world::hlod::GenerateHLODCommand cmd;
-                cmd.coord = coord;
-                cmd.tier = 0;
-                dispatcher.execute(cmd);
-                hlodPendingSectors.pop_back();
-                hlodDoneCount++;
+            ImGui::ProgressBar(bake.fraction(), ImVec2(-1, 0),
+                               std::format("Tier {} — {}/{} cells", bake.currentTier,
+                                           bake.cellsDone, bake.cellsTotal).c_str());
 
-                hlodGenerationProgress = static_cast<float>(hlodDoneCount) /
-                    static_cast<float>(std::max(hlodTotalToGenerate, 1));
-                hlodGenerationStage = "Sector " + std::to_string(hlodDoneCount) +
-                    "/" + std::to_string(hlodTotalToGenerate);
-            }
-            else
-            {
-                hlodGenerating = false;
-                hlodGenerationProgress = 1.0f;
-                hlodGenerationStage = "Complete";
-                // Refresh cached status
-                cachedHLODCount = 0;
-                cachedHLODTotal = 0;
-                for (const auto& info : cachedGrid)
-                {
-                    if (!info.exists) continue;
-                    cachedHLODTotal++;
-                    events::world::hlod::IsHLODGeneratedQuery q;
-                    q.coord = info.coord;
-                    if (dispatcher.query(q)) cachedHLODCount++;
-                }
-            }
+            if (ImGui::Button("Cancel Bake"))
+                dispatcher.execute(events::world::hlod::CancelHLODBakeCommand{});
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Cells already in flight finish, then the bake stops.\n"
+                                  "No partially written .vfHLOD is ever published.");
 
-            ImGui::ProgressBar(hlodGenerationProgress, ImVec2(-1, 0),
-                               hlodGenerationStage.c_str());
+            ImGui::TextDisabled("Saving the world is blocked while a bake runs.");
         }
         else
         {
-            if (ImGui::Button("Generate All HLOD (Tier 0)"))
+            if (ImGui::Button("Generate All HLOD"))
             {
-                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
-                hlodPendingSectors = std::move(allCoords);
-                hlodTotalToGenerate = static_cast<int>(hlodPendingSectors.size());
-                hlodDoneCount = 0;
-                hlodGenerationProgress = 0.0f;
-                hlodGenerationStage = "Starting...";
-                hlodGenerating = true;
+                // VK-1594: bakes every configured tier, on the JobSystem. The previous button
+                // seeded itself from GetLoadedSectorCoordsQuery, which silently skipped every
+                // sector that was not currently streamed in.
+                events::world::hlod::GenerateAllHLODCommand cmd;
+                cmd.missingOnly = false;
+                dispatcher.execute(cmd);
             }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Re-bake every tier for every saved sector in the world");
+
             ImGui::SameLine();
             if (ImGui::Button("Generate Missing"))
             {
-                // Only sectors without a bake — covers invalidated (stale) HLODs
-                auto allCoords = dispatcher.query(events::world::GetLoadedSectorCoordsQuery{});
-                hlodPendingSectors.clear();
-                for (const auto& coord : allCoords)
-                {
-                    events::world::hlod::IsHLODGeneratedQuery q;
-                    q.coord = coord;
-                    if (!dispatcher.query(q))
-                        hlodPendingSectors.push_back(coord);
-                }
-                hlodTotalToGenerate = static_cast<int>(hlodPendingSectors.size());
-                hlodDoneCount = 0;
-                hlodGenerationProgress = 0.0f;
-                hlodGenerationStage = "Starting...";
-                hlodGenerating = hlodTotalToGenerate > 0;
+                events::world::hlod::GenerateAllHLODCommand cmd;
+                cmd.missingOnly = true;
+                dispatcher.execute(cmd);
             }
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Re-bake only sectors whose HLOD is missing or was\n"
+                ImGui::SetTooltip("Bake only cells whose HLOD is missing or was\n"
                                   "invalidated by a content change (saved dirty sector)");
         }
+
+        // Refresh the cached status once, on the frame the bake finishes
+        if (hlodBakeWasRunning && !bake.running)
+        {
+            cachedHLODCount = 0;
+            cachedHLODTotal = 0;
+            for (const auto& info : cachedGrid)
+            {
+                if (!info.exists) continue;
+                cachedHLODTotal++;
+                events::world::hlod::IsHLODGeneratedQuery q;
+                q.coord = info.coord;
+                if (dispatcher.query(q)) cachedHLODCount++;
+            }
+        }
+        hlodBakeWasRunning = bake.running;
 
         // Status: use cached counts (refreshed on timer in refreshStats, not per-frame)
         ImGui::Separator();
         ImGui::Text("Status");
         ImGui::Text("HLOD Generated: %d / %d sectors", cachedHLODCount, cachedHLODTotal);
+        if (!bake.running && bake.cellsTotal > 0)
+        {
+            ImGui::Text("Last bake: %u cells, %u failed%s", bake.cellsDone, bake.cellsFailed,
+                        bake.cancelled ? " (cancelled)" : "");
+        }
     }
 
 } // namespace windows

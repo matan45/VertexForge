@@ -249,10 +249,21 @@ void main() {
 
     // Pack LOD level (bits 0-7) and crossfade alpha (bits 8-15)
     uint packedLodLevel = lodLevel;
+    uint crossfadeByte = 0u;
     if (camera.enableLODSelection == LOD_SELECTION_WITH_CROSSFADE && !isInstanced) {
-        uint crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
-        packedLodLevel = lodLevel | (crossfadeByte << 8u);
+        crossfadeByte = computeCrossfadeByte(screenPixelsCrossfade, obj.lodThresholds, camera.globalLodBias, lodLevel);
     }
+
+    // VK-1594: HLOD proxy tier handoff. obj.instanceData.x carries the proxy's fade amount as
+    // a byte in bits 0-7, tagged with 0x0001 in bits 16-31 so it cannot be confused with the
+    // INVALID_TEXTURE_INDEX (0xFFFFFFFF) that every non-HLOD object resets the lane to - and so
+    // that a legitimate alpha of 0 (fully visible) is still distinguishable from "no fade set".
+    // Combined the same way VK-1582's distance fade is: whichever discards more wins.
+    if ((obj.instanceData.x >> 16) == 0x0001u) {
+        crossfadeByte = max(crossfadeByte, obj.instanceData.x & 0xFFu);
+    }
+
+    packedLodLevel = lodLevel | (crossfadeByte << 8u);
 
     perDrawData[globalDrawIndex] = makePerDrawData(obj, objectIndex, packedLodLevel,
                                                    meshletOffset, meshletCount,

@@ -74,6 +74,12 @@ namespace components
         int32_t cellZ = 0;
         uint8_t tier = 0;
 
+        // VK-1594: 0 = fully visible, 1 = fully faded out. Written every frame by
+        // HLODProxyManager::update while a tier handoff is in flight and read by
+        // FramePreparationSystem, which forwards it to the GPU dither crossfade. Not serialized -
+        // proxy entities are runtime-only and are rebuilt on every load.
+        float crossfadeAlpha = 0.0f;
+
         HLODProxyComponent() = default;
         HLODProxyComponent(int32_t x, int32_t z, uint8_t t) : cellX(x), cellZ(z), tier(t) {}
     };

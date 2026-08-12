@@ -46,12 +46,128 @@ namespace render::mesh
         meshStates[meshPath] = std::move(state);
     }
 
+    bool MeshStreamManager::registerInMemoryMesh(const InMemoryMeshData& mesh)
+    {
+        if (mesh.meshKey.empty() || mesh.submeshes.empty())
+            return false;
+
+        {
+            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            auto existing = meshStates.find(mesh.meshKey);
+            if (existing != meshStates.end())
+            {
+                // Already registered (or, pathologically, a file-backed mesh is using this key).
+                // Either way there is nothing to upload.
+                return existing->second.inMemory;
+            }
+        }
+
+        // reserveMesh reads exactly three things off the header - numSubmeshes, each submesh name,
+        // and each LOD's vertex/index COUNT - so everything file-related is left at its default.
+        resource::MeshStreamHeader header;
+        header.numSubmeshes = static_cast<uint32_t>(mesh.submeshes.size());
+        header.submeshes.resize(mesh.submeshes.size());
+
+        for (size_t subIdx = 0; subIdx < mesh.submeshes.size(); ++subIdx)
+        {
+            const auto& src = mesh.submeshes[subIdx];
+            auto& dst = header.submeshes[subIdx];
+            dst.name = src.name;
+            for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+            {
+                dst.lods[lod].vertexCount = src.lods[lod].vertexCount;
+                dst.lods[lod].indexCount = src.lods[lod].indexCount;
+            }
+        }
+
+        auto* meshInfo = mergedBuffer.reserveMesh(mesh.meshKey, header);
+        if (!meshInfo)
+        {
+            vfLogError("MeshStreamManager: Failed to reserve space for in-memory mesh {}", mesh.meshKey);
+            return false;
+        }
+
+        for (uint32_t subIdx = 0; subIdx < header.numSubmeshes; ++subIdx)
+        {
+            const auto& src = mesh.submeshes[subIdx];
+            for (uint32_t lod = 0; lod < gpudriven::LOD_LEVEL_COUNT; ++lod)
+            {
+                const auto& lodData = src.lods[lod];
+                if (lodData.vertexCount == 0 || lodData.indexCount == 0)
+                    continue;
+
+                gpudriven::LODUploadData upload;
+                upload.vertexData = lodData.vertices;
+                upload.vertexCount = lodData.vertexCount;
+                upload.indexData = lodData.indices;
+                upload.indexCount = lodData.indexCount;
+
+                if (!mergedBuffer.uploadLOD(mesh.meshKey, src.name, subIdx, lod, upload))
+                {
+                    vfLogError("MeshStreamManager: in-memory upload failed for {}:{} LOD{}",
+                               mesh.meshKey, src.name, lod);
+                    mergedBuffer.freeMesh(mesh.meshKey);
+                    return false;
+                }
+
+                // Without this the LOD stays in Uploading and is never considered renderable.
+                mergedBuffer.markLODReady(mesh.meshKey, src.name, subIdx, lod);
+            }
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(meshStatesMutex);
+            MeshStreamingState state;
+            state.referenceCount = 1;
+            state.headerParsed = true; // keeps update() from ever calling openMeshStream on it
+            state.inMemory = true;
+            meshStates[mesh.meshKey] = std::move(state);
+        }
+
+        // NOTE: meshlets are deliberately not registered. HLOD proxies fall back to the
+        // non-mesh-shader draw path, the same fallback openMeshStream already logs when
+        // MeshletBuffer::reserveMeshlets fails.
+        vfLogInfo("MeshStreamManager: registered in-memory mesh '{}' ({} submeshes)",
+                  mesh.meshKey, header.numSubmeshes);
+        return true;
+    }
+
+    void MeshStreamManager::releaseInMemoryMesh(const std::string& meshKey)
+    {
+        std::lock_guard<std::mutex> lock(meshStatesMutex);
+
+        auto it = meshStates.find(meshKey);
+        if (it == meshStates.end() || !it->second.inMemory)
+            return;
+
+        if (meshletBuffer)
+            meshletBuffer->freeAllMeshlets(meshKey);
+        mergedBuffer.freeMesh(meshKey);
+        meshStates.erase(it);
+
+        vfLogInfo("MeshStreamManager: released in-memory mesh '{}'", meshKey);
+    }
+
+    bool MeshStreamManager::isInMemoryMesh(const std::string& meshKey) const
+    {
+        std::lock_guard<std::mutex> lock(meshStatesMutex);
+        auto it = meshStates.find(meshKey);
+        return it != meshStates.end() && it->second.inMemory;
+    }
+
     void MeshStreamManager::unrequestMesh(const std::string& meshPath)
     {
         std::lock_guard<std::mutex> lock(meshStatesMutex);
 
         auto it = meshStates.find(meshPath);
         if (it == meshStates.end())
+        {
+            return;
+        }
+
+        // VK-1594: an in-memory mesh has no backing file, so the force-release below would drop
+        // geometry nothing can ever restore. Only releaseInMemoryMesh may free it.
+        if (it->second.inMemory)
         {
             return;
         }

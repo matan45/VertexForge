@@ -150,6 +150,16 @@ namespace services
             return false;
         }
 
+        // VK-1594: the async HLOD bake holds an immutable snapshot of the sector file list and its
+        // workers are reading those .vfsector files right now. Saving would rewrite them mid-read
+        // and produce proxies baked from a mix of old and new geometry, so refuse rather than try
+        // to make the two concurrent. The bake is an explicit, cancellable user action.
+        if (hlodBaker.isRunning())
+        {
+            vfLogError("Cannot save world: an HLOD bake is in progress (cancel it first)");
+            return false;
+        }
+
         std::string path = resolveProjectPath(filePath.empty() ? currentWorldPath : filePath);
         if (path.empty())
         {
@@ -368,7 +378,30 @@ namespace services
             root.removeComponent<components::WorldSectorComponent>();
         }
 
-        hlodProxyManager.unloadAll(*sceneGraph);
+        // VK-1594: free the GPU geometry too. In-memory HLOD meshes are pinned in
+        // MeshStreamManager precisely so the ordinary eviction sweep cannot drop them, which also
+        // means closing the world without this would leak every resident proxy's buffers.
+        {
+            std::vector<std::string> hlodMeshKeys;
+            hlodProxyManager.collectMeshKeys(hlodMeshKeys);
+            hlodProxyManager.unloadAll(*sceneGraph);
+
+            for (const auto& meshKey : hlodMeshKeys)
+            {
+                events::render::objectstreaming::ReleaseHLODMeshCommand relCmd;
+                relCmd.meshKey = meshKey;
+                try
+                {
+                    ::events::EventDispatcher::instance().execute(relCmd);
+                }
+                catch (const std::exception&)
+                {
+                    // execute() throws with no handler registered, which is the normal state
+                    // outside the Editor (ObjectStreamingServiceImpl is Editor-only). Nothing was
+                    // registered there in the first place.
+                }
+            }
+        }
         hlodStreamer.clear();
         hlodRegenQueue.clear();
 

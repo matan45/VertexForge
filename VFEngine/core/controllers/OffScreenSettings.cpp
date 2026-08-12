@@ -242,4 +242,14 @@ namespace controllers {
 		offScreenController->unregisterSectorObjects(sectorId);
 	}
 
+	bool OffScreen::registerHLODMesh(const render::mesh::InMemoryMeshData& mesh)
+	{
+		return offScreenController->registerHLODMesh(mesh);
+	}
+
+	void OffScreen::releaseHLODMesh(const std::string& meshKey)
+	{
+		offScreenController->releaseHLODMesh(meshKey);
+	}
+
 }

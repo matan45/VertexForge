@@ -12,6 +12,7 @@
 #include "world/HLODStreamer.hpp"
 #include "world/HLODProxyManager.hpp"
 #include "world/HLODSerialization.hpp"
+#include "HLODWorldBaker.hpp"
 #include "streaming/AsyncLoadQueue.hpp"
 #include "streaming/AsyncResultSlot.hpp"
 #include "resource/CancellationToken.hpp"
@@ -73,6 +74,7 @@ namespace services
         world::PendingReferenceResolver referenceResolver;
         world::HLODStreamer hlodStreamer;
         world::HLODProxyManager hlodProxyManager;
+        HLODWorldBaker hlodBaker;
 
         // Atomic because the notification handlers that gate on it (entity-deleted,
         // transform-changed, and the VK-1589 streaming-source commands) are published from the
@@ -86,6 +88,11 @@ namespace services
 
         std::vector<world::SectorStreamingAction> streamingActions;
         std::vector<world::HLODStreamingAction> hlodActions;
+
+        // VK-1594: proxies whose fade-out completed this frame, drained right after
+        // HLODProxyManager::update. A member rather than a local so the steady state costs no
+        // per-frame allocation, matching hlodActions above.
+        std::vector<world::HLODCellCoord> expiredHlodCells;
 
         // VK-1590: targets that were already resident when their referencing entity spawned.
         // Batched here rather than probed per-entity so a frame's whole spawn budget costs one
@@ -264,6 +271,11 @@ namespace services
 
         void submitHlodLoad(const world::HLODCellCoord& cell, const std::string& filePath,
                             const glm::vec3& cellCenter);
+
+        // VK-1594: destroys the proxy entities and frees its GPU geometry. Always use this rather
+        // than a bare hlodProxyManager.unloadProxy - in-memory HLOD meshes are pinned and are
+        // never reclaimed by the renderer's ordinary eviction sweep.
+        void releaseHLODProxy(const world::HLODCellCoord& cell);
         void cancelHlodRequest(const world::HLODCellCoord& cell);
         void pollAsyncHlodLoads();
         void drainHlodLoads();
@@ -281,9 +293,36 @@ namespace services
         bool generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier);
         void processHLODRegenQueue();
 
-        // Sectors whose HLOD was invalidated, awaiting automatic re-bake
-        // (drained one per frame in edit mode while streaming is idle)
-        std::deque<world::SectorCoord> hlodRegenQueue;
+        // VK-1594: look a tier up by its id rather than indexing hlodConfig.tiers positionally -
+        // the tier table comes from .vfworld verbatim, so index and tier id need not agree.
+        [[nodiscard]] const world::HLODTierConfig* findHLODTier(uint8_t tier) const;
+
+        // VK-1594: the cell's baked .vfHLOD. Prefers the per-cell hlodCells inventory; for tier 0
+        // it falls back to WorldSector::hlodFilePath so worlds baked before hlodCells existed
+        // still resolve. Empty when the cell has no bake.
+        [[nodiscard]] std::string resolveHLODCellPath(const world::HLODCellCoord& cell,
+                                                      const world::HLODTierConfig& tierConfig) const;
+
+        // Directory the .vfworld lives in; every mesh path inside a .vfsector is relative to it.
+        [[nodiscard]] std::string hlodWorkingDirectory() const;
+
+        // VK-1594: snapshot the per-tier cell work list and hand it to the async baker. Returns
+        // whether a bake was started (false if one is already running or nothing needs baking).
+        bool beginHLODBake(bool missingOnly);
+
+        // VK-1594: bake one cell at any tier, synchronously. Tier 0 routes to generateForSector to
+        // preserve the historical per-sector output; tiers 1+ merge their member sectors through
+        // the previously dead generateForCell.
+        bool bakeHLODCell(const world::HLODCellCoord& cell);
+
+        // Main-thread bookkeeping for a finished bake. Split out from bakeHLODCell because the
+        // async baker runs the generation on a worker and applies the result back here.
+        void recordHLODBake(const world::HLODCellCoord& cell, const std::string& outputPath);
+
+        // Cells whose HLOD was invalidated, awaiting automatic re-bake
+        // (drained one per frame in edit mode while streaming is idle).
+        // VK-1594: keyed by cell, not sector, so tier 1/2 re-bakes can be queued too.
+        std::deque<world::HLODCellCoord> hlodRegenQueue;
         void pollAsyncSectorLoads();
         void finalizeSectorLoad(const world::SectorCoord& coord,
                                 std::vector<nlohmann::json>& entityData,

@@ -2,6 +2,7 @@
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../render/mesh/MeshStreamManager.hpp"
 #include "../render/gi/RadianceCascadeManager.hpp"
 #include "../render/gi/SSGIPipeline.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
@@ -251,5 +252,31 @@ namespace controllers
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu && gpu->getObjectStreamManager())
             gpu->getObjectStreamManager()->unregisterSectorObjects(sectorId);
+    }
+
+    bool OffScreenController::registerHLODMesh(const render::mesh::InMemoryMeshData& meshData)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return false;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (!gpu) return false;
+
+        auto* streamManager = gpu->getMeshStreamManager();
+        if (!streamManager) return false;
+
+        return streamManager->registerInMemoryMesh(meshData);
+    }
+
+    void OffScreenController::releaseHLODMesh(const std::string& meshKey)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (!gpu) return;
+
+        if (auto* streamManager = gpu->getMeshStreamManager())
+            streamManager->releaseInMemoryMesh(meshKey);
     }
 }

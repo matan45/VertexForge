@@ -15,15 +15,6 @@ namespace world
         loadedProxies.clear();
     }
 
-    HLODCellCoord HLODStreamer::sectorToCell(const SectorCoord& coord, uint8_t cellSize) const
-    {
-        int32_t cs = static_cast<int32_t>(cellSize);
-        // Floor division for negative coords
-        int32_t cx = (coord.x >= 0) ? coord.x / cs : (coord.x - cs + 1) / cs;
-        int32_t cz = (coord.z >= 0) ? coord.z / cs : (coord.z - cs + 1) / cs;
-        return HLODCellCoord(cx, cz, 0);
-    }
-
     float HLODStreamer::cellDistanceSq(const HLODCellCoord& cell, uint8_t cellSize,
                                         const glm::vec3& pos, float sectorWorldSize) const
     {
@@ -70,17 +61,46 @@ namespace world
             return;
 
         float sectorSize = sectorConfig.sectorWorldSize;
-        float unloadRadiusWorld = streamConfig.unloadRadius * sectorSize;
-        float unloadRadiusSq = unloadRadiusWorld * unloadRadiusWorld;
 
-        for (const auto& tier : hlodConfig.tiers)
+        // VK-1594: tiers occupy ANNULI, not nested discs. Previously every tier's inner bound was
+        // unloadRadius, so a cell 8 sectors out satisfied tier 0 (<=10), tier 1 (<=20) AND tier 2
+        // (<=40) at once and all three proxies stacked on the same geometry. Tier N now begins
+        // where tier N-1 ends. Ordered by displayRadius rather than trusting the tier ids to be
+        // sorted, since .vfworld stores the tier table verbatim.
+        std::vector<const HLODTierConfig*> ordered;
+        ordered.reserve(hlodConfig.tiers.size());
+        for (const auto& t : hlodConfig.tiers)
+            ordered.push_back(&t);
+        std::sort(ordered.begin(), ordered.end(),
+                  [](const HLODTierConfig* a, const HLODTierConfig* b)
+                  { return a->displayRadius < b->displayRadius; });
+
+        for (size_t tierIndex = 0; tierIndex < ordered.size(); ++tierIndex)
         {
+            const HLODTierConfig& tier = *ordered[tierIndex];
+
+            float innerRadius = streamConfig.unloadRadius;
+            if (tierIndex > 0)
+                innerRadius = std::max(innerRadius, ordered[tierIndex - 1]->displayRadius);
+
+            float innerRadiusWorld = innerRadius * sectorSize;
+            float innerRadiusSq = innerRadiusWorld * innerRadiusWorld;
             float tierRadiusWorld = tier.displayRadius * sectorSize;
             float tierRadiusSq = tierRadiusWorld * tierRadiusWorld;
-            float hysteresisRadiusSq = (tier.displayRadius + 1.0f) * sectorSize;
-            hysteresisRadiusSq *= hysteresisRadiusSq;
 
-            uint8_t cs = tier.cellSize;
+            // Hysteresis widens the band by one sector at BOTH ends. The outer margin stops thrash
+            // as the camera retreats; the inner margin is what gives the tier N -> N+1 handoff its
+            // crossfade overlap, and before VK-1594 it did not exist: a proxy the camera moved
+            // INSIDE of dropped out of wantLoaded but still failed the beyond-outer-radius unload
+            // test, so it stayed resident forever.
+            float outerHysteresis = (tier.displayRadius + 1.0f) * sectorSize;
+            float outerHysteresisSq = outerHysteresis * outerHysteresis;
+            float innerHysteresis = std::max(0.0f, innerRadius - 1.0f) * sectorSize;
+            float innerHysteresisSq = innerHysteresis * innerHysteresis;
+
+            // Clamped: a cellSize of 0 from a hand-edited .vfworld would divide by zero below and
+            // blow scanRange up to the VK-1588 runaway scan box.
+            uint8_t cs = static_cast<uint8_t>(effectiveCellSize(tier));
 
             // Determine cells that should be loaded
             std::unordered_set<HLODCellCoord, HLODCellCoordHash> wantLoaded;
@@ -101,8 +121,9 @@ namespace world
                         HLODCellCoord cell(centerCellX + dx, centerCellZ + dz, tier.tier);
                         float distSq = cellDistanceSq(cell, cs, source.position, sectorSize);
 
-                        // Must be beyond unload radius but within tier display radius
-                        if (distSq < unloadRadiusSq || distSq > tierRadiusSq)
+                        // Must fall inside this tier's annulus: past the previous tier's reach
+                        // (or unloadRadius for the nearest tier) and within this tier's radius
+                        if (distSq < innerRadiusSq || distSq > tierRadiusSq)
                             continue;
 
                         // Don't show proxy if any of its sectors are loaded
@@ -132,14 +153,16 @@ namespace world
 
                 if (wantLoaded.find(loaded) == wantLoaded.end())
                 {
-                    // Check hysteresis: only unload if beyond hysteresis radius from ALL sources
-                    bool beyondAll = true;
+                    // Keep the proxy while at least one source still sees it inside the
+                    // hysteresis-widened annulus - whether it fell out through the near edge
+                    // (handing off to a finer tier) or the far edge (handing off to a coarser one).
+                    bool keptByAnySource = false;
                     for (const auto& source : sources)
                     {
                         float distSq = cellDistanceSq(loaded, cs, source.position, sectorSize);
-                        if (distSq <= hysteresisRadiusSq)
+                        if (distSq >= innerHysteresisSq && distSq <= outerHysteresisSq)
                         {
-                            beyondAll = false;
+                            keptByAnySource = true;
                             break;
                         }
                     }
@@ -147,7 +170,7 @@ namespace world
                     // Also unload if any sector in this cell is now loaded
                     bool sectorLoaded = anySectorLoaded(loaded, tier, manager);
 
-                    if (beyondAll || sectorLoaded)
+                    if (!keptByAnySource || sectorLoaded)
                     {
                         toUnload.push_back(loaded);
                     }

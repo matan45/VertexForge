@@ -13,7 +13,7 @@ namespace world
         int32_t z = 0;
 
         SectorCoord() = default;
-        SectorCoord(int32_t x, int32_t z) : x(x), z(z) {}
+        constexpr SectorCoord(int32_t x, int32_t z) : x(x), z(z) {}
 
         bool operator==(const SectorCoord& other) const
         {

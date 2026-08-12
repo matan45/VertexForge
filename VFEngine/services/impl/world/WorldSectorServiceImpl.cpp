@@ -18,6 +18,7 @@
 #include "../../events/audio/AudioSnapshotEvents.hpp"
 #include "../../events/world/HLODEvents.hpp"
 #include "world/HLODGenerator.hpp"
+#include "world/HLODCellPlanner.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -45,6 +46,19 @@ namespace services
     WorldSectorServiceImpl::WorldSectorServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph))
     {
+        // VK-1594: the baker generates on workers but publishes here, on the main-thread-pinned
+        // update(), so recordHLODBake is the only writer of worldDefinition.hlodCells.
+        hlodBaker.setCellBakedCallback(
+            [this](const world::HLODCellCoord& cell, const std::string& outputPath)
+            {
+                recordHLODBake(cell, outputPath);
+
+                ::events::world::hlod::HLODGenerationCompleteNotification notif;
+                notif.coord = cell;
+                notif.success = true;
+                ::events::EventDispatcher::instance().publish(notif);
+            });
+
         entityLoader.setOnEntityLoaded([this](uint64_t uuid, const world::SectorCoord& coord)
         {
             // Look up the entity's actual deserialized position for correct sector assignment
@@ -741,35 +755,23 @@ namespace services
                 return sector && !sector->hlodFilePath.empty();
             });
 
+        // VK-1594: bakes every configured tier, asynchronously. Returns whether the bake STARTED.
         dispatcher.registerCommandHandler<::events::world::hlod::GenerateAllHLODCommand>(
-            [this](const ::events::world::hlod::GenerateAllHLODCommand&) -> bool
+            [this](const ::events::world::hlod::GenerateAllHLODCommand& cmd) -> bool
             {
-                if (!worldMode) return false;
-                bool allSuccess = true;
-                sectorManager.forEachSector([&](world::WorldSector& sector)
-                {
-                    if (sector.filePath.empty()) return;
+                return beginHLODBake(cmd.missingOnly);
+            });
 
-                    auto& tiers = worldDefinition.hlodConfig.tiers;
-                    world::HLODTierConfig tierConfig;
-                    if (!tiers.empty()) tierConfig = tiers[0];
+        dispatcher.registerCommandHandler<::events::world::hlod::CancelHLODBakeCommand>(
+            [this](const ::events::world::hlod::CancelHLODBakeCommand&)
+            {
+                hlodBaker.cancel();
+            });
 
-                    std::string hlodPath = sector.filePath;
-                    auto dotPos = hlodPath.rfind('.');
-                    if (dotPos != std::string::npos)
-                        hlodPath = hlodPath.substr(0, dotPos);
-                    hlodPath += "_hlod0.vfHLOD";
-
-                    std::string workingDir = currentWorldPath.empty() ? "." :
-                        currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
-
-                    world::HLODGenerator generator;
-                    if (generator.generateForSector(sector.coord, sector.filePath, workingDir, tierConfig, hlodPath))
-                        sector.hlodFilePath = hlodPath;
-                    else
-                        allSuccess = false;
-                });
-                return allSuccess;
+        dispatcher.registerQueryHandler<::events::world::hlod::GetHLODBakeProgressQuery>(
+            [this](const ::events::world::hlod::GetHLODBakeProgressQuery&)
+            {
+                return hlodBaker.getProgress();
             });
 
         dispatcher.registerCommandHandler<::events::world::hlod::InvalidateHLODCommand>(
@@ -803,6 +805,11 @@ namespace services
                 if (notif.currentMode == services::EditorMode::Play)
                 {
                     isPlayMode = true;
+
+                    // VK-1594: a bake is an edit-mode authoring action. Entering play mode stops
+                    // it rather than letting workers keep chewing through sector files while the
+                    // game runs (and while savedWorldDefinition is swapped out underneath).
+                    hlodBaker.cancel();
 
                     // VK-1589: start the session with no gameplay sources, symmetric with the
                     // Edit branch below. Anything registered in edit mode (a nav invoker, a
@@ -1086,101 +1093,238 @@ namespace services
             });
     }
 
-    bool WorldSectorServiceImpl::generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier)
+    bool WorldSectorServiceImpl::beginHLODBake(bool missingOnly)
+    {
+        // The worldMode guard is what keeps a bake out of play mode; do not weaken it.
+        if (!worldMode) return false;
+        if (hlodBaker.isRunning()) return false;
+        if (worldDefinition.hlodConfig.tiers.empty()) return false;
+
+        HLODWorldBaker::BakeRequest request;
+        request.workingDirectory = hlodWorkingDirectory();
+        request.sectorConfig = worldDefinition.sectorConfig;
+
+        // Fine tier first, so the near ring becomes correct before the expensive far one, and so
+        // the baker's per-tier concurrency cap narrows monotonically as cells get bigger.
+        auto tiers = worldDefinition.hlodConfig.tiers;
+        std::sort(tiers.begin(), tiers.end(),
+                  [](const world::HLODTierConfig& a, const world::HLODTierConfig& b)
+                  { return world::effectiveCellSize(a) < world::effectiveCellSize(b); });
+
+        for (const auto& tier : tiers)
+        {
+            for (auto& plan : world::planCellsForTier(worldDefinition.sectorFilePaths, tier))
+            {
+                if (missingOnly && !resolveHLODCellPath(plan.cell, tier).empty())
+                    continue;
+
+                HLODWorldBaker::CellJob job;
+                job.cell = plan.cell;
+                job.tierConfig = tier;
+                job.firstMemberCoord = plan.memberCoords.front();
+                job.outputPath = world::hlodOutputPathForCell(plan.cell, currentWorldPath,
+                                                              plan.memberSectorFiles.front());
+                job.memberSectorFiles = std::move(plan.memberSectorFiles);
+                request.jobs.push_back(std::move(job));
+            }
+        }
+
+        if (request.jobs.empty())
+        {
+            vfLogInfo("HLOD bake: nothing to do");
+            return false;
+        }
+
+        return hlodBaker.begin(std::move(request));
+    }
+
+    const world::HLODTierConfig* WorldSectorServiceImpl::findHLODTier(uint8_t tier) const
+    {
+        for (const auto& t : worldDefinition.hlodConfig.tiers)
+        {
+            if (t.tier == tier)
+                return &t;
+        }
+        return nullptr;
+    }
+
+    std::string WorldSectorServiceImpl::resolveHLODCellPath(
+        const world::HLODCellCoord& cell, const world::HLODTierConfig& tierConfig) const
+    {
+        if (auto it = worldDefinition.hlodCells.find(cell); it != worldDefinition.hlodCells.end())
+            return it->second;
+
+        // Fallback for worlds baked before the hlodCells inventory existed. Only tier 0 has a
+        // filename convention that WorldSectorPersistenceOps can rediscover on load, so tiers 1+
+        // simply have no bake until the world is re-baked.
+        if (cell.tier == 0)
+        {
+            const world::SectorCoord origin = world::cellOriginSector(cell, tierConfig);
+            if (const auto* sector = sectorManager.getSector(origin))
+                return sector->hlodFilePath;
+        }
+
+        return {};
+    }
+
+    std::string WorldSectorServiceImpl::hlodWorkingDirectory() const
+    {
+        if (currentWorldPath.empty())
+            return ".";
+
+        const auto slash = currentWorldPath.find_last_of("/\\");
+        return slash == std::string::npos ? "." : currentWorldPath.substr(0, slash);
+    }
+
+    bool WorldSectorServiceImpl::bakeHLODCell(const world::HLODCellCoord& cell)
     {
         if (!worldMode) return false;
-        const auto* sector = sectorManager.getSector(coord);
-        if (!sector || sector->filePath.empty()) return false;
 
-        auto& tiers = worldDefinition.hlodConfig.tiers;
-        world::HLODTierConfig tierConfig;
-        for (const auto& t : tiers)
-        {
-            if (t.tier == tier) { tierConfig = t; break; }
-        }
+        const auto* tierConfig = findHLODTier(cell.tier);
+        if (!tierConfig) return false;
 
-        // Generate output path alongside sector file
-        std::string hlodPath = sector->filePath;
-        auto dotPos = hlodPath.rfind('.');
-        if (dotPos != std::string::npos)
-            hlodPath = hlodPath.substr(0, dotPos);
-        hlodPath += "_hlod" + std::to_string(tier) + ".vfHLOD";
+        // Re-plan from the live sector table rather than trusting a stale member list: a sector
+        // may have been added or deleted since the cell was queued.
+        auto plans = world::planCellsForTier(worldDefinition.sectorFilePaths, *tierConfig);
+        const auto plan = std::find_if(plans.begin(), plans.end(),
+                                       [&](const world::HLODCellPlan& p) { return p.cell == cell; });
+        if (plan == plans.end() || plan->memberSectorFiles.empty())
+            return false;
+
+        const std::string outputPath = world::hlodOutputPathForCell(
+            cell, currentWorldPath, plan->memberSectorFiles.front());
 
         world::HLODGenerator generator;
-        std::string workingDir = currentWorldPath.empty() ? "." :
-            currentWorldPath.substr(0, currentWorldPath.find_last_of("/\\"));
+        const std::string workingDir = hlodWorkingDirectory();
 
-        bool result = generator.generateForSector(
-            coord, sector->filePath, workingDir,
-            tierConfig, hlodPath);
+        bool result = false;
+        if (cell.tier == 0)
+        {
+            result = generator.generateForSector(plan->memberCoords.front(),
+                                                 plan->memberSectorFiles.front(),
+                                                 workingDir, *tierConfig, outputPath);
+        }
+        else
+        {
+            result = generator.generateForCell(cell, plan->memberSectorFiles, workingDir,
+                                               *tierConfig, worldDefinition.sectorConfig,
+                                               outputPath);
+        }
 
         if (result)
-        {
-            sectorManager.getSector(coord)->hlodFilePath = hlodPath;
-        }
+            recordHLODBake(cell, outputPath);
 
         return result;
     }
 
+    void WorldSectorServiceImpl::recordHLODBake(const world::HLODCellCoord& cell,
+                                                const std::string& outputPath)
+    {
+        worldDefinition.hlodCells[cell] = outputPath;
+
+        // Tier 0 also keeps WorldSector::hlodFilePath current: it is what the load-time filename
+        // probe and IsHLODGeneratedQuery both read, and what old worlds fall back to.
+        if (cell.tier == 0)
+        {
+            const auto* tierConfig = findHLODTier(0);
+            if (tierConfig)
+            {
+                const world::SectorCoord origin = world::cellOriginSector(cell, *tierConfig);
+                if (auto* sector = sectorManager.getSector(origin))
+                    sector->hlodFilePath = outputPath;
+            }
+        }
+
+        // A fresh bake supersedes whatever the streamer thinks it has for this cell.
+        hlodStreamer.forgetProxy(cell);
+    }
+
+    bool WorldSectorServiceImpl::generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier)
+    {
+        const auto* tierConfig = findHLODTier(tier);
+        if (!tierConfig) return false;
+
+        return bakeHLODCell(world::sectorToCell(coord, *tierConfig));
+    }
+
     void WorldSectorServiceImpl::processHLODRegenQueue()
     {
-        // One re-bake per frame, edit mode only (generation runs on the main
-        // thread — HLODGenerator's thread-safety is unproven), and only while
-        // sector streaming is idle so re-bakes never compete with loads
+        // One re-bake per frame, edit mode only, and only while sector streaming is idle so
+        // re-bakes never compete with loads. This path is still SYNCHRONOUS on the main thread:
+        // it is a single stale cell, not a whole-world bake, and running it through the async
+        // baker would fight the explicit Generate All the user may have started.
         if (hlodRegenQueue.empty() || isPlayMode || !worldDefinition.hlodConfig.enabled)
             return;
         if (!pendingAsyncLoads.empty())
             return;
 
-        auto coord = hlodRegenQueue.front();
+        // VK-1594: never re-bake behind the async baker's back - it holds an immutable snapshot
+        // of the sector list and would race this write to worldDefinition.hlodCells.
+        if (hlodBaker.isRunning())
+            return;
+
+        const auto cell = hlodRegenQueue.front();
         hlodRegenQueue.pop_front();
 
-        auto* sector = sectorManager.getSector(coord);
-        if (!sector || sector->filePath.empty() || !sector->hlodFilePath.empty())
-            return; // gone, never saved, or already re-baked manually
+        // Already re-baked (manually, or by an earlier queue entry covering the same cell)
+        if (worldDefinition.hlodCells.count(cell) > 0)
+            return;
 
-        if (generateSectorHLOD(coord, 0))
-            vfLogInfo("HLOD re-baked for sector [{},{}]", coord.x, coord.z);
+        if (bakeHLODCell(cell))
+            vfLogInfo("HLOD re-baked for cell [{},{},T{}]", cell.x, cell.z, cell.tier);
         else
-            vfLogWarning("HLOD re-bake failed for sector [{},{}]", coord.x, coord.z);
+            vfLogWarning("HLOD re-bake failed for cell [{},{},T{}]", cell.x, cell.z, cell.tier);
     }
 
     void WorldSectorServiceImpl::invalidateHLODForSector(const world::SectorCoord& coord)
     {
         auto* sector = sectorManager.getSector(coord);
-        if (!sector || sector->hlodFilePath.empty())
+        if (!sector)
             return;
 
-        // Delete the stale bake so loadWorld's disk probe doesn't resurrect it
-        std::error_code ec;
-        std::filesystem::remove(sector->hlodFilePath, ec);
-        sector->hlodFilePath.clear();
-
-        // Drop any loaded proxy covering this sector, per tier (real or future
-        // geometry replaces it; the streamer re-emits a load once a new bake exists)
-        auto floorDiv = [](int32_t v, int32_t s) { return (v >= 0) ? v / s : (v - s + 1) / s; };
+        // VK-1594: cascade into every tier that contains this sector, not just its own tier-0
+        // bake. A 4x4 tier-2 cell is stale the moment any one of its 16 sectors changes.
+        bool invalidatedAny = false;
         for (const auto& tier : worldDefinition.hlodConfig.tiers)
         {
-            int32_t cs = static_cast<int32_t>(tier.cellSize);
-            world::HLODCellCoord cell(floorDiv(coord.x, cs), floorDiv(coord.z, cs), tier.tier);
+            const world::HLODCellCoord cell = world::sectorToCell(coord, tier);
+            const std::string stalePath = resolveHLODCellPath(cell, tier);
+
+            if (!stalePath.empty())
+            {
+                // Delete the stale bake so loadWorld's disk probe doesn't resurrect it
+                std::error_code ec;
+                std::filesystem::remove(stalePath, ec);
+                invalidatedAny = true;
+            }
+
+            worldDefinition.hlodCells.erase(cell);
+            if (tier.tier == 0)
+                sector->hlodFilePath.clear();
+
+            // Drop any loaded proxy covering this sector (real or future geometry replaces it;
+            // the streamer re-emits a load once a new bake exists).
             // VK-1592: the read now lives in the scheduler, not inside HLODProxyManager, so
             // unloadProxy no longer discards it implicitly - a load still in flight would
             // rebuild a proxy from the bake we just deleted.
             cancelHlodRequest(cell);
-            hlodProxyManager.unloadProxy(cell, *sceneGraph);
+            releaseHLODProxy(cell);
             hlodStreamer.forgetProxy(cell);
+
+            // Queue an automatic re-bake (drained when streaming is idle, edit mode)
+            if (worldDefinition.hlodConfig.enabled &&
+                std::find(hlodRegenQueue.begin(), hlodRegenQueue.end(), cell) == hlodRegenQueue.end())
+            {
+                hlodRegenQueue.push_back(cell);
+            }
         }
+
+        if (!invalidatedAny)
+            return;
 
         ::events::world::hlod::HLODInvalidatedNotification notif;
         notif.coord = coord;
         ::events::EventDispatcher::instance().publish(notif);
-
-        // Queue an automatic re-bake (drained when streaming is idle, edit mode)
-        if (worldDefinition.hlodConfig.enabled &&
-            std::find(hlodRegenQueue.begin(), hlodRegenQueue.end(), coord) == hlodRegenQueue.end())
-        {
-            hlodRegenQueue.push_back(coord);
-        }
 
         vfLogInfo("HLOD invalidated for sector [{},{}]", coord.x, coord.z);
     }

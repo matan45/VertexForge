@@ -2,6 +2,7 @@
 #include "../print/Log.hpp"
 #include "../serialization/SerializationFileAccess.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <fstream>
 
 namespace world
@@ -81,6 +82,40 @@ namespace world
                 sectorsJson.push_back(sectorEntry);
             }
             worldJson["sectors"] = sectorsJson;
+
+            // VK-1594: per-cell HLOD bake inventory. Written only when non-empty so a world with
+            // no bakes stays byte-identical to what pre-VK-1594 produced.
+            if (!definition.hlodCells.empty())
+            {
+                json cellsJson = json::array();
+                for (const auto& [cell, path] : definition.hlodCells)
+                {
+                    if (path.empty())
+                        continue;
+
+                    json cellEntry;
+                    cellEntry["x"] = cell.x;
+                    cellEntry["z"] = cell.z;
+                    cellEntry["tier"] = cell.tier;
+                    cellEntry["path"] = path;
+                    cellsJson.push_back(cellEntry);
+                }
+
+                // Sorted so the file does not churn between saves - hlodCells is an unordered_map,
+                // and an unstable key order would show up as a spurious diff on every save.
+                std::sort(cellsJson.begin(), cellsJson.end(), [](const json& a, const json& b)
+                {
+                    const auto at = a["tier"].get<int>();
+                    const auto bt = b["tier"].get<int>();
+                    if (at != bt) return at < bt;
+                    const auto az = a["z"].get<int32_t>();
+                    const auto bz = b["z"].get<int32_t>();
+                    if (az != bz) return az < bz;
+                    return a["x"].get<int32_t>() < b["x"].get<int32_t>();
+                });
+
+                worldJson["hlodCells"] = cellsJson;
+            }
 
             std::ofstream file{filePath};
             if (!file.is_open())
@@ -207,6 +242,25 @@ namespace world
                 {
                     SectorCoord coord(entry.value("x", 0), entry.value("z", 0));
                     outDefinition.sectorFilePaths[coord] = entry.value("path", "");
+                }
+            }
+
+            // VK-1594: absent key is the normal state for a world saved before this change. The
+            // map stays empty and the streamer falls back to the tier-0 filename convention that
+            // WorldSectorPersistenceOps probes on load, so nothing breaks.
+            outDefinition.hlodCells.clear();
+            if (worldJson.contains("hlodCells") && worldJson["hlodCells"].is_array())
+            {
+                for (const auto& entry : worldJson["hlodCells"])
+                {
+                    const std::string path = entry.value("path", "");
+                    if (path.empty())
+                        continue;
+
+                    HLODCellCoord cell(entry.value("x", 0),
+                                       entry.value("z", 0),
+                                       static_cast<uint8_t>(entry.value("tier", 0)));
+                    outDefinition.hlodCells[cell] = path;
                 }
             }
 
