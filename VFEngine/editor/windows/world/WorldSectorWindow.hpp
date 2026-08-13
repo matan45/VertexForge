@@ -3,7 +3,10 @@
 #include "imguiHandler/ImguiWindow.hpp"
 #include "events/EventTypes.hpp"
 #include "world/WorldTypes.hpp"
+#include "world/SectorDataLayerOps.hpp"
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -84,6 +87,42 @@ namespace windows
         // Save World persists it.
         ::events::SubscriptionToken worldLoadedToken;
 
+        // ── VK-1596: Data Layers ──────────────────────────────────────────────────────
+        // Refreshed on the same 0.25s timer as the sector stats. Polled unconditionally rather
+        // than only while the tab is open: the Sector Grid tooltip and highlight read the derived
+        // cache below, so gating the poll would show stale layers there. One O(sectors) in-memory
+        // walk is noise next to the ~2 dispatcher round-trips per grid cell refreshStats already
+        // makes.
+        world::DataLayerInventory cachedLayers;
+
+        // Inverted from cachedLayers once per refresh so the grid tooltip and highlight cost no
+        // extra queries. Keyed only by sectors that actually carry a layer, so it is bounded by the
+        // loaded-sector count rather than by the ~289 visible grid cells.
+        std::unordered_map<world::SectorCoord, std::vector<std::string>, world::SectorCoordHash>
+            cachedSectorLayers;
+
+        // A NAME, not a row index: the table is rebuilt from a fresh, re-sorted summary every
+        // 0.25s, so an index would silently point at a different layer.
+        std::string selectedLayer;
+        char newLayerName[64] = "";
+        std::string layerError;
+        int exportSectorIndex = 0;
+
+        // Bytes an un-check removed this session, keyed layer -> coord -> blob, so re-checking
+        // restores them instead of silently discarding work. Export is the durable backup; this is
+        // the cheap safety net for a mis-click. Dropped with the other per-world caches.
+        std::unordered_map<std::string,
+                           std::unordered_map<world::SectorCoord, std::vector<uint8_t>,
+                                              world::SectorCoordHash>>
+            detachedLayers;
+
+        // Latched when the delete modal opens. The summary repolls every 0.25s and streaming can
+        // change the loaded set underneath an open dialog, so the confirmation must destroy exactly
+        // what it named. Same reasoning as the content browser's delete-dependents latch.
+        std::string pendingDeleteLayer;
+        uint32_t pendingDeleteSectorCount = 0;
+        uint64_t pendingDeleteBytes = 0;
+
     public:
         WorldSectorWindow();
         ~WorldSectorWindow() override;
@@ -106,7 +145,18 @@ namespace windows
         void drawCreationWizard();
         void refreshStats();
 
+        // VK-1596 - defined in WorldSectorWindowDataLayers.cpp to keep this window's main .cpp
+        // readable, following EditorPreferencesWindowSections.cpp.
+        void drawDataLayers();
+        void refreshDataLayers();
+        void drawDeleteLayerModal();
+        // Presence toggle across every loaded sector: `present` ensures the layer exists there,
+        // otherwise removes it (stashing the bytes in detachedLayers first).
+        void applyLayerPresence(const std::string& layerName, bool present);
+        [[nodiscard]] const world::DataLayerSummary* findCachedLayer(const std::string& name) const;
+
         static const std::vector<std::pair<std::wstring, std::wstring>> WORLD_FILE_TYPES;
+        static const std::vector<std::pair<std::wstring, std::wstring>> LAYER_FILE_TYPES;
     };
 
 } // namespace windows

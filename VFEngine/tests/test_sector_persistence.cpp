@@ -1,6 +1,7 @@
 #include <doctest.h>
 #include <world/WorldSector.hpp>
 #include <world/WorldSectorManager.hpp>
+#include <world/SectorDataLayerOps.hpp>
 #include <world/WorldSectorSerialization.hpp>
 #include <world/WorldDefinition.hpp>
 #include <world/WorldDefinitionSerialization.hpp>
@@ -824,5 +825,252 @@ TEST_SUITE("SectorPersistence")
         manager.reassignEntity(930003, glm::vec3(10.0f, 0.0f, 10.0f),
                                glm::vec3(90.0f, 0.0f, 90.0f));
         CHECK_FALSE(manager.getSector({0, 0})->dirty);
+    }
+
+    // ── VK-1596: data layer authoring ────────────────────────────────────────────────
+    //
+    // WorldSectorServiceImpl is not unit-constructible, so these exercise the pure helpers the
+    // service delegates to, plus the file round-trip the editor's create/toggle drives.
+
+    TEST_CASE("canMutateDataLayers refuses every sector whose entityUUIDs are not authoritative")
+    {
+        world::WorldSector sector;
+
+        sector.state = world::SectorState::Loaded;
+        CHECK(world::canMutateDataLayers(sector));
+
+        // The whole point of the guard: an Unloaded sector's entityUUIDs has been stripped, so
+        // dirtying it makes Save World rewrite its .vfsector with an empty entity list.
+        sector.state = world::SectorState::Unloaded;
+        CHECK_FALSE(world::canMutateDataLayers(sector));
+
+        // Loading is refused for a second reason - finalizeSectorLoad would clear the dirty flag
+        // the write had just set.
+        sector.state = world::SectorState::Loading;
+        CHECK_FALSE(world::canMutateDataLayers(sector));
+
+        sector.state = world::SectorState::Unloading;
+        CHECK_FALSE(world::canMutateDataLayers(sector));
+        sector.state = world::SectorState::Prefetching;
+        CHECK_FALSE(world::canMutateDataLayers(sector));
+        sector.state = world::SectorState::Prefetched;
+        CHECK_FALSE(world::canMutateDataLayers(sector));
+    }
+
+    TEST_CASE("summarizeDataLayers unions layers across loaded sectors only")
+    {
+        world::SectorConfig config;
+        config.sectorWorldSize = 100.0f;
+        world::WorldSectorManager manager(config);
+
+        auto& a = manager.getOrCreateSector({0, 0});
+        a.state = world::SectorState::Loaded;
+        a.dataLayers["fogOfWar"] = {0x01, 0x02, 0x03, 0x04};
+        a.dataLayers["resourceGrid"] = std::vector<uint8_t>(256, 0xAB);
+
+        auto& b = manager.getOrCreateSector({1, 0});
+        b.state = world::SectorState::Loaded;
+        b.dataLayers["fogOfWar"] = {0x05, 0x06};
+
+        // Carries a layer but must not be summarized: its map is stale until it loads.
+        auto& c = manager.getOrCreateSector({2, 0});
+        c.state = world::SectorState::Unloaded;
+        c.dataLayers["fogOfWar"] = std::vector<uint8_t>(1024, 0xFF);
+
+        // Bytes resident, no live layers.
+        auto& d = manager.getOrCreateSector({3, 0});
+        d.state = world::SectorState::Prefetched;
+
+        world::DataLayerInventory inventory;
+        world::summarizeDataLayers(manager, inventory);
+
+        REQUIRE(inventory.loadedSectors.size() == 2);
+        CHECK(inventory.loadedSectors[0] == world::SectorCoord(0, 0));
+        CHECK(inventory.loadedSectors[1] == world::SectorCoord(1, 0));
+
+        REQUIRE(inventory.layers.size() == 2);
+        // Sorted by name: the backing store is an unordered_map, so without the sort the editor's
+        // table would reshuffle on every 0.25s poll.
+        CHECK(inventory.layers[0].name == "fogOfWar");
+        CHECK(inventory.layers[1].name == "resourceGrid");
+
+        CHECK(inventory.layers[0].sectorCount == 2);
+        CHECK(inventory.layers[0].totalBytes == 6); // 4 + 2, the unloaded sector's 1024 excluded
+        REQUIRE(inventory.layers[0].sectors.size() == 2);
+        CHECK(inventory.layers[0].sectors[0] == world::SectorCoord(0, 0));
+        CHECK(inventory.layers[0].sectors[1] == world::SectorCoord(1, 0));
+
+        CHECK(inventory.layers[1].sectorCount == 1);
+        CHECK(inventory.layers[1].totalBytes == 256);
+
+        SUBCASE("a world with no loaded sectors summarizes to nothing")
+        {
+            a.state = world::SectorState::Unloaded;
+            b.state = world::SectorState::Unloaded;
+
+            world::summarizeDataLayers(manager, inventory);
+            CHECK(inventory.loadedSectors.empty());
+            CHECK(inventory.layers.empty());
+        }
+    }
+
+    TEST_CASE("mergeSectorDataLayers keeps resident layers and reports unsaved work")
+    {
+        SUBCASE("nothing resident: the file wins outright and nothing is unsaved")
+        {
+            world::SectorDataLayers resident;
+            world::SectorDataLayers incoming{{"fogOfWar", {0x01, 0x02}}};
+
+            CHECK_FALSE(world::mergeSectorDataLayers(resident, incoming));
+            REQUIRE(resident.size() == 1);
+            CHECK(resident.at("fogOfWar") == std::vector<uint8_t>{0x01, 0x02});
+        }
+
+        SUBCASE("a resident layer absent from the file is unsaved work")
+        {
+            world::SectorDataLayers resident{{"spawnMask", {0x09}}};
+            world::SectorDataLayers incoming{{"fogOfWar", {0x01}}};
+
+            CHECK(world::mergeSectorDataLayers(resident, incoming));
+            CHECK(resident.size() == 2);
+            CHECK(resident.at("spawnMask") == std::vector<uint8_t>{0x09});
+        }
+
+        SUBCASE("a resident layer that differs from the file is unsaved work")
+        {
+            world::SectorDataLayers resident{{"fogOfWar", {0xAA}}};
+            world::SectorDataLayers incoming{{"fogOfWar", {0x01}}};
+
+            CHECK(world::mergeSectorDataLayers(resident, incoming));
+            // Resident wins: a runtime write is newer than the file.
+            CHECK(resident.at("fogOfWar") == std::vector<uint8_t>{0xAA});
+        }
+
+        SUBCASE("a resident layer identical to the file is not unsaved work")
+        {
+            world::SectorDataLayers resident{{"fogOfWar", {0x01, 0x02}}};
+            world::SectorDataLayers incoming{{"fogOfWar", {0x01, 0x02}},
+                                             {"resourceGrid", {0x07}}};
+
+            CHECK_FALSE(world::mergeSectorDataLayers(resident, incoming));
+            CHECK(resident.size() == 2);
+        }
+    }
+
+    TEST_CASE("VK-1596: create, save and reload a data layer at the core level")
+    {
+        resetTestRoot();
+        TestEntities scope{{920090, {10.0f, 0.0f, 10.0f}}};
+
+        world::SectorConfig config;
+        config.sectorWorldSize = 100.0f;
+        world::WorldSectorManager manager(config);
+        manager.assignEntityToSector(920090, glm::vec3(10.0f, 0.0f, 10.0f));
+
+        auto* sector = manager.getSector({0, 0});
+        REQUIRE(sector != nullptr);
+        sector->state = world::SectorState::Loaded;
+        sector->dirty = false;
+
+        // create - the editor's Create button, via SetSectorDataLayerCommand
+        REQUIRE(world::canMutateDataLayers(*sector));
+        sector->dataLayers["fogOfWar"] = {0x01, 0x02, 0x03};
+        sector->dirty = true; // the service's edit-mode rule
+
+        const std::string path = (testRoot() / "layer_roundtrip.vfsector").string();
+        REQUIRE(world::WorldSectorSerialization::saveSector(*sector, path));
+        CHECK_FALSE(sector->dirty); // cleared by the save
+
+        // unload: entityUUIDs is stripped, exactly as handleSectorUnload leaves it
+        sector->entityUUIDs.clear();
+        sector->state = world::SectorState::Unloaded;
+        // ... and the sector is now un-editable, which is what stops Save World truncating it
+        CHECK_FALSE(world::canMutateDataLayers(*sector));
+
+        // reload: the file merges UNDER whatever survived on the struct
+        std::vector<nlohmann::json> entityData;
+        world::SectorDataLayers fileLayers;
+        REQUIRE(world::WorldSectorSerialization::loadSector(path, entityData, &fileLayers));
+        CHECK(entityData.size() == 1);
+
+        const bool unsaved = world::mergeSectorDataLayers(sector->dataLayers, fileLayers);
+        sector->dirty = unsaved;
+        // finalizeSectorLoad rebuilds entityUUIDs from the parsed payload before the sector counts
+        // as Loaded again; without this the sector would be "loaded" with no entities, which is
+        // precisely the state canMutateDataLayers exists to keep out of saveSector.
+        sector->entityUUIDs.push_back(920090);
+        sector->state = world::SectorState::Loaded;
+
+        REQUIRE(sector->dataLayers.contains("fogOfWar"));
+        CHECK(sector->dataLayers.at("fogOfWar") == std::vector<uint8_t>{0x01, 0x02, 0x03});
+        CHECK_FALSE(sector->dirty); // identical to the file - nothing left to save
+
+        SUBCASE("a layer created after the save survives the reload AND keeps the sector dirty")
+        {
+            // This is the pair of assertions VK-1596's ACs hang on. The second one fails against
+            // an unconditional `dirty = false` in finalizeSectorLoad: the layer would survive the
+            // reload but Save World would then skip the sector and never write it.
+            sector->dataLayers["resourceGrid"] = std::vector<uint8_t>(64, 0x5A);
+
+            std::vector<nlohmann::json> reloadEntities;
+            world::SectorDataLayers reloadFileLayers;
+            REQUIRE(world::WorldSectorSerialization::loadSector(path, reloadEntities,
+                                                               &reloadFileLayers));
+
+            const bool stillUnsaved =
+                world::mergeSectorDataLayers(sector->dataLayers, reloadFileLayers);
+
+            CHECK(sector->dataLayers.contains("fogOfWar"));    // came back from the file
+            CHECK(sector->dataLayers.contains("resourceGrid")); // survived on the struct
+            CHECK(stillUnsaved);
+        }
+
+        SUBCASE("removing a layer only becomes permanent once the sector is saved")
+        {
+            // The merge is try_emplace, so an in-memory removal is a hole the file fills. The tab
+            // says so on screen rather than pretending otherwise.
+            sector->dataLayers.erase("fogOfWar");
+
+            std::vector<nlohmann::json> reloadEntities;
+            world::SectorDataLayers reloadFileLayers;
+            REQUIRE(world::WorldSectorSerialization::loadSector(path, reloadEntities,
+                                                               &reloadFileLayers));
+            world::SectorDataLayers resurrected = sector->dataLayers;
+            CHECK_FALSE(world::mergeSectorDataLayers(resurrected, reloadFileLayers));
+            CHECK(resurrected.contains("fogOfWar"));
+
+            // Save first, and it is gone for good.
+            sector->dirty = true;
+            REQUIRE(world::WorldSectorSerialization::saveSector(*sector, path));
+
+            std::vector<nlohmann::json> afterSave;
+            world::SectorDataLayers afterSaveLayers;
+            REQUIRE(world::WorldSectorSerialization::loadSector(path, afterSave, &afterSaveLayers));
+            CHECK_FALSE(afterSaveLayers.contains("fogOfWar"));
+            // ...and the save carried the sector's entities through, rather than truncating them
+            CHECK(afterSave.size() == 1);
+        }
+    }
+
+    TEST_CASE("VK-1596: a zero-byte data layer round-trips as a zero-byte layer")
+    {
+        // The Create button writes an empty blob, so this pins that an empty payload survives the
+        // msgpack section: json::binary({}) must stay binary, or the reader's is_binary() check
+        // drops the layer and Create would appear to do nothing.
+        resetTestRoot();
+        TestEntities scope{{920091, {5.0f, 0.0f, 5.0f}}};
+
+        auto sector = makeSector({920091});
+        sector.dataLayers["emptyLayer"] = {};
+
+        const std::string path = (testRoot() / "empty_layer.vfsector").string();
+        REQUIRE(world::WorldSectorSerialization::saveSector(sector, path));
+
+        std::vector<nlohmann::json> entityData;
+        world::SectorDataLayers layers;
+        REQUIRE(world::WorldSectorSerialization::loadSector(path, entityData, &layers));
+
+        REQUIRE(layers.contains("emptyLayer"));
+        CHECK(layers.at("emptyLayer").empty());
     }
 }

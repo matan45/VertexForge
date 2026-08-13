@@ -1123,9 +1123,11 @@ namespace services
 
         // Merge file layers under any in-memory ones: layers written at runtime
         // (e.g. fog-of-war) survive unload on the sector struct and are newer
-        // than what the file holds
-        for (auto& [layerName, bytes] : dataLayers)
-            sector->dataLayers.try_emplace(layerName, std::move(bytes));
+        // than what the file holds.
+        //
+        // VK-1596: the merge also reports whether anything resident is NOT in the file - see the
+        // dirty assignment at the end of this function.
+        const bool unsavedLayers = world::mergeSectorDataLayers(sector->dataLayers, dataLayers);
         for (const auto& [layerName, bytes] : sector->dataLayers)
         {
             ::events::world::SectorDataLayerLoadedNotification notif;
@@ -1150,7 +1152,14 @@ namespace services
         entityLoader.queueSectorLoadFromData(coord, entityNamesAndJson);
 
         // State stays Loading until all entities are processed (checked in update())
-        sector->dirty = false; // Just loaded from disk — nothing to save
+        //
+        // VK-1596: normally "just loaded from disk - nothing to save", but NOT when the merge above
+        // preserved a resident layer the file does not hold (or holds with different bytes). An
+        // explicit UnloadSectorCommand from the grid bypasses the streamer's dirty guard, so
+        // create-layer -> unload -> reload used to land here with the layer still resident and the
+        // dirty flag cleared - after which Save World skipped the sector and the layer was never
+        // written. Play mode still must never dirty: that would pin the sector against unload.
+        sector->dirty = unsavedLayers && !isPlayMode;
     }
 
     void WorldSectorServiceImpl::rescanEntityReferences()

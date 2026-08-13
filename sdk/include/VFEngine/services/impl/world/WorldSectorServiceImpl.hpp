@@ -5,6 +5,7 @@
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/animation/AnimationSnapshotEvents.hpp"
 #include "world/WorldSectorManager.hpp"
+#include "world/SectorDataLayerOps.hpp"
 #include "world/WorldDefinition.hpp"
 #include "world/SectorStreamer.hpp"
 #include "world/SectorEntityLoader.hpp"

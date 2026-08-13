@@ -41,6 +41,16 @@ namespace windows
         streamingConfigLoaded = false;
         overrideLoaded = false;
         hlodConfigLoaded = false;
+
+        // VK-1596: the detached-layer stash holds bytes belonging to the OUTGOING world's sector
+        // coords. Carrying it across would let a re-check paste one world's fog-of-war into
+        // another's identically numbered sector.
+        detachedLayers.clear();
+        cachedLayers = {};
+        cachedSectorLayers.clear();
+        selectedLayer.clear();
+        layerError.clear();
+        exportSectorIndex = 0;
     }
     void WorldSectorWindow::draw()
     {
@@ -79,6 +89,11 @@ namespace windows
                     if (ImGui::BeginTabItem("HLOD"))
                     {
                         drawHLODConfig();
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Data Layers")) // VK-1596
+                    {
+                        drawDataLayers();
                         ImGui::EndTabItem();
                     }
                     ImGui::EndTabBar();
@@ -207,6 +222,18 @@ namespace windows
 
         ImGui::TextDisabled("Color: Green=Loaded, Cyan=Prefetched, Gray=Unloaded, Yellow=Loading, "
                             "Blue outline=Camera");
+
+        // VK-1596: a highlight the user set on another tab must never be a mystery here.
+        if (!selectedLayer.empty())
+        {
+            const world::DataLayerSummary* summary = findCachedLayer(selectedLayer);
+            const uint32_t carrying = summary ? summary->sectorCount : 0;
+            ImGui::TextDisabled("Amber outline: sectors carrying \"%s\" (%u of %zu loaded)",
+                                selectedLayer.c_str(), carrying, cachedLayers.loadedSectors.size());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Clear##layerHighlight"))
+                selectedLayer.clear();
+        }
         ImGui::Spacing();
 
         auto& dispatcher = events::EventDispatcher::instance();
@@ -306,15 +333,36 @@ namespace windows
                                  readiness.entitySpawnsPending ? "entity spawns" : "");
                     }
 
-                    ImGui::SetTooltip("Sector (%d, %d) - %s\n"
-                                      "Entities: %u | Pending: %s\n"
-                                      "Terrain tiles: (%d,%d) to (%d,%d)\n"
-                                      "Click to %s",
-                                      x, z, stateStr,
-                                      readiness.entityCount, pendingStr,
-                                      x * tps, z * tps,
-                                      (x + 1) * tps - 1, (z + 1) * tps - 1,
-                                      clickAction);
+                    // VK-1596: SetTooltip takes one format string, which cannot carry a
+                    // variable-length layer list - hence the explicit Begin/End pair.
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Sector (%d, %d) - %s\n"
+                                "Entities: %u | Pending: %s\n"
+                                "Terrain tiles: (%d,%d) to (%d,%d)\n"
+                                "Click to %s",
+                                x, z, stateStr,
+                                readiness.entityCount, pendingStr,
+                                x * tps, z * tps,
+                                (x + 1) * tps - 1, (z + 1) * tps - 1,
+                                clickAction);
+
+                    // Read from the inverted summary cache - no extra query per hover.
+                    if (const auto layerIt = cachedSectorLayers.find(info.coord);
+                        layerIt != cachedSectorLayers.end() && !layerIt->second.empty())
+                    {
+                        std::string layerList;
+                        for (const auto& layerName : layerIt->second)
+                        {
+                            if (!layerList.empty()) layerList += ", ";
+                            layerList += layerName;
+                        }
+                        ImGui::TextDisabled("Layers: %s", layerList.c_str());
+                    }
+                    else if (info.state == world::SectorState::Loaded)
+                    {
+                        ImGui::TextDisabled("Layers: none");
+                    }
+                    ImGui::EndTooltip();
                 }
 
                 // Draw blue outline for camera sector
@@ -325,6 +373,28 @@ namespace windows
                     ImGui::GetWindowDrawList()->AddRect(
                         btnMin, btnMax,
                         IM_COL32(80, 140, 255, 255), 0.0f, 0, 2.0f);
+                }
+
+                // VK-1596: amber outline for sectors carrying the layer selected in the Data
+                // Layers tab. Inset so it coexists with the camera outline drawn at exact bounds,
+                // and an OUTLINE rather than a fill on purpose - the fill table above is mirrored
+                // by ViewPortStreamingOverlay::cellColor so the two views agree on what a colour
+                // means, and recolouring here would desync them.
+                if (!selectedLayer.empty())
+                {
+                    const auto layerIt = cachedSectorLayers.find(info.coord);
+                    if (layerIt != cachedSectorLayers.end() &&
+                        std::find(layerIt->second.begin(), layerIt->second.end(), selectedLayer) !=
+                            layerIt->second.end())
+                    {
+                        ImVec2 btnMin = ImGui::GetItemRectMin();
+                        ImVec2 btnMax = ImGui::GetItemRectMax();
+                        btnMin.x += 3.0f; btnMin.y += 3.0f;
+                        btnMax.x -= 3.0f; btnMax.y -= 3.0f;
+                        ImGui::GetWindowDrawList()->AddRect(
+                            btnMin, btnMax,
+                            IM_COL32(255, 190, 60, 255), 0.0f, 0, 2.0f);
+                    }
                 }
 
                 ImGui::PopStyleColor();
@@ -815,6 +885,8 @@ namespace windows
                 }
             }
         }
+
+        refreshDataLayers(); // VK-1596 - self-gating, see its definition
 
         // Refresh cached HLOD status counts
         cachedHLODCount = 0;

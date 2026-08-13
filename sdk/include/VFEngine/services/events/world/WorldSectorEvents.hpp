@@ -2,6 +2,7 @@
 
 #include "../EventTypes.hpp"
 #include "world/WorldTypes.hpp"
+#include "world/SectorDataLayerOps.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
@@ -147,6 +148,22 @@ namespace events::world
         std::string layerName;
 
         std::string_view getName() const override { return "GetSectorDataLayer"; }
+    };
+
+    // VK-1596: everything the editor's Data Layers tab shows, in one poll.
+    //
+    // Deliberately returned BY VALUE, unlike GetStreamingOverlaySnapshotQuery below. That query
+    // hands out borrowed pointers into service-owned buffers and is documented SINGLE-CONSUMER,
+    // naming a panel in the World Sectors window as the exact hazard - so this one must not copy
+    // the trick. It is affordable because the tab polls it on the window's existing 0.25s refresh
+    // timer rather than per frame, and the result is bounded by (loaded sectors x layer names).
+    // Do not "optimize" it into the overlay buffers later.
+    //
+    // Loaded sectors only. An unloaded sector's .vfsector may well carry layers, but reading them
+    // would need a TLV index scan per file; the editor labels the list accordingly.
+    struct GetDataLayersSummaryQuery : IQuery<::world::DataLayerInventory>
+    {
+        std::string_view getName() const override { return "GetDataLayersSummary"; }
     };
 
     // Published once per layer when a streamed-in sector carries data layers

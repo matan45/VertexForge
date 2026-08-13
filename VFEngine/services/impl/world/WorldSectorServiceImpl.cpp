@@ -756,10 +756,17 @@ namespace services
                 if (!worldMode || cmd.layerName.empty()) return false;
                 auto* sector = sectorManager.getSector(cmd.coord);
                 if (!sector) return false;
+                if (!world::canMutateDataLayers(*sector)) return false;
 
                 sector->dataLayers[cmd.layerName] = cmd.data;
-                // Edit-mode only dirty (play-mode dirty pins the sector against unload);
-                // play-mode layer writes live in memory until an editor-mode save
+                // Edit-mode only dirty: a dirty sector is never auto-unloaded by the streamer, so
+                // dirtying in play mode would pin it forever.
+                //
+                // VK-1596: the old note here claimed play-mode writes "live in memory until an
+                // editor-mode save". They do not. Leaving play runs sectorManager.clear() (see the
+                // EditorModeChangedNotification handler below), which destroys every WorldSector
+                // and every dataLayers map with it - so a play-mode write is lost at Stop, not
+                // merely unsaved. The editor blocks layer editing in play mode for that reason.
                 if (!isPlayMode)
                     sector->dirty = true;
                 return true;
@@ -771,6 +778,7 @@ namespace services
                 if (!worldMode) return false;
                 auto* sector = sectorManager.getSector(cmd.coord);
                 if (!sector) return false;
+                if (!world::canMutateDataLayers(*sector)) return false;
 
                 if (sector->dataLayers.erase(cmd.layerName) == 0)
                     return false;
@@ -789,6 +797,17 @@ namespace services
                 auto it = sector->dataLayers.find(q.layerName);
                 if (it == sector->dataLayers.end()) return std::nullopt;
                 return it->second;
+            });
+
+        // VK-1596: everything the editor's Data Layers tab shows, in one poll. Built by value -
+        // see the note on the query - and only over Loaded sectors.
+        dispatcher.registerQueryHandler<::events::world::GetDataLayersSummaryQuery>(
+            [this](const ::events::world::GetDataLayersSummaryQuery&)
+            {
+                world::DataLayerInventory inventory;
+                if (worldMode)
+                    world::summarizeDataLayers(sectorManager, inventory);
+                return inventory;
             });
 
         dispatcher.registerQueryHandler<::events::world::GetSectorReadinessQuery>(
