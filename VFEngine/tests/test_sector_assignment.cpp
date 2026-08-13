@@ -318,8 +318,10 @@ TEST_SUITE("SectorAssignment")
         REQUIRE(tree["components"].contains("streamingPolicy"));
         CHECK_FALSE(tree["components"]["streamingPolicy"]["spatiallyLoaded"].get<bool>());
 
+        // Parent must be a real scene-graph node, not a detached entity - deserializeEntityTree
+        // parents the instance through the graph (see test_scene_hierarchy_reorder.cpp:136-137).
         scene::SceneGraphSystem sceneGraph;
-        auto parent = makeEntity("PrefabParent");
+        auto& parent = sceneGraph.GetRoot();
         auto instance = serialization::PrefabSerialization::deserializeEntityTree(tree, parent, sceneGraph);
 
         REQUIRE(instance.isValid());
