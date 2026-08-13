@@ -68,6 +68,20 @@ namespace components
         std::string worldFilePath;
     };
 
+    // VK-1597: UE5 World Partition's "Is Spatially Loaded", per entity. false keeps the entity out
+    // of every World Sector, so it lives in the scene file and survives any sector unload - the
+    // same path the type skip-list (terrain / ocean / IBL / camera) has always used.
+    //
+    // ABSENT MEANS spatiallyLoaded == true. Only an entity the user has deliberately pinned carries
+    // the component, so nothing about existing scenes or .vfsector payloads changes.
+    //
+    // Engine infrastructure, deliberately not a plugin component: the sector bucketer in Services
+    // has to see it with no plugin loaded.
+    struct StreamingPolicyComponent
+    {
+        bool spatiallyLoaded = true;
+    };
+
     struct HLODProxyComponent
     {
         int32_t cellX = 0;

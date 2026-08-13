@@ -51,6 +51,31 @@ namespace windows::details {
                     "Static entities are placed in a BVH that rebuilds less frequently.\n"
                     "Uncheck for entities that move often (affects rendering, physics, and lights).");
             }
+
+            // VK-1597: World Sector streaming policy. Sits here rather than behind its own
+            // Add Component entry because it is the sibling of Is Static above and every entity
+            // has a Transform, so it is discoverable without knowing the component exists.
+            events::scene::IsEntitySpatiallyLoadedQuery spatialQuery;
+            spatialQuery.entity = handle;
+            bool spatiallyLoaded = dispatcher.query(spatialQuery);
+
+            if (ImGui::Checkbox("Spatially Loaded", &spatiallyLoaded))
+            {
+                events::scene::SetEntitySpatiallyLoadedCommand cmd;
+                cmd.entity = handle;
+                cmd.spatiallyLoaded = spatiallyLoaded;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip(
+                    "Uncheck to keep this entity loaded no matter which World Sector it sits in\n"
+                    "(global managers, match state, landmark meshes).\n\n"
+                    "An always-loaded entity is stored in the SCENE file, not in a .vfsector, so\n"
+                    "Save Scene is what persists it - Save World alone is not enough.\n\n"
+                    "Only affects sector streaming. Entities with Is Static unchecked already\n"
+                    "survive an unload, and terrain / ocean / IBL / cameras are never streamed.");
+            }
         }
     }
 

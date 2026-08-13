@@ -49,6 +49,10 @@ namespace components
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, NavInvokerComponent, ControllerComponent,
                                                IKTargetComponent, WorldSectorComponent,
+                                               // VK-1597: a duplicated landmark must keep its
+                                               // always-loaded pin, or the copy silently starts
+                                               // getting bucketed and unloaded.
+                                               StreamingPolicyComponent,
                                                GrassComponent, MeshBrushInstanceComponent,
                                                // VK-1621
                                                RoadSplineComponent,

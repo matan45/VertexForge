@@ -149,6 +149,23 @@ namespace windows
                     dispatcher.execute(cmd);
                     invalidateConfigCaches(); // clearWorld publishes no WorldLoadedNotification
                 }
+
+                // VK-1597: an always-loaded entity is persisted by the SCENE file, and Save World
+                // does not write that. Deliberately a warning rather than an implicit Save Scene:
+                // saveScene is sector-unaware, so auto-saving here would bake every currently
+                // resident sector entity into the .vfscene and pin them all always-loaded.
+                const uint32_t pendingMigrations =
+                    dispatcher.query(events::world::GetAlwaysLoadedMigrationCountQuery{});
+                if (pendingMigrations > 0)
+                {
+                    ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.2f, 1.0f),
+                                       "%u entity(ies) moved to the always-loaded set - Save Scene to persist them.",
+                                       pendingMigrations);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("These entities were removed from their sector because\n"
+                                          "\"Spatially Loaded\" is unchecked. They now live in the\n"
+                                          "scene file, so File > Save Scene is what writes them.");
+                }
             }
             else
             {

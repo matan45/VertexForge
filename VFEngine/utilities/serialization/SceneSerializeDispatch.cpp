@@ -189,6 +189,12 @@ namespace serialization
             out["volumetricNavVolume"] = serializeVolumetricNavVolume(entity.getComponent<components::VolumetricNavVolumeComponent>());
         if (entity.hasComponent<components::VolumetricAgentComponent>())
             out["volumetricAgent"] = serializeVolumetricAgent(entity.getComponent<components::VolumetricAgentComponent>());
+        // VK-1597: written only when the entity actually carries the component - absence is the
+        // "spatially loaded" default, so untouched entities keep their exact current payload.
+        if (entity.hasComponent<components::StreamingPolicyComponent>())
+            out["streamingPolicy"] = {
+                {"spatiallyLoaded", entity.getComponent<components::StreamingPolicyComponent>().spatiallyLoaded}
+            };
         if (entity.hasComponent<components::PrefabInstanceComponent>())
             out["prefabInstance"] = {
                 {"sourcePrefabPath", entity.getComponent<components::PrefabInstanceComponent>().sourcePrefabPath}

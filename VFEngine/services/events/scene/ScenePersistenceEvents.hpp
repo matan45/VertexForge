@@ -123,6 +123,15 @@ namespace events::scene {
         std::string_view getName() const override { return "SceneCleared"; }
     };
 
+    // VK-1597: published only on a SUCCESSFUL save. World Sector streaming needs it because an
+    // always-loaded entity is persisted by the scene file, not by Save World - so this is the only
+    // signal that tells the editor its "Save Scene still owed" warning can be cleared.
+    struct SceneSavedNotification : INotification {
+        std::string scenePath;
+
+        std::string_view getName() const override { return "SceneSaved"; }
+    };
+
     struct SceneLoadingStartedNotification : INotification {
         std::string scenePath;
 

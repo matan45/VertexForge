@@ -210,6 +210,14 @@ namespace events::world
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
+    // VK-1597: entities pulled out of a sector because they are not spatially loaded, counted
+    // since the last successful scene save. Non-zero means the .vfscene - which is the ONLY place
+    // an always-loaded entity is persisted - is out of date, and Save World will not fix that.
+    struct GetAlwaysLoadedMigrationCountQuery : IQuery<uint32_t>
+    {
+        std::string_view getName() const override { return "GetAlwaysLoadedMigrationCount"; }
+    };
+
     // VK-1591: prefetch-ring residency for the streaming overlay. `bytes` is EXACT - it is the sum
     // of the raw .vfsector byte buffers held - unlike SectorMetadata::estimatedMemory, which is the
     // on-disk header figure.

@@ -117,6 +117,16 @@ namespace events::scene {
         std::string_view getName() const override { return "SetEntityStatic"; }
     };
 
+    // VK-1597: UE5's "Is Spatially Loaded". false pins the entity out of World Sector streaming.
+    // Owned by the scene layer (EntityStateService), not the world service, so the inspector
+    // checkbox still works with no world open; WorldSectorServiceImpl reacts to the notification.
+    struct SetEntitySpatiallyLoadedCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        bool spatiallyLoaded;
+
+        std::string_view getName() const override { return "SetEntitySpatiallyLoaded"; }
+    };
+
     // ============================================
     // Entity / Transform / Hierarchy Queries
     // ============================================
@@ -177,6 +187,13 @@ namespace events::scene {
         std::string_view getName() const override { return "IsEntityStatic"; }
     };
 
+    // VK-1597: true when StreamingPolicyComponent is absent - absence IS the default.
+    struct IsEntitySpatiallyLoadedQuery : IQuery<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "IsEntitySpatiallyLoaded"; }
+    };
+
     // ============================================
     // Entity / Transform / Hierarchy Notifications
     // ============================================
@@ -221,6 +238,16 @@ namespace events::scene {
         bool isStatic;
 
         std::string_view getName() const override { return "EntityStaticChanged"; }
+    };
+
+    // VK-1597: published only when the value actually changed. A notification rather than a
+    // world-service command on purpose - publish is fire-and-forget, so the scene layer stays
+    // usable in a build or a session where no world service is registered.
+    struct EntityStreamingPolicyChangedNotification : INotification {
+        services::EntityHandle entity;
+        bool spatiallyLoaded;
+
+        std::string_view getName() const override { return "EntityStreamingPolicyChanged"; }
     };
 
     struct EntityDuplicatedNotification : INotification {

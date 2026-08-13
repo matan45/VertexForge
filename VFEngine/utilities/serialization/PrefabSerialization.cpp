@@ -181,6 +181,15 @@ namespace serialization
                 entity.getComponent<components::IKTargetComponent>());
         }
 
+        // VK-1597: a prefab of an always-loaded landmark must instantiate still pinned, or the
+        // instance is silently bucketed into a sector and vanishes on the next unload.
+        if (entity.hasComponent<components::StreamingPolicyComponent>())
+        {
+            out["streamingPolicy"] = {
+                {"spatiallyLoaded", entity.getComponent<components::StreamingPolicyComponent>().spatiallyLoaded}
+            };
+        }
+
         // Behavior tree must be baked so instantiated entities carry their AI brain
         // (the .vfBehaviorTree ref + enabled flag); matches the scene serializer.
         if (entity.hasComponent<components::BehaviorTreeComponent>())
@@ -525,6 +534,12 @@ namespace serialization
         {
             auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
             SceneSerialization::deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
+        }
+
+        if (componentsJson.contains("streamingPolicy")) // VK-1597
+        {
+            entity.addOrReplaceComponent<components::StreamingPolicyComponent>().spatiallyLoaded =
+                componentsJson["streamingPolicy"].value("spatiallyLoaded", true);
         }
 
         if (componentsJson.contains("behaviorTree"))

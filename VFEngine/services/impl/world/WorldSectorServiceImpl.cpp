@@ -19,6 +19,7 @@
 #include "../../events/world/HLODEvents.hpp"
 #include "world/HLODGenerator.hpp"
 #include "world/HLODCellPlanner.hpp"
+#include "world/SectorAssignment.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include "resource/AssetLifecycleHelpers.hpp"
@@ -28,19 +29,6 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
-
-namespace
-{
-    bool isManagedBySeparateSystem(const scene::Entity& entity)
-    {
-        return entity.hasComponent<components::TerrainComponent>()
-            || entity.hasComponent<components::TerrainTileComponent>()
-            || entity.hasComponent<components::OceanComponent>()
-            || entity.hasComponent<components::IBLComponent>()
-            || entity.hasComponent<components::CameraComponent>();
-    }
-
-}
 
 namespace services
 {
@@ -73,6 +61,14 @@ namespace services
             if (entity != entt::null)
             {
                 scene::Entity sceneEntity(entity);
+
+                // VK-1597: a .vfsector written before the entity was pinned still lists it. Spawn
+                // it (the payload is the only copy of its data) but do NOT re-capture it into the
+                // sector, or the very next unload would destroy it again. The next Save World
+                // rewrites the file without it - see reconcileAlwaysLoadedEntities.
+                if (!world::readEntityStreamingTraits(sceneEntity).spatiallyLoaded)
+                    return;
+
                 if (sceneEntity.hasComponent<components::TransformComponent>())
                 {
                     assignPos = sceneEntity.getComponent<components::TransformComponent>().position;
@@ -916,6 +912,12 @@ namespace services
                 return buildOverlaySnapshot(query.maxRadius);
             });
 
+        dispatcher.registerQueryHandler<::events::world::GetAlwaysLoadedMigrationCountQuery>(
+            [this](const ::events::world::GetAlwaysLoadedMigrationCountQuery&)
+            {
+                return alwaysLoadedMigrationCount;
+            });
+
         dispatcher.registerCommandHandler<::events::world::MarkEntitySectorDirtyCommand>(
             [this](const ::events::world::MarkEntitySectorDirtyCommand& cmd)
             {
@@ -1157,17 +1159,17 @@ namespace services
                     }
 
                     auto& root = sceneGraph->GetRoot();
+                    const auto& reassignConfig = sectorManager.getConfig();
                     for (auto& child : root.getChildren())
                     {
-                        if (isManagedBySeparateSystem(child))
+                        // VK-1597: this is also the recovery path for a policy flip attempted
+                        // during play - the flag is honoured here even though the migration
+                        // handler refused it mid-session.
+                        const auto assignment = world::resolveEntitySectorAssignment(child, reassignConfig);
+                        if (!assignment.isSpatial())
                             continue;
 
-                        if (child.hasComponent<components::TransformComponent>())
-                        {
-                            const auto& transform = child.getComponent<components::TransformComponent>();
-                            uint64_t uuid = child.getUUID().getValue();
-                            sectorManager.assignEntityToSector(uuid, transform.position);
-                        }
+                        sectorManager.assignEntityToSector(child.getUUID().getValue(), assignment.coord);
                     }
 
                     sectorManager.forEachSector([](world::WorldSector& sector)
@@ -1206,13 +1208,46 @@ namespace services
                 if (!registry.valid(entity)) return;
 
                 scene::Entity sceneEntity(entity);
-                if (isManagedBySeparateSystem(sceneEntity)) return;
+                // VK-1597: an always-loaded entity has no sector to migrate between, so the
+                // isSpatial() gate subsumes the old type skip-list here. (hasEntitySector below
+                // already covers it once the entity has been migrated out, but not in the window
+                // before the flip is applied.)
+                if (!world::resolveEntitySectorAssignment(sceneEntity, sectorManager.getConfig()).isSpatial())
+                    return;
 
                 uint64_t uuid = sceneEntity.getUUID().getValue();
                 if (sectorManager.hasEntitySector(uuid))
                 {
                     onTransformChanged(uuid, notif.newTransform.position);
                 }
+            });
+
+        // VK-1597: the interactive half of the streaming-policy flip. A notification rather than a
+        // command handler because EntityStateService owns the component - this service only owns
+        // the sector membership that has to follow it.
+        streamingPolicyChangedToken =
+            dispatcher.subscribe<::events::scene::EntityStreamingPolicyChangedNotification>(
+            [this](const ::events::scene::EntityStreamingPolicyChangedNotification& notif)
+            {
+                if (!worldMode) return;
+
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = internal::fromHandle(notif.entity);
+                if (!registry.valid(entity)) return;
+
+                auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
+                if (!uuidComp) return;
+
+                onStreamingPolicyChanged(uuidComp->id.getValue(), notif.spatiallyLoaded);
+            });
+
+        // VK-1597: the scene file is what actually persists an always-loaded entity, so a
+        // successful scene save - not Save World - is what clears the outstanding-migration
+        // warning.
+        sceneSavedToken = dispatcher.subscribe<::events::scene::SceneSavedNotification>(
+            [this](const ::events::scene::SceneSavedNotification&)
+            {
+                alwaysLoadedMigrationCount = 0;
             });
 
         // Auto-unregister streaming sources whose owning entity is deleted
@@ -1296,16 +1331,19 @@ namespace services
                 if (!registry.valid(entity)) return;
 
                 scene::Entity sceneEntity(entity);
-                if (isManagedBySeparateSystem(sceneEntity)) return;
 
-                if (sceneEntity.hasComponent<components::TransformComponent>())
+                // VK-1597: HierarchyService::createEntity publishes this on a BARE entity, before
+                // any component is deserialized onto it, so a prefab instance that is about to
+                // receive StreamingPolicyComponent still lands in a sector here. That is what
+                // reconcileAlwaysLoadedEntities() at Save World exists to undo.
+                const auto assignment = world::resolveEntitySectorAssignment(sceneEntity, sectorManager.getConfig());
+                if (!assignment.isSpatial())
+                    return;
+
+                uint64_t uuid = sceneEntity.getUUID().getValue();
+                if (!sectorManager.hasEntitySector(uuid))
                 {
-                    uint64_t uuid = sceneEntity.getUUID().getValue();
-                    if (!sectorManager.hasEntitySector(uuid))
-                    {
-                        const auto& transform = sceneEntity.getComponent<components::TransformComponent>();
-                        sectorManager.assignEntityToSector(uuid, transform.position);
-                    }
+                    sectorManager.assignEntityToSector(uuid, assignment.coord);
                 }
             });
 

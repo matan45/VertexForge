@@ -49,5 +49,11 @@ namespace services
         // Static state
         bool setEntityStatic(EntityHandle entity, bool isStatic);
         bool isEntityStatic(EntityHandle entity) const;
+
+        // VK-1597: World Sector streaming policy. The component is only ever ADDED here - absence
+        // means spatially loaded, so an entity the user has never touched keeps a clean payload,
+        // but once pinned it keeps the component (holding true again) so the value round-trips.
+        bool setEntitySpatiallyLoaded(EntityHandle entity, bool spatiallyLoaded);
+        bool isEntitySpatiallyLoaded(EntityHandle entity) const;
     };
 }

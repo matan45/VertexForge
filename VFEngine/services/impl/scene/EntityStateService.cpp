@@ -70,6 +70,18 @@ namespace services
             {
                 return isEntityStatic(query.entity);
             });
+
+        dispatcher.registerCommandHandler<events::scene::SetEntitySpatiallyLoadedCommand>(
+            [this](const events::scene::SetEntitySpatiallyLoadedCommand& cmd)
+            {
+                return setEntitySpatiallyLoaded(cmd.entity, cmd.spatiallyLoaded);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::IsEntitySpatiallyLoadedQuery>(
+            [this](const events::scene::IsEntitySpatiallyLoadedQuery& query)
+            {
+                return isEntitySpatiallyLoaded(query.entity);
+            });
     }
 
     void EntityStateService::setSelectedEntity(std::optional<EntityHandle> entity)
@@ -249,5 +261,54 @@ namespace services
 
         const auto& transform = registry.get<components::TransformComponent>(enttEntity);
         return transform.isStatic;
+    }
+
+    bool EntityStateService::setEntitySpatiallyLoaded(EntityHandle entity, bool spatiallyLoaded)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+        auto* policy = registry.try_get<components::StreamingPolicyComponent>(enttEntity);
+
+        // Absence is the "spatially loaded" default, so setting true on an entity that never
+        // carried the component is a genuine no-op - do not mint one just to store the default.
+        if (!policy)
+        {
+            if (spatiallyLoaded)
+            {
+                return true;
+            }
+            policy = &registry.emplace<components::StreamingPolicyComponent>(enttEntity);
+        }
+        else if (policy->spatiallyLoaded == spatiallyLoaded)
+        {
+            return true;
+        }
+
+        policy->spatiallyLoaded = spatiallyLoaded;
+
+        events::scene::EntityStreamingPolicyChangedNotification notification;
+        notification.entity = entity;
+        notification.spatiallyLoaded = spatiallyLoaded;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool EntityStateService::isEntitySpatiallyLoaded(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return true;
+        }
+
+        const auto* policy =
+            registry.try_get<components::StreamingPolicyComponent>(internal::fromHandle(entity));
+        return policy ? policy->spatiallyLoaded : true;
     }
 }

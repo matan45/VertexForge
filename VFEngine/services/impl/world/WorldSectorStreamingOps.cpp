@@ -5,6 +5,7 @@
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
 #include "world/HLODSerialization.hpp"
+#include "world/SectorAssignment.hpp"
 #include "serialization/SceneSerialization.hpp"
 #include "serialization/SerializationFileAccess.hpp"
 #include "resource/ResourceLoadScheduler.hpp"
@@ -20,6 +21,7 @@
 #include "math/TransformUtils.hpp"
 #include "threading/JobSystem.hpp"
 #include <atomic>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 namespace
@@ -1233,25 +1235,33 @@ namespace services
         // Cancel any pending entity loads for this sector (prevents recreating entities after unload)
         entityLoader.cancelPendingLoads(coord);
 
-        // Separate static entities (to unload) from dynamic entities (to keep alive)
+        // Separate static entities (to unload) from entities that must stay alive: dynamic ones,
+        // and — VK-1597 — anything pinned as not spatially loaded.
         std::vector<uint64_t> staticUUIDs;
-        std::vector<uint64_t> dynamicUUIDs;
+        std::vector<uint64_t> retainedUUIDs;
 
         for (uint64_t uuid : sector->entityUUIDs)
         {
-            bool isDynamic = false;
+            bool retain = false;
             auto ent = scene::EntityRegistry::findByUUID(uuid);
             if (ent != entt::null)
             {
                 scene::Entity sceneEntity(ent);
                 if (sceneEntity.hasComponent<components::TransformComponent>())
                 {
-                    isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
+                    retain = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
                 }
+
+                // VK-1597: the guarantee behind the whole feature, enforced at the one point where
+                // it could be violated. A pinned entity can still be listed here - a .vfsector
+                // written before it was pinned lists it, and reconcileAlwaysLoadedEntities does not
+                // run until the next Save World - so destroying it on that word alone would be
+                // exactly the bug the flag exists to prevent.
+                retain = retain || !world::readEntityStreamingTraits(sceneEntity).spatiallyLoaded;
             }
 
-            if (isDynamic)
-                dynamicUUIDs.push_back(uuid);
+            if (retain)
+                retainedUUIDs.push_back(uuid);
             else
                 staticUUIDs.push_back(uuid);
         }
@@ -1267,8 +1277,9 @@ namespace services
         // subtree, so queueing the expanded set would try to destroy children twice.
         entityLoader.queueSectorUnload(coord, staticUUIDs);
 
-        // Clear the sector's entity list, then re-add dynamic entities so they remain tracked
-        sector->entityUUIDs = dynamicUUIDs;
+        // Clear the sector's entity list, then re-add the entities that stayed alive so they
+        // remain tracked
+        sector->entityUUIDs = retainedUUIDs;
         sector->state = world::SectorState::Unloaded;
 
         ::events::world::SectorUnloadedNotification notif;
@@ -1298,6 +1309,104 @@ namespace services
 
         sectorManager.removeEntityFromSector(uuid, oldCoord);
         sectorManager.assignEntityToSector(uuid, newPosition);
+    }
+
+    void WorldSectorServiceImpl::onStreamingPolicyChanged(uint64_t uuid, bool spatiallyLoaded)
+    {
+        // VK-1597: edit-mode only, same reason as MarkEntitySectorDirtyCommand and
+        // onTransformChanged above - a dirty sector is never auto-unloaded, so migrating during
+        // play would pin sectors for the rest of the session. The play->edit restore re-buckets
+        // every root child through the same gate, so a flip attempted in play is honoured on stop.
+        if (isPlayMode)
+            return;
+
+        if (!spatiallyLoaded)
+        {
+            if (!sectorManager.hasEntitySector(uuid))
+                return;
+
+            const world::SectorCoord coord = sectorManager.getEntitySector(uuid);
+            auto* sector = sectorManager.getSector(coord);
+            if (!sector)
+                return;
+
+            // canMigrateEntity is a DATA-LOSS guard, not a convenience check: a non-Loaded
+            // sector's entityUUIDs is empty or holds only its dynamic leftovers, so dirtying it
+            // would make the next Save World overwrite a good .vfsector with an empty one. This
+            // is reachable - handleSectorUnload leaves dynamic entities mapped to an Unloaded
+            // sector.
+            if (!world::canMigrateEntity(*sector))
+            {
+                vfLogWarning("[WorldSector] Entity {} is mapped to sector ({},{}), which is not "
+                             "loaded - its always-loaded flag will be applied on the next Save "
+                             "World instead.",
+                             uuid, coord.x, coord.z);
+                return;
+            }
+
+            sectorManager.removeEntityFromSector(uuid, coord);
+            ++alwaysLoadedMigrationCount;
+            return;
+        }
+
+        // Back to spatially loaded: re-derive the assignment rather than trusting the old coord,
+        // because the entity may have been moved while it was pinned (TransformChangedNotification
+        // ignores entities with no sector).
+        if (sectorManager.hasEntitySector(uuid))
+            return;
+
+        auto entity = scene::EntityRegistry::findByUUID(uuid);
+        if (entity == entt::null)
+            return;
+
+        const scene::Entity sceneEntity(entity);
+        const auto assignment = world::resolveEntitySectorAssignment(sceneEntity, sectorManager.getConfig());
+        if (!assignment.isSpatial())
+            return;
+
+        sectorManager.assignEntityToSector(uuid, assignment.coord);
+    }
+
+    uint32_t WorldSectorServiceImpl::reconcileAlwaysLoadedEntities()
+    {
+        uint32_t migrated = 0;
+
+        std::vector<std::pair<uint64_t, world::SectorCoord>> toRemove;
+        sectorManager.forEachSector([&](world::WorldSector& sector)
+        {
+            // Loaded only. An Unloaded/Prefetched sector's entityUUIDs is not authoritative, and
+            // resolving it against the registry would "find" nothing and drop real entities.
+            if (!world::canMigrateEntity(sector))
+                return;
+
+            for (uint64_t uuid : sector.entityUUIDs)
+            {
+                auto entity = scene::EntityRegistry::findByUUID(uuid);
+                if (entity == entt::null)
+                    continue;
+
+                const scene::Entity sceneEntity(entity);
+                if (!world::readEntityStreamingTraits(sceneEntity).spatiallyLoaded)
+                    toRemove.emplace_back(uuid, sector.coord);
+            }
+        });
+
+        // Deduplicate on (uuid, coord) rather than on hasEntitySector: a pinned entity spawned
+        // from a stale .vfsector is deliberately never registered in entityToSector (see the
+        // setOnEntityLoaded gate), so a hasEntitySector check would skip exactly the entries this
+        // pass exists to clean up. removeEntityFromSector erases every occurrence, which is what
+        // makes the second visit of a duplicated uuid a harmless no-op.
+        std::unordered_set<uint64_t> handled;
+        for (const auto& [uuid, coord] : toRemove)
+        {
+            if (!handled.insert(uuid).second)
+                continue;
+
+            sectorManager.removeEntityFromSector(uuid, coord);
+            ++migrated;
+        }
+
+        return migrated;
     }
 
     WorldSectorServiceImpl::CameraPose WorldSectorServiceImpl::getPrimaryCameraPose() const

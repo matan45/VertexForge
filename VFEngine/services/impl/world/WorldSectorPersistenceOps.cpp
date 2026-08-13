@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
 #include "world/WorldDefinitionSerialization.hpp"
+#include "world/SectorAssignment.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/ObjectStreamingEvents.hpp"
@@ -18,18 +19,6 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
-
-namespace
-{
-    bool isManagedBySeparateSystem(const scene::Entity& entity)
-    {
-        return entity.hasComponent<components::TerrainComponent>()
-            || entity.hasComponent<components::TerrainTileComponent>()
-            || entity.hasComponent<components::OceanComponent>()
-            || entity.hasComponent<components::IBLComponent>()
-            || entity.hasComponent<components::CameraComponent>();
-    }
-}
 
 namespace services
 {
@@ -79,18 +68,16 @@ namespace services
         root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
             toProjectRelativePath(worldPath);
 
-        // Assign existing entities to sectors (skip terrain/water/IBL/camera — they have their own systems)
+        // Assign existing entities to sectors. The decision skips terrain/water/IBL/camera (they
+        // have their own systems) and, since VK-1597, anything the user pinned as not spatially
+        // loaded — those stay scene-graph children and are persisted by the scene file.
         for (auto& child : root.getChildren())
         {
-            if (isManagedBySeparateSystem(child))
+            const auto assignment = world::resolveEntitySectorAssignment(child, sectorConfig);
+            if (!assignment.isSpatial())
                 continue;
 
-            if (child.hasComponent<components::TransformComponent>())
-            {
-                const auto& transform = child.getComponent<components::TransformComponent>();
-                uint64_t uuid = child.getUUID().getValue();
-                sectorManager.assignEntityToSector(uuid, transform.position);
-            }
+            sectorManager.assignEntityToSector(child.getUUID().getValue(), assignment.coord);
         }
 
         // Mark all sectors as Loaded since entities are already live in the scene,
@@ -176,6 +163,13 @@ namespace services
         std::filesystem::path worldDir = std::filesystem::path(path).parent_path();
         std::filesystem::path sectorsDir = worldDir / "sectors";
         std::filesystem::create_directories(sectorsDir);
+
+        // VK-1597: the authoritative half of the streaming-policy migration, and the ticket's own
+        // "migrates it out on next Save World". The notification path only covers the inspector
+        // checkbox; the component can also arrive via prefab instantiation, a script, or undo, and
+        // EntityCreatedNotification fires on a bare entity before its components are deserialized.
+        // Runs BEFORE the save loop so the dirtied sectors it produces are written this pass.
+        alwaysLoadedMigrationCount += reconcileAlwaysLoadedEntities();
 
         std::vector<world::SectorCoord> staleHLODs;
         sectorManager.forEachSector([&](world::WorldSector& sector)

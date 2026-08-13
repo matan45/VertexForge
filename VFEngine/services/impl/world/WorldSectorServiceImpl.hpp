@@ -144,6 +144,14 @@ namespace services
         ::events::SubscriptionToken entityCreatedToken;
         ::events::SubscriptionToken terrainCreatedToken;
         ::events::SubscriptionToken terrainLoadedToken;
+        ::events::SubscriptionToken streamingPolicyChangedToken; // VK-1597
+        ::events::SubscriptionToken sceneSavedToken;             // VK-1597
+
+        // VK-1597: entities pulled out of a sector because they are not spatially loaded, counted
+        // since the last scene save. They now persist ONLY in the .vfscene, and Save World is not
+        // what writes that - so the World Sectors window uses this to tell the user a Save Scene is
+        // still owed. Reset by SceneSavedNotification, deliberately NOT by saveWorld.
+        uint32_t alwaysLoadedMigrationCount = 0;
 
         glm::vec3 cachedCameraPos{0.0f};
         std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
@@ -351,6 +359,18 @@ namespace services
                                 std::vector<nlohmann::json>& entityData,
                                 world::SectorDataLayers& dataLayers);
         void onTransformChanged(uint64_t uuid, const glm::vec3& newPosition);
+
+        // VK-1597: interactive half of the streaming-policy flip - takes effect immediately so the
+        // entity survives its former sector's very next unload, without waiting for a save.
+        void onStreamingPolicyChanged(uint64_t uuid, bool spatiallyLoaded);
+
+        // VK-1597: authoritative half. The component can also arrive through routes that publish
+        // nothing (prefab instantiation, a script, undo), and EntityCreatedNotification fires on a
+        // BARE entity before any component is deserialized onto it - so the notification path alone
+        // would leave such an entity bucketed forever. Run at the top of saveWorld, which is the
+        // ticket's own "migrates it out on next Save World". Returns how many entities moved.
+        uint32_t reconcileAlwaysLoadedEntities();
+
         void onTerrainAvailable(float worldTileSize);
         // VK-1593: position plus the unit look direction of the play-mode camera. Replaces the
         // position-only getter - every caller wanted the pose. `forward` is left zero when there
