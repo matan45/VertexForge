@@ -55,7 +55,19 @@ namespace windows
 
         // Deliberately no play-mode early-out (unlike ViewPortOverlay): the ticket requires this to
         // work in play-in-editor, which is where streaming is most interesting.
-        const auto snapshot = dispatcher.query(events::world::GetStreamingOverlaySnapshotQuery{});
+        //
+        // VK-1599: one grid per snapshot. The service refills the SAME borrowed buffers on every
+        // query and the contract is single-consumer, so asking for all grids at once is exactly the
+        // aliasing hazard GetStreamingOverlaySnapshotQuery's header forbids. The panel steps
+        // through them instead, on the viewport's own cycle key.
+        events::world::GetStreamingOverlaySnapshotQuery snapshotQuery;
+        snapshotQuery.gridIndex = displayedGrid;
+        const auto snapshot = dispatcher.query(snapshotQuery);
+
+        // Clamp against what the service actually reported: a world reload or a Remove Grid can
+        // shrink the list under a selection made a moment ago, and the service already folded an
+        // out-of-range request onto the primary grid.
+        displayedGrid = snapshot.gridIndex;
 
         const ImVec2 windowPos = ImGui::GetWindowPos();
         const ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
@@ -97,10 +109,25 @@ namespace windows
             }
             else
             {
-                char header[128];
-                std::snprintf(header, sizeof(header), "Streaming  (%d, %d)  r=%d%s",
-                              snapshot.center.x, snapshot.center.z, snapshot.radius,
-                              snapshot.radiusClamped ? " (clamped)" : "");
+                char header[192];
+                if (snapshot.gridCount > 1)
+                {
+                    // The grid is only named when there is more than one - a single-grid world's
+                    // header would otherwise gain a "Default 1/1" that says nothing.
+                    std::snprintf(header, sizeof(header),
+                                  "Streaming  %s %u/%u  (%d, %d)  r=%d%s",
+                                  snapshot.gridName.c_str(),
+                                  static_cast<unsigned>(snapshot.gridIndex + 1),
+                                  static_cast<unsigned>(snapshot.gridCount),
+                                  snapshot.center.x, snapshot.center.z, snapshot.radius,
+                                  snapshot.radiusClamped ? " (clamped)" : "");
+                }
+                else
+                {
+                    std::snprintf(header, sizeof(header), "Streaming  (%d, %d)  r=%d%s",
+                                  snapshot.center.x, snapshot.center.z, snapshot.radius,
+                                  snapshot.radiusClamped ? " (clamped)" : "");
+                }
                 ImGui::TextUnformatted(header);
 
                 if (snapshot.overrideActive)

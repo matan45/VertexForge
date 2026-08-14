@@ -42,6 +42,9 @@ namespace events::world
 
     struct SaveSectorCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         std::string filePath;
 
@@ -50,6 +53,9 @@ namespace events::world
 
     struct LoadSectorCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "LoadSector"; }
@@ -57,6 +63,9 @@ namespace events::world
 
     struct UnloadSectorCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "UnloadSector"; }
@@ -65,6 +74,62 @@ namespace events::world
     struct ClearWorldCommand : ICommand<>
     {
         std::string_view getName() const override { return "ClearWorld"; }
+    };
+
+    // ============================================
+    // VK-1599 - named runtime grids
+    // ============================================
+
+    // What the editor needs to list and label the world's grids, in index order.
+    struct WorldGridInfo
+    {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        std::string name;
+        ::world::SectorConfig sectorConfig;
+        // Resident sector counts, so the UI can tell a grid that owns content from an empty one
+        // before offering to remove it.
+        uint32_t sectorCount = 0;
+        uint32_t loadedSectorCount = 0;
+        // True for grid 0: terrain, ocean, navmesh and HLOD are bound to it, and it cannot be
+        // removed. Surfaced rather than inferred so the UI does not hard-code the rule.
+        bool drivesWorldSystems = false;
+    };
+
+    struct GetWorldGridsQuery : IQuery<std::vector<WorldGridInfo>>
+    {
+        std::string_view getName() const override { return "GetWorldGrids"; }
+    };
+
+    // Appends a grid. Returns its index, or world::kMaxGrids if the world is already at the cap.
+    struct AddWorldGridCommand : ICommand<uint8_t>
+    {
+        std::string name;
+        ::world::SectorConfig sectorConfig;
+        ::world::SectorStreamingConfig streamingConfig;
+
+        std::string_view getName() const override { return "AddWorldGrid"; }
+    };
+
+    // Removes a grid. Returns the refusal message; empty means it happened. Refuses on the primary
+    // grid and on any grid that still owns sector files or resident entities - the .vfsector is the
+    // only copy of that payload, so it is never dropped as a side effect.
+    struct RemoveWorldGridCommand : ICommand<std::string>
+    {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+
+        std::string_view getName() const override { return "RemoveWorldGrid"; }
+    };
+
+    // Renames a grid, and/or changes its cell size. Changing the cell size of a grid that already
+    // owns sector files needs a repartition (ApplyRepartitionCommand) - this command only writes
+    // the definition, so the editor gates it the same way it gates the sector-size field.
+    struct SetWorldGridCommand : ICommand<bool>
+    {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        std::string name;
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "SetWorldGrid"; }
     };
 
     struct UpdateWorldStreamingCommand : ICommand<>
@@ -128,6 +193,9 @@ namespace events::world
 
     struct SetSectorDataLayerCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         std::string layerName;
         std::vector<uint8_t> data;
@@ -137,6 +205,9 @@ namespace events::world
 
     struct RemoveSectorDataLayerCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         std::string layerName;
 
@@ -145,6 +216,9 @@ namespace events::world
 
     struct GetSectorDataLayerQuery : IQuery<std::optional<std::vector<uint8_t>>>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         std::string layerName;
 
@@ -164,12 +238,21 @@ namespace events::world
     // would need a TLV index scan per file; the editor labels the list accordingly.
     struct GetDataLayersSummaryQuery : IQuery<::world::DataLayerInventory>
     {
+        // VK-1599: ONE grid, matching the Data Layers tab's grid selector. Aggregating across grids
+        // would put coords from several grids into a single `loadedSectors` list, and every write
+        // the tab makes from that list targets one grid - so a coord from another grid would
+        // address the wrong sector, or a sector that does not exist.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+
         std::string_view getName() const override { return "GetDataLayersSummary"; }
     };
 
     // Published once per layer when a streamed-in sector carries data layers
     struct SectorDataLayerLoadedNotification : INotification
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         std::string layerName;
 
@@ -182,6 +265,9 @@ namespace events::world
 
     struct GetSectorAtPositionQuery : IQuery<std::optional<::world::SectorCoord>>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         glm::vec3 position{0.0f};
 
         std::string_view getName() const override { return "GetSectorAtPosition"; }
@@ -189,6 +275,9 @@ namespace events::world
 
     struct GetSectorStateQuery : IQuery<::world::SectorState>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "GetSectorState"; }
@@ -196,6 +285,9 @@ namespace events::world
 
     struct DoesSectorExistQuery : IQuery<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "DoesSectorExist"; }
@@ -208,6 +300,9 @@ namespace events::world
 
     struct GetWorldStreamingStatsQuery : IQuery<::world::SectorStreamingConfig>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetWorldStreamingStats"; }
     };
 
@@ -243,6 +338,9 @@ namespace events::world
     // definition). Persisted on the next Save World.
     struct SetStreamingConfigCommand : ICommand<>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorStreamingConfig config;
 
         std::string_view getName() const override { return "SetStreamingConfig"; }
@@ -250,17 +348,26 @@ namespace events::world
 
     struct GetSectorConfigQuery : IQuery<::world::SectorConfig>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetSectorConfig"; }
     };
 
     struct GetLoadedSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetLoadedSectorCoords"; }
     };
 
     // Every sector in the world definition regardless of state (world bake passes)
     struct GetAllSectorCoordsQuery : IQuery<std::vector<::world::SectorCoord>>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetAllSectorCoords"; }
     };
 
@@ -276,6 +383,9 @@ namespace events::world
 
     struct GetSectorReadinessQuery : IQuery<SectorReadiness>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "GetSectorReadiness"; }
@@ -304,6 +414,9 @@ namespace events::world
     // into worldDefinition on the very next slider drag and persist it.
     struct GetPersistedStreamingConfigQuery : IQuery<::world::SectorStreamingConfig>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetPersistedStreamingConfig"; }
     };
 
@@ -312,6 +425,9 @@ namespace events::world
     // saved without it. Retained across play/stop; cleared when the world closes.
     struct SetStreamingConfigOverrideCommand : ICommand<>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorStreamingConfig config;
 
         std::string_view getName() const override { return "SetStreamingConfigOverride"; }
@@ -319,6 +435,9 @@ namespace events::world
 
     struct ClearStreamingConfigOverrideCommand : ICommand<>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "ClearStreamingConfigOverride"; }
     };
 
@@ -326,6 +445,9 @@ namespace events::world
     // the streamer resolved (e.g. an unloadRadius pushed out beyond the prefetch ring).
     struct GetStreamingConfigOverrideQuery : IQuery<std::optional<::world::SectorStreamingConfig>>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         std::string_view getName() const override { return "GetStreamingConfigOverride"; }
     };
 
@@ -412,6 +534,15 @@ namespace events::world
     struct StreamingOverlaySnapshot
     {
         bool valid = false; // false when there is no world open
+
+        // VK-1599: which grid this snapshot describes, and how many the world has. The panel shows
+        // one grid at a time and lets the user step through them: the buffers below are shared and
+        // refilled per query, so returning every grid at once is exactly the aliasing hazard the
+        // single-consumer note above forbids.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        uint8_t gridCount = 1;
+        std::string gridName;
+
         ::world::SectorCoord center;
         int32_t radius = 0;         // ring half-width in sectors; the grid is (2*radius+1)^2
         bool radiusClamped = false; // the ring was wider than the query's maxRadius allowed
@@ -434,6 +565,9 @@ namespace events::world
 
     struct GetStreamingOverlaySnapshotQuery : IQuery<StreamingOverlaySnapshot>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         // Hard cap on the ring half-width. The Unload Radius slider reaches 48, which would
         // otherwise mean a 101x101 grid rebuilt every frame for a panel nobody could read.
         int32_t maxRadius = 16;
@@ -452,6 +586,9 @@ namespace events::world
     // `summary.valid == false` means a guard refused; `summary.refusal` is the message to show.
     struct PreviewRepartitionQuery : IQuery<::world::RepartitionSummary>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorConfig sectorConfig;
 
         std::string_view getName() const override { return "PreviewRepartition"; }
@@ -465,6 +602,9 @@ namespace events::world
     // Reloads the world on success, so the caller does not have to.
     struct ApplyRepartitionCommand : ICommand<bool>
     {
+        // VK-1599: which named runtime grid this targets. 0 (the primary grid) is what
+        // every pre-VK-1599 caller means, so existing call sites keep working unchanged.
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorConfig sectorConfig;
 
         std::string_view getName() const override { return "ApplyRepartition"; }
@@ -512,8 +652,23 @@ namespace events::world
         std::string_view getName() const override { return "WorldLoaded"; }
     };
 
+    // VK-1599: every sector notification names the grid it came from, and carries a
+    // `drivesWorldSystems` flag that is true for the PRIMARY grid only.
+    //
+    // The flag exists because terrain tiles, ocean tiles and navmesh tiles are properties of the
+    // ground, not of a grid: every grid covers the same ground, so if each one drove them a
+    // two-grid world would activate every terrain tile twice and unbalance the navmesh refcounts.
+    // Consumers gate on the flag rather than comparing gridIndex themselves, so the rule lives in
+    // one place (WorldSectorServiceImpl::beginSectorActivation) and a future "which grid drives
+    // world systems" setting changes nothing downstream.
+    //
+    // Consumers that care about ENTITIES rather than ground - VFXPlayModeHandler,
+    // RuntimeAnimatorSystem - deliberately ignore both fields and react to every grid.
+
     struct SectorAboutToLoadNotification : INotification
     {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        bool drivesWorldSystems = true;
         ::world::SectorCoord coord;
         glm::vec3 boundsMin{0.0f};
         glm::vec3 boundsMax{0.0f};
@@ -524,6 +679,8 @@ namespace events::world
 
     struct SectorActivatedNotification : INotification
     {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        bool drivesWorldSystems = true;
         ::world::SectorCoord coord;
         ::world::SectorConfig sectorConfig;
 
@@ -532,6 +689,8 @@ namespace events::world
 
     struct SectorDeactivatedNotification : INotification
     {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        bool drivesWorldSystems = true;
         ::world::SectorCoord coord;
         ::world::SectorConfig sectorConfig;
 
@@ -540,6 +699,7 @@ namespace events::world
 
     struct SectorLoadedNotification : INotification
     {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
         ::world::SectorCoord coord;
         uint32_t entityCount = 0;
 
@@ -548,6 +708,8 @@ namespace events::world
 
     struct SectorUnloadedNotification : INotification
     {
+        uint8_t gridIndex = ::world::kPrimaryGridIndex;
+        bool drivesWorldSystems = true;
         ::world::SectorCoord coord;
         ::world::SectorConfig sectorConfig;
 

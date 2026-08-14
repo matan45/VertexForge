@@ -9,6 +9,122 @@ namespace world
 {
     using json = nlohmann::json;
 
+    namespace
+    {
+        // VK-1599: the per-grid blocks, factored out so the primary grid can keep writing into the
+        // top-level keys byte-identically while grids 1..N-1 write the same shapes inside "grids".
+        json writeSectorConfig(const SectorConfig& config)
+        {
+            json out;
+            out["sectorWorldSize"] = config.sectorWorldSize;
+            out["tilesPerSector"] = config.tilesPerSector;
+            out["alignedToTerrain"] = config.alignedToTerrain;
+            return out;
+        }
+
+        void readSectorConfig(const json& in, SectorConfig& out)
+        {
+            const SectorConfig defaults;
+            out.sectorWorldSize = in.value("sectorWorldSize", defaults.sectorWorldSize);
+            out.tilesPerSector = in.value("tilesPerSector", defaults.tilesPerSector);
+            out.alignedToTerrain = in.value("alignedToTerrain", defaults.alignedToTerrain);
+        }
+
+        json writeStreamingConfig(const SectorStreamingConfig& config)
+        {
+            json out;
+            out["loadRadius"] = config.loadRadius;
+            // VK-1591: 0 means "same as loadRadius" (no prefetch ring). Written verbatim so the
+            // sentinel round-trips - resolving it here would bake loadRadius in and make a later
+            // loadRadius edit silently stop widening the prefetch ring with it.
+            out["prefetchRadius"] = config.prefetchRadius;
+            out["unloadRadius"] = config.unloadRadius;
+            out["maxLoadsPerFrame"] = config.maxLoadsPerFrame;
+            out["maxPrefetchesPerFrame"] = config.maxPrefetchesPerFrame;
+            out["maxUnloadsPerFrame"] = config.maxUnloadsPerFrame;
+            out["maxPrefetchBytes"] = config.maxPrefetchBytes;
+            // VK-1593: predictive streaming. Like prefetchRadius above, the 0 sentinels are
+            // written VERBATIM - resolving teleportThresholdSectors or the burst budgets here
+            // would bake in the value they happen to derive from today and stop them tracking a
+            // later edit of maxLoadsPerFrame / maxEntitiesPerFrame.
+            out["lookaheadSeconds"] = config.lookaheadSeconds;
+            out["viewBiasStrength"] = config.viewBiasStrength;
+            out["teleportThresholdSectors"] = config.teleportThresholdSectors;
+            out["burstFrames"] = config.burstFrames;
+            out["maxLoadsPerFrameBurst"] = config.maxLoadsPerFrameBurst;
+            out["maxEntitiesPerFrameBurst"] = config.maxEntitiesPerFrameBurst;
+            out["maxEntitiesPerFrame"] = config.maxEntitiesPerFrame;
+            out["maxTerrainLoadsPerFrame"] = config.maxTerrainLoadsPerFrame;
+            out["maxTerrainUnloadsPerFrame"] = config.maxTerrainUnloadsPerFrame;
+            out["enableGPUObjectStreaming"] = config.enableGPUObjectStreaming;
+            out["editModeStreaming"] = config.editModeStreaming;
+            out["hlodTier0Radius"] = config.hlodTier0Radius;
+            out["hlodTier1Radius"] = config.hlodTier1Radius;
+            out["hlodTier2Radius"] = config.hlodTier2Radius;
+            return out;
+        }
+
+        void readStreamingConfig(const json& in, SectorStreamingConfig& out)
+        {
+            // VK-1588: the structs are the single source of truth for defaults - an absent key
+            // resolves to its in-class initializer, never to a literal repeated here.
+            const SectorStreamingConfig defaults;
+            out.loadRadius = in.value("loadRadius", defaults.loadRadius);
+            // VK-1591: absent -> the struct's 0 sentinel -> effectivePrefetchRadius() ==
+            // loadRadius, so a pre-VK-1591 .vfworld streams byte-for-byte as it did before.
+            out.prefetchRadius = in.value("prefetchRadius", defaults.prefetchRadius);
+            out.unloadRadius = in.value("unloadRadius", defaults.unloadRadius);
+            out.maxLoadsPerFrame = in.value("maxLoadsPerFrame", defaults.maxLoadsPerFrame);
+            out.maxPrefetchesPerFrame = in.value("maxPrefetchesPerFrame", defaults.maxPrefetchesPerFrame);
+            out.maxUnloadsPerFrame = in.value("maxUnloadsPerFrame", defaults.maxUnloadsPerFrame);
+            out.maxPrefetchBytes = in.value("maxPrefetchBytes", defaults.maxPrefetchBytes);
+            // VK-1593: absent -> the struct's "off" defaults -> no lookahead, no view bias,
+            // no burst window. A pre-VK-1593 .vfworld therefore streams byte-for-byte as it
+            // did, which is what the teleport guard being inert at those defaults buys us.
+            out.lookaheadSeconds = in.value("lookaheadSeconds", defaults.lookaheadSeconds);
+            out.viewBiasStrength = in.value("viewBiasStrength", defaults.viewBiasStrength);
+            out.teleportThresholdSectors = in.value("teleportThresholdSectors", defaults.teleportThresholdSectors);
+            out.burstFrames = in.value("burstFrames", defaults.burstFrames);
+            out.maxLoadsPerFrameBurst = in.value("maxLoadsPerFrameBurst", defaults.maxLoadsPerFrameBurst);
+            out.maxEntitiesPerFrameBurst = in.value("maxEntitiesPerFrameBurst", defaults.maxEntitiesPerFrameBurst);
+            out.maxEntitiesPerFrame = in.value("maxEntitiesPerFrame", defaults.maxEntitiesPerFrame);
+            out.maxTerrainLoadsPerFrame = in.value("maxTerrainLoadsPerFrame", defaults.maxTerrainLoadsPerFrame);
+            out.maxTerrainUnloadsPerFrame = in.value("maxTerrainUnloadsPerFrame", defaults.maxTerrainUnloadsPerFrame);
+            out.enableGPUObjectStreaming = in.value("enableGPUObjectStreaming", defaults.enableGPUObjectStreaming);
+            out.editModeStreaming = in.value("editModeStreaming", defaults.editModeStreaming);
+            out.hlodTier0Radius = in.value("hlodTier0Radius", defaults.hlodTier0Radius);
+            out.hlodTier1Radius = in.value("hlodTier1Radius", defaults.hlodTier1Radius);
+            out.hlodTier2Radius = in.value("hlodTier2Radius", defaults.hlodTier2Radius);
+        }
+
+        json writeSectorPaths(const GridDefinition& grid)
+        {
+            json out = json::array();
+            for (const auto& [coord, path] : grid.sectorFilePaths)
+            {
+                json entry;
+                entry["x"] = coord.x;
+                entry["z"] = coord.z;
+                entry["path"] = path;
+                out.push_back(entry);
+            }
+            return out;
+        }
+
+        void readSectorPaths(const json& in, GridDefinition& grid)
+        {
+            grid.sectorFilePaths.clear();
+            if (!in.is_array())
+                return;
+
+            for (const auto& entry : in)
+            {
+                SectorCoord coord(entry.value("x", 0), entry.value("z", 0));
+                grid.sectorFilePaths[coord] = entry.value("path", "");
+            }
+        }
+    }
+
     bool WorldDefinitionSerialization::save(const WorldDefinition& definition, const std::string& filePath)
     {
         try
@@ -19,42 +135,13 @@ namespace world
             worldJson["terrainPath"] = definition.terrainPath;
             worldJson["waterDefinitionPath"] = definition.waterDefinitionPath;
 
-            json sectorConfigJson;
-            sectorConfigJson["sectorWorldSize"] = definition.sectorConfig.sectorWorldSize;
-            sectorConfigJson["tilesPerSector"] = definition.sectorConfig.tilesPerSector;
-            sectorConfigJson["alignedToTerrain"] = definition.sectorConfig.alignedToTerrain;
-            worldJson["sectorConfig"] = sectorConfigJson;
+            // VK-1599: the primary grid stays in the historical top-level keys. A world with one
+            // grid named "Default" therefore writes exactly the bytes it wrote before this change,
+            // and an engine build without multi-grid support could still read it.
+            const GridDefinition& primary = definition.primaryGrid();
 
-            json streamingJson;
-            streamingJson["loadRadius"] = definition.streamingConfig.loadRadius;
-            // VK-1591: 0 means "same as loadRadius" (no prefetch ring). Written verbatim so the
-            // sentinel round-trips - resolving it here would bake loadRadius in and make a later
-            // loadRadius edit silently stop widening the prefetch ring with it.
-            streamingJson["prefetchRadius"] = definition.streamingConfig.prefetchRadius;
-            streamingJson["unloadRadius"] = definition.streamingConfig.unloadRadius;
-            streamingJson["maxLoadsPerFrame"] = definition.streamingConfig.maxLoadsPerFrame;
-            streamingJson["maxPrefetchesPerFrame"] = definition.streamingConfig.maxPrefetchesPerFrame;
-            streamingJson["maxUnloadsPerFrame"] = definition.streamingConfig.maxUnloadsPerFrame;
-            streamingJson["maxPrefetchBytes"] = definition.streamingConfig.maxPrefetchBytes;
-            // VK-1593: predictive streaming. Like prefetchRadius above, the 0 sentinels are
-            // written VERBATIM - resolving teleportThresholdSectors or the burst budgets here
-            // would bake in the value they happen to derive from today and stop them tracking a
-            // later edit of maxLoadsPerFrame / maxEntitiesPerFrame.
-            streamingJson["lookaheadSeconds"] = definition.streamingConfig.lookaheadSeconds;
-            streamingJson["viewBiasStrength"] = definition.streamingConfig.viewBiasStrength;
-            streamingJson["teleportThresholdSectors"] = definition.streamingConfig.teleportThresholdSectors;
-            streamingJson["burstFrames"] = definition.streamingConfig.burstFrames;
-            streamingJson["maxLoadsPerFrameBurst"] = definition.streamingConfig.maxLoadsPerFrameBurst;
-            streamingJson["maxEntitiesPerFrameBurst"] = definition.streamingConfig.maxEntitiesPerFrameBurst;
-            streamingJson["maxEntitiesPerFrame"] = definition.streamingConfig.maxEntitiesPerFrame;
-            streamingJson["maxTerrainLoadsPerFrame"] = definition.streamingConfig.maxTerrainLoadsPerFrame;
-            streamingJson["maxTerrainUnloadsPerFrame"] = definition.streamingConfig.maxTerrainUnloadsPerFrame;
-            streamingJson["enableGPUObjectStreaming"] = definition.streamingConfig.enableGPUObjectStreaming;
-            streamingJson["editModeStreaming"] = definition.streamingConfig.editModeStreaming;
-            streamingJson["hlodTier0Radius"] = definition.streamingConfig.hlodTier0Radius;
-            streamingJson["hlodTier1Radius"] = definition.streamingConfig.hlodTier1Radius;
-            streamingJson["hlodTier2Radius"] = definition.streamingConfig.hlodTier2Radius;
-            worldJson["streamingConfig"] = streamingJson;
+            worldJson["sectorConfig"] = writeSectorConfig(primary.sectorConfig);
+            worldJson["streamingConfig"] = writeStreamingConfig(primary.streamingConfig);
 
             // HLOD config
             json hlodJson;
@@ -72,16 +159,37 @@ namespace world
             hlodJson["tiers"] = tiersJson;
             worldJson["hlodConfig"] = hlodJson;
 
-            json sectorsJson = json::array();
-            for (const auto& [coord, path] : definition.sectorFilePaths)
+            worldJson["sectors"] = writeSectorPaths(primary);
+
+            // VK-1599: grids 1..N-1, plus the primary grid's name when it has been renamed away
+            // from the default. Written ONLY when there is something to say - exactly the trick
+            // VK-1594 used for hlodCells below - so a plain one-grid world has no "grids" key at
+            // all and stays byte-identical to a pre-VK-1599 save.
+            if (definition.grids.size() > 1 || primary.name != kDefaultGridName)
             {
-                json sectorEntry;
-                sectorEntry["x"] = coord.x;
-                sectorEntry["z"] = coord.z;
-                sectorEntry["path"] = path;
-                sectorsJson.push_back(sectorEntry);
+                json gridsJson = json::array();
+                for (size_t i = 0; i < definition.grids.size(); ++i)
+                {
+                    const GridDefinition& grid = definition.grids[i];
+
+                    json gridEntry;
+                    gridEntry["index"] = static_cast<int>(i);
+                    gridEntry["name"] = grid.name;
+
+                    // The primary grid's config and sector inventory already live in the
+                    // top-level keys; repeating them here would be a second source of truth for
+                    // the same values, and the two could disagree after a hand edit.
+                    if (i != kPrimaryGridIndex)
+                    {
+                        gridEntry["sectorConfig"] = writeSectorConfig(grid.sectorConfig);
+                        gridEntry["streamingConfig"] = writeStreamingConfig(grid.streamingConfig);
+                        gridEntry["sectors"] = writeSectorPaths(grid);
+                    }
+
+                    gridsJson.push_back(gridEntry);
+                }
+                worldJson["grids"] = gridsJson;
             }
-            worldJson["sectors"] = sectorsJson;
 
             // VK-1594: per-cell HLOD bake inventory. Written only when non-empty so a world with
             // no bakes stays byte-identical to what pre-VK-1594 produced.
@@ -152,63 +260,19 @@ namespace world
             outDefinition.terrainPath = worldJson.value("terrainPath", "");
             outDefinition.waterDefinitionPath = worldJson.value("waterDefinitionPath", "");
 
-            // VK-1588: the structs are the single source of truth for defaults - an absent key
-            // resolves to its in-class initializer, never to a literal repeated here. The old
-            // literals had drifted: loadRadius 512 / unloadRadius 640 are WORLD UNITS copy-pasted
-            // from TerrainWorldStreamer, but SectorStreamingConfig means SECTOR COUNTS, so a
-            // .vfworld missing those keys produced a 512-sector load ring (512 * 128 = 65536
-            // units) instead of a 4-sector one.
-            const SectorConfig sectorDefaults;
-            const SectorStreamingConfig streamingDefaults;
+            // VK-1599: rebuild the grid list from scratch, primary grid first. VK-1588's rule still
+            // holds throughout: an absent key resolves to the struct's in-class initializer, never
+            // to a literal repeated here. (The old literals had drifted - loadRadius 512 /
+            // unloadRadius 640 are WORLD UNITS copy-pasted from TerrainWorldStreamer, while
+            // SectorStreamingConfig means SECTOR COUNTS.)
+            outDefinition.grids.assign(1, GridDefinition{});
+            GridDefinition& primary = outDefinition.primaryGrid();
 
             if (worldJson.contains("sectorConfig"))
-            {
-                const auto& sc = worldJson["sectorConfig"];
-                auto& out = outDefinition.sectorConfig;
-                out.sectorWorldSize = sc.value("sectorWorldSize", sectorDefaults.sectorWorldSize);
-                out.tilesPerSector = sc.value("tilesPerSector", sectorDefaults.tilesPerSector);
-                out.alignedToTerrain = sc.value("alignedToTerrain", sectorDefaults.alignedToTerrain);
-            }
-            else
-            {
-                outDefinition.sectorConfig = sectorDefaults;
-            }
+                readSectorConfig(worldJson["sectorConfig"], primary.sectorConfig);
 
             if (worldJson.contains("streamingConfig"))
-            {
-                const auto& stc = worldJson["streamingConfig"];
-                auto& out = outDefinition.streamingConfig;
-                out.loadRadius = stc.value("loadRadius", streamingDefaults.loadRadius);
-                // VK-1591: absent -> the struct's 0 sentinel -> effectivePrefetchRadius() ==
-                // loadRadius, so a pre-VK-1591 .vfworld streams byte-for-byte as it did before.
-                out.prefetchRadius = stc.value("prefetchRadius", streamingDefaults.prefetchRadius);
-                out.unloadRadius = stc.value("unloadRadius", streamingDefaults.unloadRadius);
-                out.maxLoadsPerFrame = stc.value("maxLoadsPerFrame", streamingDefaults.maxLoadsPerFrame);
-                out.maxPrefetchesPerFrame = stc.value("maxPrefetchesPerFrame", streamingDefaults.maxPrefetchesPerFrame);
-                out.maxUnloadsPerFrame = stc.value("maxUnloadsPerFrame", streamingDefaults.maxUnloadsPerFrame);
-                out.maxPrefetchBytes = stc.value("maxPrefetchBytes", streamingDefaults.maxPrefetchBytes);
-                // VK-1593: absent -> the struct's "off" defaults -> no lookahead, no view bias,
-                // no burst window. A pre-VK-1593 .vfworld therefore streams byte-for-byte as it
-                // did, which is what the teleport guard being inert at those defaults buys us.
-                out.lookaheadSeconds = stc.value("lookaheadSeconds", streamingDefaults.lookaheadSeconds);
-                out.viewBiasStrength = stc.value("viewBiasStrength", streamingDefaults.viewBiasStrength);
-                out.teleportThresholdSectors = stc.value("teleportThresholdSectors", streamingDefaults.teleportThresholdSectors);
-                out.burstFrames = stc.value("burstFrames", streamingDefaults.burstFrames);
-                out.maxLoadsPerFrameBurst = stc.value("maxLoadsPerFrameBurst", streamingDefaults.maxLoadsPerFrameBurst);
-                out.maxEntitiesPerFrameBurst = stc.value("maxEntitiesPerFrameBurst", streamingDefaults.maxEntitiesPerFrameBurst);
-                out.maxEntitiesPerFrame = stc.value("maxEntitiesPerFrame", streamingDefaults.maxEntitiesPerFrame);
-                out.maxTerrainLoadsPerFrame = stc.value("maxTerrainLoadsPerFrame", streamingDefaults.maxTerrainLoadsPerFrame);
-                out.maxTerrainUnloadsPerFrame = stc.value("maxTerrainUnloadsPerFrame", streamingDefaults.maxTerrainUnloadsPerFrame);
-                out.enableGPUObjectStreaming = stc.value("enableGPUObjectStreaming", streamingDefaults.enableGPUObjectStreaming);
-                out.editModeStreaming = stc.value("editModeStreaming", streamingDefaults.editModeStreaming);
-                out.hlodTier0Radius = stc.value("hlodTier0Radius", streamingDefaults.hlodTier0Radius);
-                out.hlodTier1Radius = stc.value("hlodTier1Radius", streamingDefaults.hlodTier1Radius);
-                out.hlodTier2Radius = stc.value("hlodTier2Radius", streamingDefaults.hlodTier2Radius);
-            }
-            else
-            {
-                outDefinition.streamingConfig = streamingDefaults;
-            }
+                readStreamingConfig(worldJson["streamingConfig"], primary.streamingConfig);
 
             // HLOD config
             if (worldJson.contains("hlodConfig"))
@@ -235,13 +299,47 @@ namespace world
                 outDefinition.hlodConfig = HLODConfig::defaultConfig();
             }
 
-            outDefinition.sectorFilePaths.clear();
-            if (worldJson.contains("sectors") && worldJson["sectors"].is_array())
+            if (worldJson.contains("sectors"))
+                readSectorPaths(worldJson["sectors"], primary);
+
+            // VK-1599: an absent "grids" key is the normal state for a world saved before this
+            // change, and for any world that only ever used one grid - the primary grid is already
+            // fully populated from the top-level keys above, so there is nothing more to do.
+            //
+            // Entries are keyed by an explicit "index" rather than by array position so a
+            // hand-edited file with a gap or a reordering still lands each grid where it belongs;
+            // the vector is grown to fit and any grid the file never names keeps its defaults.
+            if (worldJson.contains("grids") && worldJson["grids"].is_array())
             {
-                for (const auto& entry : worldJson["sectors"])
+                for (const auto& entry : worldJson["grids"])
                 {
-                    SectorCoord coord(entry.value("x", 0), entry.value("z", 0));
-                    outDefinition.sectorFilePaths[coord] = entry.value("path", "");
+                    const int rawIndex = entry.value("index", 0);
+                    if (rawIndex < 0 || rawIndex >= static_cast<int>(kMaxGrids))
+                    {
+                        vfLogError("World file names grid index {} - outside [0, {}). Ignored.",
+                                   rawIndex, static_cast<int>(kMaxGrids));
+                        continue;
+                    }
+
+                    const auto index = static_cast<size_t>(rawIndex);
+                    if (index >= outDefinition.grids.size())
+                        outDefinition.grids.resize(index + 1);
+
+                    GridDefinition& grid = outDefinition.grids[index];
+                    grid.name = entry.value("name", grid.name);
+
+                    // The primary grid's config and sector inventory are NOT repeated inside
+                    // "grids" - they are the top-level keys, already read above. Only its name
+                    // travels here.
+                    if (index == kPrimaryGridIndex)
+                        continue;
+
+                    if (entry.contains("sectorConfig"))
+                        readSectorConfig(entry["sectorConfig"], grid.sectorConfig);
+                    if (entry.contains("streamingConfig"))
+                        readStreamingConfig(entry["streamingConfig"], grid.streamingConfig);
+                    if (entry.contains("sectors"))
+                        readSectorPaths(entry["sectors"], grid);
                 }
             }
 

@@ -18,8 +18,13 @@ namespace scene
 
 namespace world
 {
-    using EntityLoadedCallback = std::function<void(uint64_t uuid, const SectorCoord& coord)>;
-    using EntityUnloadedCallback = std::function<void(uint64_t uuid, const SectorCoord& coord)>;
+    // VK-1599: the grid travels with the coord. The loader is a SINGLE shared spawn queue across
+    // every grid - it owns the frame's entity budget and the loadedThisFrame dedupe set, both of
+    // which are whole-process resources - so a bare SectorCoord would be ambiguous the moment two
+    // grids held a sector at the same coord, and the service would bucket the entity into the
+    // wrong manager.
+    using EntityLoadedCallback = std::function<void(uint64_t uuid, uint8_t gridIndex, const SectorCoord& coord)>;
+    using EntityUnloadedCallback = std::function<void(uint64_t uuid, uint8_t gridIndex, const SectorCoord& coord)>;
     using EntityPostLoadCallback = std::function<void(uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)>;
     using EntityPreDestroyCallback = std::function<void(uint64_t entityHandleId)>;
 
@@ -51,6 +56,7 @@ namespace world
     private:
         struct PendingLoad
         {
+            uint8_t gridIndex = 0;
             SectorCoord coord;
             std::string entityName;
             nlohmann::json entityJson;
@@ -58,6 +64,7 @@ namespace world
 
         struct PendingUnload
         {
+            uint8_t gridIndex = 0;
             SectorCoord coord;
             uint64_t uuid;
         };
@@ -76,8 +83,10 @@ namespace world
     public:
         SectorEntityLoader() = default;
 
-        void queueSectorLoadFromData(const SectorCoord& coord, std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson);
-        void queueSectorUnload(const SectorCoord& coord, const std::vector<uint64_t>& uuids);
+        void queueSectorLoadFromData(uint8_t gridIndex, const SectorCoord& coord,
+                                     std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson);
+        void queueSectorUnload(uint8_t gridIndex, const SectorCoord& coord,
+                               const std::vector<uint64_t>& uuids);
 
         void update(scene::SceneGraphSystem& sceneGraph, int maxEntitiesPerFrame = 8);
 
@@ -88,7 +97,7 @@ namespace world
 
         void flush(scene::SceneGraphSystem& sceneGraph) { update(sceneGraph, std::numeric_limits<int>::max()); }
 
-        void cancelPendingLoads(const SectorCoord& coord);
+        void cancelPendingLoads(uint8_t gridIndex, const SectorCoord& coord);
 
         void clear()
         {
@@ -98,11 +107,11 @@ namespace world
             totalProcessedLoads = 0;
         }
 
-        [[nodiscard]] bool hasPendingLoadsForSector(const SectorCoord& coord) const
+        [[nodiscard]] bool hasPendingLoadsForSector(uint8_t gridIndex, const SectorCoord& coord) const
         {
             for (const auto& load : pendingLoads)
             {
-                if (load.coord == coord) return true;
+                if (load.gridIndex == gridIndex && load.coord == coord) return true;
             }
             return false;
         }

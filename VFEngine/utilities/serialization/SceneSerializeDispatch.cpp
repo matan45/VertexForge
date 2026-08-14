@@ -192,9 +192,16 @@ namespace serialization
         // VK-1597: written only when the entity actually carries the component - absence is the
         // "spatially loaded" default, so untouched entities keep their exact current payload.
         if (entity.hasComponent<components::StreamingPolicyComponent>())
+        {
+            const auto& policy = entity.getComponent<components::StreamingPolicyComponent>();
             out["streamingPolicy"] = {
-                {"spatiallyLoaded", entity.getComponent<components::StreamingPolicyComponent>().spatiallyLoaded}
+                {"spatiallyLoaded", policy.spatiallyLoaded}
             };
+            // VK-1599: written only when non-zero. Grid 0 is the default for every entity that has
+            // never been assigned, so a scene that predates named grids stays byte-identical.
+            if (policy.gridIndex != 0)
+                out["streamingPolicy"]["gridIndex"] = policy.gridIndex;
+        }
         if (entity.hasComponent<components::PrefabInstanceComponent>())
             out["prefabInstance"] = {
                 {"sourcePrefabPath", entity.getComponent<components::PrefabInstanceComponent>().sourcePrefabPath}

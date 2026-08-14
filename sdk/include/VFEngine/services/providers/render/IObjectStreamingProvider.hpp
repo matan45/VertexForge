@@ -20,9 +20,11 @@ namespace services
         virtual void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config) = 0;
         virtual render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const = 0;
         virtual render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const = 0;
-        virtual void registerSectorObjects(uint32_t sectorId,
+        // VK-1599: `sectorId` is world::sectorRegistrationId(gridIndex, coord) - 64 bits, because a
+        // world may run several streaming grids and the packed coord alone already fills 32.
+        virtual void registerSectorObjects(uint64_t sectorId,
                                            const std::vector<std::pair<uint64_t, entt::entity>>& entities) = 0;
-        virtual void unregisterSectorObjects(uint32_t sectorId) = 0;
+        virtual void unregisterSectorObjects(uint64_t sectorId) = 0;
 
         // VK-1594: upload a baked HLOD proxy's geometry under a synthetic mesh key so it draws
         // through the ordinary MeshComponent path. Returns false if the GPU-driven renderer is

@@ -48,7 +48,9 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        const auto current = dispatcher.query(events::world::GetSectorConfigQuery{});
+        events::world::GetSectorConfigQuery configQuery;
+        configQuery.gridIndex = activeGrid;
+        const auto current = dispatcher.query(configQuery);
         repartitionSectorSize = current.sectorWorldSize;
         repartitionTilesPerSector = current.tilesPerSector;
         repartitionAlignToTerrain = current.alignedToTerrain;
@@ -65,7 +67,9 @@ namespace windows
     void WorldSectorWindow::drawRepartitionSection()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        const auto current = dispatcher.query(events::world::GetSectorConfigQuery{});
+        events::world::GetSectorConfigQuery configQuery;
+        configQuery.gridIndex = activeGrid;
+        const auto current = dispatcher.query(configQuery);
 
         ImGui::SeparatorText("Partition");
         ImGui::Text("Sector size: %.0f world units  |  %d tile(s) per sector%s",
@@ -194,6 +198,7 @@ namespace windows
             if (ImGui::Button("Dry Run", ImVec2(110, 0)))
             {
                 events::world::PreviewRepartitionQuery query;
+                query.gridIndex = activeGrid;
                 query.sectorConfig = currentRepartitionConfig();
                 repartitionPreview = dispatcher.query(query);
                 repartitionPreviewValid = repartitionPreview.valid;
@@ -266,6 +271,7 @@ namespace windows
                 pendingRepartitionConfig = currentRepartitionConfig();
 
                 events::world::ApplyRepartitionCommand cmd;
+                cmd.gridIndex = activeGrid;
                 cmd.sectorConfig = pendingRepartitionConfig;
                 const bool ok = dispatcher.execute(cmd);
 

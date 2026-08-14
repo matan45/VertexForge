@@ -40,7 +40,7 @@ namespace core::adapters
     }
 
     void ObjectStreamingAdapter::registerSectorObjects(
-        uint32_t sectorId,
+        uint64_t sectorId,
         const std::vector<std::pair<uint64_t, entt::entity>>& entities)
     {
         if (offScreen)
@@ -49,7 +49,7 @@ namespace core::adapters
         }
     }
 
-    void ObjectStreamingAdapter::unregisterSectorObjects(uint32_t sectorId)
+    void ObjectStreamingAdapter::unregisterSectorObjects(uint64_t sectorId)
     {
         if (offScreen)
         {

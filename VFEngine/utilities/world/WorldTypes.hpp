@@ -4,6 +4,7 @@
 #include <cmath>
 #include <functional>
 #include <optional>
+#include <string>
 #include <glm/glm.hpp>
 
 namespace world
@@ -75,6 +76,49 @@ namespace world
         const uint32_t ux = (static_cast<uint32_t>(coord.x) + 0x8000u) & 0xFFFFu;
         const uint32_t uz = (static_cast<uint32_t>(coord.z) + 0x8000u) & 0xFFFFu;
         return (ux << 16) | uz;
+    }
+
+    // VK-1599: the maximum number of runtime grids a world may declare. Grid indices are uint8_t
+    // everywhere, but the cap is far tighter than that: every grid is a full WorldSectorManager +
+    // SectorStreamer with its own per-frame budgets, and grid 0 is the only one that drives
+    // terrain / ocean / navmesh / HLOD.
+    inline constexpr uint8_t kMaxGrids = 8;
+
+    // VK-1599: grid 0, the one every world has and the only one that drives terrain, ocean,
+    // navmesh and HLOD. Named rather than written as a bare 0 at the call sites that are
+    // deliberately primary-grid-only, so they stay distinguishable from ones simply not yet
+    // converted.
+    inline constexpr uint8_t kPrimaryGridIndex = 0;
+
+    // VK-1599: the key every runtime registration is made under - GPU object slots, streamed light
+    // slots, ResourceLoadScheduler hints. sectorCoordToId already consumes all 32 bits over the
+    // validated coord range, so a second grid at the same coord would silently share the first
+    // grid's slot; the grid index has to live above it.
+    //
+    // 64 bits rather than a narrower coord window on purpose: shrinking the coord range would undo
+    // VK-1588's deliberate widening to the full int16 span. Grid 0 reproduces the legacy
+    // sectorCoordToId value exactly, so a single-grid world registers under the ids it always did.
+    //
+    // Runtime-only, like sectorCoordToId - nothing persists it (see the note above).
+    [[nodiscard]] inline uint64_t sectorRegistrationId(uint8_t gridIndex,
+                                                       const SectorCoord& coord) noexcept
+    {
+        return (static_cast<uint64_t>(gridIndex) << 32) | sectorCoordToId(coord);
+    }
+
+    // VK-1599: the single source of truth for a sector's on-disk name, replacing the two
+    // byte-identical string builds that had drifted apart in WorldSectorPersistenceOps and
+    // WorldSectorRepartitionOps.
+    //
+    // The primary grid keeps the historical spelling exactly, so a world that only ever uses one
+    // grid produces the same file set it always did and existing .vfworld sector inventories keep
+    // resolving.
+    [[nodiscard]] inline std::string sectorFileName(uint8_t gridIndex, const SectorCoord& coord)
+    {
+        std::string name = "sector_";
+        if (gridIndex != kPrimaryGridIndex)
+            name += "g" + std::to_string(static_cast<int>(gridIndex)) + "_";
+        return name + std::to_string(coord.x) + "_" + std::to_string(coord.z) + ".vfsector";
     }
 
     // VK-1591: UE5 World Partition "Target State" parity. Prefetching/Prefetched are APPENDED

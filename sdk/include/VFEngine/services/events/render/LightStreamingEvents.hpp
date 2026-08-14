@@ -14,16 +14,18 @@ namespace events::render::lightstreaming
         std::string_view getName() const override { return "SetLightStreamingConfig"; }
     };
 
+    // VK-1599: `sectorId` is world::sectorRegistrationId(gridIndex, coord). 64 bits because the
+    // packed coord alone fills 32 and a world may run several streaming grids.
     struct RegisterSectorLightsCommand : ::events::ICommand<void>
     {
-        uint32_t sectorId;
+        uint64_t sectorId;
         std::vector<uint32_t> lightEntityIds;
         std::string_view getName() const override { return "RegisterSectorLights"; }
     };
 
     struct UnregisterSectorLightsCommand : ::events::ICommand<void>
     {
-        uint32_t sectorId;
+        uint64_t sectorId;
         std::string_view getName() const override { return "UnregisterSectorLights"; }
     };
 

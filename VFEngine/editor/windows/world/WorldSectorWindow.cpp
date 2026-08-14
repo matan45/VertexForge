@@ -38,6 +38,13 @@ namespace windows
 
     void WorldSectorWindow::invalidateConfigCaches()
     {
+        // VK-1599: the incoming world may declare fewer grids than the outgoing one. Falling back
+        // to the primary grid is the only index guaranteed to exist; drawGridSelector clamps too,
+        // but this runs before the next draw and keeps every cache below consistent with it.
+        activeGrid = 0;
+        cachedGrids.clear();
+        gridActionMessage.clear();
+
         streamingConfigLoaded = false;
         overrideLoaded = false;
         hlodConfigLoaded = false;
@@ -81,11 +88,21 @@ namespace windows
                 drawWorldInfo();
                 ImGui::Separator();
 
+                // VK-1599: one selector above the tab bar rather than one per tab. Sector Grid,
+                // Streaming Config and Data Layers all operate on a single grid, and having them
+                // disagree about which one would be the whole bug class this feature can produce.
+                drawGridSelector();
+
                 if (ImGui::BeginTabBar("WorldSectorTabs"))
                 {
                     if (ImGui::BeginTabItem("Sector Grid"))
                     {
                         drawSectorGrid();
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Grids")) // VK-1599
+                    {
+                        drawGridManagement();
                         ImGui::EndTabItem();
                     }
                     if (ImGui::BeginTabItem("Streaming Config"))
@@ -224,6 +241,213 @@ namespace windows
             ImGui::Text("Terrain tile actions pending: %u", terrainPending);
     }
 
+    void WorldSectorWindow::onActiveGridChanged()
+    {
+        // VK-1599: every cache in this window describes ONE grid. The streaming-config latch is the
+        // dangerous one - VK-1595 showed that a stale latch turns the first slider drag into a
+        // whole-config write onto the wrong target - but the data-layer caches matter too: their
+        // coord lists drive writes that now carry a grid index, so acting on another grid's coords
+        // would address a sector that may not exist.
+        streamingConfigLoaded = false;
+        overrideLoaded = false;
+
+        cachedLayers = {};
+        cachedSectorLayers.clear();
+        selectedLayer.clear();
+        layerError.clear();
+        exportSectorIndex = 0;
+
+        // The dry run describes one grid's sector set, so an Apply offered against another grid's
+        // numbers would be exactly wrong.
+        repartitionSeeded = false;
+        repartitionPreviewValid = false;
+        repartitionPreview = {};
+    }
+
+    void WorldSectorWindow::drawGridSelector()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        cachedGrids = dispatcher.query(events::world::GetWorldGridsQuery{});
+
+        if (cachedGrids.empty())
+            return; // no world open; the caller only draws this in world mode, but be defensive
+
+        // Clamp every frame rather than only on change: Remove Grid and a world reload can both
+        // shrink the list under a selection the user made a moment ago.
+        if (activeGrid >= cachedGrids.size())
+            activeGrid = 0;
+
+        // A single-grid world has nothing to pick. Drawing a one-entry combo would only teach the
+        // user that grids exist without giving them anything to do - the Grids tab does that.
+        if (cachedGrids.size() <= 1)
+            return;
+
+        std::vector<const char*> labels;
+        labels.reserve(cachedGrids.size());
+        for (const auto& grid : cachedGrids)
+            labels.push_back(grid.name.c_str());
+
+        int selected = static_cast<int>(activeGrid);
+        ImGui::SetNextItemWidth(200.0f);
+        if (ImGui::Combo("Grid", &selected, labels.data(), static_cast<int>(labels.size())))
+        {
+            activeGrid = static_cast<uint8_t>(selected);
+            onActiveGridChanged();
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("Which streaming grid the Sector Grid, Streaming Config and\n"
+                              "Data Layers tabs below operate on.");
+        }
+
+        ImGui::SameLine();
+        const auto& active = cachedGrids[activeGrid];
+        ImGui::TextDisabled("%.0f units/sector | %u sectors (%u loaded)%s",
+                            active.sectorConfig.sectorWorldSize, active.sectorCount,
+                            active.loadedSectorCount,
+                            active.drivesWorldSystems ? " | drives terrain/navmesh/HLOD" : "");
+    }
+
+    void WorldSectorWindow::drawGridManagement()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        ImGui::TextWrapped(
+            "A world streams through one or more named grids. Each has its own cell size and load "
+            "radius, so short-range clutter and long-range landmarks can stream independently.");
+        ImGui::Spacing();
+        ImGui::TextDisabled(
+            "The Default grid is the only one that drives terrain, water, navmesh and HLOD.");
+        ImGui::Separator();
+
+        if (ImGui::BeginTable("GridsTable", 5,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_SizingStretchProp))
+        {
+            ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Cell Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("Sectors", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("Drives World", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableHeadersRow();
+
+            // Deferred past the loop: removeGrid mutates the list cachedGrids mirrors, and acting
+            // inside the row would invalidate the reference being iterated. Same reason VK-1596's
+            // Data Layers tab defers applyLayerPresence past EndTable.
+            int pendingRemove = -1;
+
+            for (const auto& grid : cachedGrids)
+            {
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int>(grid.gridIndex));
+
+                ImGui::TableSetColumnIndex(0);
+                if (ImGui::Selectable(grid.name.c_str(), grid.gridIndex == activeGrid,
+                                      ImGuiSelectableFlags_SpanAllColumns))
+                {
+                    activeGrid = grid.gridIndex;
+                    onActiveGridChanged();
+                }
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%.0f", grid.sectorConfig.sectorWorldSize);
+
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%u (%u)", grid.sectorCount, grid.loadedSectorCount);
+
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextUnformatted(grid.drivesWorldSystems ? "yes" : "-");
+
+                ImGui::TableSetColumnIndex(4);
+                ImGui::BeginDisabled(grid.drivesWorldSystems);
+                if (ImGui::SmallButton("Remove"))
+                    pendingRemove = static_cast<int>(grid.gridIndex);
+                ImGui::EndDisabled();
+                if (grid.drivesWorldSystems &&
+                    ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip("The Default grid cannot be removed - terrain, water,\n"
+                                      "navmesh and HLOD are bound to it.");
+                }
+
+                ImGui::PopID();
+            }
+
+            ImGui::EndTable();
+
+            if (pendingRemove >= 0)
+            {
+                events::world::RemoveWorldGridCommand cmd;
+                cmd.gridIndex = static_cast<uint8_t>(pendingRemove);
+                gridActionMessage = dispatcher.execute(cmd);
+                if (gridActionMessage.empty())
+                {
+                    gridActionMessage = "Grid removed.";
+                    activeGrid = 0;
+                    onActiveGridChanged();
+                }
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::SeparatorText("Add Grid");
+
+        ImGui::InputText("Name##newgrid", newGridName, sizeof(newGridName));
+        ImGui::DragFloat("Cell Size##newgrid", &newGridSectorConfig.sectorWorldSize,
+                         1.0f, 8.0f, 8192.0f, "%.0f units");
+        ImGui::DragFloat("Load Radius##newgrid", &newGridStreamingConfig.loadRadius,
+                         0.1f, 1.0f, 32.0f, "%.1f sectors");
+        ImGui::DragFloat("Unload Radius##newgrid", &newGridStreamingConfig.unloadRadius,
+                         0.1f, 2.0f, 48.0f, "%.1f sectors");
+
+        const bool atCap = cachedGrids.size() >= world::kMaxGrids;
+        // The same coherence rule normalizeStreamingConfig enforces, checked up front so the button
+        // explains itself rather than silently correcting the value after the fact.
+        const bool radiiOk = newGridStreamingConfig.unloadRadius > newGridStreamingConfig.loadRadius;
+        const bool sizeOk = newGridSectorConfig.sectorWorldSize > 0.0f;
+
+        ImGui::BeginDisabled(atCap || !radiiOk || !sizeOk);
+        if (ImGui::Button("Add Grid"))
+        {
+            events::world::AddWorldGridCommand cmd;
+            cmd.name = newGridName;
+            cmd.sectorConfig = newGridSectorConfig;
+            cmd.streamingConfig = newGridStreamingConfig;
+
+            const uint8_t added = dispatcher.execute(cmd);
+            if (added < world::kMaxGrids)
+            {
+                gridActionMessage = "Added grid '" + std::string(newGridName) + "'.";
+                activeGrid = added;
+                onActiveGridChanged();
+            }
+            else
+            {
+                gridActionMessage = "Could not add the grid (at the cap, or no world open).";
+            }
+        }
+        ImGui::EndDisabled();
+
+        if (atCap)
+            ImGui::TextDisabled("At the %d-grid cap.", static_cast<int>(world::kMaxGrids));
+        else if (!sizeOk)
+            ImGui::TextDisabled("Cell size must be greater than 0.");
+        else if (!radiiOk)
+            ImGui::TextDisabled("Unload radius must exceed the load radius.");
+
+        if (!gridActionMessage.empty())
+        {
+            ImGui::Spacing();
+            ImGui::TextWrapped("%s", gridActionMessage.c_str());
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled(
+            "Assign entities to a grid from the Details panel (Transform > Streaming Grid).\n"
+            "A grid must be empty before it can be removed - its .vfsector files are the only\n"
+            "copy of those entities.");
+    }
+
     void WorldSectorWindow::drawSectorGrid()
     {
         // Navigation controls
@@ -321,6 +545,7 @@ namespace windows
                     if (info.state == world::SectorState::Loaded)
                     {
                         events::world::UnloadSectorCommand cmd;
+                        cmd.gridIndex = activeGrid;
                         cmd.coord = info.coord;
                         dispatcher.execute(cmd);
                     }
@@ -331,6 +556,7 @@ namespace windows
                              info.state == world::SectorState::Prefetched)
                     {
                         events::world::LoadSectorCommand cmd;
+                        cmd.gridIndex = activeGrid;
                         cmd.coord = info.coord;
                         dispatcher.execute(cmd);
                     }
@@ -351,6 +577,7 @@ namespace windows
                     else if (info.state == world::SectorState::Prefetched) clickAction = "activate (no file read)";
 
                     events::world::GetSectorReadinessQuery readinessQuery;
+                    readinessQuery.gridIndex = activeGrid;
                     readinessQuery.coord = info.coord;
                     auto readiness = dispatcher.query(readinessQuery);
 
@@ -532,10 +759,15 @@ namespace windows
 
         // Load once so slider edits aren't clobbered by the live query every frame.
         // VK-1595: the PERSISTED config, not the effective one — see the header note.
-        if (!streamingConfigLoaded)
+        // VK-1599: the latch is per (world, grid) - drawGridSelector clears it on a grid switch,
+        // and the grid stamp below catches any other path that changes activeGrid.
+        if (!streamingConfigLoaded || streamingConfigGrid != activeGrid)
         {
-            editableStreaming = dispatcher.query(events::world::GetPersistedStreamingConfigQuery{});
+            events::world::GetPersistedStreamingConfigQuery q;
+            q.gridIndex = activeGrid;
+            editableStreaming = dispatcher.query(q);
             streamingConfigLoaded = true;
+            streamingConfigGrid = activeGrid;
         }
 
         ImGui::PushID("persist");
@@ -545,10 +777,13 @@ namespace windows
         if (changed)
         {
             events::world::SetStreamingConfigCommand cmd;
+            cmd.gridIndex = activeGrid;
             cmd.config = editableStreaming;
             dispatcher.execute(cmd);
             // Re-read so UI reflects validation (e.g. unloadRadius forced above loadRadius)
-            editableStreaming = dispatcher.query(events::world::GetPersistedStreamingConfigQuery{});
+            events::world::GetPersistedStreamingConfigQuery reread;
+            reread.gridIndex = activeGrid;
+            editableStreaming = dispatcher.query(reread);
         }
 
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 60.0f);
@@ -617,7 +852,9 @@ namespace windows
 
         ImGui::SeparatorText("Debug - session override (not saved)");
 
-        auto activeOverride = dispatcher.query(events::world::GetStreamingConfigOverrideQuery{});
+        events::world::GetStreamingConfigOverrideQuery overrideQuery;
+        overrideQuery.gridIndex = activeGrid;
+        auto activeOverride = dispatcher.query(overrideQuery);
         bool overrideEnabled = activeOverride.has_value();
 
         if (ImGui::Checkbox("Enable session override", &overrideEnabled))
@@ -626,16 +863,21 @@ namespace windows
             {
                 // Seed from what the streamer is running right now, so switching the override on
                 // changes nothing until a slider is actually moved.
-                overrideStreaming = dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+                events::world::GetWorldStreamingStatsQuery statsQuery;
+                statsQuery.gridIndex = activeGrid;
+                overrideStreaming = dispatcher.query(statsQuery);
                 overrideLoaded = true;
 
                 events::world::SetStreamingConfigOverrideCommand cmd;
+                cmd.gridIndex = activeGrid;
                 cmd.config = overrideStreaming;
                 dispatcher.execute(cmd);
             }
             else
             {
-                dispatcher.execute(events::world::ClearStreamingConfigOverrideCommand{});
+                events::world::ClearStreamingConfigOverrideCommand clearCmd;
+                clearCmd.gridIndex = activeGrid;
+                dispatcher.execute(clearCmd);
                 overrideLoaded = false;
             }
         }
@@ -663,10 +905,15 @@ namespace windows
             if (overrideChanged)
             {
                 events::world::SetStreamingConfigOverrideCommand cmd;
+                cmd.gridIndex = activeGrid;
                 cmd.config = overrideStreaming;
                 dispatcher.execute(cmd);
                 overrideStreaming =
-                    dispatcher.query(events::world::GetWorldStreamingStatsQuery{});
+                    dispatcher.query([this] {
+                        events::world::GetWorldStreamingStatsQuery q;
+                        q.gridIndex = activeGrid;
+                        return q;
+                    }());
             }
 
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
@@ -848,12 +1095,15 @@ namespace windows
             return;
         }
 
-        auto sectorConfig = dispatcher.query(events::world::GetSectorConfigQuery{});
+        events::world::GetSectorConfigQuery sectorConfigQuery;
+        sectorConfigQuery.gridIndex = activeGrid;
+        auto sectorConfig = dispatcher.query(sectorConfigQuery);
         cachedTilesPerSector = sectorConfig.tilesPerSector;
 
         // Compute camera sector from editor camera position
         {
             events::world::GetSectorAtPositionQuery posQuery;
+            posQuery.gridIndex = activeGrid;
             posQuery.position = glm::vec3(0.0f); // fallback
             // Use the scene's primary camera or editor camera
             auto cameraOpt = dispatcher.query(events::scene::GetPrimaryCameraQuery{});
@@ -895,12 +1145,14 @@ namespace windows
                 info.coord = world::SectorCoord(x, z);
 
                 events::world::DoesSectorExistQuery existQuery;
+                existQuery.gridIndex = activeGrid;
                 existQuery.coord = info.coord;
                 info.exists = dispatcher.query(existQuery);
 
                 if (info.exists)
                 {
                     events::world::GetSectorStateQuery stateQuery;
+                    stateQuery.gridIndex = activeGrid;
                     stateQuery.coord = info.coord;
                     info.state = dispatcher.query(stateQuery);
                 }

@@ -630,7 +630,7 @@ TEST_SUITE("SectorRepartition")
         for (uint64_t uuid : uuids)
             sector.entityUUIDs.push_back(uuid);
 
-        loader.setOnEntityLoaded([&](uint64_t uuid, const world::SectorCoord& c)
+        loader.setOnEntityLoaded([&](uint64_t uuid, uint8_t, const world::SectorCoord& c)
         {
             glm::vec3 position(0.0f);
             auto entity = scene::EntityRegistry::findByUUID(uuid);
@@ -641,7 +641,7 @@ TEST_SUITE("SectorRepartition")
             manager.assignEntityToSector(uuid, position);
         });
 
-        loader.queueSectorLoadFromData(coord, payload);
+        loader.queueSectorLoadFromData(world::kPrimaryGridIndex, coord, payload);
         loader.flush(sceneGraph);
 
         const auto* loaded = manager.getSector(coord);
@@ -652,7 +652,7 @@ TEST_SUITE("SectorRepartition")
         CHECK(unique.size() == uuids.size());
 
         // Clean up through the loader's own destroy path.
-        loader.queueSectorUnload(coord, uuids);
+        loader.queueSectorUnload(world::kPrimaryGridIndex, coord, uuids);
         loader.flush(sceneGraph);
     }
 }

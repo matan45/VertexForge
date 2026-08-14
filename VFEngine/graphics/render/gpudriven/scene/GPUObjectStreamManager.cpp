@@ -45,7 +45,7 @@ namespace render::gpudriven
     }
 
     void GPUObjectStreamManager::registerSectorObjects(
-        uint32_t sectorId,
+        uint64_t sectorId,
         const std::vector<std::pair<uint64_t, entt::entity>>& entities,
         entt::registry& registry)
     {
@@ -89,7 +89,7 @@ namespace render::gpudriven
                   entities.size(), sectorId);
     }
 
-    void GPUObjectStreamManager::unregisterSectorObjects(uint32_t sectorId)
+    void GPUObjectStreamManager::unregisterSectorObjects(uint64_t sectorId)
     {
         auto it = sectorObjects.find(sectorId);
         if (it == sectorObjects.end()) return;

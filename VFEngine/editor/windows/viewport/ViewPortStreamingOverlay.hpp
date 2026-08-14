@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <imgui.h>
 
 namespace events::world
@@ -32,7 +33,17 @@ namespace windows
     public:
         void draw();
 
+        // VK-1599: step to the next grid. Driven from the ViewPort's key handling rather than from
+        // a widget in the panel, because the panel carries ImGuiWindowFlags_NoInputs and adding an
+        // interactive control to it would re-open the sculpt-brush hazard the flag comment above
+        // describes. Wraps; a single-grid world is a no-op because the service clamps it back.
+        void cycleGrid() { displayedGrid = static_cast<uint8_t>(displayedGrid + 1); }
+
     private:
+        // Which grid the panel is showing. Clamped every frame against what the service reports,
+        // so a world reload or a removed grid can never strand it out of range.
+        uint8_t displayedGrid = 0;
+
         // Panel geometry. The grid is square and the cell size falls out of the ring width, so a
         // wide unload radius shrinks the cells rather than growing the panel.
         static constexpr float PANEL_SIZE = 208.0f;

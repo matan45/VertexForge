@@ -78,7 +78,9 @@ namespace resource {
 		float priority = 0.5f;
 		LoadImportance importance = LoadImportance::Normal;
 		std::optional<glm::vec3> worldPosition;
-		uint32_t sectorId = 0;
+		// VK-1599: world::sectorRegistrationId(gridIndex, coord), widened with the rest of the
+		// registration chain. Currently informational - nothing in the scheduler reads it.
+		uint64_t sectorId = 0;
 	};
 
 	struct ResourceSchedulerConfig

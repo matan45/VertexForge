@@ -4,6 +4,7 @@
 #include "WorldSector.hpp"
 #include "WorldTypes.hpp"
 #include <cstdint>
+#include <span>
 #include <glm/glm.hpp>
 
 namespace scene
@@ -41,11 +42,17 @@ namespace world
         bool spatiallyLoaded = true;
         bool hasTransform = false;
         glm::vec3 position{0.0f};
+        // VK-1599: which named runtime grid this entity streams on. 0 is the primary grid and the
+        // default for everything that has never been assigned - which is what keeps a world with
+        // one grid behaving exactly as it did.
+        uint8_t gridIndex = kPrimaryGridIndex;
     };
 
     struct SectorAssignment
     {
         SectorAssignmentKind kind = SectorAssignmentKind::NoTransform;
+        // VK-1599: the grid `coord` is expressed in. Meaningful only when kind == Spatial.
+        uint8_t gridIndex = kPrimaryGridIndex;
         SectorCoord coord{};
 
         [[nodiscard]] bool isSpatial() const noexcept { return kind == SectorAssignmentKind::Spatial; }
@@ -66,6 +73,19 @@ namespace world
                                                                    float worldTileSize,
                                                                    const SectorConfig& config) noexcept;
 
+    // VK-1599: `gridConfigs` is the world's grids in index order, so the entity's own gridIndex
+    // selects the sector size its coord is derived against. An out-of-range gridIndex - a scene
+    // authored against a world that has since lost a grid - falls back to the primary grid rather
+    // than refusing: the entity still has a home, and the editor surfaces the mismatch.
+    //
+    // An EMPTY span is treated as a single default-constructed grid, so a caller with no world open
+    // still gets a usable answer instead of reading out of bounds.
+    [[nodiscard]] VF_WORLD_API SectorAssignment resolveSectorAssignment(
+        const EntityStreamingTraits& traits,
+        std::span<const SectorConfig> gridConfigs) noexcept;
+
+    // Single-grid convenience, and the shape every pre-VK-1599 caller used. Always resolves on the
+    // primary grid, whatever the traits say.
     [[nodiscard]] VF_WORLD_API SectorAssignment resolveSectorAssignment(const EntityStreamingTraits& traits,
                                                                         const SectorConfig& config) noexcept;
 

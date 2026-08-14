@@ -26,16 +26,18 @@ namespace events::render::objectstreaming
         std::string_view getName() const override { return "SetObjectStreamingConfig"; }
     };
 
+    // VK-1599: `sectorId` is world::sectorRegistrationId(gridIndex, coord). 64 bits because the
+    // packed coord alone fills 32 and a world may run several streaming grids.
     struct RegisterSectorObjectsCommand : ::events::ICommand<void>
     {
-        uint32_t sectorId;
+        uint64_t sectorId;
         std::vector<std::pair<uint64_t, entt::entity>> entities;
         std::string_view getName() const override { return "RegisterSectorObjects"; }
     };
 
     struct UnregisterSectorObjectsCommand : ::events::ICommand<void>
     {
-        uint32_t sectorId;
+        uint64_t sectorId;
         std::string_view getName() const override { return "UnregisterSectorObjects"; }
     };
 

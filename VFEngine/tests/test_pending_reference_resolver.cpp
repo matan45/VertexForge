@@ -199,7 +199,7 @@ namespace
                     if (scene::EntityRegistry::findByUUID(uuid) != entt::null)
                         alive.push_back(uuid);
                 }
-                loader.queueSectorUnload(sector.coord, alive);
+                loader.queueSectorUnload(world::kPrimaryGridIndex, sector.coord, alive);
             }
             loader.flush(sceneGraph);
         }
@@ -208,7 +208,7 @@ namespace
                          std::vector<std::pair<std::string, json>> payloads,
                          std::vector<uint64_t> rootUUIDs)
         {
-            loader.queueSectorLoadFromData(coord, payloads);
+            loader.queueSectorLoadFromData(world::kPrimaryGridIndex, coord, payloads);
             sectors.push_back({coord, std::move(rootUUIDs), true});
         }
 
@@ -228,7 +228,7 @@ namespace
 
             for (auto& sector : sectors)
             {
-                if (sector.loading && !loader.hasPendingLoadsForSector(sector.coord))
+                if (sector.loading && !loader.hasPendingLoadsForSector(world::kPrimaryGridIndex, sector.coord))
                 {
                     sector.loading = false;
                     resolver.onSectorLoaded(expandLiveUUIDs(sector.uuids));
@@ -270,7 +270,7 @@ namespace
                 const std::vector<uint64_t> subtree = expandLiveUUIDs(sector.uuids);
                 resolver.onSectorUnloaded(subtree);
                 resolver.removeReferencesFrom(subtree);
-                loader.queueSectorUnload(coord, sector.uuids); // ROOT list, as in production
+                loader.queueSectorUnload(world::kPrimaryGridIndex, coord, sector.uuids); // ROOT list, as in production
                 loader.flush(sceneGraph);
                 sector.loading = false;
             }

@@ -14,7 +14,9 @@ namespace render::lighting
     {
         uint32_t entityId = 0;
         uint32_t slotIndex = 0;     // Index in the GPU buffer (from free-list)
-        uint32_t sectorId = 0;
+        // VK-1599: world::sectorRegistrationId - the grid index in the high 32 bits over the
+        // packed coord. Opaque here; the only requirement is that it is unique per (grid, sector).
+        uint64_t sectorId = 0;
         float priority = 0.0f;
         float distance = 0.0f;
         float intensity = 0.0f;
@@ -82,7 +84,7 @@ namespace render::lighting
         std::unordered_set<uint32_t> activeLightIds;
 
         // Sector tracking: sectorId -> set of entityIds
-        std::unordered_map<uint32_t, std::unordered_set<uint32_t>> sectorLights;
+        std::unordered_map<uint64_t, std::unordered_set<uint32_t>> sectorLights;
 
         LightStreamingConfig config;
 
@@ -101,11 +103,11 @@ namespace render::lighting
         void init(const LightStreamingConfig& cfg = {});
         void cleanup();
 
-        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
-        void unregisterSectorLights(uint32_t sectorId);
+        void registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds);
+        void unregisterSectorLights(uint64_t sectorId);
 
         bool registerLight(uint32_t entityId, LightStreamEntry::LightType type,
-                          uint32_t sectorId = 0);
+                          uint64_t sectorId = 0);
         void unregisterLight(uint32_t entityId);
 
         void updatePriorities(const glm::vec3& cameraPos);

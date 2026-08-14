@@ -127,6 +127,21 @@ namespace events::scene {
         std::string_view getName() const override { return "SetEntitySpatiallyLoaded"; }
     };
 
+    // VK-1599: which named runtime grid the entity streams on. Same ownership split as the
+    // spatially-loaded flag above - the scene layer owns the component, the world service reacts.
+    struct SetEntityStreamingGridCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        uint8_t gridIndex = 0;
+
+        std::string_view getName() const override { return "SetEntityStreamingGrid"; }
+    };
+
+    struct GetEntityStreamingGridQuery : IQuery<uint8_t> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetEntityStreamingGrid"; }
+    };
+
     // ============================================
     // Entity / Transform / Hierarchy Queries
     // ============================================
@@ -246,6 +261,10 @@ namespace events::scene {
     struct EntityStreamingPolicyChangedNotification : INotification {
         services::EntityHandle entity;
         bool spatiallyLoaded;
+        // VK-1599: the grid the entity now names. The world service re-buckets against BOTH fields
+        // - a grid change is a migration between two managers, so it has to unbucket from wherever
+        // the entity currently sits before assigning on the grid it now belongs to.
+        uint8_t gridIndex = 0;
 
         std::string_view getName() const override { return "EntityStreamingPolicyChanged"; }
     };

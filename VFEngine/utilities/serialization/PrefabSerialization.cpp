@@ -185,9 +185,14 @@ namespace serialization
         // instance is silently bucketed into a sector and vanishes on the next unload.
         if (entity.hasComponent<components::StreamingPolicyComponent>())
         {
+            const auto& policy = entity.getComponent<components::StreamingPolicyComponent>();
             out["streamingPolicy"] = {
-                {"spatiallyLoaded", entity.getComponent<components::StreamingPolicyComponent>().spatiallyLoaded}
+                {"spatiallyLoaded", policy.spatiallyLoaded}
             };
+            // VK-1599: written only when non-zero, so a prefab that never touched grids keeps its
+            // exact current payload.
+            if (policy.gridIndex != 0)
+                out["streamingPolicy"]["gridIndex"] = policy.gridIndex;
         }
 
         // Behavior tree must be baked so instantiated entities carry their AI brain
@@ -538,8 +543,11 @@ namespace serialization
 
         if (componentsJson.contains("streamingPolicy")) // VK-1597
         {
-            entity.addOrReplaceComponent<components::StreamingPolicyComponent>().spatiallyLoaded =
-                componentsJson["streamingPolicy"].value("spatiallyLoaded", true);
+            auto& policy = entity.addOrReplaceComponent<components::StreamingPolicyComponent>();
+            policy.spatiallyLoaded = componentsJson["streamingPolicy"].value("spatiallyLoaded", true);
+            // VK-1599: absent means the primary grid.
+            policy.gridIndex =
+                static_cast<uint8_t>(componentsJson["streamingPolicy"].value("gridIndex", 0));
         }
 
         if (componentsJson.contains("behaviorTree"))

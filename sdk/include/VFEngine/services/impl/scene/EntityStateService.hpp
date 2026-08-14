@@ -55,5 +55,10 @@ namespace services
         // but once pinned it keeps the component (holding true again) so the value round-trips.
         bool setEntitySpatiallyLoaded(EntityHandle entity, bool spatiallyLoaded);
         bool isEntitySpatiallyLoaded(EntityHandle entity) const;
+
+        // VK-1599: which named runtime grid the entity streams on. 0 is the primary grid and the
+        // default; setting 0 on an entity with no StreamingPolicyComponent is deliberately a no-op.
+        bool setEntityStreamingGrid(EntityHandle entity, uint8_t gridIndex);
+        [[nodiscard]] uint8_t getEntityStreamingGrid(EntityHandle entity) const;
     };
 }

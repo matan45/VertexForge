@@ -45,33 +45,68 @@ namespace world
         );
     }
 
+    namespace
+    {
+        // The three refusals, shared by both overloads. Returns true when a refusal was written.
+        bool resolveRefusal(const EntityStreamingTraits& traits, SectorAssignment& out) noexcept
+        {
+            // Order matters for diagnostics only - the three refusals are mutually exclusive in
+            // practice - but the type skip-list is checked first so it keeps reporting the reason
+            // it reported before VK-1597 existed.
+            if (traits.managedBySeparateSystem)
+            {
+                out.kind = SectorAssignmentKind::ManagedBySeparateSystem;
+                return true;
+            }
+
+            if (!traits.spatiallyLoaded)
+            {
+                out.kind = SectorAssignmentKind::NotSpatiallyLoaded;
+                return true;
+            }
+
+            if (!traits.hasTransform)
+            {
+                out.kind = SectorAssignmentKind::NoTransform;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    SectorAssignment resolveSectorAssignment(const EntityStreamingTraits& traits,
+                                             std::span<const SectorConfig> gridConfigs) noexcept
+    {
+        SectorAssignment result;
+        if (resolveRefusal(traits, result))
+            return result;
+
+        // VK-1599: an out-of-range grid resolves on the primary grid rather than refusing. A
+        // .vfscene can name a grid a later edit of the .vfworld removed, and dropping the entity
+        // out of the sector system entirely would be data loss on the next Save World.
+        const bool gridExists = traits.gridIndex < gridConfigs.size();
+        result.gridIndex = gridExists ? traits.gridIndex : kPrimaryGridIndex;
+
+        // An empty span means "no world open"; the struct default is the same 128-unit grid a new
+        // world starts from, which is the only sensible answer and never reads out of bounds.
+        const SectorConfig fallback;
+        const SectorConfig& config = gridConfigs.empty() ? fallback : gridConfigs[result.gridIndex];
+
+        result.kind = SectorAssignmentKind::Spatial;
+        result.coord = worldPositionToSectorCoord(traits.position, config);
+        return result;
+    }
+
     SectorAssignment resolveSectorAssignment(const EntityStreamingTraits& traits,
                                              const SectorConfig& config) noexcept
     {
         SectorAssignment result;
-
-        // Order matters for diagnostics only - the three refusals are mutually exclusive in
-        // practice - but the type skip-list is checked first so it keeps reporting the reason it
-        // reported before VK-1597 existed.
-        if (traits.managedBySeparateSystem)
-        {
-            result.kind = SectorAssignmentKind::ManagedBySeparateSystem;
+        if (resolveRefusal(traits, result))
             return result;
-        }
-
-        if (!traits.spatiallyLoaded)
-        {
-            result.kind = SectorAssignmentKind::NotSpatiallyLoaded;
-            return result;
-        }
-
-        if (!traits.hasTransform)
-        {
-            result.kind = SectorAssignmentKind::NoTransform;
-            return result;
-        }
 
         result.kind = SectorAssignmentKind::Spatial;
+        result.gridIndex = kPrimaryGridIndex;
         result.coord = worldPositionToSectorCoord(traits.position, config);
         return result;
     }
@@ -87,9 +122,13 @@ namespace world
             || entity.hasComponent<components::IBLComponent>()
             || entity.hasComponent<components::CameraComponent>();
 
-        // Absent means spatially loaded - see StreamingPolicyComponent.
+        // Absent means spatially loaded on the primary grid - see StreamingPolicyComponent.
         if (entity.hasComponent<components::StreamingPolicyComponent>())
-            traits.spatiallyLoaded = entity.getComponent<components::StreamingPolicyComponent>().spatiallyLoaded;
+        {
+            const auto& policy = entity.getComponent<components::StreamingPolicyComponent>();
+            traits.spatiallyLoaded = policy.spatiallyLoaded;
+            traits.gridIndex = policy.gridIndex;
+        }
 
         if (entity.hasComponent<components::TransformComponent>())
         {

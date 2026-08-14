@@ -387,14 +387,14 @@ TEST_SUITE("SectorPersistence")
 
         world::WorldDefinition definition;
         definition.name = "RoundTrip";
-        definition.sectorConfig.sectorWorldSize = 256.0f;
-        definition.sectorConfig.tilesPerSector = 8;
-        definition.streamingConfig.loadRadius = 6.0f;
-        definition.streamingConfig.unloadRadius = 9.0f;
-        definition.streamingConfig.maxLoadsPerFrame = 3;
-        definition.streamingConfig.maxEntitiesPerFrame = 16;
-        definition.streamingConfig.editModeStreaming = true;
-        definition.sectorFilePaths[{1, -2}] = "sectors/sector_1_-2.vfsector";
+        definition.primaryGrid().sectorConfig.sectorWorldSize = 256.0f;
+        definition.primaryGrid().sectorConfig.tilesPerSector = 8;
+        definition.primaryGrid().streamingConfig.loadRadius = 6.0f;
+        definition.primaryGrid().streamingConfig.unloadRadius = 9.0f;
+        definition.primaryGrid().streamingConfig.maxLoadsPerFrame = 3;
+        definition.primaryGrid().streamingConfig.maxEntitiesPerFrame = 16;
+        definition.primaryGrid().streamingConfig.editModeStreaming = true;
+        definition.primaryGrid().sectorFilePaths[{1, -2}] = "sectors/sector_1_-2.vfsector";
 
         std::string path = (testRoot() / "roundtrip.vfworld").string();
         REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
@@ -402,15 +402,15 @@ TEST_SUITE("SectorPersistence")
         world::WorldDefinition loaded;
         REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
         CHECK(loaded.name == "RoundTrip");
-        CHECK(loaded.sectorConfig.sectorWorldSize == doctest::Approx(256.0f));
-        CHECK(loaded.sectorConfig.tilesPerSector == 8);
-        CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(6.0f));
-        CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(9.0f));
-        CHECK(loaded.streamingConfig.maxLoadsPerFrame == 3);
-        CHECK(loaded.streamingConfig.maxEntitiesPerFrame == 16);
-        CHECK(loaded.streamingConfig.editModeStreaming == true);
-        REQUIRE(loaded.sectorFilePaths.size() == 1);
-        CHECK(loaded.sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
+        CHECK(loaded.primaryGrid().sectorConfig.sectorWorldSize == doctest::Approx(256.0f));
+        CHECK(loaded.primaryGrid().sectorConfig.tilesPerSector == 8);
+        CHECK(loaded.primaryGrid().streamingConfig.loadRadius == doctest::Approx(6.0f));
+        CHECK(loaded.primaryGrid().streamingConfig.unloadRadius == doctest::Approx(9.0f));
+        CHECK(loaded.primaryGrid().streamingConfig.maxLoadsPerFrame == 3);
+        CHECK(loaded.primaryGrid().streamingConfig.maxEntitiesPerFrame == 16);
+        CHECK(loaded.primaryGrid().streamingConfig.editModeStreaming == true);
+        REQUIRE(loaded.primaryGrid().sectorFilePaths.size() == 1);
+        CHECK(loaded.primaryGrid().sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
     }
 
     // ── VK-1594: per-cell HLOD bake inventory ───────────────────────────
@@ -542,24 +542,24 @@ TEST_SUITE("SectorPersistence")
 
         SUBCASE("sectorConfig falls back to the struct")
         {
-            CHECK(loaded.sectorConfig.sectorWorldSize == doctest::Approx(sectorDefaults.sectorWorldSize));
-            CHECK(loaded.sectorConfig.tilesPerSector == sectorDefaults.tilesPerSector);
-            CHECK(loaded.sectorConfig.alignedToTerrain == sectorDefaults.alignedToTerrain);
+            CHECK(loaded.primaryGrid().sectorConfig.sectorWorldSize == doctest::Approx(sectorDefaults.sectorWorldSize));
+            CHECK(loaded.primaryGrid().sectorConfig.tilesPerSector == sectorDefaults.tilesPerSector);
+            CHECK(loaded.primaryGrid().sectorConfig.alignedToTerrain == sectorDefaults.alignedToTerrain);
         }
         SUBCASE("every streamingConfig field falls back to the struct")
         {
-            CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(d.loadRadius));
-            CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
-            CHECK(loaded.streamingConfig.maxLoadsPerFrame == d.maxLoadsPerFrame);
-            CHECK(loaded.streamingConfig.maxUnloadsPerFrame == d.maxUnloadsPerFrame);
-            CHECK(loaded.streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
-            CHECK(loaded.streamingConfig.maxTerrainLoadsPerFrame == d.maxTerrainLoadsPerFrame);
-            CHECK(loaded.streamingConfig.maxTerrainUnloadsPerFrame == d.maxTerrainUnloadsPerFrame);
-            CHECK(loaded.streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
-            CHECK(loaded.streamingConfig.editModeStreaming == d.editModeStreaming);
-            CHECK(loaded.streamingConfig.hlodTier0Radius == doctest::Approx(d.hlodTier0Radius));
-            CHECK(loaded.streamingConfig.hlodTier1Radius == doctest::Approx(d.hlodTier1Radius));
-            CHECK(loaded.streamingConfig.hlodTier2Radius == doctest::Approx(d.hlodTier2Radius));
+            CHECK(loaded.primaryGrid().streamingConfig.loadRadius == doctest::Approx(d.loadRadius));
+            CHECK(loaded.primaryGrid().streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
+            CHECK(loaded.primaryGrid().streamingConfig.maxLoadsPerFrame == d.maxLoadsPerFrame);
+            CHECK(loaded.primaryGrid().streamingConfig.maxUnloadsPerFrame == d.maxUnloadsPerFrame);
+            CHECK(loaded.primaryGrid().streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
+            CHECK(loaded.primaryGrid().streamingConfig.maxTerrainLoadsPerFrame == d.maxTerrainLoadsPerFrame);
+            CHECK(loaded.primaryGrid().streamingConfig.maxTerrainUnloadsPerFrame == d.maxTerrainUnloadsPerFrame);
+            CHECK(loaded.primaryGrid().streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
+            CHECK(loaded.primaryGrid().streamingConfig.editModeStreaming == d.editModeStreaming);
+            CHECK(loaded.primaryGrid().streamingConfig.hlodTier0Radius == doctest::Approx(d.hlodTier0Radius));
+            CHECK(loaded.primaryGrid().streamingConfig.hlodTier1Radius == doctest::Approx(d.hlodTier1Radius));
+            CHECK(loaded.primaryGrid().streamingConfig.hlodTier2Radius == doctest::Approx(d.hlodTier2Radius));
         }
         SUBCASE("an absent hlodConfig still yields the three default tiers")
         {
@@ -593,10 +593,10 @@ TEST_SUITE("SectorPersistence")
         REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
 
         const world::SectorStreamingConfig d;
-        CHECK(loaded.streamingConfig.loadRadius == doctest::Approx(7.0f));
-        CHECK(loaded.streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
-        CHECK(loaded.streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
-        CHECK(loaded.streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
+        CHECK(loaded.primaryGrid().streamingConfig.loadRadius == doctest::Approx(7.0f));
+        CHECK(loaded.primaryGrid().streamingConfig.unloadRadius == doctest::Approx(d.unloadRadius));
+        CHECK(loaded.primaryGrid().streamingConfig.maxEntitiesPerFrame == d.maxEntitiesPerFrame);
+        CHECK(loaded.primaryGrid().streamingConfig.enableGPUObjectStreaming == d.enableGPUObjectStreaming);
     }
 
     // ── VK-1587: buffer parsing + archive-mode routing ──────────────────

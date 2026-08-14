@@ -35,6 +35,11 @@ namespace services
     WorldSectorServiceImpl::WorldSectorServiceImpl(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph))
     {
+        // VK-1599: `grids` must be non-empty from construction - every accessor indexes it, and
+        // handlers can be queried before any world is opened. worldDefinition starts with exactly
+        // one default grid, so this produces exactly one runtime.
+        rebuildGridRuntimes();
+
         // VK-1594: the baker generates on workers but publishes here, on the main-thread-pinned
         // update(), so recordHLODBake is the only writer of worldDefinition.hlodCells.
         hlodBaker.setCellBakedCallback(
@@ -48,13 +53,20 @@ namespace services
                 ::events::EventDispatcher::instance().publish(notif);
             });
 
-        entityLoader.setOnEntityLoaded([this](uint64_t uuid, const world::SectorCoord& coord)
+        entityLoader.setOnEntityLoaded([this](uint64_t uuid, uint8_t gridIndex,
+                                              const world::SectorCoord& coord)
         {
+            // VK-1599: the entity came out of THIS grid's sector file, so it goes back into this
+            // grid's manager - and the fallback position below has to be derived against this
+            // grid's own cell size, not the primary grid's.
+            auto& manager = gridRuntime(gridIndex).manager;
+            const float sectorSize = manager.getConfig().sectorWorldSize;
+
             // Look up the entity's actual deserialized position for correct sector assignment
             glm::vec3 assignPos(
-                (static_cast<float>(coord.x) + 0.5f) * sectorManager.getConfig().sectorWorldSize,
+                (static_cast<float>(coord.x) + 0.5f) * sectorSize,
                 0.0f,
-                (static_cast<float>(coord.z) + 0.5f) * sectorManager.getConfig().sectorWorldSize
+                (static_cast<float>(coord.z) + 0.5f) * sectorSize
             );
 
             auto entity = scene::EntityRegistry::findByUUID(uuid);
@@ -85,18 +97,19 @@ namespace services
             //
             // The !spatiallyLoaded early-return above deliberately runs BEFORE this, leaving those
             // UUIDs in the parse-time list for reconcileAlwaysLoadedEntities to strip and count.
-            sectorManager.removeEntityFromSector(uuid, coord);
-            sectorManager.assignEntityToSector(uuid, assignPos);
+            manager.removeEntityFromSector(uuid, coord);
+            manager.assignEntityToSector(uuid, assignPos);
             // Entity was loaded from file — don't mark sector as needing save. (Both calls above
             // set dirty; if assignPos resolved to a DIFFERENT sector the entity genuinely moved,
             // and that sector stays dirty on purpose.)
-            auto* sector = sectorManager.getSector(coord);
+            auto* sector = manager.getSector(coord);
             if (sector) sector->dirty = false;
         });
 
-        entityLoader.setOnEntityUnloaded([this](uint64_t uuid, const world::SectorCoord& coord)
+        entityLoader.setOnEntityUnloaded([this](uint64_t uuid, uint8_t gridIndex,
+                                                const world::SectorCoord& coord)
         {
-            sectorManager.removeEntityFromSector(uuid, coord);
+            gridRuntime(gridIndex).manager.removeEntityFromSector(uuid, coord);
         });
 
         entityLoader.setOnEntityPostLoad([this](uint64_t uuid, const std::string& meshPath, const std::string& animatorPath)
@@ -456,27 +469,63 @@ namespace services
         });
     }
 
+    void WorldSectorServiceImpl::rebuildGridRuntimes()
+    {
+        // VK-1599: the runtimes are rebuilt from scratch rather than reconciled. Every caller is a
+        // world open/close, where carrying anything over - a tracked sector set, a pending read, a
+        // cached blob - would attribute the previous world's state to the new one. That is the same
+        // argument drainSectorLoads and clearPrefetchedBlobs already make coord by coord.
+        grids.clear();
+        grids.reserve(worldDefinition.grids.size());
+        for (const auto& definition : worldDefinition.grids)
+        {
+            auto runtime = std::make_unique<GridRuntime>();
+            runtime->manager.setConfig(definition.sectorConfig);
+            runtime->streamer.setConfig(definition.streamingConfig);
+            grids.push_back(std::move(runtime));
+        }
+
+        // worldDefinition.grids is never empty, but a hand-edited .vfworld reaching load() through
+        // some future path must not be able to leave this empty - every accessor indexes grids[0].
+        if (grids.empty())
+            grids.push_back(std::make_unique<GridRuntime>());
+
+        perGridActions.assign(grids.size(), {});
+    }
+
     void WorldSectorServiceImpl::applyEffectiveStreamingConfig()
     {
-        const auto& effective = getEffectiveStreamingConfig();
-        streamer.setConfig(effective);
-        // Take the config back off the streamer: setConfig normalizes, and the HLOD streamer must
-        // see the same resolved radii the sector streamer is running.
-        hlodStreamer.setConfig(streamer.getConfig(), worldDefinition.hlodConfig);
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
+            gridRuntime(gridIndex).streamer.setConfig(getEffectiveStreamingConfig(gridIndex));
+
+        // Take the config back off the PRIMARY streamer: setConfig normalizes, and the HLOD
+        // streamer must see the same resolved radii the grid it is bound to is running.
+        hlodStreamer.setConfig(primaryRuntime().streamer.getConfig(), worldDefinition.hlodConfig);
     }
 
     void WorldSectorServiceImpl::resetStreamingSessionState()
     {
-        streamingConfigOverride.reset();
-        streamer.setPaused(false);
+        // Every grid: an override belongs to the world it was tuned against, and a streamer left
+        // paused across a world change reads as "streaming is broken" whichever grid it is on.
+        for (auto& grid : grids)
+        {
+            grid->streamingConfigOverride.reset();
+            grid->streamer.setPaused(false);
+        }
     }
 
     ::events::world::StreamingOverlaySnapshot
-    WorldSectorServiceImpl::buildOverlaySnapshot(int32_t maxRadius)
+    WorldSectorServiceImpl::buildOverlaySnapshot(uint8_t gridIndex, int32_t maxRadius)
     {
         ::events::world::StreamingOverlaySnapshot snapshot;
         if (!worldMode)
             return snapshot; // valid == false; the overlay draws a "no world" line instead
+
+        gridIndex = worldDefinition.clampGridIndex(gridIndex);
+        auto& runtime = gridRuntime(gridIndex);
+        snapshot.gridIndex = gridIndex;
+        snapshot.gridCount = gridCount();
+        snapshot.gridName = worldDefinition.grid(gridIndex).name;
 
         // The STREAMER's copy, not getEffectiveStreamingConfig(). Both name the same config, but
         // only this one has been through normalizeConfig: worldDefinition.streamingConfig is
@@ -489,8 +538,8 @@ namespace services
         // Deliberately NOT fixed by normalizing worldDefinition.streamingConfig instead: that
         // member is what Save World writes, and resolving it would bake VK-1591's prefetchRadius
         // 0 sentinel into loadRadius on disk.
-        const auto& config = streamer.getConfig();
-        const float sectorSize = sectorManager.getConfig().sectorWorldSize;
+        const auto& config = runtime.streamer.getConfig();
+        const float sectorSize = runtime.manager.getConfig().sectorWorldSize;
         if (!(sectorSize > 0.0f))
             return snapshot;
 
@@ -519,7 +568,7 @@ namespace services
         // Clamp into the addressable sector window before the loop below adds +/- radius to it:
         // a NaN or wildly out-of-range camera position would otherwise overflow the loop bounds.
         {
-            const world::SectorCoord raw = sectorManager.worldPositionToSectorCoord(origin);
+            const world::SectorCoord raw = runtime.manager.worldPositionToSectorCoord(origin);
             snapshot.center = world::SectorCoord(
                 std::clamp(raw.x, world::kMinSectorCoord + radius, world::kMaxSectorCoord - radius),
                 std::clamp(raw.z, world::kMinSectorCoord + radius, world::kMaxSectorCoord - radius));
@@ -530,16 +579,19 @@ namespace services
         snapshot.loadRadius = config.loadRadius;
         snapshot.prefetchRadius = world::effectivePrefetchRadius(config);
         snapshot.unloadRadius = config.unloadRadius;
-        snapshot.overrideActive = streamingConfigOverride.has_value();
-        snapshot.paused = streamer.isPaused();
-        snapshot.burstFramesRemaining = streamer.getBurstFramesRemaining();
+        snapshot.overrideActive = runtime.streamingConfigOverride.has_value();
+        snapshot.paused = runtime.streamer.isPaused();
+        snapshot.burstFramesRemaining = runtime.streamer.getBurstFramesRemaining();
 
         // clear() keeps capacity, so after the first fill this whole loop allocates nothing.
         overlayCells.clear();
         overlaySources.clear();
 
         const auto& tiers = worldDefinition.hlodConfig.tiers;
-        const bool hlodEnabled = worldDefinition.hlodConfig.enabled && !tiers.empty();
+        // VK-1599: HLOD is bound to the primary grid, so a non-primary grid's cells never carry a
+        // proxy - reporting one would draw HLOD coverage on a grid that has none.
+        const bool hlodEnabled = worldDefinition.hlodConfig.enabled && !tiers.empty() &&
+                                 gridIndex == world::kPrimaryGridIndex;
 
         // z descending so the first row drawn is the northernmost, matching the Sector Grid tab.
         for (int32_t z = snapshot.center.z + radius; z >= snapshot.center.z - radius; --z)
@@ -549,7 +601,7 @@ namespace services
                 ::events::world::StreamingOverlayCell cell;
                 cell.coord = world::SectorCoord(x, z);
 
-                if (const world::WorldSector* sector = sectorManager.getSector(cell.coord))
+                if (const world::WorldSector* sector = runtime.manager.getSector(cell.coord))
                 {
                     cell.exists = true;
                     cell.state = sector->state;
@@ -630,19 +682,19 @@ namespace services
         dispatcher.registerCommandHandler<::events::world::SaveSectorCommand>(
             [this](const ::events::world::SaveSectorCommand& cmd)
             {
-                return saveSector(cmd.coord, cmd.filePath);
+                return saveSector(cmd.gridIndex, cmd.coord, cmd.filePath);
             });
 
         dispatcher.registerCommandHandler<::events::world::LoadSectorCommand>(
             [this](const ::events::world::LoadSectorCommand& cmd)
             {
-                return loadSector(cmd.coord);
+                return loadSector(cmd.gridIndex, cmd.coord);
             });
 
         dispatcher.registerCommandHandler<::events::world::UnloadSectorCommand>(
             [this](const ::events::world::UnloadSectorCommand& cmd)
             {
-                return unloadSector(cmd.coord);
+                return unloadSector(cmd.gridIndex, cmd.coord);
             });
 
         dispatcher.registerCommandHandler<::events::world::ClearWorldCommand>(
@@ -651,17 +703,77 @@ namespace services
                 clearWorld();
             });
 
+        // ---- VK-1599: named runtime grids ----
+        dispatcher.registerQueryHandler<::events::world::GetWorldGridsQuery>(
+            [this](const ::events::world::GetWorldGridsQuery&)
+            {
+                std::vector<::events::world::WorldGridInfo> out;
+                out.reserve(worldDefinition.grids.size());
+
+                for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
+                {
+                    ::events::world::WorldGridInfo info;
+                    info.gridIndex = gridIndex;
+                    info.name = worldDefinition.grid(gridIndex).name;
+                    info.sectorConfig = worldDefinition.grid(gridIndex).sectorConfig;
+                    info.drivesWorldSystems = (gridIndex == world::kPrimaryGridIndex);
+
+                    gridRuntime(gridIndex).manager.forEachSector([&info](const world::WorldSector& sector)
+                    {
+                        ++info.sectorCount;
+                        if (sector.state == world::SectorState::Loaded)
+                            ++info.loadedSectorCount;
+                    });
+
+                    out.push_back(std::move(info));
+                }
+                return out;
+            });
+
+        dispatcher.registerCommandHandler<::events::world::AddWorldGridCommand>(
+            [this](const ::events::world::AddWorldGridCommand& cmd) -> uint8_t
+            {
+                if (!worldMode)
+                    return world::kMaxGrids;
+                return addGrid(cmd.name, cmd.sectorConfig, cmd.streamingConfig);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::RemoveWorldGridCommand>(
+            [this](const ::events::world::RemoveWorldGridCommand& cmd) -> std::string
+            {
+                if (!worldMode)
+                    return "No world is open.";
+                return removeGrid(cmd.gridIndex);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::SetWorldGridCommand>(
+            [this](const ::events::world::SetWorldGridCommand& cmd) -> bool
+            {
+                if (!worldMode || cmd.gridIndex >= gridCount())
+                    return false;
+
+                auto& definition = worldDefinition.grid(cmd.gridIndex);
+                if (!cmd.name.empty())
+                    definition.name = cmd.name;
+
+                definition.sectorConfig = cmd.sectorConfig;
+                // The manager owns the live copy; the streamer reads the size through it, so this
+                // is the only push needed.
+                gridRuntime(cmd.gridIndex).manager.setConfig(definition.sectorConfig);
+                return true;
+            });
+
         // VK-1598
         dispatcher.registerQueryHandler<::events::world::PreviewRepartitionQuery>(
             [this](const ::events::world::PreviewRepartitionQuery& q)
             {
-                return previewRepartition(q.sectorConfig);
+                return previewRepartition(q.gridIndex, q.sectorConfig);
             });
 
         dispatcher.registerCommandHandler<::events::world::ApplyRepartitionCommand>(
             [this](const ::events::world::ApplyRepartitionCommand& cmd)
             {
-                return applyRepartition(cmd.sectorConfig);
+                return applyRepartition(cmd.gridIndex, cmd.sectorConfig);
             });
 
         dispatcher.registerCommandHandler<::events::world::ConvertWorldToFlatCommand>(
@@ -681,13 +793,13 @@ namespace services
                 -> std::optional<world::SectorCoord>
             {
                 if (!worldMode) return std::nullopt;
-                return sectorManager.worldPositionToSectorCoord(q.position);
+                return gridRuntime(q.gridIndex).manager.worldPositionToSectorCoord(q.position);
             });
 
         dispatcher.registerQueryHandler<::events::world::GetSectorStateQuery>(
             [this](const ::events::world::GetSectorStateQuery& q) -> world::SectorState
             {
-                const auto* sector = sectorManager.getSector(q.coord);
+                const auto* sector = gridRuntime(q.gridIndex).manager.getSector(q.coord);
                 if (!sector) return world::SectorState::Unloaded;
                 return sector->state;
             });
@@ -695,7 +807,7 @@ namespace services
         dispatcher.registerQueryHandler<::events::world::DoesSectorExistQuery>(
             [this](const ::events::world::DoesSectorExistQuery& q)
             {
-                const auto* sector = sectorManager.getSector(q.coord);
+                const auto* sector = gridRuntime(q.gridIndex).manager.getSector(q.coord);
                 return sector != nullptr && !sector->filePath.empty();
             });
 
@@ -712,16 +824,16 @@ namespace services
         // would be copied into worldDefinition on the next drag. They use
         // GetPersistedStreamingConfigQuery below.
         dispatcher.registerQueryHandler<::events::world::GetWorldStreamingStatsQuery>(
-            [this](const ::events::world::GetWorldStreamingStatsQuery&)
+            [this](const ::events::world::GetWorldStreamingStatsQuery& q)
             {
-                return streamer.getConfig();
+                return gridRuntime(q.gridIndex).streamer.getConfig();
             });
 
         // VK-1595: the world's own config, i.e. exactly what Save World will write.
         dispatcher.registerQueryHandler<::events::world::GetPersistedStreamingConfigQuery>(
-            [this](const ::events::world::GetPersistedStreamingConfigQuery&)
+            [this](const ::events::world::GetPersistedStreamingConfigQuery& q)
             {
-                return worldDefinition.streamingConfig;
+                return worldDefinition.grid(q.gridIndex).streamingConfig;
             });
 
         // VK-1591: prefetch-ring residency for the streaming overlay. `bytes` is EXACT (the raw
@@ -730,31 +842,40 @@ namespace services
         dispatcher.registerQueryHandler<::events::world::GetSectorPrefetchStatsQuery>(
             [this](const ::events::world::GetSectorPrefetchStatsQuery&)
             {
+                // VK-1599: aggregated across every grid. The prefetch ring is a memory readout
+                // and memory is a whole-process resource, so a per-grid figure would understate
+                // what the world is actually holding. byteCap sums the per-grid caps for the same
+                // reason - each grid enforces its own, so the honest ceiling is their sum.
                 ::events::world::SectorPrefetchStats stats;
-                stats.bytes = prefetchedBytes;
-                stats.byteCap = getEffectiveStreamingConfig().maxPrefetchBytes; // VK-1595
-                stats.burstFramesRemaining = streamer.getBurstFramesRemaining(); // VK-1593
-                sectorManager.forEachSector([&stats](const world::WorldSector& sector)
+                for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
                 {
-                    if (sector.state == world::SectorState::Prefetched)
-                        ++stats.prefetchedSectors;
-                    else if (sector.state == world::SectorState::Prefetching)
-                        ++stats.prefetchingSectors;
-                });
+                    const auto& runtime = gridRuntime(gridIndex);
+                    stats.bytes += runtime.prefetchedBytes;
+                    stats.byteCap += getEffectiveStreamingConfig(gridIndex).maxPrefetchBytes; // VK-1595
+                    stats.burstFramesRemaining = std::max(
+                        stats.burstFramesRemaining, runtime.streamer.getBurstFramesRemaining()); // VK-1593
+                    runtime.manager.forEachSector([&stats](const world::WorldSector& sector)
+                    {
+                        if (sector.state == world::SectorState::Prefetched)
+                            ++stats.prefetchedSectors;
+                        else if (sector.state == world::SectorState::Prefetching)
+                            ++stats.prefetchingSectors;
+                    });
+                }
                 return stats;
             });
 
         dispatcher.registerQueryHandler<::events::world::GetSectorConfigQuery>(
-            [this](const ::events::world::GetSectorConfigQuery&)
+            [this](const ::events::world::GetSectorConfigQuery& q)
             {
-                return sectorManager.getConfig();
+                return gridRuntime(q.gridIndex).manager.getConfig();
             });
 
         dispatcher.registerQueryHandler<::events::world::GetLoadedSectorCoordsQuery>(
-            [this](const ::events::world::GetLoadedSectorCoordsQuery&)
+            [this](const ::events::world::GetLoadedSectorCoordsQuery& q)
             {
                 std::vector<world::SectorCoord> result;
-                sectorManager.forEachSector([&](const world::WorldSector& sector)
+                gridRuntime(q.gridIndex).manager.forEachSector([&](const world::WorldSector& sector)
                 {
                     // VK-1591: deliberately NOT extended to Prefetching/Prefetched. Callers of
                     // this query expect sectors whose entities exist or are about to.
@@ -768,10 +889,10 @@ namespace services
             });
 
         dispatcher.registerQueryHandler<::events::world::GetAllSectorCoordsQuery>(
-            [this](const ::events::world::GetAllSectorCoordsQuery&)
+            [this](const ::events::world::GetAllSectorCoordsQuery& q)
             {
                 std::vector<world::SectorCoord> result;
-                sectorManager.forEachSector([&](const world::WorldSector& sector)
+                gridRuntime(q.gridIndex).manager.forEachSector([&](const world::WorldSector& sector)
                 {
                     result.push_back(sector.coord);
                 });
@@ -782,7 +903,7 @@ namespace services
             [this](const ::events::world::SetSectorDataLayerCommand& cmd) -> bool
             {
                 if (!worldMode || cmd.layerName.empty()) return false;
-                auto* sector = sectorManager.getSector(cmd.coord);
+                auto* sector = gridRuntime(cmd.gridIndex).manager.getSector(cmd.coord);
                 if (!sector) return false;
                 if (!world::canMutateDataLayers(*sector)) return false;
 
@@ -804,7 +925,7 @@ namespace services
             [this](const ::events::world::RemoveSectorDataLayerCommand& cmd) -> bool
             {
                 if (!worldMode) return false;
-                auto* sector = sectorManager.getSector(cmd.coord);
+                auto* sector = gridRuntime(cmd.gridIndex).manager.getSector(cmd.coord);
                 if (!sector) return false;
                 if (!world::canMutateDataLayers(*sector)) return false;
 
@@ -819,7 +940,7 @@ namespace services
             [this](const ::events::world::GetSectorDataLayerQuery& q)
                 -> std::optional<std::vector<uint8_t>>
             {
-                const auto* sector = sectorManager.getSector(q.coord);
+                const auto* sector = gridRuntime(q.gridIndex).manager.getSector(q.coord);
                 if (!sector) return std::nullopt;
 
                 auto it = sector->dataLayers.find(q.layerName);
@@ -830,11 +951,14 @@ namespace services
         // VK-1596: everything the editor's Data Layers tab shows, in one poll. Built by value -
         // see the note on the query - and only over Loaded sectors.
         dispatcher.registerQueryHandler<::events::world::GetDataLayersSummaryQuery>(
-            [this](const ::events::world::GetDataLayersSummaryQuery&)
+            [this](const ::events::world::GetDataLayersSummaryQuery& q)
             {
+                // VK-1599: ONE grid - see the note on the query. The editor's grid selector picks
+                // it, and every write the Data Layers tab makes carries the same index, so the
+                // coords in `loadedSectors` and the sectors those writes reach are the same set.
                 world::DataLayerInventory inventory;
                 if (worldMode)
-                    world::summarizeDataLayers(sectorManager, inventory);
+                    world::summarizeDataLayers(gridRuntime(q.gridIndex).manager, inventory);
                 return inventory;
             });
 
@@ -843,13 +967,13 @@ namespace services
                 -> ::events::world::SectorReadiness
             {
                 ::events::world::SectorReadiness readiness;
-                const auto* sector = sectorManager.getSector(q.coord);
+                const auto* sector = gridRuntime(q.gridIndex).manager.getSector(q.coord);
                 if (!sector)
                     return readiness;
 
                 readiness.state = sector->state;
-                readiness.fileLoadPending = pendingAsyncLoads.contains(q.coord);
-                readiness.entitySpawnsPending = entityLoader.hasPendingLoadsForSector(q.coord);
+                readiness.fileLoadPending = gridRuntime(q.gridIndex).pendingAsyncLoads.contains(q.coord);
+                readiness.entitySpawnsPending = entityLoader.hasPendingLoadsForSector(q.gridIndex, q.coord);
                 readiness.entityCount = static_cast<uint32_t>(sector->entityUUIDs.size());
                 return readiness;
             });
@@ -874,8 +998,9 @@ namespace services
             [this](const ::events::world::SetStreamingConfigCommand& cmd)
             {
                 if (!worldMode) return;
-                worldDefinition.streamingConfig = cmd.config;
-                world::normalizeStreamingConfig(worldDefinition.streamingConfig);
+                auto& persisted = worldDefinition.grid(cmd.gridIndex).streamingConfig;
+                persisted = cmd.config;
+                world::normalizeStreamingConfig(persisted);
                 applyEffectiveStreamingConfig(); // an active override still wins
             });
 
@@ -886,43 +1011,50 @@ namespace services
                 if (!worldMode) return;
                 world::SectorStreamingConfig normalized = cmd.config;
                 world::normalizeStreamingConfig(normalized);
-                streamingConfigOverride = normalized;
+                gridRuntime(cmd.gridIndex).streamingConfigOverride = normalized;
                 applyEffectiveStreamingConfig();
             });
 
         dispatcher.registerCommandHandler<::events::world::ClearStreamingConfigOverrideCommand>(
-            [this](const ::events::world::ClearStreamingConfigOverrideCommand&)
+            [this](const ::events::world::ClearStreamingConfigOverrideCommand& cmd)
             {
-                if (!streamingConfigOverride.has_value()) return;
-                streamingConfigOverride.reset();
+                auto& sessionOverride = gridRuntime(cmd.gridIndex).streamingConfigOverride;
+                if (!sessionOverride.has_value()) return;
+                sessionOverride.reset();
                 // Snap the streamers back onto the world's own config in the same frame, so
                 // "clear" is observable immediately rather than at the next config edit.
                 applyEffectiveStreamingConfig();
             });
 
         dispatcher.registerQueryHandler<::events::world::GetStreamingConfigOverrideQuery>(
-            [this](const ::events::world::GetStreamingConfigOverrideQuery&)
+            [this](const ::events::world::GetStreamingConfigOverrideQuery& q)
             {
-                return streamingConfigOverride;
+                return gridRuntime(q.gridIndex).streamingConfigOverride;
             });
 
         // ---- VK-1595: freeze / single-step ----
         dispatcher.registerCommandHandler<::events::world::SetStreamingPausedCommand>(
             [this](const ::events::world::SetStreamingPausedCommand& cmd)
             {
-                streamer.setPaused(cmd.paused);
+                // VK-1599: every grid at once. The freeze exists to inspect one decision pass;
+                // letting one grid run while another is frozen would show a handoff mid-flight and
+                // defeat the tool.
+                for (auto& grid : grids)
+                    grid->streamer.setPaused(cmd.paused);
             });
 
         dispatcher.registerCommandHandler<::events::world::StepStreamingFrameCommand>(
             [this](const ::events::world::StepStreamingFrameCommand&)
             {
-                streamer.requestStep();
+                for (auto& grid : grids)
+                    grid->streamer.requestStep();
             });
 
         dispatcher.registerQueryHandler<::events::world::GetStreamingPausedQuery>(
             [this](const ::events::world::GetStreamingPausedQuery&)
             {
-                return streamer.isPaused();
+                // Pause is applied to every grid together, so the primary grid speaks for all.
+                return primaryRuntime().streamer.isPaused();
             });
 
         // ---- VK-1595: in-viewport overlay ----
@@ -941,7 +1073,7 @@ namespace services
         dispatcher.registerQueryHandler<::events::world::GetStreamingOverlaySnapshotQuery>(
             [this](const ::events::world::GetStreamingOverlaySnapshotQuery& query)
             {
-                return buildOverlaySnapshot(query.maxRadius);
+                return buildOverlaySnapshot(query.gridIndex, query.maxRadius);
             });
 
         dispatcher.registerQueryHandler<::events::world::GetAlwaysLoadedMigrationCountQuery>(
@@ -955,10 +1087,14 @@ namespace services
             {
                 // Edit-mode only: play-mode dirty sectors are pinned (never auto-unloaded)
                 if (!worldMode || isPlayMode) return;
-                if (!sectorManager.hasEntitySector(cmd.entityUUID)) return;
+                // VK-1599: the entity lives on exactly one grid; resolve it rather than assuming
+                // the primary, or an edit to a clutter-grid entity would silently not be saved.
+                const uint8_t gridIndex = findEntityGrid(cmd.entityUUID);
+                if (gridIndex >= gridCount()) return;
 
-                auto coord = sectorManager.getEntitySector(cmd.entityUUID);
-                if (auto* sector = sectorManager.getSector(coord))
+                auto& manager = gridRuntime(gridIndex).manager;
+                const auto coord = manager.getEntitySector(cmd.entityUUID);
+                if (auto* sector = manager.getSector(coord))
                     sector->dirty = true;
             });
 
@@ -1033,7 +1169,8 @@ namespace services
         dispatcher.registerQueryHandler<::events::world::hlod::IsHLODGeneratedQuery>(
             [this](const ::events::world::hlod::IsHLODGeneratedQuery& query) -> bool
             {
-                const auto* sector = sectorManager.getSector(query.coord);
+                // HLOD is bound to the primary grid (see beginSectorActivation).
+                const auto* sector = primaryRuntime().manager.getSector(query.coord);
                 return sector && !sector->hlodFilePath.empty();
             });
 
@@ -1117,43 +1254,51 @@ namespace services
                     int loadedCount = 0;
                     int totalStaticEntities = 0;
 
-                    // Remove static sector entities from scene; keep dynamic ones alive
-                    sectorManager.forEachSector([&](world::WorldSector& sector)
+                    // Remove static sector entities from scene; keep dynamic ones alive.
+                    // VK-1599: every grid - a clutter-grid entity is just as resident as a
+                    // landmark, and leaving it behind would double it when the grid re-streams.
+                    for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
                     {
-                        if (sector.state != world::SectorState::Loaded || sector.entityUUIDs.empty())
-                            return;
-
-                        loadedCount++;
-                        std::vector<uint64_t> staticUUIDs;
-
-                        for (uint64_t uuid : sector.entityUUIDs)
+                        gridRuntime(gridIndex).manager.forEachSector([&](world::WorldSector& sector)
                         {
-                            bool isDynamic = false;
-                            auto ent = scene::EntityRegistry::findByUUID(uuid);
-                            if (ent != entt::null)
-                            {
-                                scene::Entity sceneEntity(ent);
-                                if (sceneEntity.hasComponent<components::TransformComponent>())
-                                    isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
-                            }
-                            if (!isDynamic)
-                                staticUUIDs.push_back(uuid);
-                        }
+                            if (sector.state != world::SectorState::Loaded || sector.entityUUIDs.empty())
+                                return;
 
-                        totalStaticEntities += static_cast<int>(staticUUIDs.size());
-                        entityLoader.queueSectorUnload(sector.coord, staticUUIDs);
-                    });
+                            loadedCount++;
+                            std::vector<uint64_t> staticUUIDs;
+
+                            for (uint64_t uuid : sector.entityUUIDs)
+                            {
+                                bool isDynamic = false;
+                                auto ent = scene::EntityRegistry::findByUUID(uuid);
+                                if (ent != entt::null)
+                                {
+                                    scene::Entity sceneEntity(ent);
+                                    if (sceneEntity.hasComponent<components::TransformComponent>())
+                                        isDynamic = !sceneEntity.getComponent<components::TransformComponent>().isStatic;
+                                }
+                                if (!isDynamic)
+                                    staticUUIDs.push_back(uuid);
+                            }
+
+                            totalStaticEntities += static_cast<int>(staticUUIDs.size());
+                            entityLoader.queueSectorUnload(gridIndex, sector.coord, staticUUIDs);
+                        });
+                    }
 
                     entityLoader.flush(*sceneGraph);
 
-                    sectorManager.forEachSector([](world::WorldSector& sector)
+                    for (auto& grid : grids)
                     {
-                        sector.entityUUIDs.clear();
-                        sector.state = world::SectorState::Unloaded;
-                    });
+                        grid->manager.forEachSector([](world::WorldSector& sector)
+                        {
+                            sector.entityUUIDs.clear();
+                            sector.state = world::SectorState::Unloaded;
+                        });
 
-                    // Sector states changed wholesale — make the streamer reseed its tracking
-                    streamer.setEnabled(true);
+                        // Sector states changed wholesale — reseed the streamer's tracking
+                        grid->streamer.setEnabled(true);
+                    }
                     // VK-1595: and drop the freeze with them. Pause promises "resume from exactly
                     // where you froze", but every sector was just force-reset to Unloaded above, so
                     // there is nothing left to resume into - a streamer still paused here would
@@ -1161,7 +1306,8 @@ namespace services
                     // buried in the World Sectors window. Same reasoning as the world-close reset;
                     // the session config override is deliberately NOT dropped, it survives a wipe
                     // intact and is what the developer is mid-way through tuning.
-                    streamer.setPaused(false);
+                    for (auto& grid : grids)
+                        grid->streamer.setPaused(false);
                 }
                 else if (notif.currentMode == services::EditorMode::Edit)
                 {
@@ -1178,39 +1324,50 @@ namespace services
                     drainSectorLoads(); // VK-1592: see the Play branch above
                     clearPrefetchedBlobs();
                     entityLoader.clear();
-                    sectorManager.clear();
-                    sectorManager.setConfig(savedWorldDefinition.sectorConfig);
                     worldDefinition = savedWorldDefinition;
                     currentWorldPath = savedWorldPath;
+                    // VK-1599: rebuilds every runtime against the restored definition, and clears
+                    // the managers on the way - the single clear+setConfig this replaces only ever
+                    // covered one grid.
+                    rebuildGridRuntimes();
 
-                    for (const auto& [coord, storedSectorPath] : worldDefinition.sectorFilePaths)
+                    for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
                     {
-                        auto& sector = sectorManager.getOrCreateSector(coord);
-                        sector.filePath = resolveProjectPath(storedSectorPath);
-                        sector.state = world::SectorState::Unloaded;
+                        auto& manager = gridRuntime(gridIndex).manager;
+                        for (const auto& [coord, storedSectorPath] :
+                             worldDefinition.grid(gridIndex).sectorFilePaths)
+                        {
+                            auto& sector = manager.getOrCreateSector(coord);
+                            sector.filePath = resolveProjectPath(storedSectorPath);
+                            sector.state = world::SectorState::Unloaded;
+                        }
                     }
 
                     auto& root = sceneGraph->GetRoot();
-                    const auto& reassignConfig = sectorManager.getConfig();
                     for (auto& child : root.getChildren())
                     {
                         // VK-1597: this is also the recovery path for a policy flip attempted
                         // during play - the flag is honoured here even though the migration
                         // handler refused it mid-session.
-                        const auto assignment = world::resolveEntitySectorAssignment(child, reassignConfig);
+                        // VK-1599: and for a grid change, for exactly the same reason.
+                        const auto assignment = resolveEntityAssignment(child);
                         if (!assignment.isSpatial())
                             continue;
 
-                        sectorManager.assignEntityToSector(child.getUUID().getValue(), assignment.coord);
+                        gridRuntime(assignment.gridIndex)
+                            .manager.assignEntityToSector(child.getUUID().getValue(), assignment.coord);
                     }
 
-                    sectorManager.forEachSector([](world::WorldSector& sector)
+                    for (auto& grid : grids)
                     {
-                        if (!sector.entityUUIDs.empty())
+                        grid->manager.forEachSector([](world::WorldSector& sector)
                         {
-                            sector.state = world::SectorState::Loaded;
-                        }
-                    });
+                            if (!sector.entityUUIDs.empty())
+                            {
+                                sector.state = world::SectorState::Loaded;
+                            }
+                        });
+                    }
 
                     // VK-1595: worldDefinition was just rolled back to the play-entry snapshot, so
                     // re-push whichever config is now effective. The session override is
@@ -1223,9 +1380,12 @@ namespace services
                     // next Save World would have written another.
                     applyEffectiveStreamingConfig();
 
-                    // Sector states changed wholesale — make the streamer reseed its tracking
-                    streamer.setEnabled(true);
-                    streamer.setPaused(false); // VK-1595: symmetric with the Play branch above
+                    // Sector states changed wholesale — reseed every streamer's tracking
+                    for (auto& grid : grids)
+                    {
+                        grid->streamer.setEnabled(true);
+                        grid->streamer.setPaused(false); // VK-1595: symmetric with the Play branch
+                    }
                 }
             });
 
@@ -1244,11 +1404,11 @@ namespace services
                 // isSpatial() gate subsumes the old type skip-list here. (hasEntitySector below
                 // already covers it once the entity has been migrated out, but not in the window
                 // before the flip is applied.)
-                if (!world::resolveEntitySectorAssignment(sceneEntity, sectorManager.getConfig()).isSpatial())
+                if (!resolveEntityAssignment(sceneEntity).isSpatial())
                     return;
 
                 uint64_t uuid = sceneEntity.getUUID().getValue();
-                if (sectorManager.hasEntitySector(uuid))
+                if (findEntityGrid(uuid) < gridCount())
                 {
                     onTransformChanged(uuid, notif.newTransform.position);
                 }
@@ -1368,14 +1528,14 @@ namespace services
                 // any component is deserialized onto it, so a prefab instance that is about to
                 // receive StreamingPolicyComponent still lands in a sector here. That is what
                 // reconcileAlwaysLoadedEntities() at Save World exists to undo.
-                const auto assignment = world::resolveEntitySectorAssignment(sceneEntity, sectorManager.getConfig());
+                const auto assignment = resolveEntityAssignment(sceneEntity);
                 if (!assignment.isSpatial())
                     return;
 
                 uint64_t uuid = sceneEntity.getUUID().getValue();
-                if (!sectorManager.hasEntitySector(uuid))
+                if (findEntityGrid(uuid) >= gridCount())
                 {
-                    sectorManager.assignEntityToSector(uuid, assignment.coord);
+                    gridRuntime(assignment.gridIndex).manager.assignEntityToSector(uuid, assignment.coord);
                 }
             });
 
@@ -1397,13 +1557,16 @@ namespace services
                     drainHlodLoads();
                     clearPrefetchedBlobs();
                     entityLoader.clear();
-                    sectorManager.clear();
                     worldDefinition = {};
                     // VK-1595: the world is going away, and with it the session override it was
                     // tuned against. A streamer left paused across the change would read as
                     // "streaming is broken" in the next world.
+                    // VK-1599: rebuild first so resetStreamingSessionState and the disable below
+                    // act on the one grid the emptied definition now describes.
+                    rebuildGridRuntimes();
                     resetStreamingSessionState();
-                    streamer.setEnabled(false);
+                    for (auto& grid : grids)
+                        grid->streamer.setEnabled(false);
 
                     // VK-1589: must happen BEFORE worldMode goes false. Both the mode-change
                     // clear and the entity-delete auto-unregister are worldMode-gated, so any
@@ -1444,7 +1607,7 @@ namespace services
 
         HLODWorldBaker::BakeRequest request;
         request.workingDirectory = hlodWorkingDirectory();
-        request.sectorConfig = worldDefinition.sectorConfig;
+        request.sectorConfig = worldDefinition.primaryGrid().sectorConfig;
 
         // Fine tier first, so the near ring becomes correct before the expensive far one, and so
         // the baker's per-tier concurrency cap narrows monotonically as cells get bigger.
@@ -1455,7 +1618,7 @@ namespace services
 
         for (const auto& tier : tiers)
         {
-            for (auto& plan : world::planCellsForTier(worldDefinition.sectorFilePaths, tier))
+            for (auto& plan : world::planCellsForTier(worldDefinition.primaryGrid().sectorFilePaths, tier))
             {
                 if (missingOnly && !resolveHLODCellPath(plan.cell, tier).empty())
                     continue;
@@ -1502,7 +1665,7 @@ namespace services
         if (cell.tier == 0)
         {
             const world::SectorCoord origin = world::cellOriginSector(cell, tierConfig);
-            if (const auto* sector = sectorManager.getSector(origin))
+            if (const auto* sector = primaryRuntime().manager.getSector(origin))
                 return sector->hlodFilePath;
         }
 
@@ -1527,7 +1690,7 @@ namespace services
 
         // Re-plan from the live sector table rather than trusting a stale member list: a sector
         // may have been added or deleted since the cell was queued.
-        auto plans = world::planCellsForTier(worldDefinition.sectorFilePaths, *tierConfig);
+        auto plans = world::planCellsForTier(worldDefinition.primaryGrid().sectorFilePaths, *tierConfig);
         const auto plan = std::find_if(plans.begin(), plans.end(),
                                        [&](const world::HLODCellPlan& p) { return p.cell == cell; });
         if (plan == plans.end() || plan->memberSectorFiles.empty())
@@ -1549,7 +1712,7 @@ namespace services
         else
         {
             result = generator.generateForCell(cell, plan->memberSectorFiles, workingDir,
-                                               *tierConfig, worldDefinition.sectorConfig,
+                                               *tierConfig, worldDefinition.primaryGrid().sectorConfig,
                                                outputPath);
         }
 
@@ -1572,7 +1735,7 @@ namespace services
             if (tierConfig)
             {
                 const world::SectorCoord origin = world::cellOriginSector(cell, *tierConfig);
-                if (auto* sector = sectorManager.getSector(origin))
+                if (auto* sector = primaryRuntime().manager.getSector(origin))
                     sector->hlodFilePath = outputPath;
             }
         }
@@ -1597,8 +1760,15 @@ namespace services
         // baker would fight the explicit Generate All the user may have started.
         if (hlodRegenQueue.empty() || isPlayMode || !worldDefinition.hlodConfig.enabled)
             return;
-        if (!pendingAsyncLoads.empty())
-            return;
+
+        // VK-1599: "streaming is idle" means EVERY grid. A re-bake reads the primary grid's sector
+        // files, but the machine it competes with - the ResourceLoadScheduler and the main thread -
+        // is shared, so a busy clutter grid is just as good a reason to wait.
+        for (const auto& grid : grids)
+        {
+            if (!grid->pendingAsyncLoads.empty())
+                return;
+        }
 
         // VK-1594: never re-bake behind the async baker's back - it holds an immutable snapshot
         // of the sector list and would race this write to worldDefinition.hlodCells.
@@ -1620,7 +1790,7 @@ namespace services
 
     void WorldSectorServiceImpl::invalidateHLODForSector(const world::SectorCoord& coord)
     {
-        auto* sector = sectorManager.getSector(coord);
+        auto* sector = primaryRuntime().manager.getSector(coord);
         if (!sector)
             return;
 
@@ -1675,7 +1845,10 @@ namespace services
     {
         if (!worldMode || worldTileSize <= 0.0f) return;
 
-        const auto& config = sectorManager.getConfig();
+        // VK-1599: terrain alignment applies to the PRIMARY grid only - it is the grid the
+        // terrain, ocean and navmesh notifications are bound to, and a clutter grid deliberately
+        // uses a cell size unrelated to the terrain tile size.
+        const auto& config = primaryRuntime().manager.getConfig();
         if (config.alignedToTerrain)
         {
             float expected = worldTileSize * static_cast<float>(config.tilesPerSector);
@@ -1686,8 +1859,8 @@ namespace services
 
                 world::SectorConfig newConfig = config;
                 newConfig.sectorWorldSize = expected;
-                sectorManager.setConfig(newConfig);
-                worldDefinition.sectorConfig = newConfig;
+                primaryRuntime().manager.setConfig(newConfig);
+                worldDefinition.primaryGrid().sectorConfig = newConfig;
             }
         }
         else
@@ -1711,7 +1884,8 @@ namespace services
         // world's id-1 source and read as a teleport on its very first frame.
         lastSourcePositionsForVelocity.clear();
         sourceVelocityScratch.clear();
-        streamer.resetMotionTracking();
+        for (auto& grid : grids)
+            grid->streamer.resetMotionTracking();
 
         std::lock_guard lock(streamingSourcesMutex);
         streamingSources.clear();

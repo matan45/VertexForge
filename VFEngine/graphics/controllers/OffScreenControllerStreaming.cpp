@@ -161,7 +161,7 @@ namespace controllers
         return {};
     }
 
-    void OffScreenController::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+    void OffScreenController::registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -177,7 +177,7 @@ namespace controllers
         }
     }
 
-    void OffScreenController::unregisterSectorLights(uint32_t sectorId)
+    void OffScreenController::unregisterSectorLights(uint64_t sectorId)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -230,7 +230,7 @@ namespace controllers
     }
 
     void OffScreenController::registerSectorObjects(
-        uint32_t sectorId,
+        uint64_t sectorId,
         const std::vector<std::pair<uint64_t, entt::entity>>& entities)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -244,7 +244,7 @@ namespace controllers
         }
     }
 
-    void OffScreenController::unregisterSectorObjects(uint32_t sectorId)
+    void OffScreenController::unregisterSectorObjects(uint64_t sectorId)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;

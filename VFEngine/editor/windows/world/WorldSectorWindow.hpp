@@ -2,6 +2,7 @@
 
 #include "imguiHandler/ImguiWindow.hpp"
 #include "events/EventTypes.hpp"
+#include "events/world/WorldSectorEvents.hpp" // VK-1599: WorldGridInfo, cached by the Grids tab
 #include "world/WorldTypes.hpp"
 #include "world/SectorDataLayerOps.hpp"
 #include "world/SectorRepartitionTypes.hpp"
@@ -72,12 +73,29 @@ namespace windows
         int cachedHLODCount = 0;
         int cachedHLODTotal = 0;
 
+        // VK-1599: which grid the Sector Grid, Streaming Config and Data Layers tabs are looking
+        // at. One selector for all of them; clamped every frame against the live grid list, since a
+        // world reload or a Remove Grid can shrink it under us.
+        uint8_t activeGrid = 0;
+        std::vector<::events::world::WorldGridInfo> cachedGrids;
+
+        // Working copy for the Grids tab's add/rename form.
+        char newGridName[64] = "Clutter";
+        world::SectorConfig newGridSectorConfig{};
+        world::SectorStreamingConfig newGridStreamingConfig{};
+        std::string gridActionMessage;
+
         // Editable streaming config (loaded once, pushed via SetStreamingConfigCommand).
         // VK-1595: seeded from GetPersistedStreamingConfigQuery, NOT from
         // GetWorldStreamingStatsQuery - the latter reports the effective config, so with a session
         // override active the first slider drag would copy the override into the .vfworld.
+        //
+        // VK-1599: the latch is per (world, GRID). Switching grids has to re-seed it, or the first
+        // slider drag would push the previous grid's whole config onto this one - the same bug
+        // VK-1595 fixed for worlds, one level down.
         world::SectorStreamingConfig editableStreaming;
         bool streamingConfigLoaded = false;
+        uint8_t streamingConfigGrid = 0;
 
         // VK-1595: the session override's working copy. Never persisted.
         world::SectorStreamingConfig overrideStreaming;
@@ -159,6 +177,16 @@ namespace windows
 
     private:
         void drawWorldInfo();
+
+        // VK-1599: the shared grid picker drawn above the tab bar, and the Grids tab that
+        // adds/renames/removes them. drawGridSelector also refreshes cachedGrids and clamps
+        // activeGrid, so every tab below it reads a live, in-range index.
+        void drawGridSelector();
+        void drawGridManagement();
+
+        // Drops every cache that describes one grid. Called from every path that moves activeGrid.
+        void onActiveGridChanged();
+
         void drawSectorGrid();
         void drawStreamingConfig();
         // VK-1595: one slider block, driven twice - once for the persisted config and once for the

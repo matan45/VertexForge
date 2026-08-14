@@ -58,11 +58,13 @@ namespace world
                 || components->contains("ibl")
                 || components->contains("camera");
 
-            // Absent means spatially loaded - see StreamingPolicyComponent (VK-1597).
+            // Absent means spatially loaded on the primary grid - see StreamingPolicyComponent
+            // (VK-1597 for the flag, VK-1599 for the grid).
             if (auto policy = components->find("streamingPolicy");
                 policy != components->end() && policy->is_object())
             {
                 traits.spatiallyLoaded = policy->value("spatiallyLoaded", true);
+                traits.gridIndex = static_cast<uint8_t>(policy->value("gridIndex", 0));
             }
         }
 

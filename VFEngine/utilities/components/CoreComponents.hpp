@@ -80,6 +80,12 @@ namespace components
     struct StreamingPolicyComponent
     {
         bool spatiallyLoaded = true;
+
+        // VK-1599: which named runtime grid this entity streams on. 0 is the primary grid, which
+        // every world has and which drives terrain, ocean, navmesh and HLOD; higher indices are
+        // the world's extra grids, each with its own cell size and radii. Serialized only when
+        // non-zero, so a scene that never touched grids is byte-identical.
+        uint8_t gridIndex = 0;
     };
 
     struct HLODProxyComponent

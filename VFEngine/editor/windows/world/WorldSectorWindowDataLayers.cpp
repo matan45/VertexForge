@@ -108,7 +108,9 @@ namespace windows
     void WorldSectorWindow::refreshDataLayers()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        cachedLayers = dispatcher.query(events::world::GetDataLayersSummaryQuery{});
+        events::world::GetDataLayersSummaryQuery summaryQuery;
+        summaryQuery.gridIndex = activeGrid;
+        cachedLayers = dispatcher.query(summaryQuery);
 
         // Invert once per refresh so the Sector Grid tooltip and highlight need no query at all.
         // The layer list is already name-sorted, so each per-sector list comes out sorted too.
@@ -134,6 +136,7 @@ namespace windows
             if (present)
             {
                 events::world::SetSectorDataLayerCommand cmd;
+                cmd.gridIndex = activeGrid;
                 cmd.coord = coord;
                 cmd.layerName = layerName;
 
@@ -154,12 +157,14 @@ namespace windows
                 // Stash before removing. Export is the durable backup the ticket intends; this is
                 // the cheap net for a mis-click, and it is why un-check is recoverable in-session.
                 events::world::GetSectorDataLayerQuery query;
+                query.gridIndex = activeGrid;
                 query.coord = coord;
                 query.layerName = layerName;
                 if (auto blob = dispatcher.query(query); blob.has_value())
                     detachedLayers[layerName][coord] = std::move(*blob);
 
                 events::world::RemoveSectorDataLayerCommand cmd;
+                cmd.gridIndex = activeGrid;
                 cmd.coord = coord;
                 cmd.layerName = layerName;
                 // A false here usually just means "this sector never carried it" (the normal mixed
@@ -447,6 +452,7 @@ namespace windows
         if (ImGui::Button("Export..."))
         {
             events::world::GetSectorDataLayerQuery blobQuery;
+            blobQuery.gridIndex = activeGrid;
             blobQuery.coord = target;
             blobQuery.layerName = selectedLayer;
             const auto targetBlob = dispatcher.query(blobQuery);
@@ -506,6 +512,7 @@ namespace windows
                     }
 
                     events::world::SetSectorDataLayerCommand cmd;
+                cmd.gridIndex = activeGrid;
                     cmd.coord = target;
                     cmd.layerName = selectedLayer;
                     cmd.data = std::move(bytes);
@@ -540,6 +547,7 @@ namespace windows
                 for (const auto& coord : selectedSummary->sectors)
                 {
                     events::world::GetSectorDataLayerQuery q;
+                    q.gridIndex = activeGrid;
                     q.coord = coord;
                     q.layerName = selectedLayer;
                     const auto blob = dispatcher.query(q);

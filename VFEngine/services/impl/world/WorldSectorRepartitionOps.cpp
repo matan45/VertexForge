@@ -39,12 +39,8 @@ namespace services
     {
         namespace fs = std::filesystem;
 
-        // The one naming convention for a sector file, matching saveWorld's inline construction in
-        // WorldSectorPersistenceOps.cpp.
-        std::string sectorFileName(const world::SectorCoord& coord)
-        {
-            return "sector_" + std::to_string(coord.x) + "_" + std::to_string(coord.z) + ".vfsector";
-        }
+        // VK-1599: the naming convention now lives in world::sectorFileName, shared with saveWorld
+        // - the two copies had to agree and nothing enforced it.
 
         // The tier-0 bake that loadWorld probes for beside each sector file.
         fs::path tier0HlodPathFor(const fs::path& sectorPath)
@@ -76,7 +72,8 @@ namespace services
 
     // ---- guards -------------------------------------------------------------------------
 
-    std::string WorldSectorServiceImpl::repartitionRefusal(const world::SectorConfig* newConfig) const
+    std::string WorldSectorServiceImpl::repartitionRefusal(uint8_t gridIndex,
+                                                           const world::SectorConfig* newConfig) const
     {
         if (!worldMode)
             return "No world is open.";
@@ -99,17 +96,25 @@ namespace services
         // refuses to rename a file an ifstream still has open (MSVC opens _SH_DENYNO, which does
         // not include share-delete). That would surface as a rollback rather than corruption, but
         // it is a failure the user cannot act on, so refuse up front instead.
-        if (!sectorRequests.empty() || !hlodRequests.empty())
+        // VK-1599: every grid, not just the target one. The swap renames files inside the shared
+        // sectors/ directory, and a read in flight on ANY grid holds a handle in there.
+        bool anyRequests = false;
+        for (const auto& grid : grids)
+            anyRequests = anyRequests || !grid->sectorRequests.empty();
+        if (anyRequests || !hlodRequests.empty())
             return "Sector or HLOD reads are still in flight - wait for streaming to settle.";
 
         bool inFlight = false;
-        sectorManager.forEachSector([&](const world::WorldSector& sector)
+        for (const auto& grid : grids)
         {
-            if (sector.state == world::SectorState::Loading ||
-                sector.state == world::SectorState::Unloading ||
-                sector.state == world::SectorState::Prefetching)
-                inFlight = true;
-        });
+            grid->manager.forEachSector([&](const world::WorldSector& sector)
+            {
+                if (sector.state == world::SectorState::Loading ||
+                    sector.state == world::SectorState::Unloading ||
+                    sector.state == world::SectorState::Prefetching)
+                    inFlight = true;
+            });
+        }
         if (inFlight)
             return "Sectors are still loading or unloading - wait for streaming to settle.";
 
@@ -175,7 +180,7 @@ namespace services
             }
         }
 
-        const world::SectorConfig& current = sectorManager.getConfig();
+        const world::SectorConfig& current = gridRuntime(gridIndex).manager.getConfig();
         if (current.sectorWorldSize == newConfig->sectorWorldSize &&
             current.tilesPerSector == newConfig->tilesPerSector &&
             current.alignedToTerrain == newConfig->alignedToTerrain)
@@ -189,12 +194,13 @@ namespace services
     // ---- reading the source set ---------------------------------------------------------
 
     bool WorldSectorServiceImpl::readAllSourceSectors(
-        std::vector<world::RepartitionSourceSector>& out) const
+        uint8_t gridIndex, std::vector<world::RepartitionSourceSector>& out) const
     {
+        const auto& gridPaths = worldDefinition.grid(gridIndex).sectorFilePaths;
         out.clear();
-        out.reserve(worldDefinition.sectorFilePaths.size());
+        out.reserve(gridPaths.size());
 
-        for (const auto& [coord, storedPath] : worldDefinition.sectorFilePaths)
+        for (const auto& [coord, storedPath] : gridPaths)
         {
             const std::string sectorPath = resolveProjectPath(storedPath);
 
@@ -225,16 +231,16 @@ namespace services
     // ---- dry run ------------------------------------------------------------------------
 
     world::RepartitionSummary WorldSectorServiceImpl::previewRepartition(
-        const world::SectorConfig& newConfig)
+        uint8_t gridIndex, const world::SectorConfig& newConfig)
     {
         world::RepartitionSummary summary;
 
-        summary.refusal = repartitionRefusal(&newConfig);
+        summary.refusal = repartitionRefusal(gridIndex, &newConfig);
         if (!summary.refusal.empty())
             return summary; // valid stays false
 
         std::vector<world::RepartitionSourceSector> sources;
-        if (!readAllSourceSectors(sources))
+        if (!readAllSourceSectors(gridIndex, sources))
         {
             summary.refusal = "One or more .vfsector files could not be read (see the log).";
             return summary;
@@ -244,7 +250,7 @@ namespace services
         // numbers shown are the numbers written - an estimator computed a second way would
         // eventually disagree with the thing it is estimating.
         world::RepartitionPlan plan =
-            world::planRepartition(sources, sectorManager.getConfig(), newConfig);
+            world::planRepartition(sources, gridRuntime(gridIndex).manager.getConfig(), newConfig);
         return plan.summary;
     }
 
@@ -329,9 +335,19 @@ namespace services
 
     void WorldSectorServiceImpl::destroyAllSectorEntities()
     {
-        std::vector<std::pair<world::SectorCoord, std::vector<uint64_t>>> toUnload;
+        // VK-1599: (grid, coord, uuids). Every grid - convert-to-flat and the reload after a
+        // repartition both need the WHOLE world torn down, not just the primary grid.
+        struct PendingUnload
+        {
+            uint8_t gridIndex;
+            world::SectorCoord coord;
+            std::vector<uint64_t> uuids;
+        };
+        std::vector<PendingUnload> toUnload;
 
-        sectorManager.forEachSector([&](world::WorldSector& sector)
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
+        {
+        gridRuntime(gridIndex).manager.forEachSector([&](world::WorldSector& sector)
         {
             if (sector.entityUUIDs.empty())
                 return;
@@ -348,24 +364,27 @@ namespace services
                     uuids.push_back(uuid);
             }
 
-            toUnload.emplace_back(sector.coord, std::move(uuids));
+            toUnload.push_back({gridIndex, sector.coord, std::move(uuids)});
         });
+        }
 
         // Goes through the loader rather than calling sceneGraph.removeEntity directly, so the
         // established pre-destroy path still runs (physics/animation/VFX/audio snapshots, reference
         // resolver bookkeeping). clearWorld drops those snapshots straight afterwards.
-        for (auto& [coord, uuids] : toUnload)
-            entityLoader.queueSectorUnload(coord, uuids);
+        for (auto& pending : toUnload)
+            entityLoader.queueSectorUnload(pending.gridIndex, pending.coord, pending.uuids);
 
         entityLoader.flush(*sceneGraph);
     }
 
     // ---- apply --------------------------------------------------------------------------
 
-    bool WorldSectorServiceImpl::applyRepartition(const world::SectorConfig& newConfig,
+    bool WorldSectorServiceImpl::applyRepartition(uint8_t gridIndex,
+                                                  const world::SectorConfig& newConfig,
                                                   world::RepartitionSummary* outSummary)
     {
-        const std::string refusal = repartitionRefusal(&newConfig);
+        gridIndex = worldDefinition.clampGridIndex(gridIndex);
+        const std::string refusal = repartitionRefusal(gridIndex, &newConfig);
         if (!refusal.empty())
         {
             vfLogError("[Repartition] Refused: {}", refusal);
@@ -396,14 +415,14 @@ namespace services
         const fs::path bakWorldPath = fs::path(worldPath + ".bak");
 
         std::vector<world::RepartitionSourceSector> sources;
-        if (!readAllSourceSectors(sources))
+        if (!readAllSourceSectors(gridIndex, sources))
         {
             if (outSummary)
                 outSummary->refusal = "One or more .vfsector files could not be read (see the log).";
             return false;
         }
 
-        const world::SectorConfig oldConfig = sectorManager.getConfig();
+        const world::SectorConfig oldConfig = gridRuntime(gridIndex).manager.getConfig();
         world::RepartitionPlan plan = world::planRepartition(sources, oldConfig, newConfig);
         if (outSummary)
             *outSummary = plan.summary;
@@ -434,7 +453,7 @@ namespace services
 
         for (const auto& target : plan.targets)
         {
-            const fs::path stagedPath = stagingDir / sectorFileName(target.coord);
+            const fs::path stagedPath = stagingDir / world::sectorFileName(gridIndex, target.coord);
             if (!world::WorldSectorSerialization::saveSectorFromEntityData(
                     target.coord, target.entities, target.dataLayers, stagedPath.string()))
             {
@@ -451,12 +470,12 @@ namespace services
 
         // ---- stage: the .vfworld that names them ----
         world::WorldDefinition newDefinition = worldDefinition;
-        newDefinition.sectorConfig = newConfig;
-        newDefinition.sectorFilePaths.clear();
+        newDefinition.grid(gridIndex).sectorConfig = newConfig;
+        newDefinition.grid(gridIndex).sectorFilePaths.clear();
         for (const auto& target : plan.targets)
         {
-            const fs::path finalPath = sectorsDir / sectorFileName(target.coord);
-            newDefinition.sectorFilePaths[target.coord] = toProjectRelativePath(finalPath.string());
+            const fs::path finalPath = sectorsDir / world::sectorFileName(gridIndex, target.coord);
+            newDefinition.grid(gridIndex).sectorFilePaths[target.coord] = toProjectRelativePath(finalPath.string());
         }
         // Every bake was built from the OLD partition, so all tiers are stale by definition. The
         // files themselves go into the backup below, which is why invalidateHLODForSector is not
@@ -485,8 +504,12 @@ namespace services
         if (ec)
             vfLogWarning("[Repartition] Could not write '{}': {}", bakWorldPath.string(), ec.message());
 
-        if (!moveWorldFilesToBackup(worldDefinition.sectorFilePaths, worldDefinition.hlodCells,
-                                    backupDir))
+        // VK-1599: only the grid being repartitioned gives up its files - the other grids' sectors
+        // stay exactly where they are, so the outgoing set is this grid's inventory alone. HLOD is
+        // invalidated wholesale either way: its cells are keyed on primary-grid coords that a
+        // repartition of the primary grid stops meaning anything.
+        if (!moveWorldFilesToBackup(worldDefinition.grid(gridIndex).sectorFilePaths,
+                                    worldDefinition.hlodCells, backupDir))
         {
             // moveWorldFilesToBackup rolled itself back, so the live world is intact.
             vfLogError("[Repartition] Could not back up the outgoing sector set - aborting.");
@@ -499,7 +522,7 @@ namespace services
         fs::create_directories(sectorsDir, ec);
         for (const auto& target : plan.targets)
         {
-            const std::string name = sectorFileName(target.coord);
+            const std::string name = world::sectorFileName(gridIndex, target.coord);
             if (!moveIfPresent(stagingDir / name, sectorsDir / name))
             {
                 // Past the point of automatic recovery: the outgoing set is in sectors.bak and the
@@ -570,7 +593,9 @@ namespace services
 
     bool WorldSectorServiceImpl::convertWorldToFlat()
     {
-        const std::string refusal = repartitionRefusal(nullptr);
+        // Convert-to-flat closes the world outright, so its guards are not grid-specific; the
+        // primary grid stands in for "any grid" in the in-flight checks, which loop them all.
+        const std::string refusal = repartitionRefusal(world::kPrimaryGridIndex, nullptr);
         if (!refusal.empty())
         {
             vfLogError("[Flatten] Refused: {}", refusal);
@@ -587,37 +612,44 @@ namespace services
         const fs::path worldDir = fs::path(worldPath).parent_path();
         const fs::path backupDir = worldDir / "sectors.bak";
 
-        std::vector<world::RepartitionSourceSector> sources;
-        if (!readAllSourceSectors(sources))
-            return false;
-
         // Spawn everything, synchronously. Deliberately NOT the streaming path: loadSector is
         // async and drainSectorLoads CANCELS rather than waits, so it is the wrong tool for
         // "bring the whole world in". queueSectorLoadFromData + flush is the same spawn code the
         // streamer ends up in, minus the budget.
+        //
+        // VK-1599: EVERY grid. Flattening dissolves the world into a plain scene, so an entity left
+        // in a clutter grid's .vfsector would simply be lost. The dedupe set spans grids too - a
+        // UUID can only exist once in the registry however many grids list it.
         std::unordered_set<uint64_t> uniqueUUIDs;
-        for (auto& source : sources)
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
         {
-            std::vector<std::pair<std::string, nlohmann::json>> payload;
-            payload.reserve(source.entities.size());
+            std::vector<world::RepartitionSourceSector> sources;
+            if (!readAllSourceSectors(gridIndex, sources))
+                return false;
 
-            for (auto& entityJson : source.entities)
+            for (auto& source : sources)
             {
-                if (auto it = entityJson.find("uuid");
-                    it != entityJson.end() && it->is_number_unsigned())
+                std::vector<std::pair<std::string, nlohmann::json>> payload;
+                payload.reserve(source.entities.size());
+
+                for (auto& entityJson : source.entities)
                 {
-                    // A duplicate would be skipped by the loader's own registry check anyway;
-                    // dropping it here keeps the reported count honest.
-                    if (!uniqueUUIDs.insert(it->get<uint64_t>()).second)
-                        continue;
+                    if (auto it = entityJson.find("uuid");
+                        it != entityJson.end() && it->is_number_unsigned())
+                    {
+                        // A duplicate would be skipped by the loader's own registry check anyway;
+                        // dropping it here keeps the reported count honest.
+                        if (!uniqueUUIDs.insert(it->get<uint64_t>()).second)
+                            continue;
+                    }
+
+                    std::string name = entityJson.value("name", "Unnamed");
+                    payload.emplace_back(std::move(name), std::move(entityJson));
                 }
 
-                std::string name = entityJson.value("name", "Unnamed");
-                payload.emplace_back(std::move(name), std::move(entityJson));
+                source.entities.clear();
+                entityLoader.queueSectorLoadFromData(gridIndex, source.coord, payload);
             }
-
-            source.entities.clear();
-            entityLoader.queueSectorLoadFromData(source.coord, payload);
         }
 
         entityLoader.flush(*sceneGraph);
@@ -632,12 +664,21 @@ namespace services
         std::error_code ec;
         fs::remove_all(backupDir, ec);
 
-        if (!moveWorldFilesToBackup(worldDefinition.sectorFilePaths, worldDefinition.hlodCells,
-                                    backupDir))
+        // VK-1599: flattening takes EVERY grid's sectors - the world is being dissolved into a
+        // plain scene, so nothing may be left behind. HLOD cells go with the first pass.
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
         {
-            vfLogError("[Flatten] Could not back up the sector set - aborting. The entities are "
-                       "now resident in the scene; reload the scene to discard them.");
-            return false;
+            const bool first = (gridIndex == 0);
+            if (!moveWorldFilesToBackup(worldDefinition.grid(gridIndex).sectorFilePaths,
+                                        first ? worldDefinition.hlodCells
+                                              : std::unordered_map<world::HLODCellCoord, std::string,
+                                                                   world::HLODCellCoordHash>{},
+                                        backupDir))
+            {
+                vfLogError("[Flatten] Could not back up the sector set - aborting. The entities are "
+                           "now resident in the scene; reload the scene to discard them.");
+                return false;
+            }
         }
 
         // The .vfmeta goes with it here (unlike a repartition, which keeps the world file and so
