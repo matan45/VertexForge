@@ -112,6 +112,49 @@ namespace world
         return aabb;
     }
 
+    // VK-1598: the same bound over serialized nodes. Deliberately reads only the TOP-LEVEL
+    // "transform"/"position" of each node, because computeSectorAABB above only ever sees the root
+    // entities named by entityUUIDs - a nested child contributes to neither.
+    math::AABB WorldSectorSerialization::computeEntityDataAABB(const std::vector<json>& entityData)
+    {
+        math::AABB aabb;
+        bool hasPoints = false;
+
+        for (const auto& entityJson : entityData)
+        {
+            if (!entityJson.is_object())
+                continue;
+
+            auto transform = entityJson.find("transform");
+            if (transform == entityJson.end() || !transform->is_object())
+                continue;
+
+            auto position = transform->find("position");
+            if (position == transform->end() || !position->is_array() || position->size() < 3)
+                continue;
+
+            glm::vec3 point{0.0f};
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if ((*position)[axis].is_number())
+                    point[axis] = (*position)[axis].get<float>();
+            }
+
+            if (!hasPoints)
+            {
+                aabb.min = point;
+                aabb.max = point;
+                hasPoints = true;
+            }
+            else
+            {
+                aabb.expand(point);
+            }
+        }
+
+        return aabb;
+    }
+
     // ── Header I/O ───────────────────────────────────────────────────────
 
     void WorldSectorSerialization::writeHeader(std::ostream& file, const SectorFileHeader& header)
@@ -157,22 +200,22 @@ namespace world
 
     // ── Binary save ──────────────────────────────────────────────────────
 
-    bool WorldSectorSerialization::saveSectorBinary(WorldSector& sector,
-                                                     const std::string& filePath)
+    bool WorldSectorSerialization::writeSectorFile(const SectorCoord& coord, const json& sectorJson,
+                                                    uint32_t entityCount, const math::AABB& aabb,
+                                                    const SectorDataLayers& dataLayers,
+                                                    const std::string& filePath,
+                                                    SectorMetadata& outMetadata)
     {
         try
         {
-            json sectorJson = buildSectorJson(sector);
-            math::AABB aabb = computeSectorAABB(sector);
-
             auto msgpackData = json::to_msgpack(sectorJson);
 
             // v3 sections (TLV after the entity blob)
             std::vector<uint8_t> dataLayerBlob;
-            if (!sector.dataLayers.empty())
+            if (!dataLayers.empty())
             {
                 json layersJson;
-                for (const auto& [name, bytes] : sector.dataLayers)
+                for (const auto& [name, bytes] : dataLayers)
                     layersJson[name] = json::binary(bytes);
                 dataLayerBlob = json::to_msgpack(layersJson);
             }
@@ -194,7 +237,7 @@ namespace world
 
             SectorFileHeader header;
             header.version = SECTOR_FORMAT_VERSION;
-            header.entityCount = static_cast<uint32_t>(sector.entityUUIDs.size());
+            header.entityCount = entityCount;
             header.aabbMinX = aabb.min.x;
             header.aabbMinY = aabb.min.y;
             header.aabbMinZ = aabb.min.z;
@@ -215,16 +258,12 @@ namespace world
             }
             file.close();
 
-            sector.dirty = false;
-            sector.filePath = filePath;
+            outMetadata.entityCount = header.entityCount;
+            outMetadata.bounds = aabb;
+            outMetadata.estimatedMemory = header.totalFileSize;
+            outMetadata.valid = true;
 
-            // Update cached metadata
-            sector.metadata.entityCount = header.entityCount;
-            sector.metadata.bounds = aabb;
-            sector.metadata.estimatedMemory = header.totalFileSize;
-            sector.metadata.valid = true;
-
-            vfLogInfo("Sector ({},{}) saved as binary to: {}", sector.coord.x, sector.coord.z, filePath);
+            vfLogInfo("Sector ({},{}) saved as binary to: {}", coord.x, coord.z, filePath);
             return true;
         }
         catch (const std::exception& e)
@@ -234,10 +273,67 @@ namespace world
         }
     }
 
+    bool WorldSectorSerialization::saveSectorBinary(WorldSector& sector,
+                                                     const std::string& filePath)
+    {
+        json sectorJson;
+        math::AABB aabb;
+        try
+        {
+            sectorJson = buildSectorJson(sector);
+            aabb = computeSectorAABB(sector);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to serialize sector ({},{}): {}", sector.coord.x, sector.coord.z, e.what());
+            return false;
+        }
+
+        SectorMetadata metadata;
+        if (!writeSectorFile(sector.coord, sectorJson,
+                             static_cast<uint32_t>(sector.entityUUIDs.size()), aabb,
+                             sector.dataLayers, filePath, metadata))
+            return false;
+
+        sector.dirty = false;
+        sector.filePath = filePath;
+        sector.metadata = metadata;
+        return true;
+    }
+
     bool WorldSectorSerialization::saveSector(WorldSector& sector,
                                                const std::string& filePath)
     {
         return saveSectorBinary(sector, filePath);
+    }
+
+    bool WorldSectorSerialization::saveSectorFromEntityData(const SectorCoord& coord,
+                                                             const std::vector<json>& entityData,
+                                                             const SectorDataLayers& dataLayers,
+                                                             const std::string& filePath)
+    {
+        json sectorJson;
+        try
+        {
+            // Byte-for-byte the shape buildSectorJson produces, so a file written here is
+            // indistinguishable from one the registry-side path wrote.
+            sectorJson["version"] = "1.0";
+            sectorJson["coord"] = {{"x", coord.x}, {"z", coord.z}};
+
+            json entitiesJson = json::array();
+            for (const auto& entityJson : entityData)
+                entitiesJson.push_back(entityJson);
+            sectorJson["entities"] = std::move(entitiesJson);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to assemble sector ({},{}) from entity data: {}", coord.x, coord.z, e.what());
+            return false;
+        }
+
+        SectorMetadata metadata;
+        return writeSectorFile(coord, sectorJson, static_cast<uint32_t>(entityData.size()),
+                               computeEntityDataAABB(entityData), dataLayers, filePath, metadata);
     }
 
     // ── JSON save (debug fallback) ───────────────────────────────────────

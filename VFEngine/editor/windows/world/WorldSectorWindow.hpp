@@ -4,6 +4,7 @@
 #include "events/EventTypes.hpp"
 #include "world/WorldTypes.hpp"
 #include "world/SectorDataLayerOps.hpp"
+#include "world/SectorRepartitionTypes.hpp"
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -123,6 +124,32 @@ namespace windows
         uint32_t pendingDeleteSectorCount = 0;
         uint64_t pendingDeleteBytes = 0;
 
+        // ── VK-1598: repartition / convert-to-flat ────────────────────────────────────
+        // The candidate config. Seeded from the world's current one each time the modal opens, so
+        // the dialog always starts from what the world actually is rather than from the last thing
+        // that was typed into it.
+        float repartitionSectorSize = 128.0f;
+        int repartitionTilesPerSector = 4;
+        bool repartitionAlignToTerrain = false;
+        bool repartitionSeeded = false;
+
+        // The dry run is an explicit button, never a per-frame poll: PreviewRepartitionQuery reads
+        // and parses every .vfsector in the world.
+        world::RepartitionSummary repartitionPreview;
+        bool repartitionPreviewValid = false;
+        std::string repartitionStatus;
+        bool repartitionStatusIsError = false;
+
+        // Latched when the confirm modal opens, for the same reason the delete-layer modal latches
+        // its target: the dialog must apply exactly the config it described.
+        world::SectorConfig pendingRepartitionConfig;
+
+        bool openRepartitionModal = false;
+        bool openFlattenModal = false;
+        bool openRebakePrompt = false;
+        bool openSaveScenePrompt = false;
+        uint32_t flattenedEntityCount = 0;
+
     public:
         WorldSectorWindow();
         ~WorldSectorWindow() override;
@@ -154,6 +181,14 @@ namespace windows
         // otherwise removes it (stashing the bytes in detachedLayers first).
         void applyLayerPresence(const std::string& layerName, bool present);
         [[nodiscard]] const world::DataLayerSummary* findCachedLayer(const std::string& name) const;
+
+        // VK-1598 - defined in WorldSectorWindowRepartition.cpp, same split as the Data Layers tab.
+        // drawRepartitionSection draws the Streaming Config tab's entry point; the three modals are
+        // opened from draw() so OpenPopup and BeginPopupModal share a popup-stack ID scope.
+        void drawRepartitionSection();
+        void drawRepartitionModals();
+        [[nodiscard]] world::SectorConfig currentRepartitionConfig() const;
+        void seedRepartitionFromWorld();
 
         static const std::vector<std::pair<std::wstring, std::wstring>> WORLD_FILE_TYPES;
         static const std::vector<std::pair<std::wstring, std::wstring>> LAYER_FILE_TYPES;

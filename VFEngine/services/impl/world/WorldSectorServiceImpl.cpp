@@ -75,8 +75,21 @@ namespace services
                 }
             }
 
+            // VK-1598: finalizeSectorLoad already pushed this UUID into `coord`'s entityUUIDs
+            // straight from the file's JSON, and assignEntityToSector pushes unconditionally — so
+            // without this drop, every loaded sector ends up holding each UUID TWICE. That is not
+            // cosmetic: buildSectorJson iterates entityUUIDs, so the next Save World of a dirty
+            // loaded sector wrote every entity twice into the .vfsector, and the count compounded
+            // on each load/save cycle. removeEntityFromSector uses std::remove, so a file already
+            // doubled by the old behaviour collapses back to one entry on its next load.
+            //
+            // The !spatiallyLoaded early-return above deliberately runs BEFORE this, leaving those
+            // UUIDs in the parse-time list for reconcileAlwaysLoadedEntities to strip and count.
+            sectorManager.removeEntityFromSector(uuid, coord);
             sectorManager.assignEntityToSector(uuid, assignPos);
-            // Entity was loaded from file — don't mark sector as needing save
+            // Entity was loaded from file — don't mark sector as needing save. (Both calls above
+            // set dirty; if assignPos resolved to a DIFFERENT sector the entity genuinely moved,
+            // and that sector stays dirty on purpose.)
             auto* sector = sectorManager.getSector(coord);
             if (sector) sector->dirty = false;
         });
@@ -636,6 +649,25 @@ namespace services
             [this](const ::events::world::ClearWorldCommand&)
             {
                 clearWorld();
+            });
+
+        // VK-1598
+        dispatcher.registerQueryHandler<::events::world::PreviewRepartitionQuery>(
+            [this](const ::events::world::PreviewRepartitionQuery& q)
+            {
+                return previewRepartition(q.sectorConfig);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::ApplyRepartitionCommand>(
+            [this](const ::events::world::ApplyRepartitionCommand& cmd)
+            {
+                return applyRepartition(cmd.sectorConfig);
+            });
+
+        dispatcher.registerCommandHandler<::events::world::ConvertWorldToFlatCommand>(
+            [this](const ::events::world::ConvertWorldToFlatCommand&)
+            {
+                return convertWorldToFlat();
             });
 
         dispatcher.registerCommandHandler<::events::world::UpdateWorldStreamingCommand>(

@@ -3,6 +3,7 @@
 #include "../EventTypes.hpp"
 #include "world/WorldTypes.hpp"
 #include "world/SectorDataLayerOps.hpp"
+#include "world/SectorRepartitionTypes.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
@@ -441,8 +442,68 @@ namespace events::world
     };
 
     // ============================================
+    // VK-1598 - re-partition / cell-size migration
+    // ============================================
+
+    // Dry run. Reads every .vfsector, builds the whole plan and throws it away, returning only the
+    // counters - so what the dialog shows is produced by exactly the code Apply runs, never by a
+    // parallel estimate that could disagree with it.
+    //
+    // `summary.valid == false` means a guard refused; `summary.refusal` is the message to show.
+    struct PreviewRepartitionQuery : IQuery<::world::RepartitionSummary>
+    {
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "PreviewRepartition"; }
+    };
+
+    // Destructive. Runs Save World first (the migration reads the SAVED state), writes the new
+    // sector set to a temp directory, then swaps - moving the outgoing set to `sectors.bak/` and
+    // the outgoing .vfworld to `<world>.vfworld.bak`. Every HLOD tier is invalidated: the bakes go
+    // into the backup with the sectors they were built from, and hlodCells is cleared.
+    //
+    // Reloads the world on success, so the caller does not have to.
+    struct ApplyRepartitionCommand : ICommand<bool>
+    {
+        ::world::SectorConfig sectorConfig;
+
+        std::string_view getName() const override { return "ApplyRepartition"; }
+    };
+
+    // The inverse of the creation wizard: spawns every sector's entities into the scene, closes
+    // the world, and backs up the sector set and the .vfworld.
+    //
+    // NOT the same operation as a repartition with a null target - the flattened world exists only
+    // in the scene graph afterwards, so it is unsaved until the caller issues a SaveSceneCommand.
+    // WorldFlattenedNotification is the prompt to do that.
+    struct ConvertWorldToFlatCommand : ICommand<bool>
+    {
+        std::string_view getName() const override { return "ConvertWorldToFlat"; }
+    };
+
+    // ============================================
     // Notifications
     // ============================================
+
+    // VK-1598: published after a successful ApplyRepartition, once the world has been reloaded.
+    struct WorldRepartitionedNotification : INotification
+    {
+        ::world::SectorConfig sectorConfig;
+        ::world::RepartitionSummary summary;
+        std::string backupDirectory; // the sectors.bak/ holding the outgoing set
+
+        std::string_view getName() const override { return "WorldRepartitioned"; }
+    };
+
+    // VK-1598: published after a successful ConvertWorldToFlat. The entities are live in the scene
+    // graph and NOT yet persisted anywhere - the receiver's job is to get the user to Save Scene.
+    struct WorldFlattenedNotification : INotification
+    {
+        uint32_t entityCount = 0;
+        std::string backupDirectory;
+
+        std::string_view getName() const override { return "WorldFlattened"; }
+    };
 
     struct WorldLoadedNotification : INotification
     {

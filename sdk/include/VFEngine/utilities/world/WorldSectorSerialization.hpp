@@ -19,6 +19,18 @@ namespace world
         // Binary format (default) - writes header + MessagePack
         static bool saveSector(WorldSector& sector, const std::string& filePath);
 
+        // VK-1598: write a .vfsector from entity JSON the caller already holds, with no registry
+        // involved. saveSector above rebuilds its content by resolving WorldSector::entityUUIDs
+        // against EntityRegistry, which the repartition tool cannot do - it moves serialized nodes
+        // between sectors without ever spawning them, precisely so UUIDs and components cannot be
+        // lost to a deserialize/serialize round trip.
+        //
+        // Same v3 layout as saveSector; the two share one writer.
+        static bool saveSectorFromEntityData(const SectorCoord& coord,
+                                             const std::vector<json>& entityData,
+                                             const SectorDataLayers& dataLayers,
+                                             const std::string& filePath);
+
         // JSON format (debug fallback)
         static bool saveSectorJson(WorldSector& sector, const std::string& filePath);
 
@@ -55,6 +67,16 @@ namespace world
                                     std::vector<json>& outEntityData);
         static json buildSectorJson(WorldSector& sector);
         static math::AABB computeSectorAABB(WorldSector& sector);
+        // VK-1598: the same AABB over serialized nodes. Like computeSectorAABB it only sees the
+        // TOP-LEVEL entities - children live nested inside their parent's node and are not
+        // separately bounded, which is exactly the registry-side behaviour.
+        static math::AABB computeEntityDataAABB(const std::vector<json>& entityData);
+        // VK-1598: the single writer of the v3 layout, shared by saveSectorBinary and
+        // saveSectorFromEntityData so the two can never drift.
+        static bool writeSectorFile(const SectorCoord& coord, const json& sectorJson,
+                                    uint32_t entityCount, const math::AABB& aabb,
+                                    const SectorDataLayers& dataLayers,
+                                    const std::string& filePath, SectorMetadata& outMetadata);
         static void writeHeader(std::ostream& file, const SectorFileHeader& header);
         static bool parseHeader(std::span<const uint8_t> bytes, SectorFileHeader& outHeader);
     };

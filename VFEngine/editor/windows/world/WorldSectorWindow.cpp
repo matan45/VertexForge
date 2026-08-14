@@ -51,6 +51,13 @@ namespace windows
         selectedLayer.clear();
         layerError.clear();
         exportSectorIndex = 0;
+
+        // VK-1598: the dry run describes ONE world's sector set, so carrying it across would offer
+        // an Apply button backed by another world's numbers. The status line survives on purpose -
+        // a successful repartition reloads the world, which is what fires this.
+        repartitionSeeded = false;
+        repartitionPreviewValid = false;
+        repartitionPreview = {};
     }
     void WorldSectorWindow::draw()
     {
@@ -191,6 +198,12 @@ namespace windows
                     }
                 }
             }
+
+            // VK-1598: at the window root and OUTSIDE the isWorld branch, for two reasons -
+            // OpenPopup and BeginPopupModal must share a popup-stack ID scope (a tab item pushes
+            // its own), and Convert to Flat closes the world, so its Save-Scene prompt has to be
+            // reachable on the frame after isWorld goes false.
+            drawRepartitionModals();
 
             if (showCreationWizard)
             {
@@ -511,6 +524,11 @@ namespace windows
     void WorldSectorWindow::drawStreamingConfig()
     {
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // VK-1598: first, because the sector size governs everything the radii below are measured
+        // in - and unlike them it was unchangeable until now.
+        drawRepartitionSection();
+        ImGui::SeparatorText("Streaming");
 
         // Load once so slider edits aren't clobbered by the live query every frame.
         // VK-1595: the PERSISTED config, not the effective one — see the header note.

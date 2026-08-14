@@ -6,6 +6,7 @@
 #include "../../events/animation/AnimationSnapshotEvents.hpp"
 #include "world/WorldSectorManager.hpp"
 #include "world/SectorDataLayerOps.hpp"
+#include "world/SectorRepartitionPlanner.hpp"
 #include "world/WorldDefinition.hpp"
 #include "world/SectorStreamer.hpp"
 #include "world/SectorEntityLoader.hpp"
@@ -22,12 +23,15 @@
 #include <atomic>
 #include <chrono>
 #include <deque>
+#include <filesystem>
 #include <functional>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 namespace scene
@@ -63,6 +67,20 @@ namespace services
         bool saveSector(const world::SectorCoord& coord, const std::string& filePath);
         bool loadSector(const world::SectorCoord& coord);
         bool unloadSector(const world::SectorCoord& coord);
+
+        // ---- VK-1598: re-partition / cell-size migration (WorldSectorRepartitionOps.cpp) ----
+
+        // Dry run: does everything applyRepartition does up to, but not including, writing a byte.
+        [[nodiscard]] world::RepartitionSummary previewRepartition(const world::SectorConfig& newConfig);
+
+        // Destructive. Save World -> read every .vfsector -> re-bucket -> temp-write -> swap, with
+        // the outgoing set kept as sectors.bak/ and <world>.vfworld.bak. Reloads the world.
+        bool applyRepartition(const world::SectorConfig& newConfig,
+                              world::RepartitionSummary* outSummary = nullptr);
+
+        // The inverse of the creation wizard. Leaves every entity live in the scene graph and the
+        // world closed; the scene is UNSAVED afterwards.
+        bool convertWorldToFlat();
 
         world::WorldSectorManager& getSectorManager() { return sectorManager; }
         const world::WorldDefinition& getWorldDefinition() const { return worldDefinition; }
@@ -419,6 +437,32 @@ namespace services
         // exist when world mode is entered (the main scene). Those never pass through the
         // sector spawn path, so PostLoad registration alone would miss them. Idempotent.
         void rescanEntityReferences();
+
+        // ---- VK-1598 internals (WorldSectorRepartitionOps.cpp) ----
+
+        // The guards both repartition entry points share, phrased as a refusal message: empty
+        // means "go ahead". `newConfig` is null for convert-to-flat, which has no target config.
+        [[nodiscard]] std::string repartitionRefusal(const world::SectorConfig* newConfig) const;
+
+        // Reads every .vfsector named by worldDefinition.sectorFilePaths. Returns false on the
+        // first unreadable file - a partial read would silently drop a sector's entities.
+        [[nodiscard]] bool readAllSourceSectors(std::vector<world::RepartitionSourceSector>& out) const;
+
+        // Destroys every entity the sector manager knows about. Needed before reloading a
+        // repartitioned world: clearWorld leaves streamed entities alive in the scene, and
+        // SectorEntityLoader skips any UUID already in the registry - so without this the reloaded
+        // sectors come back empty and the entities are orphaned at their old coords.
+        void destroyAllSectorEntities();
+
+        // Moves this world's outgoing files - every sector named by `paths`, each one's tier-0
+        // .vfHLOD sibling, and every tier-1+ bake in `cells` - into `backupDir`. Deliberately
+        // per-file rather than renaming the sectors/ directory: a second .vfworld in the same
+        // folder shares that directory, and taking it wholesale would carry off its sectors too.
+        [[nodiscard]] bool moveWorldFilesToBackup(
+            const std::unordered_map<world::SectorCoord, std::string, world::SectorCoordHash>& paths,
+            const std::unordered_map<world::HLODCellCoord, std::string,
+                                     world::HLODCellCoordHash>& cells,
+            const std::filesystem::path& backupDir) const;
     };
 
 } // namespace services
