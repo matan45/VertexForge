@@ -171,6 +171,8 @@ namespace windows
                               static_cast<double>(snapshot.prefetchRadius),
                               static_cast<double>(snapshot.unloadRadius));
                 ImGui::TextDisabled("%s", radii);
+
+                drawPoolBars();
             }
         }
         ImGui::End();
@@ -290,5 +292,58 @@ namespace windows
         swatch(COL_MISSING, "No sector");
         swatch(COL_DIRTY, "Dirty (pinned)");
         swatch(COL_HLOD, "HLOD proxy");
+    }
+
+    void ViewPortStreamingOverlay::drawPoolBars()
+    {
+        const auto stats = ::events::EventDispatcher::instance().query(
+            ::events::world::GetSectorPrefetchStatsQuery{});
+
+        // Every budget at its 0 = unlimited default: the pools are inert, so the panel says
+        // nothing about them rather than drawing three empty bars.
+        if (stats.prefetchPoolCap == 0 && stats.hlodProxyCap == 0 && stats.loadedSectorCap == 0)
+            return;
+
+        ImGui::TextDisabled("Memory pools (all grids)");
+
+        // ProgressBar is safe on this NoInputs window: it is a pure readout widget and takes no
+        // interaction, so it cannot re-open the hover hazard the flag exists to prevent.
+        auto bar = [](const char* label, uint64_t used, uint64_t cap, bool bytes,
+                      uint64_t evictions)
+        {
+            if (cap == 0)
+                return; // this pool is unlimited; the others may still be capped
+
+            const float fraction =
+                std::min(1.0f, static_cast<float>(static_cast<double>(used) /
+                                                  static_cast<double>(cap)));
+            char text[96];
+            if (bytes)
+            {
+                std::snprintf(text, sizeof(text), "%llu / %llu KB",
+                              static_cast<unsigned long long>(used / 1024),
+                              static_cast<unsigned long long>(cap / 1024));
+            }
+            else
+            {
+                std::snprintf(text, sizeof(text), "%llu / %llu",
+                              static_cast<unsigned long long>(used),
+                              static_cast<unsigned long long>(cap));
+            }
+            ImGui::ProgressBar(fraction, ImVec2(PANEL_SIZE, 0.0f), text);
+            ImGui::SameLine();
+            // A count that keeps climbing while the camera stands still is the signature of a
+            // budget too small for the ring - the one number that makes that diagnosable.
+            char suffix[64];
+            std::snprintf(suffix, sizeof(suffix), "%s  ev %llu", label,
+                          static_cast<unsigned long long>(evictions));
+            ImGui::TextDisabled("%s", suffix);
+        };
+
+        bar("prefetch", stats.prefetchPoolBytes, stats.prefetchPoolCap, true,
+            stats.prefetchEvictions);
+        bar("HLOD", stats.hlodProxyBytes, stats.hlodProxyCap, true, stats.hlodEvictions);
+        bar("sectors", stats.loadedSectors, stats.loadedSectorCap, false,
+            stats.loadedSectorEvictions);
     }
 }

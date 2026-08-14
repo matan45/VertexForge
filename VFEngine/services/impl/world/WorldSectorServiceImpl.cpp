@@ -474,7 +474,7 @@ namespace services
         // VK-1599: the runtimes are rebuilt from scratch rather than reconciled. Every caller is a
         // world open/close, where carrying anything over - a tracked sector set, a pending read, a
         // cached blob - would attribute the previous world's state to the new one. That is the same
-        // argument drainSectorLoads and clearPrefetchedBlobs already make coord by coord.
+        // argument drainSectorLoads and clearStreamingResidency already make coord by coord.
         grids.clear();
         grids.reserve(worldDefinition.grids.size());
         for (const auto& definition : worldDefinition.grids)
@@ -501,6 +501,57 @@ namespace services
         // Take the config back off the PRIMARY streamer: setConfig normalizes, and the HLOD
         // streamer must see the same resolved radii the grid it is bound to is running.
         hlodStreamer.setConfig(primaryRuntime().streamer.getConfig(), worldDefinition.hlodConfig);
+
+        // VK-1600: the config just changed, so the budget-vs-ring verdict may have too.
+        prefetchBudgetWarned = false;
+        warnIfPrefetchBudgetUndersized();
+    }
+
+    void WorldSectorServiceImpl::warnIfPrefetchBudgetUndersized()
+    {
+        // Latched, and evaluated only from applyEffectiveStreamingConfig - i.e. on world load and
+        // on any config or session-override edit. Doing this per frame would spam the console for
+        // as long as the world stayed open.
+        if (prefetchBudgetWarned)
+            return;
+
+        const uint64_t budget = aggregateGridBudget(&world::SectorStreamingConfig::maxPrefetchBytes);
+        if (budget == 0)
+            return; // unlimited: nothing to be undersized against
+
+        // Estimated ring bytes = the annulus between the load and prefetch radii, in sectors,
+        // times the mean .vfsector size. Both come from data already in memory, so this costs no
+        // file IO. Only the primary grid is measured: it is the one with real content, and a
+        // clutter grid's tiny sectors would drag the mean down and hide a genuine shortfall.
+        const auto& config = primaryRuntime().streamer.getConfig();
+        const float prefetchRadius = world::effectivePrefetchRadius(config);
+        const float ringSectors = std::max(
+            0.0f, 3.14159265f * (prefetchRadius * prefetchRadius - config.loadRadius * config.loadRadius));
+        if (ringSectors < 1.0f)
+            return; // no prefetch ring configured, so the budget cannot be too small for it
+
+        uint64_t totalBytes = 0;
+        uint64_t sectorCount = 0;
+        primaryRuntime().manager.forEachSector([&](const world::WorldSector& sector)
+        {
+            totalBytes += sector.metadata.estimatedMemory;
+            ++sectorCount;
+        });
+        if (sectorCount == 0 || totalBytes == 0)
+            return; // an unbaked or empty world tells us nothing
+
+        const uint64_t meanBytes = totalBytes / sectorCount;
+        const uint64_t ringEstimate = static_cast<uint64_t>(ringSectors) * meanBytes;
+        if (budget >= ringEstimate)
+            return;
+
+        prefetchBudgetWarned = true;
+        vfLogWarning(
+            "Prefetch budget ({} KB) is below the estimated prefetch ring ({} KB over ~{} sectors). "
+            "The pool will refuse the farther half of the ring rather than thrash it, so those "
+            "sectors still activate correctly - but they pay a cold file read. Raise "
+            "maxPrefetchBytes or shrink prefetchRadius.",
+            budget / 1024, ringEstimate / 1024, static_cast<uint64_t>(ringSectors));
     }
 
     void WorldSectorServiceImpl::resetStreamingSessionState()
@@ -862,6 +913,19 @@ namespace services
                             ++stats.prefetchingSectors;
                     });
                 }
+
+                // VK-1600: the pools are shared across every grid, so these are read once
+                // OUTSIDE the loop - summing them per grid would multiply a whole-world figure
+                // by the grid count.
+                stats.prefetchPoolBytes = prefetchPool.residentCost();
+                stats.prefetchPoolCap = prefetchPool.capacity();
+                stats.prefetchEvictions = prefetchPool.evictionCount();
+                stats.hlodProxyBytes = hlodProxyPool.residentCost();
+                stats.hlodProxyCap = hlodProxyPool.capacity();
+                stats.hlodEvictions = hlodProxyPool.evictionCount();
+                stats.loadedSectors = static_cast<uint32_t>(loadedSectorPool.residentCost());
+                stats.loadedSectorCap = static_cast<uint32_t>(loadedSectorPool.capacity());
+                stats.loadedSectorEvictions = loadedSectorPool.evictionCount();
                 return stats;
             });
 
@@ -1248,7 +1312,7 @@ namespace services
                     // block on a promise nobody will ever satisfy. HLOD proxies deliberately
                     // survive the mode change, so their in-flight reads are left alone.
                     drainSectorLoads();
-                    clearPrefetchedBlobs();
+                    clearStreamingResidency();
                     entityLoader.clear();
 
                     int loadedCount = 0;
@@ -1322,7 +1386,7 @@ namespace services
                     // VK-1591: sectorManager.clear() destroys every WorldSector, so blobs keyed on
                     // their coords must go with them (see the loadWorld note).
                     drainSectorLoads(); // VK-1592: see the Play branch above
-                    clearPrefetchedBlobs();
+                    clearStreamingResidency();
                     entityLoader.clear();
                     worldDefinition = savedWorldDefinition;
                     currentWorldPath = savedWorldPath;
@@ -1555,7 +1619,7 @@ namespace services
                     // (a bare drain would hang); the world is going away, so HLOD reads go too.
                     drainSectorLoads();
                     drainHlodLoads();
-                    clearPrefetchedBlobs();
+                    clearStreamingResidency();
                     entityLoader.clear();
                     worldDefinition = {};
                     // VK-1595: the world is going away, and with it the session override it was

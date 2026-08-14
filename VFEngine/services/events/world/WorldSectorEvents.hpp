@@ -327,6 +327,25 @@ namespace events::world
         // new query because the Streaming Config tab already polls this struct every frame, and
         // a countdown is the only way to observe the burst from the editor.
         int burstFramesRemaining = 0;
+
+        // VK-1600: eviction-pool occupancy. WHOLE-WORLD figures - the pools are shared across
+        // every grid, unlike the rest of this struct's per-grid sums - and reported here rather
+        // than through a new query because both consumers (the Streaming Config tab and the
+        // viewport overlay) already poll this one every frame.
+        //
+        // `poolBytes` differs from `bytes` above: it also carries the reservations for reads
+        // still in flight, which is what the budget actually gates on.
+        uint64_t prefetchPoolBytes = 0;
+        uint64_t prefetchPoolCap = 0; // 0 = unlimited
+        uint64_t hlodProxyBytes = 0;
+        uint64_t hlodProxyCap = 0;    // 0 = unlimited
+        uint32_t loadedSectors = 0;
+        uint32_t loadedSectorCap = 0; // 0 = unlimited
+        // Since the world loaded. A counter still climbing while the camera stands still is the
+        // signature of a budget too small for the ring it is being asked to hold.
+        uint64_t prefetchEvictions = 0;
+        uint64_t hlodEvictions = 0;
+        uint64_t loadedSectorEvictions = 0;
     };
 
     struct GetSectorPrefetchStatsQuery : IQuery<SectorPrefetchStats>

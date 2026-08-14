@@ -7,6 +7,7 @@
 #include <world/SectorAssignment.hpp>
 #include <world/WorldDefinition.hpp>
 #include <world/WorldDefinitionSerialization.hpp>
+#include <streaming/BudgetedEvictionPool.hpp> // VK-1600: pool re-keying after a grid removal
 
 #include <algorithm>
 #include <filesystem>
@@ -646,5 +647,137 @@ TEST_SUITE("VK-1599 world grids")
         CHECK(definition.clampGridIndex(1) == 0);
         CHECK(definition.clampGridIndex(world::kMaxGrids) == 0);
         CHECK(definition.grid(9).sectorConfig.sectorWorldSize == doctest::Approx(77.0f));
+    }
+
+    // ── VK-1600: registration-id inverses ───────────────────────────────
+    //
+    // The eviction pools key on sectorRegistrationId so ONE flat pool can span every grid, then
+    // invert it to reach the (grid, coord) release paths. A lossy inverse would evict the wrong
+    // sector, so the round trip is pinned over the whole validated range and every grid.
+
+    TEST_CASE("VK-1600: registration id round-trips over the full valid coord range")
+    {
+        const int32_t coords[] = {world::kMinSectorCoord, -32767, -4096, -1, 0, 1,
+                                  4096, 32766, world::kMaxSectorCoord};
+
+        for (uint8_t grid = 0; grid < world::kMaxGrids; ++grid)
+        {
+            for (int32_t x : coords)
+            {
+                for (int32_t z : coords)
+                {
+                    const world::SectorCoord coord(x, z);
+                    REQUIRE(world::isValidSectorCoord(coord));
+
+                    const uint64_t id = world::sectorRegistrationId(grid, coord);
+                    CHECK(world::gridIndexFromRegistrationId(id) == grid);
+                    CHECK(world::sectorCoordFromRegistrationId(id) == coord);
+                }
+            }
+        }
+    }
+
+    TEST_CASE("VK-1600: the inverse is constexpr and agrees at the range corners")
+    {
+        // constexpr matters because it is what proves the inverse is pure arithmetic on the
+        // packed bits rather than anything that could consult runtime state.
+        static_assert(world::gridIndexFromRegistrationId(
+                          world::sectorRegistrationId(5, world::SectorCoord(-32768, 32767))) == 5);
+        static_assert(world::sectorCoordFromRegistrationId(
+                          world::sectorRegistrationId(5, world::SectorCoord(-32768, 32767))).x == -32768);
+        static_assert(world::sectorCoordFromRegistrationId(
+                          world::sectorRegistrationId(5, world::SectorCoord(-32768, 32767))).z == 32767);
+
+        // Grid 0 still yields the legacy value, so the inverse cannot have changed the forward
+        // mapping to make itself easier.
+        const world::SectorCoord coord(11, -13);
+        CHECK(world::sectorRegistrationId(0, coord) == world::sectorCoordToId(coord));
+    }
+
+    TEST_CASE("VK-1600: re-keying a pool after a grid removal must run in ascending key order")
+    {
+        // removeGrid shifts every higher grid's index down by one. The eviction pools bake the
+        // grid into their key, so their entries have to be rewritten to match - and the rewrite
+        // order matters, because two grids can hold the SAME coord. Ascending key order is
+        // ascending grid order, so each entry moves down into the slot the grid below it has
+        // already vacated. This mirrors WorldSectorServiceImpl::rekeySectorPoolsAfterGridRemoval.
+        const world::SectorCoord same(5, 5);
+
+        auto build = []
+        {
+            streaming::BudgetedEvictionPool<uint64_t> pool;
+            pool.put(world::sectorRegistrationId(0, world::SectorCoord(5, 5)), 10, 1, -1.0f, false);
+            pool.put(world::sectorRegistrationId(2, world::SectorCoord(5, 5)), 20, 2, -2.0f, false);
+            pool.put(world::sectorRegistrationId(3, world::SectorCoord(5, 5)), 30, 3, -3.0f, true);
+            pool.put(world::sectorRegistrationId(3, world::SectorCoord(9, 9)), 40, 4, -4.0f, false);
+            return pool;
+        };
+
+        auto rekey = [](streaming::BudgetedEvictionPool<uint64_t>& pool, uint8_t removedGrid,
+                        bool ascending)
+        {
+            std::vector<uint64_t> keys;
+            pool.forEach([&keys](uint64_t key, const auto&) { keys.push_back(key); });
+            std::sort(keys.begin(), keys.end());
+            if (!ascending)
+                std::reverse(keys.begin(), keys.end());
+
+            for (const uint64_t key : keys)
+            {
+                const uint8_t grid = world::gridIndexFromRegistrationId(key);
+                if (grid < removedGrid)
+                    continue;
+                if (grid == removedGrid)
+                {
+                    pool.remove(key);
+                    continue;
+                }
+                const auto* entry = pool.find(key);
+                if (!entry)
+                    continue;
+                const auto moved = *entry;
+                pool.remove(key);
+                pool.put(world::sectorRegistrationId(static_cast<uint8_t>(grid - 1),
+                                                     world::sectorCoordFromRegistrationId(key)),
+                         moved.cost, moved.lastUsedFrame, moved.priority, moved.pinned);
+            }
+        };
+
+        SUBCASE("ascending preserves every entry, its cost and its pin") {
+            auto pool = build();
+            REQUIRE(pool.size() == 4);
+            REQUIRE(pool.residentCost() == 100);
+
+            rekey(pool, 1, /*ascending=*/true);
+
+            CHECK(pool.size() == 4);
+            CHECK(pool.residentCost() == 100);
+
+            const auto* g0 = pool.find(world::sectorRegistrationId(0, same));
+            const auto* g1 = pool.find(world::sectorRegistrationId(1, same));
+            const auto* g2 = pool.find(world::sectorRegistrationId(2, same));
+            const auto* g2b = pool.find(world::sectorRegistrationId(2, world::SectorCoord(9, 9)));
+
+            REQUIRE(g0 != nullptr);
+            REQUIRE(g1 != nullptr);
+            REQUIRE(g2 != nullptr);
+            REQUIRE(g2b != nullptr);
+            CHECK(g0->cost == 10);  // below the removal point: untouched
+            CHECK(g1->cost == 20);  // was grid 2
+            CHECK(g2->cost == 30);  // was grid 3
+            CHECK(g2->pinned);      // the pin survives the move
+            CHECK(g2b->cost == 40);
+        }
+
+        SUBCASE("descending silently loses the colliding entry") {
+            // Pins WHY the sort is there rather than just that it is. Without ascending order the
+            // grid-3 entry is re-keyed onto the grid-2 entry at the same coord before that one has
+            // moved, and put() overwrites it.
+            auto pool = build();
+            rekey(pool, 1, /*ascending=*/false);
+
+            CHECK(pool.size() == 3);
+            CHECK(pool.residentCost() == 80);
+        }
     }
 }

@@ -691,6 +691,43 @@ namespace windows
         changed |= ImGui::SliderInt("Max Entities/Frame", &config.maxEntitiesPerFrame, 1, 64);
 
         ImGui::Separator();
+        ImGui::Text("Memory Budgets (VK-1600)");
+        // InputScalar rather than a slider: these run to gigabytes, and a slider over a 64-bit
+        // byte range cannot be aimed. All three are live-overridable - unlike the terrain budgets
+        // below, nothing caches them at world activation.
+        ImGui::InputScalar("Max Prefetch Bytes", ImGuiDataType_U64, &config.maxPrefetchBytes);
+        changed |= ImGui::IsItemDeactivatedAfterEdit();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Ceiling on resident prefetch blob bytes, shared across ALL grids.\n"
+                              "At the cap a NEARER sector displaces a farther one; a sector that\n"
+                              "beats nothing resident is refused and simply pays a cold read when\n"
+                              "it activates. 0 = unlimited.");
+
+        ImGui::InputScalar("Max HLOD Proxy Bytes", ImGuiDataType_U64, &config.maxHLODProxyBytes);
+        changed |= ImGui::IsItemDeactivatedAfterEdit();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Ceiling on resident HLOD proxy geometry (vertices + indices).\n"
+                              "Proxies are pinned in-memory meshes with no .vfMesh behind them, so\n"
+                              "nothing else ever reclaims them. 0 = unlimited.");
+
+        {
+            // SliderInt over a uint32_t: the count is small and bounded, so a slider is the
+            // right control here even though the byte budgets above are not.
+            int loadedCap = static_cast<int>(config.maxLoadedSectors);
+            if (ImGui::SliderInt("Max Loaded Sectors", &loadedCap, 0, 256))
+            {
+                config.maxLoadedSectors = static_cast<uint32_t>(loadedCap < 0 ? 0 : loadedCap);
+                changed = true;
+            }
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Guardrail on ACTIVATED sectors, shared across all grids.\n"
+                              "Dirty sectors and the sector holding the selection are never\n"
+                              "evicted. Because a sector may only displace one it is clearly\n"
+                              "nearer than, content goes missing at the OUTER edge of the load\n"
+                              "ring, never under the camera. 0 = unlimited.");
+
+        ImGui::Separator();
         ImGui::Text("Terrain Tile Streaming (via Sector)");
         // VK-1595: TerrainService caches these two once, in activateTilesForLoadedSectors(), and
         // the session override is cleared on world load - so an overridden value can never reach

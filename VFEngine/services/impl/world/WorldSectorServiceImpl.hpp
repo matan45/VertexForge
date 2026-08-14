@@ -20,6 +20,7 @@
 #include "HLODWorldBaker.hpp"
 #include "streaming/AsyncLoadQueue.hpp"
 #include "streaming/AsyncResultSlot.hpp"
+#include "streaming/BudgetedEvictionPool.hpp"
 #include "resource/CancellationToken.hpp"
 #include "resource/ResourceLoadTypes.hpp"
 #include <atomic>
@@ -143,9 +144,12 @@ namespace services
         {
             std::weak_ptr<SectorLoadSlot> slot;
             resource::CancellationToken::Ptr cancellation;
-            // Bytes charged against maxPrefetchBytes while this read is in flight (0 for
-            // activations), refunded by releaseSectorRequest.
-            uint64_t prefetchReservation = 0;
+            // VK-1600: replaced VK-1591's `prefetchReservation` byte counter. The prefetch pool
+            // now holds the in-flight read as a PINNED entry sized by the .vfsector header, so
+            // there is one accounting instead of two that had to stay in step across three
+            // separate decrement sites. This flag is all the request still needs: whether
+            // releasing it should also drop that pool entry.
+            bool holdsPrefetchReservation = false;
         };
 
         // VK-1599: everything that is per-GRID rather than per-world.
@@ -172,11 +176,10 @@ namespace services
             // state - a WorldSector is a value type that plugins copy and inspect through sdk/.
             std::unordered_map<world::SectorCoord, std::vector<uint8_t>,
                                world::SectorCoordHash> prefetchedBlobs;
-            uint64_t prefetchedBytes = 0; // running sum of prefetchedBlobs value sizes
-            // VK-1592: prefetch reads no longer have an in-flight count cap (the scheduler governs
-            // concurrency now), so maxPrefetchBytes must also account for reads still in flight or
-            // a burst would overshoot the cap by (in-flight x sector size) before any of it lands.
-            uint64_t prefetchBytesInFlight = 0;
+            // Running sum of prefetchedBlobs value sizes - bytes ACTUALLY held, which is what
+            // the overlay reports. Distinct from the prefetch pool's residentCost(), which
+            // also carries the reservations for reads still in flight.
+            uint64_t prefetchedBytes = 0;
 
             // VK-1595: a session-only streaming config for tuning radii and budgets without
             // dirtying the world. NEVER serialized - saveWorld writes the grid's persisted config,
@@ -199,6 +202,52 @@ namespace services
         world::HLODStreamer hlodStreamer;
         world::HLODProxyManager hlodProxyManager;
         HLODWorldBaker hlodBaker;
+
+        // ---- VK-1600: streaming memory pools ----
+        //
+        // Deliberately world-level rather than per-GridRuntime. VK-1599 left the prefetch byte
+        // cap accounted per grid and noted that a shared pool "would need a global eviction
+        // policy to decide which grid gives bytes back, which is VK-1600's story" - this is
+        // that pool. Memory is a whole-process resource, so N grids must not hold N x the cap.
+        //
+        // Sector-keyed pools use world::sectorRegistrationId(grid, coord), which is already the
+        // unique uint64 name for a (grid, coord) pair, so one flat pool spans every grid with
+        // no composite key type.
+        //
+        // Safe to own the pool OBJECTS here: utilities/streaming is header-only inside
+        // Utilities (a StaticLib), so unlike EventDispatcher/ResourceLoadScheduler there is no
+        // instance() that could resolve to a per-binary copy.
+        using PrefetchPool = streaming::BudgetedEvictionPool<uint64_t>;
+        using HlodProxyPool =
+            streaming::BudgetedEvictionPool<world::HLODCellCoord, world::HLODCellCoordHash>;
+
+        PrefetchPool prefetchPool;
+        HlodProxyPool hlodProxyPool;
+        // Cost 1 per sector: this one is a COUNT budget (maxLoadedSectors), not bytes.
+        PrefetchPool loadedSectorPool;
+
+        // Monotonic per-update tick, the pools' lastUsedFrame. The service had no frame counter
+        // before VK-1600; this is deliberately its own rather than a renderer frame index, so
+        // Tests.exe (which never renders) still advances it.
+        uint64_t streamingFrame = 0;
+
+        // Latched by warnIfPrefetchBudgetUndersized so the warning fires once per config change
+        // rather than once per frame. Cleared by applyEffectiveStreamingConfig.
+        bool prefetchBudgetWarned = false;
+
+        // VK-1600: resolved once per update, then read by BOTH the loaded-sector pin and the
+        // edit-mode unload veto further down the same update - which used to resolve it itself.
+        std::optional<world::SectorCoord> selectedSectorCoord;
+        uint8_t selectedSectorGrid = world::kMaxGrids;
+
+        // Reused across frames so the per-frame pool refresh allocates nothing in the steady
+        // state, the same contract overlayCells/overlaySources have. forEach cannot mutate the
+        // pool while iterating it, so the keys are collected first and touched afterwards.
+        std::vector<uint64_t> poolRefreshKeys;
+        std::vector<world::HLODCellCoord> poolHlodRefreshKeys;
+        std::vector<uint64_t> prefetchEvictionScratch;
+        std::vector<world::HLODCellCoord> hlodEvictionScratch;
+        std::vector<uint64_t> loadedEvictionScratch;
 
         // Atomic because the notification handlers that gate on it (entity-deleted,
         // transform-changed, and the VK-1589 streaming-source commands) are published from the
@@ -230,6 +279,13 @@ namespace services
         // hlodActions below. perGridActions keeps its per-grid capacity across frames.
         std::vector<std::vector<world::SectorStreamingAction>> perGridActions;
         std::vector<world::GridStreamingAction> streamingActions;
+
+        // VK-1600: this frame's resolved streaming sources. A member rather than a local in
+        // update() because the eviction pools rank candidates against it from call sites well
+        // outside that scope - the prefetch submit and the async HLOD poll callback. Rebuilt
+        // (cleared, not freed) at the top of every streaming frame; empty when the streaming
+        // gate is shut, which the pools read as "nothing has any residency value".
+        std::vector<world::StreamingSource> frameStreamingSources;
         std::vector<world::HLODStreamingAction> hlodActions;
 
         // VK-1594: proxies whose fade-out completed this frame, drained right after
@@ -391,7 +447,7 @@ namespace services
                                             resource::LoadImportance importance,
                                             float hintPriority,
                                             uint64_t estimatedBytes,
-                                            uint64_t prefetchReservation,
+                                            bool holdsPrefetchReservation,
                                             std::string debugName,
                                             std::function<AsyncSectorLoadResult()> work);
         void releaseSectorRequest(uint8_t gridIndex, const world::SectorCoord& coord);
@@ -424,7 +480,76 @@ namespace services
         void launchParseFromCachedBlob(uint8_t gridIndex, const world::SectorCoord& coord);
         void dropPrefetchedBlob(uint8_t gridIndex, const world::SectorCoord& coord);
         // Clears EVERY grid's blob cache, for the same reason drainSectorLoads drains them all.
-        void clearPrefetchedBlobs();
+        // VK-1600: renamed from clearPrefetchedBlobs and widened to drop the prefetch and
+        // loaded-sector pools with it. All six call sites force-reset sector state, so blobs and
+        // pool residency go stale together; one function is what stops a future reset path
+        // remembering one and forgetting the other.
+        void clearStreamingResidency();
+
+        // ---- VK-1600: streaming memory pools ----
+        //
+        // Re-ranks and re-pins every resident pool entry against THIS frame's sources, then
+        // syncs each pool's capacity from config. Must run before the frame's actions are
+        // dispatched: admission compares a candidate against residents, and a comparison
+        // against last frame's ranking is what would let the pool evict the wrong entry.
+        void refreshStreamingPools(const std::vector<world::StreamingSource>& sources);
+        // Resolves selectedSectorCoord / selectedSectorGrid for this update. Extracted from the
+        // dispatch loop so refreshStreamingPools, which runs earlier, can pin the same sector.
+        void resolveEditorHeldSector();
+        // Negated distance in sectors from `coord` (or a cell centre) to the nearest source -
+        // the pools' "higher = keep" priority. Plain distance on purpose, NOT VK-1593's
+        // predicted distance: lookahead exists to reorder LOADS, while memory value is about
+        // where content actually is.
+        [[nodiscard]] float sectorPoolPriority(uint8_t gridIndex, const world::SectorCoord& coord,
+                                               const std::vector<world::StreamingSource>& sources) const;
+        [[nodiscard]] float hlodPoolPriority(const world::HLODCellCoord& cell,
+                                             const std::vector<world::StreamingSource>& sources) const;
+        [[nodiscard]] float poolPriorityAt(const glm::vec3& center, float sectorSize,
+                                           const std::vector<world::StreamingSource>& sources) const;
+        // VK-1600: extracted from the HLOD load-action branch, which built this inline; the pool
+        // ranking needs the same centre and the two must not drift.
+        [[nodiscard]] glm::vec3 hlodCellCenterWorld(const world::HLODCellCoord& cell,
+                                                    const world::HLODTierConfig& tier) const;
+        // True for the sector holding the editor's current selection - panels and gizmos hold
+        // live references into it, so the count guardrail must pin it exactly as the edit-mode
+        // unload rail already vetoes it.
+        [[nodiscard]] bool isEditorHeldSector(uint8_t gridIndex, const world::SectorCoord& coord) const
+        {
+            return selectedSectorCoord.has_value() && gridIndex == selectedSectorGrid &&
+                   coord == *selectedSectorCoord;
+        }
+        // Sum of the per-grid budgets, except that ANY grid declaring itself unlimited (0)
+        // makes the whole pool unlimited - a grid that opted out of a bound cannot be bounded
+        // by its neighbours' numbers. Templated only so it can read both the uint64_t byte
+        // budgets and the uint32_t sector count through one implementation.
+        template <typename T>
+        [[nodiscard]] uint64_t aggregateGridBudget(T world::SectorStreamingConfig::* field) const
+        {
+            uint64_t total = 0;
+            for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
+            {
+                const auto value = static_cast<uint64_t>(getEffectiveStreamingConfig(gridIndex).*field);
+                if (value == 0)
+                    return 0; // one unlimited grid makes the shared pool unlimited
+                total += value;
+            }
+            return total;
+        }
+        // False when the loaded-sector count budget refuses this activation. Always true when
+        // the budget is unlimited (the default), so the guardrail is a pure pass-through until a
+        // world opts in.
+        [[nodiscard]] bool admitLoadedSector(uint8_t gridIndex, const world::SectorCoord& coord);
+        // VK-1600: removeGrid shifts every higher grid's index down by one. The GridRuntimes
+        // travel with their own coord-keyed maps, but the pools bake the grid index into their
+        // key, so theirs have to be rewritten to match or they address the wrong sector.
+        void rekeySectorPoolsAfterGridRemoval(uint8_t removedGrid);
+        void executePrefetchEvictions(const std::vector<uint64_t>& evicted);
+        void executeHlodEvictions(const std::vector<world::HLODCellCoord>& evicted);
+        void executeLoadedSectorEvictions(const std::vector<uint64_t>& evicted);
+        // VK-1600: warn ONCE per config change when the prefetch budget cannot hold the ring it
+        // is being asked to cache - the pool degrades to refuse-at-cap, which is correct but
+        // silently wastes the whole prefetch feature.
+        void warnIfPrefetchBudgetUndersized();
         void invalidateHLODForSector(const world::SectorCoord& coord);
         bool generateSectorHLOD(const world::SectorCoord& coord, uint8_t tier);
         void processHLODRegenQueue();

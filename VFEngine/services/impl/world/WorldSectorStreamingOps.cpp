@@ -22,6 +22,8 @@
 #include "threading/JobSystem.hpp"
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <limits>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
 
@@ -189,7 +191,13 @@ namespace services
         {
             // Build streaming sources: camera is always source[0].
             // The editor camera isn't an ECS entity — use the cached viewport position.
-            std::vector<world::StreamingSource> sources;
+            //
+            // VK-1600: promoted from a per-frame local to a service member. The eviction pools
+            // rank against these, and two of the three admission sites (the HLOD poll callback,
+            // the prefetch submit) are nowhere near this scope. Reusing the buffer also stops
+            // the streaming pass reallocating it every frame, matching perGridActions above.
+            frameStreamingSources.clear();
+            auto& sources = frameStreamingSources;
             {
                 world::StreamingSource cameraSrc;
                 if (isPlayMode)
@@ -231,6 +239,24 @@ namespace services
             // Update resource load scheduler with current camera position for priority re-computation
             resource::ResourceLoadScheduler::instance().update(sources[0].position);
 
+            // Edit-mode rail: never auto-unload the sector holding the selected entity - panels
+            // and gizmos hold live references to it.
+            //
+            // VK-1599: the selection lives on exactly one grid, and the reseed below has to fire
+            // on THAT grid's streamer. Reseeding every grid would drop the ring state of grids
+            // that had nothing to do with the selection.
+            //
+            // VK-1600: resolved HERE rather than just before the dispatch loop, because
+            // refreshStreamingPools has to pin the same sector - a count guardrail that evicted
+            // the selection would defeat the veto that already exists twenty lines below.
+            resolveEditorHeldSector();
+
+            // VK-1600: re-rank and re-pin every resident pool entry against THIS frame's
+            // sources, and pick up any capacity change, BEFORE the actions below consult the
+            // pools for admission. Ranking a candidate against last frame's residents is what
+            // would let a pool evict the wrong entry.
+            refreshStreamingPools(sources);
+
             // VK-1599: one streamer per grid, all fed the SAME source list. Reach is per grid
             // because each streamer carries its own radii; the sources describe where the player
             // is, which is a property of the world, not of a grid.
@@ -262,35 +288,6 @@ namespace services
                     world::effectiveBurstEntities(getEffectiveStreamingConfig(gridIndex)));
             }
 
-            // Edit-mode rail: never auto-unload the sector holding the selected entity —
-            // panels and gizmos hold live references to it.
-            //
-            // VK-1599: the selection lives on exactly one grid, and the reseed below has to fire on
-            // THAT grid's streamer. Reseeding every grid would drop the ring state of grids that
-            // had nothing to do with the selection.
-            std::optional<world::SectorCoord> selectedCoord;
-            uint8_t selectedGrid = world::kMaxGrids;
-            if (!isPlayMode)
-            {
-                auto selected = ::events::EventDispatcher::instance().query(
-                    ::events::scene::GetSelectedEntityQuery{});
-                if (selected.has_value())
-                {
-                    auto& registry = scene::EntityRegistry::getRegistry();
-                    auto entity = internal::fromHandle(*selected);
-                    if (registry.valid(entity))
-                    {
-                        if (auto* uuidComp = registry.try_get<components::UUIDComponent>(entity))
-                        {
-                            const uint64_t uuid = uuidComp->id.getValue();
-                            selectedGrid = findEntityGrid(uuid);
-                            if (selectedGrid < gridCount())
-                                selectedCoord = gridRuntime(selectedGrid).manager.getEntitySector(uuid);
-                        }
-                    }
-                }
-            }
-
             for (const auto& merged : streamingActions)
             {
                 const uint8_t gridIndex = merged.gridIndex;
@@ -304,6 +301,18 @@ namespace services
                 switch (action.target)
                 {
                 case world::SectorTargetState::Activated:
+                    // VK-1600: the loaded-sector guardrail gates HERE rather than inside
+                    // handleSectorLoad, so the explicit loadSector() path - scripts, the editor's
+                    // Load button - stays budget-free. A user asking for a specific sector is not
+                    // speculative streaming.
+                    //
+                    // Refusing costs one hash lookup and the streamer simply re-offers next
+                    // frame, so the steady state is quiet. Because a candidate may only displace
+                    // an entry it is clearly nearer than, the sector that goes without is always
+                    // the FAR one: the hole opens at the outer edge of the load ring, never under
+                    // the camera.
+                    if (!admitLoadedSector(gridIndex, action.coord))
+                        break;
                     handleSectorLoad(gridIndex, action.coord);
                     break;
 
@@ -322,8 +331,7 @@ namespace services
                         handleSectorPrefetchDrop(gridIndex, action.coord);
                         break;
                     }
-                    if (selectedCoord.has_value() && gridIndex == selectedGrid &&
-                        action.coord == *selectedCoord)
+                    if (isEditorHeldSector(gridIndex, action.coord))
                     {
                         // The streamer already dropped this coord from its tracking;
                         // force a reseed so it retries once the selection moves on
@@ -387,15 +395,10 @@ namespace services
                         // than inside HLODProxyManager, which lives in World.dll and would
                         // resolve ResourceLoadScheduler::instance() to a private, never
                         // pumped copy of the singleton (Utilities is a StaticLib).
-                        const int32_t cs = world::effectiveCellSize(*tierConfig);
-                        const world::SectorCoord origin =
-                            world::cellOriginSector(action.cellCoord, *tierConfig);
-                        const float sectorSize = primary.manager.getConfig().sectorWorldSize;
-                        const float half = static_cast<float>(cs) * 0.5f;
-                        const glm::vec3 cellCenter(
-                            (static_cast<float>(origin.x) + half) * sectorSize, 0.0f,
-                            (static_cast<float>(origin.z) + half) * sectorSize);
-                        submitHlodLoad(action.cellCoord, cellPath, cellCenter);
+                        // VK-1600: extracted, because the eviction pool ranks cells by distance
+                        // to this same centre and the two must not drift apart.
+                        submitHlodLoad(action.cellCoord, cellPath,
+                                       hlodCellCenterWorld(action.cellCoord, *tierConfig));
                     }
                     else
                     {
@@ -727,7 +730,7 @@ namespace services
         // can observe the gap - the result is only ever consumed by pollAsyncSectorLoads, which
         // runs at the top of the next update().
         if (!submitSectorLoad(gridIndex, coord, resource::LoadImportance::High, kSectorActivateBias,
-                sector->metadata.estimatedMemory, /*prefetchReservation=*/0,
+                sector->metadata.estimatedMemory, /*holdsPrefetchReservation=*/false,
                 sectorDebugName("sector", gridIndex, coord),
                 [filePath]() -> AsyncSectorLoadResult {
                     AsyncSectorLoadResult result;
@@ -758,21 +761,34 @@ namespace services
         // activate-ring sector scores above 1.5 while a prefetch scores at most 0.2, so the
         // scheduler's max-heap always dispatches activations first.
         //
-        // The byte cap must count reads still in flight, though: without an in-flight ceiling a
-        // burst would blow past maxPrefetchBytes by (in-flight x sector size) before the first
-        // blob ever lands.
-        //
-        // VK-1599: the cap is accounted PER GRID. A shared pool would need a global eviction
-        // policy to decide which grid gives bytes back, which is VK-1600's story; until then each
-        // grid honours its own configured ceiling and the worst case is grids x cap.
-        const uint64_t byteCap = getEffectiveStreamingConfig(gridIndex).maxPrefetchBytes; // VK-1595
-        if (byteCap != 0 && runtime.prefetchedBytes + runtime.prefetchBytesInFlight >= byteCap)
+        // VK-1600: the byte budget is now the prefetch POOL, and it is global across grids -
+        // VK-1599 left it per grid precisely because bounding it needed the eviction policy this
+        // story adds. Two consequences beyond "it can now evict":
+        //   * the read is charged at SUBMIT time, as a PINNED entry sized by the .vfsector
+        //     header (which is exactly the blob size, since the blob IS the raw file), so a
+        //     burst cannot overshoot by (in-flight x sector size) before the first one lands.
+        //     That replaces VK-1591's separate prefetchBytesInFlight counter entirely.
+        //   * a refusal now means "everything resident is nearer than this", which is the
+        //     correct answer and the reason the ring cannot livelock: re-offering this sector
+        //     every frame costs one hash lookup and never a file read.
+        const uint64_t reservation = sector->metadata.estimatedMemory;
+        const uint64_t poolKey = world::sectorRegistrationId(gridIndex, coord);
+        prefetchEvictionScratch.clear();
+        const auto admission = prefetchPool.admit(
+            poolKey, reservation, streamingFrame,
+            sectorPoolPriority(gridIndex, coord, frameStreamingSources), prefetchEvictionScratch);
+        executePrefetchEvictions(prefetchEvictionScratch);
+        if (admission == PrefetchPool::Admission::Refused)
             return;
+
+        // Untouchable until the bytes land: there is no payload to reclaim yet, and dropping the
+        // entry would let a later admission double-spend the budget this read is already using.
+        prefetchPool.setPinned(poolKey, true);
 
         std::string filePath = sector->filePath;
 
         if (!submitSectorLoad(gridIndex, coord, resource::LoadImportance::Background, kSectorPrefetchBias,
-                sector->metadata.estimatedMemory, sector->metadata.estimatedMemory,
+                reservation, /*holdsPrefetchReservation=*/true,
                 sectorDebugName("sector prefetch", gridIndex, coord),
                 [filePath]() -> AsyncSectorLoadResult {
                     AsyncSectorLoadResult result;
@@ -782,6 +798,9 @@ namespace services
                     return result;
                 }))
         {
+            // Never tracked, so nothing will ever release the reservation - hand it back here or
+            // it occupies the budget for the lifetime of the world.
+            prefetchPool.remove(poolKey);
             return;
         }
 
@@ -812,6 +831,11 @@ namespace services
         const uint64_t byteCount = bytes.size();
         runtime.prefetchedBytes -= byteCount;
         runtime.prefetchedBlobs.erase(it);
+        // VK-1600: the blob is being consumed into an activation, so it stops being prefetch
+        // residency. Leaving the entry would charge the sector to the prefetch budget for as
+        // long as it stayed loaded - and it is about to be charged to the loaded-sector pool
+        // instead, in finalizeSectorLoad.
+        prefetchPool.remove(world::sectorRegistrationId(gridIndex, coord));
 
         // Same priority as a cold activation: this sector is in the activate ring either way,
         // it just skips the file read. estimatedBytes is the parse's own headroom (the blob is
@@ -819,7 +843,7 @@ namespace services
         // count) - the DOM this produces is several times the byte count, so it errs low but in
         // the same spirit as ResourceLoadEstimate's conservative multipliers.
         if (!submitSectorLoad(gridIndex, coord, resource::LoadImportance::High, kSectorActivateBias,
-                byteCount, /*prefetchReservation=*/0,
+                byteCount, /*holdsPrefetchReservation=*/false,
                 sectorDebugName("sector parse", gridIndex, coord),
                 [bytes = std::move(bytes)]() -> AsyncSectorLoadResult {
                     AsyncSectorLoadResult result;
@@ -858,6 +882,338 @@ namespace services
                          (static_cast<float>(coord.z) + 0.5f) * sectorSize);
     }
 
+    void WorldSectorServiceImpl::resolveEditorHeldSector()
+    {
+        selectedSectorCoord.reset();
+        selectedSectorGrid = world::kMaxGrids;
+
+        if (isPlayMode)
+            return;
+
+        auto selected = ::events::EventDispatcher::instance().query(
+            ::events::scene::GetSelectedEntityQuery{});
+        if (!selected.has_value())
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto entity = internal::fromHandle(*selected);
+        if (!registry.valid(entity))
+            return;
+
+        auto* uuidComp = registry.try_get<components::UUIDComponent>(entity);
+        if (!uuidComp)
+            return;
+
+        const uint64_t uuid = uuidComp->id.getValue();
+        const uint8_t grid = findEntityGrid(uuid);
+        if (grid >= gridCount())
+            return;
+
+        selectedSectorGrid = grid;
+        selectedSectorCoord = gridRuntime(grid).manager.getEntitySector(uuid);
+    }
+
+    // ---- VK-1600: streaming memory pools ----
+
+    namespace
+    {
+        // A source scaled to want twice the radius values a sector twice as far out equally,
+        // which is exactly how SectorStreamer applies radiusMultiplier to its thresholds. Guarded
+        // because a hand-edited .vfworld or a script could hand us zero or a negative.
+        [[nodiscard]] float sourceRadiusScale(const world::StreamingSource& source)
+        {
+            return source.radiusMultiplier > 0.001f ? source.radiusMultiplier : 1.0f;
+        }
+    }
+
+    float WorldSectorServiceImpl::sectorPoolPriority(
+        uint8_t gridIndex, const world::SectorCoord& coord,
+        const std::vector<world::StreamingSource>& sources) const
+    {
+        const float sectorSize = gridRuntime(gridIndex).manager.getConfig().sectorWorldSize;
+        if (!(sectorSize > 0.0f))
+            return 0.0f;
+
+        const glm::vec3 center = sectorCenterWorld(gridIndex, coord);
+        return poolPriorityAt(center, sectorSize, sources);
+    }
+
+    float WorldSectorServiceImpl::hlodPoolPriority(
+        const world::HLODCellCoord& cell,
+        const std::vector<world::StreamingSource>& sources) const
+    {
+        const auto* tier = findHLODTier(cell.tier);
+        if (!tier)
+            return 0.0f;
+
+        const float sectorSize = primaryRuntime().manager.getConfig().sectorWorldSize;
+        if (!(sectorSize > 0.0f))
+            return 0.0f;
+
+        return poolPriorityAt(hlodCellCenterWorld(cell, *tier), sectorSize, sources);
+    }
+
+    float WorldSectorServiceImpl::poolPriorityAt(
+        const glm::vec3& center, float sectorSize,
+        const std::vector<world::StreamingSource>& sources) const
+    {
+        // No source wants anything, so nothing resident has any value - a flat 0 leaves the
+        // pools' relative order untouched rather than inventing one.
+        float nearest = std::numeric_limits<float>::max();
+        for (const auto& source : sources)
+        {
+            // Same exclusion SectorStreamer::buildSourceEvals makes: a source that wants
+            // nothing keeps nothing resident.
+            if (source.targetState == world::SectorTargetState::Unloaded)
+                continue;
+
+            const float dx = center.x - source.position.x;
+            const float dz = center.z - source.position.z;
+            const float dist = std::sqrt(dx * dx + dz * dz) / sourceRadiusScale(source);
+            nearest = std::min(nearest, dist);
+        }
+
+        if (nearest == std::numeric_limits<float>::max())
+            return 0.0f;
+
+        // Negated so HIGHER = nearer = keep, matching PriorityHysteresis. Expressed in SECTORS
+        // so kEvictionHysteresisSectors is directly comparable to it.
+        return -(nearest / sectorSize);
+    }
+
+    glm::vec3 WorldSectorServiceImpl::hlodCellCenterWorld(const world::HLODCellCoord& cell,
+                                                          const world::HLODTierConfig& tier) const
+    {
+        const int32_t cellSize = world::effectiveCellSize(tier);
+        const world::SectorCoord origin = world::cellOriginSector(cell, tier);
+        const float sectorSize = primaryRuntime().manager.getConfig().sectorWorldSize;
+        const float half = static_cast<float>(cellSize) * 0.5f;
+        return glm::vec3((static_cast<float>(origin.x) + half) * sectorSize, 0.0f,
+                         (static_cast<float>(origin.z) + half) * sectorSize);
+    }
+
+    void WorldSectorServiceImpl::refreshStreamingPools(
+        const std::vector<world::StreamingSource>& sources)
+    {
+        ++streamingFrame;
+
+        // Capacity first: a slider drag or a session override can change it any frame, and the
+        // ranking below is what decides who a shrink takes.
+        const uint64_t prefetchCap = aggregateGridBudget(&world::SectorStreamingConfig::maxPrefetchBytes);
+        const uint64_t hlodCap = aggregateGridBudget(&world::SectorStreamingConfig::maxHLODProxyBytes);
+        const uint64_t loadedCap = aggregateGridBudget(&world::SectorStreamingConfig::maxLoadedSectors);
+
+        const bool prefetchCapChanged = prefetchCap != prefetchPool.capacity();
+        const bool hlodCapChanged = hlodCap != hlodProxyPool.capacity();
+        const bool loadedCapChanged = loadedCap != loadedSectorPool.capacity();
+
+        prefetchPool.setCapacity(prefetchCap);
+        hlodProxyPool.setCapacity(hlodCap);
+        loadedSectorPool.setCapacity(loadedCap);
+
+        prefetchPool.setHysteresisMargin(world::kEvictionHysteresisSectors);
+        hlodProxyPool.setHysteresisMargin(world::kEvictionHysteresisSectors);
+        loadedSectorPool.setHysteresisMargin(world::kEvictionHysteresisSectors);
+
+        // Re-rank and re-pin. Neither streamer re-emits for an entry that is already resident,
+        // so if the service did not push this in every frame the pools would still be ranking
+        // by wherever the camera was when each entry was admitted.
+        poolRefreshKeys.clear();
+        prefetchPool.forEach([this](uint64_t key, const auto&) { poolRefreshKeys.push_back(key); });
+        for (const uint64_t key : poolRefreshKeys)
+        {
+            const uint8_t gridIndex = world::gridIndexFromRegistrationId(key);
+            if (gridIndex >= gridCount())
+                continue;
+            prefetchPool.touch(key, streamingFrame,
+                               sectorPoolPriority(gridIndex,
+                                                  world::sectorCoordFromRegistrationId(key), sources));
+        }
+
+        // The loaded-sector pool is RECONCILED against sector state rather than merely re-ranked.
+        // Its entry is created before handleSectorLoad runs (the gate has to precede the work),
+        // and handleSectorLoad has several early returns - a sector that vanished, an activation
+        // already tracked, a refused submit. Releasing the entry at each of those would be one
+        // more thing to keep in step; restating the invariant once, here, cannot be forgotten.
+        poolRefreshKeys.clear();
+        loadedSectorPool.forEach([this](uint64_t key, const auto&) { poolRefreshKeys.push_back(key); });
+        for (const uint64_t key : poolRefreshKeys)
+        {
+            const uint8_t gridIndex = world::gridIndexFromRegistrationId(key);
+            const world::SectorCoord coord = world::sectorCoordFromRegistrationId(key);
+            const world::WorldSector* sector =
+                gridIndex < gridCount() ? gridRuntime(gridIndex).manager.getSector(coord) : nullptr;
+
+            // Not resident and not becoming resident: whatever created this entry did not
+            // finish, so it must not keep occupying a slot.
+            if (!sector || sector->state == world::SectorState::Unloaded)
+            {
+                loadedSectorPool.remove(key);
+                continue;
+            }
+
+            loadedSectorPool.touch(key, streamingFrame,
+                                   sectorPoolPriority(gridIndex, coord, sources));
+
+            // Three reasons a loaded sector may not be evicted:
+            //   * still activating - handleSectorUnload on a half-spawned sector would publish a
+            //     teardown for notifications the activation has not finished sending;
+            //   * dirty - the dirty-never-unload rule SectorStreamer enforces in its own unload
+            //     pass (only a non-dirty Loaded sector is a candidate there). The count guardrail
+            //     bypasses that pass, so the rule has to be restated as a pin or unsaved edits
+            //     would be thrown away;
+            //   * the editor is holding it - panels and gizmos have live references.
+            const bool stillActivating = sector->state != world::SectorState::Loaded;
+            loadedSectorPool.setPinned(key, stillActivating || sector->dirty ||
+                                                isEditorHeldSector(gridIndex, coord));
+        }
+
+        poolHlodRefreshKeys.clear();
+        hlodProxyPool.forEach([this](const world::HLODCellCoord& cell, const auto&)
+                              { poolHlodRefreshKeys.push_back(cell); });
+        for (const auto& cell : poolHlodRefreshKeys)
+            hlodProxyPool.touch(cell, streamingFrame, hlodPoolPriority(cell, sources));
+
+        // Only on an actual capacity change: trimming every frame would instantly undo an
+        // explicit, user-requested load that pushed a pool over budget.
+        if (prefetchCapChanged)
+        {
+            prefetchEvictionScratch.clear();
+            prefetchPool.trim(prefetchEvictionScratch);
+            executePrefetchEvictions(prefetchEvictionScratch);
+        }
+        if (hlodCapChanged)
+        {
+            hlodEvictionScratch.clear();
+            hlodProxyPool.trim(hlodEvictionScratch);
+            executeHlodEvictions(hlodEvictionScratch);
+        }
+        if (loadedCapChanged)
+        {
+            loadedEvictionScratch.clear();
+            loadedSectorPool.trim(loadedEvictionScratch);
+            executeLoadedSectorEvictions(loadedEvictionScratch);
+        }
+    }
+
+    void WorldSectorServiceImpl::rekeySectorPoolsAfterGridRemoval(uint8_t removedGrid)
+    {
+        // Only the two sector-keyed pools need this. The HLOD pool keys on HLODCellCoord and is
+        // bound to the primary grid, which can never be the one removed.
+        auto rekey = [&](PrefetchPool& pool)
+        {
+            poolRefreshKeys.clear();
+            pool.forEach([this](uint64_t key, const auto&) { poolRefreshKeys.push_back(key); });
+
+            // ASCENDING, and this is load-bearing rather than tidiness. The grid index lives in
+            // the key's high bits, so ascending key order is ascending grid order, and each entry
+            // therefore moves down into the slot the previous grid just vacated. In
+            // unordered_map order a grid-3 entry could be re-keyed onto a grid-2 entry that has
+            // not moved yet at the SAME coord - put() would overwrite it and the grid-2 entry
+            // would be silently lost.
+            std::sort(poolRefreshKeys.begin(), poolRefreshKeys.end());
+
+            for (const uint64_t key : poolRefreshKeys)
+            {
+                const uint8_t grid = world::gridIndexFromRegistrationId(key);
+                if (grid < removedGrid)
+                    continue; // below the removal point, so its index did not move
+
+                // removeGrid refuses a grid that still owns sector files or resident entities, so
+                // the removed grid should hold nothing here. Drop anything that somehow does
+                // rather than carry a key naming a grid that no longer exists.
+                if (grid == removedGrid)
+                {
+                    pool.remove(key);
+                    continue;
+                }
+
+                const auto* entry = pool.find(key);
+                if (!entry)
+                    continue;
+
+                const auto moved = *entry; // copy before remove() invalidates it
+                pool.remove(key);
+                pool.put(world::sectorRegistrationId(static_cast<uint8_t>(grid - 1),
+                                                     world::sectorCoordFromRegistrationId(key)),
+                         moved.cost, moved.lastUsedFrame, moved.priority, moved.pinned);
+            }
+        };
+
+        rekey(prefetchPool);
+        rekey(loadedSectorPool);
+    }
+
+    void WorldSectorServiceImpl::executePrefetchEvictions(const std::vector<uint64_t>& evicted)
+    {
+        for (const uint64_t key : evicted)
+        {
+            const uint8_t gridIndex = world::gridIndexFromRegistrationId(key);
+            if (gridIndex >= gridCount())
+                continue;
+            // handleSectorPrefetchDrop, NOT handleSectorUnload: a prefetched sector never
+            // activated, so publishing SectorDeactivated would tear down terrain it never
+            // pulled. It also cancels an in-flight read, which is what makes evicting a pinned
+            // -> unpinned reservation safe. The sector returns to Unloaded and handleSectorLoad
+            // falls back to a cold file read if it is activated before the ring re-caches it.
+            handleSectorPrefetchDrop(gridIndex, world::sectorCoordFromRegistrationId(key));
+        }
+    }
+
+    void WorldSectorServiceImpl::executeHlodEvictions(
+        const std::vector<world::HLODCellCoord>& evicted)
+    {
+        for (const auto& cell : evicted)
+        {
+            releaseHLODProxy(cell);
+            // MANDATORY, and the difference between this and a streamer-driven unload:
+            // HLODStreamer claims a cell in loadedProxies the moment it emits the load action
+            // and only releases the claim when IT decides to unload. An eviction it did not ask
+            // for would leave the claim standing and the cell blank for the rest of the session.
+            hlodStreamer.forgetProxy(cell);
+        }
+    }
+
+    bool WorldSectorServiceImpl::admitLoadedSector(uint8_t gridIndex, const world::SectorCoord& coord)
+    {
+        if (loadedSectorPool.unlimited())
+            return true; // 0 = unlimited: the guardrail is off and this is a pure pass-through
+
+        const uint64_t key = world::sectorRegistrationId(gridIndex, coord);
+        // Already counted - a Prefetched or Prefetching sector being promoted, or a re-emit for
+        // one still mid-activation. Nothing new is becoming resident, so nothing to charge.
+        if (loadedSectorPool.contains(key))
+            return true;
+
+        loadedEvictionScratch.clear();
+        const auto admission = loadedSectorPool.admit(
+            key, /*cost=*/1, streamingFrame,
+            sectorPoolPriority(gridIndex, coord, frameStreamingSources), loadedEvictionScratch);
+        executeLoadedSectorEvictions(loadedEvictionScratch);
+
+        if (admission == PrefetchPool::Admission::Refused)
+            return false;
+
+        // Pinned until the entities actually exist. If handleSectorLoad then takes one of its
+        // early returns and no activation ever happens, refreshStreamingPools drops this entry
+        // on the next frame when it finds the sector still Unloaded - which is why none of those
+        // early returns needs a release of its own.
+        loadedSectorPool.setPinned(key, true);
+        return true;
+    }
+
+    void WorldSectorServiceImpl::executeLoadedSectorEvictions(const std::vector<uint64_t>& evicted)
+    {
+        for (const uint64_t key : evicted)
+        {
+            const uint8_t gridIndex = world::gridIndexFromRegistrationId(key);
+            if (gridIndex >= gridCount())
+                continue;
+            // The NORMAL unload path, notifications and all - this sector really did activate.
+            handleSectorUnload(gridIndex, world::sectorCoordFromRegistrationId(key));
+        }
+    }
+
     resource::LoadHint WorldSectorServiceImpl::sectorLoadHint(uint8_t gridIndex,
                                                                const world::SectorCoord& coord,
                                                                resource::LoadImportance importance,
@@ -876,7 +1232,7 @@ namespace services
                                                    resource::LoadImportance importance,
                                                    float hintPriority,
                                                    uint64_t estimatedBytes,
-                                                   uint64_t prefetchReservation,
+                                                   bool holdsPrefetchReservation,
                                                    std::string debugName,
                                                    std::function<AsyncSectorLoadResult()> work)
     {
@@ -890,8 +1246,8 @@ namespace services
             return false;
 
         auto cancellation = resource::CancellationToken::create();
-        runtime.sectorRequests[coord] = PendingSectorRequest{slot, cancellation, prefetchReservation};
-        runtime.prefetchBytesInFlight += prefetchReservation;
+        runtime.sectorRequests[coord] =
+            PendingSectorRequest{slot, cancellation, holdsPrefetchReservation};
 
         resource::LoadRequest request;
         request.guid = sectorLoadGuid(gridIndex, coord);
@@ -931,7 +1287,10 @@ namespace services
         if (it == runtime.sectorRequests.end())
             return;
 
-        runtime.prefetchBytesInFlight -= it->second.prefetchReservation;
+        // VK-1600: the caller (pollAsyncSectorLoads) decides what happens to the pool entry -
+        // a landed prefetch keeps it and resizes to the real byte count, a failed one drops it -
+        // so releasing the REQUEST must not touch the reservation. Only the paths that abandon
+        // the read outright (below) hand it back here.
         runtime.sectorRequests.erase(it);
     }
 
@@ -950,7 +1309,12 @@ namespace services
             {
                 slot->fulfil(AsyncSectorLoadResult{}); // abandoned by default
             }
-            runtime.prefetchBytesInFlight -= it->second.prefetchReservation;
+            // VK-1600: the read is gone, so its pinned reservation must go with it or those
+            // bytes are occupied for the lifetime of the world. Safe to call unconditionally:
+            // remove() on an absent key is a no-op, and a blob that already landed is dropped by
+            // dropPrefetchedBlob on the same rail.
+            if (it->second.holdsPrefetchReservation)
+                prefetchPool.remove(world::sectorRegistrationId(gridIndex, coord));
             runtime.sectorRequests.erase(it);
         }
 
@@ -979,10 +1343,15 @@ namespace services
                 }
             }
             grid->sectorRequests.clear();
-            grid->prefetchBytesInFlight = 0;
 
             grid->pendingAsyncLoads.drain();
         }
+
+        // VK-1600: every in-flight reservation just died with its request.
+        // clearStreamingResidency - which every caller of this also calls - wipes the pool
+        // wholesale, but it is not guaranteed to run AFTER us, so drop the reservations here
+        // rather than rely on call order.
+        prefetchPool.clear();
     }
 
     void WorldSectorServiceImpl::submitHlodLoad(const world::HLODCellCoord& cell,
@@ -1045,6 +1414,12 @@ namespace services
 
     void WorldSectorServiceImpl::releaseHLODProxy(const world::HLODCellCoord& cell)
     {
+        // VK-1600: the single destroy path, so the single place the budget comes back. Note it
+        // deliberately does NOT call hlodStreamer.forgetProxy - a streamer-driven unload has
+        // already dropped the claim, and re-dropping it is harmless but misleading. The
+        // budget-driven path adds that call itself, in executeHlodEvictions.
+        hlodProxyPool.remove(cell);
+
         // VK-1594: destroy the entities AND free the GPU geometry. Unlike a normal mesh there is
         // no .vfMesh to re-stream from, so MeshStreamManager pins in-memory meshes and the release
         // has to be explicit - the per-frame unrequestMesh sweep will never reclaim it.
@@ -1096,6 +1471,29 @@ namespace services
             const auto* tierConfig = findHLODTier(cell.tier);
             const std::string meshKey = tierConfig ? resolveHLODCellPath(cell, *tierConfig) : std::string{};
 
+            // VK-1600: charge the proxy against the HLOD budget BEFORE it reaches the GPU.
+            // Proxy geometry is a pinned in-memory mesh with no .vfMesh behind it, so the
+            // renderer's ordinary eviction sweep can never reclaim it - this pool is the only
+            // bound on a densely baked world. Bytes are the vertex + index payload; meshlets are
+            // deliberately not registered for proxies (VK-1594), so they cost nothing here.
+            const uint64_t proxyBytes =
+                result.data.vertices.size() * sizeof(resource::Vertex) +
+                result.data.indices.size() * sizeof(uint32_t);
+
+            hlodEvictionScratch.clear();
+            const auto admission = hlodProxyPool.admit(
+                cell, proxyBytes, streamingFrame, hlodPoolPriority(cell, frameStreamingSources),
+                hlodEvictionScratch);
+            executeHlodEvictions(hlodEvictionScratch);
+
+            if (admission == HlodProxyPool::Admission::Refused)
+            {
+                // Same shape as the !registered path below: release the streamer's claim so the
+                // cell is reconsidered once the camera makes it worth more than a resident one.
+                hlodStreamer.forgetProxy(cell);
+                return;
+            }
+
             bool registered = false;
             if (!meshKey.empty())
             {
@@ -1121,6 +1519,8 @@ namespace services
                 // No GPU-driven renderer (or a corrupt bake): spawning an entity whose
                 // MeshComponent resolves to nothing would just add an invisible, uncullable
                 // object, so drop the cell and let the streamer re-emit it later.
+                // VK-1600: nothing became resident, so hand the budget back too.
+                hlodProxyPool.remove(cell);
                 hlodStreamer.forgetProxy(cell);
                 return;
             }
@@ -1150,6 +1550,11 @@ namespace services
 
     void WorldSectorServiceImpl::dropPrefetchedBlob(uint8_t gridIndex, const world::SectorCoord& coord)
     {
+        // VK-1600: unconditional, and BEFORE the blob lookup. The pool entry outlives the blob
+        // in one direction (a reservation exists while the read is still in flight, with no blob
+        // yet), so an early return on "no blob" would strand it.
+        prefetchPool.remove(world::sectorRegistrationId(gridIndex, coord));
+
         auto& runtime = gridRuntime(gridIndex);
         auto it = runtime.prefetchedBlobs.find(coord);
         if (it == runtime.prefetchedBlobs.end())
@@ -1158,7 +1563,7 @@ namespace services
         runtime.prefetchedBlobs.erase(it);
     }
 
-    void WorldSectorServiceImpl::clearPrefetchedBlobs()
+    void WorldSectorServiceImpl::clearStreamingResidency()
     {
         // VK-1599: every grid, same argument as drainSectorLoads - blobs are keyed on a bare
         // SectorCoord within a grid, and this only runs when the world is changing underneath.
@@ -1167,6 +1572,18 @@ namespace services
             grid->prefetchedBlobs.clear();
             grid->prefetchedBytes = 0;
         }
+
+        // VK-1600: renamed from clearPrefetchedBlobs and widened to "nothing sector-shaped is
+        // resident any more". Every one of its six call sites force-resets sector state, so the
+        // loaded-sector pool is stale in exactly the same breath as the blob cache - keeping them
+        // in one function is what makes it impossible to reset one and forget the other. Both
+        // pools span every grid, so each is cleared once.
+        //
+        // The HLOD proxy pool is deliberately NOT here: proxies survive a play/edit mode change
+        // by design (see the drainSectorLoads comment on that branch), so it is cleared only
+        // where the proxies themselves are destroyed, in unloadWorld.
+        prefetchPool.clear();
+        loadedSectorPool.clear();
     }
 
     void WorldSectorServiceImpl::pollAsyncSectorLoads()
@@ -1188,6 +1605,16 @@ namespace services
                 releaseSectorRequest(gridIndex, coord);
 
                 auto* sector = runtime.manager.getSector(coord);
+
+                // VK-1600: every way out of this callback that does NOT end with resident bytes
+                // has to hand the pinned reservation back, or those bytes stay charged against
+                // the global budget forever. Collected here rather than repeated at each early
+                // return, which is exactly how the old two-counter accounting drifted.
+                const bool keepsReservation =
+                    sector != nullptr && !result.abandoned && result.success;
+                if (result.wasPrefetch && !keepsReservation)
+                    prefetchPool.remove(world::sectorRegistrationId(gridIndex, coord));
+
                 if (!sector)
                     return;
 
@@ -1216,11 +1643,27 @@ namespace services
                     // SectorDataLayerLoadedNotification is published - a prefetched sector has no
                     // entities and its data layers are not live yet. Both happen in
                     // finalizeSectorLoad, on activation.
-                    // Drop first so the running total can never drift: assigning over an existing
-                    // entry would silently leak its bytes out of the accounting.
-                    dropPrefetchedBlob(gridIndex, coord);
-                    runtime.prefetchedBytes += result.prefetchBytes.size();
+                    const uint64_t landedBytes = result.prefetchBytes.size();
+
+                    // Drop the BLOB only - not the pool entry, which is this read's reservation
+                    // and simply changes from an estimate to the real thing below. Dropping the
+                    // blob first keeps prefetchedBytes exact: assigning over an existing entry
+                    // would leak its bytes out of the running total.
+                    auto existing = runtime.prefetchedBlobs.find(coord);
+                    if (existing != runtime.prefetchedBlobs.end())
+                    {
+                        runtime.prefetchedBytes -= existing->second.size();
+                        runtime.prefetchedBlobs.erase(existing);
+                    }
+                    runtime.prefetchedBytes += landedBytes;
                     runtime.prefetchedBlobs[coord] = std::move(result.prefetchBytes);
+
+                    // VK-1600: the header size was only ever an estimate of the read; correct it
+                    // to what actually arrived, and unpin now that there is a payload eviction
+                    // could genuinely reclaim.
+                    const uint64_t poolKey = world::sectorRegistrationId(gridIndex, coord);
+                    prefetchPool.resize(poolKey, landedBytes);
+                    prefetchPool.setPinned(poolKey, false);
 
                     if (sector->state == world::SectorState::Loading)
                         promotedPrefetches.push_back(coord); // promoted while the read was in flight
@@ -1245,6 +1688,22 @@ namespace services
         auto* sector = gridRuntime(gridIndex).manager.getSector(coord);
         if (!sector)
             return;
+
+        // VK-1600: this sector is now resident whichever route it took - the streamer's gated
+        // path, or the ungated explicit loadSector(). put() rather than admit() because the
+        // decision is already made: an explicit load is not asking permission, it is stating a
+        // fact the count has to reflect, and it simply becomes a legal victim later if the
+        // budget is tight. Tracked even when the budget is unlimited so that switching the
+        // guardrail on mid-session starts from an honest count rather than zero.
+        //
+        // Still PINNED: the sector stays Loading until its entities have all been spawned
+        // (checked in update()), and tearing one down mid-spawn would publish a deactivation for
+        // notifications the activation has not finished sending. refreshStreamingPools unpins it
+        // once the state reaches Loaded, and re-pins if it is dirty or editor-held.
+        loadedSectorPool.put(world::sectorRegistrationId(gridIndex, coord), /*cost=*/1,
+                             streamingFrame,
+                             sectorPoolPriority(gridIndex, coord, frameStreamingSources),
+                             /*pinned=*/true);
 
         // Merge file layers under any in-memory ones: layers written at runtime
         // (e.g. fog-of-war) survive unload on the sector struct and are newer
@@ -1334,6 +1793,11 @@ namespace services
         // blob was already consumed by launchParseFromCachedBlob — but a promotion that failed
         // mid-flight can leave one behind, and a stale blob would resurrect old content.
         dropPrefetchedBlob(gridIndex, coord);
+        // VK-1600: it stops occupying a loaded-sector slot the moment the teardown starts, not
+        // when the last entity is destroyed - the streamer must be able to activate a nearer
+        // sector on the very next frame. Also the release side of a budget-driven eviction,
+        // which reaches this function through executeLoadedSectorEvictions.
+        loadedSectorPool.remove(world::sectorRegistrationId(gridIndex, coord));
 
         sector->state = world::SectorState::Unloading;
 

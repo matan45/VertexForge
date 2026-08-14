@@ -55,6 +55,12 @@ namespace windows
                                         ImDrawList* drawList, const ImVec2& gridMin, float cellPx);
         static void drawLegend();
 
+        // VK-1600: eviction-pool occupancy bars. WHOLE-WORLD figures, unlike everything above
+        // them in the panel, which is per displayed grid - the pools are shared across grids, so
+        // the rows are labelled to say so. Skipped entirely when every budget is unlimited, which
+        // is the default, so an unconfigured world's panel is unchanged.
+        static void drawPoolBars();
+
         // State -> fill colour. Mirrors the Sector Grid tab's table (WorldSectorWindow.cpp) so the
         // two views never disagree about what a colour means.
         static ImU32 cellColor(const ::events::world::StreamingOverlayCell& cell);

@@ -177,6 +177,16 @@ TEST_CASE("SectorStreamingConfig: default-constructed values") {
 
         CHECK(config.maxPrefetchBytes == 0); // 0 = unlimited
     }
+    SUBCASE("VK-1600: every eviction-pool budget defaults to unlimited") {
+        // All three pools inert by default is what makes VK-1600 a no-op on an existing world:
+        // a .vfworld that mentions none of these keys streams byte-for-byte as it did.
+        CHECK(config.maxPrefetchBytes == 0);
+        CHECK(config.maxHLODProxyBytes == 0);
+        CHECK(config.maxLoadedSectors == 0);
+        // The eviction hysteresis is a constant, not a config key - one sector, mirroring the
+        // band HLODStreamer already widens its tier annuli by.
+        CHECK(world::kEvictionHysteresisSectors == doctest::Approx(1.0f));
+    }
     SUBCASE("per-frame budgets are conservative") {
         CHECK(config.maxLoadsPerFrame == 1);
         CHECK(config.maxPrefetchesPerFrame == 1);

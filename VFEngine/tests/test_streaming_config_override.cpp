@@ -27,6 +27,8 @@ namespace
         config.maxTerrainLoadsPerFrame = 6;
         config.maxTerrainUnloadsPerFrame = 7;
         config.maxPrefetchBytes = 1234567;
+        config.maxHLODProxyBytes = 7654321; // VK-1600
+        config.maxLoadedSectors = 77;       // VK-1600
         config.lookaheadSeconds = 1.5f;
         config.viewBiasStrength = 2.0f;
         config.teleportThresholdSectors = 3.0f;
@@ -53,6 +55,8 @@ namespace
             && a.maxTerrainLoadsPerFrame == b.maxTerrainLoadsPerFrame
             && a.maxTerrainUnloadsPerFrame == b.maxTerrainUnloadsPerFrame
             && a.maxPrefetchBytes == b.maxPrefetchBytes
+            && a.maxHLODProxyBytes == b.maxHLODProxyBytes // VK-1600
+            && a.maxLoadedSectors == b.maxLoadedSectors   // VK-1600
             && a.lookaheadSeconds == b.lookaheadSeconds
             && a.viewBiasStrength == b.viewBiasStrength
             && a.teleportThresholdSectors == b.teleportThresholdSectors

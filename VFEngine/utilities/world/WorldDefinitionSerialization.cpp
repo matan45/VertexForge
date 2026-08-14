@@ -43,6 +43,10 @@ namespace world
             out["maxPrefetchesPerFrame"] = config.maxPrefetchesPerFrame;
             out["maxUnloadsPerFrame"] = config.maxUnloadsPerFrame;
             out["maxPrefetchBytes"] = config.maxPrefetchBytes;
+            // VK-1600: the other two eviction-pool budgets. Absent -> the struct's 0 =
+            // unlimited default, so a pre-VK-1600 .vfworld streams byte-for-byte as it did.
+            out["maxHLODProxyBytes"] = config.maxHLODProxyBytes;
+            out["maxLoadedSectors"] = config.maxLoadedSectors;
             // VK-1593: predictive streaming. Like prefetchRadius above, the 0 sentinels are
             // written VERBATIM - resolving teleportThresholdSectors or the burst budgets here
             // would bake in the value they happen to derive from today and stop them tracking a
@@ -78,6 +82,10 @@ namespace world
             out.maxPrefetchesPerFrame = in.value("maxPrefetchesPerFrame", defaults.maxPrefetchesPerFrame);
             out.maxUnloadsPerFrame = in.value("maxUnloadsPerFrame", defaults.maxUnloadsPerFrame);
             out.maxPrefetchBytes = in.value("maxPrefetchBytes", defaults.maxPrefetchBytes);
+            // VK-1600: absent -> 0 = unlimited -> every pool is inert, which is exactly the
+            // pre-VK-1600 behaviour.
+            out.maxHLODProxyBytes = in.value("maxHLODProxyBytes", defaults.maxHLODProxyBytes);
+            out.maxLoadedSectors = in.value("maxLoadedSectors", defaults.maxLoadedSectors);
             // VK-1593: absent -> the struct's "off" defaults -> no lookahead, no view bias,
             // no burst window. A pre-VK-1593 .vfworld therefore streams byte-for-byte as it
             // did, which is what the teleport guard being inert at those defaults buys us.

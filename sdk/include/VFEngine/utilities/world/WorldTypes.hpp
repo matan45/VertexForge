@@ -71,7 +71,10 @@ namespace world
     //
     // The int32 -> uint32 cast happens BEFORE the bias so an out-of-range coord wraps under
     // defined unsigned arithmetic instead of overflowing a signed int (UB).
-    [[nodiscard]] inline uint32_t sectorCoordToId(const SectorCoord& coord) noexcept
+    // VK-1600: constexpr so it pairs with sectorCoordFromRegistrationId below, whose round trip
+    // is static_asserted. Pure integer arithmetic either way - the qualifier adds nothing at
+    // runtime and every existing call site is unaffected.
+    [[nodiscard]] inline constexpr uint32_t sectorCoordToId(const SectorCoord& coord) noexcept
     {
         const uint32_t ux = (static_cast<uint32_t>(coord.x) + 0x8000u) & 0xFFFFu;
         const uint32_t uz = (static_cast<uint32_t>(coord.z) + 0x8000u) & 0xFFFFu;
@@ -100,10 +103,29 @@ namespace world
     // sectorCoordToId value exactly, so a single-grid world registers under the ids it always did.
     //
     // Runtime-only, like sectorCoordToId - nothing persists it (see the note above).
-    [[nodiscard]] inline uint64_t sectorRegistrationId(uint8_t gridIndex,
-                                                       const SectorCoord& coord) noexcept
+    [[nodiscard]] inline constexpr uint64_t sectorRegistrationId(uint8_t gridIndex,
+                                                                 const SectorCoord& coord) noexcept
     {
         return (static_cast<uint64_t>(gridIndex) << 32) | sectorCoordToId(coord);
+    }
+
+    // VK-1600: the exact inverses of the above. sectorCoordToId is a bit concatenation, not a
+    // hash, so it round-trips losslessly over [kMinSectorCoord, kMaxSectorCoord] - which
+    // isValidSectorCoord already guarantees for every sector the world can create. The eviction
+    // pools key on the registration id so one flat pool spans every grid; these are how an
+    // eviction decision gets turned back into the (grid, coord) the release paths take. A side
+    // map would have been a second thing to keep in step, which is the bug class VK-1600 exists
+    // to remove.
+    [[nodiscard]] inline constexpr uint8_t gridIndexFromRegistrationId(uint64_t id) noexcept
+    {
+        return static_cast<uint8_t>(id >> 32);
+    }
+
+    [[nodiscard]] inline constexpr SectorCoord sectorCoordFromRegistrationId(uint64_t id) noexcept
+    {
+        const uint32_t packed = static_cast<uint32_t>(id & 0xFFFFFFFFull);
+        return SectorCoord(static_cast<int32_t>((packed >> 16) & 0xFFFFu) - 0x8000,
+                           static_cast<int32_t>(packed & 0xFFFFu) - 0x8000);
     }
 
     // VK-1599: the single source of truth for a sector's on-disk name, replacing the two
@@ -221,9 +243,26 @@ namespace world
         int maxEntitiesPerFrame = 8;
         int maxTerrainLoadsPerFrame = 4;    // terrain tiles loaded per frame via sector activation
         int maxTerrainUnloadsPerFrame = 4;  // terrain tiles unloaded per frame via sector deactivation
-        // VK-1591: hard ceiling on resident prefetch blob bytes; 0 = unlimited. Refuses new
-        // prefetches at the cap - it does not evict. Interim guard until the eviction-pool story.
+        // VK-1591 / VK-1600: ceiling on resident prefetch blob bytes; 0 = unlimited.
+        // VK-1600 turned this from a pure admission cap into the capacity of a real eviction
+        // pool: at the cap a NEARER sector may now displace a farther resident blob, where
+        // before the nearer one was simply refused. It is also enforced GLOBALLY across grids
+        // now (the pool sums the per-grid values), not per grid.
         uint64_t maxPrefetchBytes = 0;
+
+        // VK-1600: ceiling on resident HLOD proxy geometry bytes (vertex + index payload of
+        // the .vfHLOD cells currently registered on the GPU); 0 = unlimited. Proxies are
+        // pinned in-memory meshes with no .vfMesh to re-stream from, so nothing else reclaims
+        // them - this budget is the only bound on a densely baked world.
+        uint64_t maxHLODProxyBytes = 0;
+
+        // VK-1600: ceiling on the number of ACTIVATED sectors held at once; 0 = unlimited.
+        // A count rather than bytes on purpose: the cost of a loaded sector is its spawned
+        // entities, and nothing measures those - the .vfsector file size would understate it
+        // by an unknown factor. Dirty sectors and the edit-mode selection are pinned, so the
+        // dirty-never-unload rule survives. A refused activation leaves a hole at the FAR
+        // edge of the load ring, never under the camera.
+        uint32_t maxLoadedSectors = 0;
 
         // ---- VK-1593: predictive / view-biased prioritization + camera-jump bursts ----
         // Every field below is OFF at its default, so a .vfworld written before VK-1593 (which
@@ -268,6 +307,14 @@ namespace world
     {
         return config.prefetchRadius > config.loadRadius ? config.prefetchRadius : config.loadRadius;
     }
+
+    // VK-1600: how much nearer a candidate must be, in sectors, before it may displace a
+    // resident entry from a streaming memory pool. Deliberately a constant rather than another
+    // .vfworld knob: the strict-improvement admission rule already excludes the evict/
+    // re-request livelock outright, and this margin only has to absorb sub-sector camera
+    // jitter at a pool boundary. One sector mirrors HLODStreamer, which widens its tier annulus
+    // by exactly one sector at both ends for the same reason.
+    inline constexpr float kEvictionHysteresisSectors = 1.0f;
 
     // VK-1593: two sectors of travel in a single frame is not travel. Small enough that a real
     // camera pan never trips it (at 60 Hz that is 120 sectors/second), large enough to absorb a

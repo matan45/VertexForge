@@ -36,7 +36,7 @@ namespace services
         // the scheduler has no worker behind it and would block the main thread forever.
         drainSectorLoads();
         drainHlodLoads();
-        clearPrefetchedBlobs();
+        clearStreamingResidency();
 
         // VK-1599: a world is created with exactly one grid. Extra grids are added afterwards from
         // the World Sectors window - the creation wizard stays a single-grid affair, which is also
@@ -279,7 +279,7 @@ namespace services
         // thread; drainHlodLoads applies the same cross-world argument to .vfHLOD proxy reads.
         drainSectorLoads();
         drainHlodLoads();
-        clearPrefetchedBlobs();
+        clearStreamingResidency();
 
         worldDefinition = newDef;
         // VK-1599: one runtime per grid the file declares, each configured from its own block.
@@ -444,6 +444,14 @@ namespace services
         worldDefinition.grids.erase(worldDefinition.grids.begin() + gridIndex);
         perGridActions.resize(grids.size());
 
+        // VK-1600: every GridRuntime's own maps are keyed on a bare SectorCoord and travel with
+        // the runtime, so the erase above leaves them correct. The eviction pools do NOT: they
+        // are world-level and bake the grid index into their key (sectorRegistrationId). Every
+        // entry above the removed grid now names a grid one too high - it would release the
+        // wrong sector, and once the index passes gridCount() it would simply sit there holding
+        // budget nothing can reclaim. Re-key them to match the shift.
+        rekeySectorPoolsAfterGridRemoval(gridIndex);
+
         // Every entity on a HIGHER grid has just had its index shifted down by one. Their
         // components still name the old index, so re-resolve them all rather than letting
         // clampGridIndex quietly fold the last grid's entities onto the primary one.
@@ -476,7 +484,7 @@ namespace services
         // Drain all pending async sector and HLOD loads before clearing
         drainSectorLoads(); // VK-1592: cancels undispatched scheduler requests first
         drainHlodLoads();
-        clearPrefetchedBlobs(); // VK-1591
+        clearStreamingResidency(); // VK-1591
 
         entityLoader.clear();
         // VK-1590: otherwise the ledger keeps entries keyed on the previous world's UUIDs.
@@ -521,6 +529,12 @@ namespace services
             }
         }
         hlodStreamer.clear();
+        // VK-1600: unloadAll above destroyed every proxy without going through
+        // releaseHLODProxy, so this is the one place the HLOD budget has to be handed back in
+        // bulk. Deliberately not in clearStreamingResidency - proxies survive a play/edit mode
+        // change by design, and clearing the pool there would let the world hold twice its
+        // budget in proxies nothing is accounting for.
+        hlodProxyPool.clear();
         hlodRegenQueue.clear();
 
         worldDefinition = {};
