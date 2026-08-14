@@ -266,11 +266,12 @@ namespace windows
 
     void WorldSectorWindow::drawGridSelector()
     {
-        auto& dispatcher = events::EventDispatcher::instance();
-        cachedGrids = dispatcher.query(events::world::GetWorldGridsQuery{});
-
+        // cachedGrids is refilled by refreshStats on the window's existing 0.25s timer, NOT here:
+        // GetWorldGridsQuery walks every sector of every grid to produce its counts, and paying
+        // that per frame just to label a combo would make the cost scale with world size. The
+        // add/remove paths refresh it immediately so the list is never visibly stale.
         if (cachedGrids.empty())
-            return; // no world open; the caller only draws this in world mode, but be defensive
+            return; // no world open, or the first refresh has not landed yet
 
         // Clamp every frame rather than only on change: Remove Grid and a world reload can both
         // shrink the list under a selection the user made a moment ago.
@@ -385,6 +386,9 @@ namespace windows
                     gridActionMessage = "Grid removed.";
                     activeGrid = 0;
                     onActiveGridChanged();
+                    // Re-query now rather than waiting for the 0.25s timer: the table below is
+                    // drawn from cachedGrids and would otherwise still list the removed grid.
+                    cachedGrids = dispatcher.query(events::world::GetWorldGridsQuery{});
                 }
             }
         }
@@ -420,6 +424,7 @@ namespace windows
                 gridActionMessage = "Added grid '" + std::string(newGridName) + "'.";
                 activeGrid = added;
                 onActiveGridChanged();
+                cachedGrids = dispatcher.query(events::world::GetWorldGridsQuery{});
             }
             else
             {
@@ -1092,8 +1097,15 @@ namespace windows
         {
             totalSectors = loadedSectors = unloadedSectors = loadingSectors = 0;
             cachedGrid.clear();
+            cachedGrids.clear(); // VK-1599: no world, no grids to pick between
             return;
         }
+
+        // VK-1599: refreshed here rather than in drawGridSelector - the query walks every sector of
+        // every grid, so it belongs on this timer with the rest of the per-sector polling.
+        cachedGrids = dispatcher.query(events::world::GetWorldGridsQuery{});
+        if (activeGrid >= cachedGrids.size())
+            activeGrid = 0;
 
         events::world::GetSectorConfigQuery sectorConfigQuery;
         sectorConfigQuery.gridIndex = activeGrid;
