@@ -121,13 +121,24 @@ namespace animation
             (attachment.parentEntityName.empty() && attachment.parentEntityUUID == 0))
             return;
 
-        // VK-1590: resolve into a local and commit only at the end. The old code nulled
-        // parentEntity BEFORE searching, so a re-arm (RuntimeAnimatorSystemInit sets the flag
-        // on every play/edit transition) that raced an unloaded parent DESTROYED a working
-        // link. The flag is still consumed unconditionally: retrying every frame for a
-        // permanently-absent parent would be an O(attachments x entities) name scan per frame.
-        // Re-arming is event-driven instead — the world-sector service writes the handle
-        // directly via SectorRefFieldRegistry::applyReference when the target sector loads.
+        // VK-1590: a re-arm (RuntimeAnimatorSystemInit sets the flag on EVERY play/edit
+        // transition) that races an unloaded parent must not destroy a working link.
+        //
+        // Resolving into a local and committing at the end does NOT achieve that on its own -
+        // nothing between here and the commit reads parentEntity, so deferring the write is
+        // indistinguishable from nulling up front. What achieves it is keeping the handle we
+        // already have when every lookup misses, which is what `previous` is for. It is
+        // deliberately not seeded into `found`: all three lookups below are gated on
+        // `found == entt::null` and must still run, so that a parent that MOVED is re-resolved.
+        //
+        // The flag is still consumed unconditionally: retrying every frame for a permanently
+        // absent parent would be an O(attachments x entities) name scan per frame. Re-arming is
+        // event-driven instead - the world-sector service writes the handle directly via
+        // SectorRefFieldRegistry::applyReference when the target sector loads. NOTE that path
+        // covers UUID-carrying attachments only (socketCollectAll skips parentEntityUUID == 0),
+        // so a name-only attachment whose parent is absent stays unresolved until the next
+        // play/edit toggle or scene reload.
+        const entt::entity previous = attachment.parentEntity;
         entt::entity found = entt::null;
 
         // 1. Exact UUID. O(1), and immune to duplicate names.
@@ -195,7 +206,14 @@ namespace animation
         attachment.needsParentResolution = false;
         attachment.cachedSocketIndex = -1;
         attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
-        attachment.parentEntity = found; // entt::null on failure; the service re-arms on load
+
+        // A miss keeps the handle we already had, provided it is still a live entity: "I could not
+        // find the parent right now" is not the same statement as "this attachment has no parent",
+        // and only the second one justifies tearing the link down.
+        const bool previousStillLive = previous != entt::null && registry.valid(previous);
+        attachment.parentEntity = found != entt::null ? found
+                                  : previousStillLive ? previous
+                                                      : entt::null;
 
         // VK-1590: self-heal content authored before parentEntityUUID existed. Only on an
         // UNAMBIGUOUS resolve, so a first-match guess is never made permanent.
