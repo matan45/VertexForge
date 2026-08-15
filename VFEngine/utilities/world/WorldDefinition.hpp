@@ -45,6 +45,9 @@ namespace world
         // recorded here, but a world saved before VK-1594 has no "hlodCells" key at all - the
         // streamer then falls back to the tier-0 filename convention on WorldSector::hlodFilePath,
         // so old worlds keep resolving without a format bump.
+        // Paths are PROJECT-RELATIVE, exactly like GridDefinition::sectorFilePaths: this map is
+        // serialized into the .vfworld, so an absolute path here would only resolve on the machine
+        // that baked it. Resolve before doing IO (WorldSectorServiceImpl::resolveHLODCellPath).
         std::unordered_map<HLODCellCoord, std::string, HLODCellCoordHash> hlodCells;
 
         // ---- VK-1599 grid access ----

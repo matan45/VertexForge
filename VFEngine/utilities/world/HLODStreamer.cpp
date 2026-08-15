@@ -4,6 +4,28 @@
 
 namespace world
 {
+    namespace
+    {
+        // Which sources may pull VISIBLE proxy geometry.
+        //
+        // An HLOD proxy is rendered geometry, so only a source that actually wants entities counts.
+        // SectorStreamer expresses the same rule as a CAP - it clamps each request down to the
+        // source's targetState (`if (want > eval.targetState) want = eval.targetState`) - but a
+        // proxy has nothing to clamp to: it is either drawn or it is not. So here it is a filter.
+        //
+        //   * Unloaded   - the source wants nothing. SectorStreamer::buildSourceEvals and
+        //                  WorldSectorServiceImpl::poolPriorityAt both already skip these; this was
+        //                  the one place that did not.
+        //   * Prefetched - "bytes resident in memory, NO entities spawn", the documented contract
+        //                  of registerWorldSourceEx targetState 1. Building a proxy ring around a
+        //                  minimap hover pops terrain-scale geometry into view at a place the
+        //                  player has never been - the exact opposite of what the caller asked for.
+        [[nodiscard]] bool sourceWantsVisibleGeometry(const StreamingSource& source) noexcept
+        {
+            return source.targetState == SectorTargetState::Activated;
+        }
+    }
+
     void HLODStreamer::setConfig(const SectorStreamingConfig& streamCfg, const HLODConfig& hlodCfg)
     {
         streamConfig = streamCfg;
@@ -107,6 +129,9 @@ namespace world
 
             for (const auto& source : sources)
             {
+                if (!sourceWantsVisibleGeometry(source))
+                    continue;
+
                 float radius = tier.displayRadius * source.radiusMultiplier;
                 int32_t scanRange = static_cast<int32_t>(std::ceil(radius / static_cast<float>(cs))) + 1;
 
@@ -159,6 +184,12 @@ namespace world
                     bool keptByAnySource = false;
                     for (const auto& source : sources)
                     {
+                        // Same filter as the want pass: a source that cannot ask for a proxy
+                        // cannot keep one alive either, or a prefetch-only source would pin
+                        // geometry it was never allowed to request.
+                        if (!sourceWantsVisibleGeometry(source))
+                            continue;
+
                         float distSq = cellDistanceSq(loaded, cs, source.position, sectorSize);
                         if (distSq >= innerHysteresisSq && distSq <= outerHysteresisSq)
                         {

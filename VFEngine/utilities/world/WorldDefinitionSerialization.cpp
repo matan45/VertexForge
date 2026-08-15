@@ -28,6 +28,10 @@ namespace world
             out.sectorWorldSize = in.value("sectorWorldSize", defaults.sectorWorldSize);
             out.tilesPerSector = in.value("tilesPerSector", defaults.tilesPerSector);
             out.alignedToTerrain = in.value("alignedToTerrain", defaults.alignedToTerrain);
+
+            // The .vfworld is untrusted input: it can be hand-edited, produced by an older tool, or
+            // written by a plugin. Clamp before anything divides by sectorWorldSize.
+            sanitizeSectorConfig(out);
         }
 
         json writeStreamingConfig(const SectorStreamingConfig& config)
@@ -103,6 +107,14 @@ namespace world
             out.hlodTier0Radius = in.value("hlodTier0Radius", defaults.hlodTier0Radius);
             out.hlodTier1Radius = in.value("hlodTier1Radius", defaults.hlodTier1Radius);
             out.hlodTier2Radius = in.value("hlodTier2Radius", defaults.hlodTier2Radius);
+
+            // Every read above is a bare in.value with no validation, and normalizeStreamingConfig
+            // only enforces ring coherence. Clamp here, at the one place untrusted bytes become a
+            // config: a negative per-frame budget reaches std::vector::reserve as a near-SIZE_MAX
+            // count, and a negative or NaN radius stalls streaming outright.
+            // Deliberately NOT normalizeStreamingConfig - that would resolve the prefetchRadius
+            // sentinel, which writeStreamingConfig above goes out of its way to round-trip.
+            sanitizeStreamingConfig(out);
         }
 
         json writeSectorPaths(const GridDefinition& grid)

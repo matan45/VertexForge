@@ -804,10 +804,34 @@ namespace services
                     return false;
 
                 auto& definition = worldDefinition.grid(cmd.gridIndex);
+
+                // Renaming is always free. Re-bucketing is not: changing sectorWorldSize on a grid
+                // that already owns .vfsector files orphans every one of them - the paths in
+                // sectorFilePaths keep naming coords from the old partition while live entities
+                // re-bucket against the new size, and the next Save World writes a mixed set.
+                // ApplyRepartitionCommand (VK-1598) is the only safe way to make that change; it
+                // migrates the files cold, file-to-file, behind repartitionRefusal's guards.
+                // This command's own doc comment delegated the gating to "the editor", but no
+                // editor call site exists - so the guard has to live here.
+                world::SectorConfig requested = cmd.sectorConfig;
+                world::sanitizeSectorConfig(requested);
+
+                const bool sizeChanged =
+                    std::abs(requested.sectorWorldSize - definition.sectorConfig.sectorWorldSize) >= 0.001f ||
+                    requested.tilesPerSector != definition.sectorConfig.tilesPerSector;
+
+                if (sizeChanged && !definition.sectorFilePaths.empty())
+                {
+                    vfLogError("SetWorldGridCommand: grid {} already owns {} sector file(s); "
+                               "changing its cell size needs ApplyRepartitionCommand.",
+                               static_cast<int>(cmd.gridIndex), definition.sectorFilePaths.size());
+                    return false;
+                }
+
                 if (!cmd.name.empty())
                     definition.name = cmd.name;
 
-                definition.sectorConfig = cmd.sectorConfig;
+                definition.sectorConfig = requested;
                 // The manager owns the live copy; the streamer reads the size through it, so this
                 // is the only push needed.
                 gridRuntime(cmd.gridIndex).manager.setConfig(definition.sectorConfig);
@@ -895,14 +919,21 @@ namespace services
             {
                 // VK-1599: aggregated across every grid. The prefetch ring is a memory readout
                 // and memory is a whole-process resource, so a per-grid figure would understate
-                // what the world is actually holding. byteCap sums the per-grid caps for the same
-                // reason - each grid enforces its own, so the honest ceiling is their sum.
+                // what the world is actually holding.
+                //
+                // VK-1600 review: byteCap goes through aggregateGridBudget, NOT a plain sum. Since
+                // VK-1600 the cap is enforced by one shared pool whose capacity is exactly what
+                // aggregateGridBudget returns - and that function short-circuits to 0 (unlimited)
+                // the moment ANY grid declares 0, because a grid that opted out of a bound cannot
+                // be bounded by its neighbours' numbers. Summing here reported a finite ceiling
+                // that nothing was enforcing: the panel drew a bar filling toward "cap reached"
+                // while prefetchPoolCap, read from the pool three lines below, said unlimited.
                 ::events::world::SectorPrefetchStats stats;
+                stats.byteCap = aggregateGridBudget(&world::SectorStreamingConfig::maxPrefetchBytes);
                 for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
                 {
                     const auto& runtime = gridRuntime(gridIndex);
                     stats.bytes += runtime.prefetchedBytes;
-                    stats.byteCap += getEffectiveStreamingConfig(gridIndex).maxPrefetchBytes; // VK-1595
                     stats.burstFramesRemaining = std::max(
                         stats.burstFramesRemaining, runtime.streamer.getBurstFramesRemaining()); // VK-1593
                     runtime.manager.forEachSector([&stats](const world::WorldSector& sector)
@@ -1056,15 +1087,22 @@ namespace services
 
         // The PERSISTED config - this is the one Save World writes.
         // VK-1595: it no longer borrows the streamer as its validator, because with a session
-        // override installed the streamer is running something else entirely. It normalizes the
-        // value directly and then re-pushes whichever config is effective.
+        // override installed the streamer is running something else entirely.
+        //
+        // SANITIZE, never normalize. normalizeStreamingConfig RESOLVES the prefetchRadius == 0
+        // sentinel into a literal loadRadius, and this object is the one that gets serialized - so
+        // normalizing here wrote the resolved value into the .vfworld and permanently detached the
+        // prefetch ring from later loadRadius edits, which is exactly what writeStreamingConfig
+        // round-trips the sentinel verbatim to prevent. Dragging any unrelated slider was enough to
+        // trigger it. The streamer still normalizes its own copy in setConfig, so what actually
+        // runs is unchanged.
         dispatcher.registerCommandHandler<::events::world::SetStreamingConfigCommand>(
             [this](const ::events::world::SetStreamingConfigCommand& cmd)
             {
                 if (!worldMode) return;
                 auto& persisted = worldDefinition.grid(cmd.gridIndex).streamingConfig;
                 persisted = cmd.config;
-                world::normalizeStreamingConfig(persisted);
+                world::sanitizeStreamingConfig(persisted);
                 applyEffectiveStreamingConfig(); // an active override still wins
             });
 
@@ -1691,6 +1729,16 @@ namespace services
                 job.cell = plan.cell;
                 job.tierConfig = tier;
                 job.firstMemberCoord = plan.memberCoords.front();
+
+                // sectorFilePaths is the serialized inventory, so these are project-relative, but
+                // everything downstream does real IO: worker threads open each member sector, and
+                // drainCompleted renames the finished .vfHLOD into place. Resolve once here so no
+                // path downstream depends on the process CWD, which nothing ever sets. It also
+                // makes hlodOutputPathForCell's tier-0 branch (derived from the member path)
+                // absolute, matching the tier-1+ branch's absolute currentWorldPath.
+                for (auto& memberFile : plan.memberSectorFiles)
+                    memberFile = resolveProjectPath(memberFile);
+
                 job.outputPath = world::hlodOutputPathForCell(plan.cell, currentWorldPath,
                                                               plan.memberSectorFiles.front());
                 job.memberSectorFiles = std::move(plan.memberSectorFiles);
@@ -1720,8 +1768,12 @@ namespace services
     std::string WorldSectorServiceImpl::resolveHLODCellPath(
         const world::HLODCellCoord& cell, const world::HLODTierConfig& tierConfig) const
     {
+        // hlodCells is the serialized inventory, so it holds project-relative paths (the same rule
+        // sectorFilePaths follows). Every caller here does IO with the result, so resolve on the
+        // way out; resolveProjectPath is a no-op on an already-absolute path, which keeps worlds
+        // written before this rule working.
         if (auto it = worldDefinition.hlodCells.find(cell); it != worldDefinition.hlodCells.end())
-            return it->second;
+            return resolveProjectPath(it->second);
 
         // Fallback for worlds baked before the hlodCells inventory existed. Only tier 0 has a
         // filename convention that WorldSectorPersistenceOps can rediscover on load, so tiers 1+
@@ -1730,7 +1782,7 @@ namespace services
         {
             const world::SectorCoord origin = world::cellOriginSector(cell, tierConfig);
             if (const auto* sector = primaryRuntime().manager.getSector(origin))
-                return sector->hlodFilePath;
+                return resolveProjectPath(sector->hlodFilePath);
         }
 
         return {};
@@ -1759,6 +1811,12 @@ namespace services
                                        [&](const world::HLODCellPlan& p) { return p.cell == cell; });
         if (plan == plans.end() || plan->memberSectorFiles.empty())
             return false;
+
+        // Same resolve-before-IO rule as beginHLODBake: the planner hands back the .vfworld's
+        // project-relative sector paths, and both the generator's reads and HLODSerialization's
+        // bare ofstream below would otherwise resolve them against the process CWD.
+        for (auto& memberFile : plan->memberSectorFiles)
+            memberFile = resolveProjectPath(memberFile);
 
         const std::string outputPath = world::hlodOutputPathForCell(
             cell, currentWorldPath, plan->memberSectorFiles.front());
@@ -1789,10 +1847,16 @@ namespace services
     void WorldSectorServiceImpl::recordHLODBake(const world::HLODCellCoord& cell,
                                                 const std::string& outputPath)
     {
-        worldDefinition.hlodCells[cell] = outputPath;
+        // outputPath is absolute - the bake just wrote to it. Only the serialized copy is
+        // relativized, the same split saveWorld makes between sectorFilePaths and
+        // WorldSector::filePath, so a project that is moved, cloned to another machine or packed
+        // into a .vfpak still resolves its bakes. Storing it verbatim baked in this machine's
+        // drive letter for every tier-1+ cell.
+        worldDefinition.hlodCells[cell] = toProjectRelativePath(outputPath);
 
         // Tier 0 also keeps WorldSector::hlodFilePath current: it is what the load-time filename
-        // probe and IsHLODGeneratedQuery both read, and what old worlds fall back to.
+        // probe and IsHLODGeneratedQuery both read, and what old worlds fall back to. That one is
+        // runtime state and is never serialized, so it keeps the absolute form and keeps doing IO.
         if (cell.tier == 0)
         {
             const auto* tierConfig = findHLODTier(0);
@@ -1868,10 +1932,21 @@ namespace services
 
             if (!stalePath.empty())
             {
-                // Delete the stale bake so loadWorld's disk probe doesn't resurrect it
+                // Delete the stale bake so loadWorld's disk probe doesn't resurrect it.
+                // resolveHLODCellPath hands back an absolute path; a project-relative one would be
+                // removed relative to the process CWD, which is never the project root, so the
+                // removal would silently no-op and the stale bake would come back next session.
                 std::error_code ec;
                 std::filesystem::remove(stalePath, ec);
-                invalidatedAny = true;
+
+                // remove() reports false with no error when the file was already gone, which is
+                // still a successful invalidation. A real error is not - claiming one anyway is
+                // what made a failed delete indistinguishable from a successful one.
+                if (ec)
+                    vfLogWarning("HLOD invalidate: could not remove stale bake {}: {}",
+                                 stalePath, ec.message());
+                else
+                    invalidatedAny = true;
             }
 
             worldDefinition.hlodCells.erase(cell);

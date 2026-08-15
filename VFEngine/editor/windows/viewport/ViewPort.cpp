@@ -124,16 +124,10 @@ namespace windows
             // VK-1595: after overlay.draw so the streaming panel's own Begin/End nests the same
             // way, and before the gizmo so ImGuizmo still owns the top of the draw order.
             //
-            // VK-1599: G steps the panel through the world's grids. Handled here rather than with a
-            // widget inside the panel because the panel is ImGuiWindowFlags_NoInputs - see the flag
-            // comment in ViewPortStreamingOverlay::draw. Gated on viewport focus and on no text
-            // input having the keyboard, exactly like the other viewport shortcuts.
-            if (isFocused && !ImGui::GetIO().WantTextInput &&
-                ImGui::IsKeyPressed(ImGuiKey_G, /*repeat=*/false))
-            {
-                streamingOverlay.cycleGrid();
-            }
-            streamingOverlay.draw();
+            // VK-1599: the panel steps through the world's grids on a rebindable shortcut. Both the
+            // key handling and its gating now live inside draw(), past the panel's own visibility
+            // check - handling it out here meant a hidden panel still consumed the key.
+            streamingOverlay.draw(isFocused);
             gizmo.draw(*editorCamera);
             const bool attenuationViewportAvailable =
                 texture.isValid() && vs.x > 0.0f && vs.y > 0.0f;

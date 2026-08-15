@@ -2,6 +2,8 @@
 #include <world/WorldTypes.hpp>
 #include <world/SectorStreamer.hpp>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 
 // ============================================================
@@ -182,5 +184,145 @@ TEST_SUITE("StreamingConfigOverride")
 
             CHECK(sameConfig(streamer.getConfig(), expected));
         }
+    }
+
+    // ---- VK-1600 review: sanitizeStreamingConfig ----
+    //
+    // normalizeStreamingConfig enforces ring COHERENCE and assumes sane inputs. Nothing on the
+    // .vfworld read path guaranteed that, and the editor sliders - the only other bound - cover
+    // neither a hand-edited file, nor a plugin, nor a script SetStreamingConfigCommand.
+
+    TEST_CASE("sanitizeStreamingConfig PRESERVES every documented 0 sentinel")
+    {
+        // The whole point of sanitizing rather than normalizing at the persistence boundary.
+        world::SectorStreamingConfig config;
+        config.loadRadius = 6.0f;
+        config.prefetchRadius = 0.0f;          // "no prefetch ring"
+        config.teleportThresholdSectors = 0.0f; // "use kDefaultTeleportThresholdSectors"
+        config.maxLoadsPerFrameBurst = 0;       // "4x maxLoadsPerFrame"
+        config.maxEntitiesPerFrameBurst = 0;    // ditto
+        config.maxPrefetchBytes = 0;            // "unlimited"
+
+        world::sanitizeStreamingConfig(config);
+
+        CHECK(config.prefetchRadius == doctest::Approx(0.0f));
+        CHECK(config.teleportThresholdSectors == doctest::Approx(0.0f));
+        CHECK(config.maxLoadsPerFrameBurst == 0);
+        CHECK(config.maxEntitiesPerFrameBurst == 0);
+        CHECK(config.maxPrefetchBytes == 0);
+        CHECK(config.loadRadius == doctest::Approx(6.0f));
+    }
+
+    TEST_CASE("sanitizeStreamingConfig floors a negative per-frame budget at 0")
+    {
+        // The crash this exists to stop: SectorStreamer sums three std::min(int, budget) terms
+        // into reserve(), so ONE negative budget made the sum negative and reserve() sign-extended
+        // it into a near-SIZE_MAX request - std::length_error out of a main-thread-pinned frame
+        // task with no handler above it.
+        world::SectorStreamingConfig config;
+        config.maxLoadsPerFrame = -1;
+        config.maxPrefetchesPerFrame = -100;
+        config.maxUnloadsPerFrame = -1;
+        config.maxEntitiesPerFrame = -8;
+        config.burstFrames = -5;
+
+        world::sanitizeStreamingConfig(config);
+
+        CHECK(config.maxLoadsPerFrame == 0);
+        CHECK(config.maxPrefetchesPerFrame == 0);
+        CHECK(config.maxUnloadsPerFrame == 0);
+        CHECK(config.maxEntitiesPerFrame == 0);
+        CHECK(config.burstFrames == 0);
+
+        // effectiveBurstLoads multiplies maxLoadsPerFrame by 4; the clamp keeps that in range.
+        CHECK(world::effectiveBurstLoads(config) == 0);
+    }
+
+    TEST_CASE("sanitizeStreamingConfig caps an absurd per-frame budget")
+    {
+        world::SectorStreamingConfig config;
+        config.maxLoadsPerFrame = 1'000'000'000;
+
+        world::sanitizeStreamingConfig(config);
+
+        CHECK(config.maxLoadsPerFrame == world::kMaxPerFrameStreamingBudget);
+        // The product must still be a sane int rather than signed-overflow UB.
+        CHECK(world::effectiveBurstLoads(config) == world::kMaxPerFrameStreamingBudget * 4);
+    }
+
+    TEST_CASE("sanitizeStreamingConfig repairs a negative or NaN radius")
+    {
+        // A negative loadRadius is a SILENT TOTAL STALL, not a small ring: SectorStreamer's scan
+        // box inverts (minWorldX > maxWorldX) so nothing ever loads, while the unload test squares
+        // the radius back into a large positive so distSq <= unloadRadiusSq always holds and
+        // nothing ever unloads. normalizeStreamingConfig cannot catch it - and NaN slips through
+        // that function entirely, because every comparison against NaN is false.
+        const world::SectorStreamingConfig defaults;
+
+        world::SectorStreamingConfig negative;
+        negative.loadRadius = -100.0f;
+        negative.unloadRadius = -99.0f;
+        world::sanitizeStreamingConfig(negative);
+        CHECK(negative.loadRadius == doctest::Approx(defaults.loadRadius));
+        CHECK(negative.unloadRadius == doctest::Approx(defaults.unloadRadius));
+
+        world::SectorStreamingConfig nan;
+        nan.loadRadius = std::numeric_limits<float>::quiet_NaN();
+        nan.unloadRadius = std::numeric_limits<float>::quiet_NaN();
+        nan.prefetchRadius = std::numeric_limits<float>::quiet_NaN();
+        world::sanitizeStreamingConfig(nan);
+        CHECK(std::isfinite(nan.loadRadius));
+        CHECK(std::isfinite(nan.unloadRadius));
+        CHECK(nan.prefetchRadius == doctest::Approx(0.0f)); // folds TO the sentinel
+
+        // And the pair is still coherent once normalize runs on top, as the streamer will do.
+        world::normalizeStreamingConfig(nan);
+        CHECK(nan.unloadRadius > nan.prefetchRadius);
+    }
+
+    TEST_CASE("sanitizeStreamingConfig caps a runaway radius")
+    {
+        // SectorStreamer derives its scan box straight from the radius with no independent cap,
+        // so a huge radius is a per-frame runaway loop, not merely a large working set.
+        world::SectorStreamingConfig config;
+        config.loadRadius = 1e9f;
+        config.prefetchRadius = 1e9f;
+
+        world::sanitizeStreamingConfig(config);
+
+        CHECK(config.loadRadius == doctest::Approx(world::kMaxStreamingRadiusSectors));
+        CHECK(config.prefetchRadius == doctest::Approx(world::kMaxStreamingRadiusSectors));
+    }
+
+    TEST_CASE("sanitizeStreamingConfig leaves a sane config untouched")
+    {
+        world::SectorStreamingConfig config = makeDistinctConfig();
+        const world::SectorStreamingConfig before = config;
+
+        world::sanitizeStreamingConfig(config);
+
+        CHECK(sameConfig(config, before));
+    }
+
+    TEST_CASE("sanitizeSectorConfig repairs a divisor that would produce inf coords")
+    {
+        const world::SectorConfig defaults;
+
+        world::SectorConfig zero;
+        zero.sectorWorldSize = 0.0f;
+        world::sanitizeSectorConfig(zero);
+        CHECK(zero.sectorWorldSize == doctest::Approx(defaults.sectorWorldSize));
+
+        world::SectorConfig negative;
+        negative.sectorWorldSize = -128.0f;
+        negative.tilesPerSector = 0;
+        world::sanitizeSectorConfig(negative);
+        CHECK(negative.sectorWorldSize == doctest::Approx(defaults.sectorWorldSize));
+        CHECK(negative.tilesPerSector == defaults.tilesPerSector);
+
+        world::SectorConfig nan;
+        nan.sectorWorldSize = std::numeric_limits<float>::quiet_NaN();
+        world::sanitizeSectorConfig(nan);
+        CHECK(std::isfinite(nan.sectorWorldSize));
     }
 }

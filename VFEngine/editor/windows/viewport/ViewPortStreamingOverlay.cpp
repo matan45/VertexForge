@@ -1,6 +1,7 @@
 #include "ViewPortStreamingOverlay.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/world/WorldSectorEvents.hpp"
+#include "events/editor/EditorKeybindingEvents.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -46,12 +47,44 @@ namespace windows
         }
     }
 
-    void ViewPortStreamingOverlay::draw()
+    bool ViewPortStreamingOverlay::isCycleGridPressed()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        if (!cycleGridActionRegistered)
+        {
+            events::editor::RegisterEditorActionCommand cmd;
+            cmd.actionName = "Viewport.CycleStreamingGrid";
+            cmd.category = "Viewport";
+            cmd.displayName = "Cycle Streaming Grid";
+            services::InputBinding binding;
+            binding.type = services::BindingType::Key;
+            binding.code = ImGuiKey_G;
+            cmd.defaultBindings = {binding};
+            dispatcher.execute(cmd);
+            cycleGridActionRegistered = true;
+        }
+
+        events::editor::IsEditorActionPressedQuery query;
+        query.actionName = "Viewport.CycleStreamingGrid";
+        return dispatcher.query(query);
+    }
+
+    void ViewPortStreamingOverlay::draw(bool viewportFocused)
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
         if (!dispatcher.query(events::world::GetStreamingOverlayVisibleQuery{}))
             return;
+
+        // VK-1599: the cycle-grid shortcut lives here, AFTER the visibility gate, rather than in
+        // ViewPort::draw where it started. It was gated on viewport focus alone, so it mutated
+        // displayedGrid - an unclamped uint8_t that can wrap - while the panel was hidden and no
+        // feedback of any kind was possible. Registered through the editor keybinding service so it
+        // can be rebound, listed and conflict-checked; a raw ImGui::IsKeyPressed is invisible to
+        // all three, and it also fired on Ctrl+G, which the binding's exact modifier match rejects.
+        if (viewportFocused && !ImGui::GetIO().WantTextInput && isCycleGridPressed())
+            displayedGrid = static_cast<uint8_t>(displayedGrid + 1);
 
         // Deliberately no play-mode early-out (unlike ViewPortOverlay): the ticket requires this to
         // work in play-in-editor, which is where streaming is most interesting.

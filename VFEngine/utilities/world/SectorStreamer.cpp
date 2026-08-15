@@ -447,10 +447,22 @@ namespace world
         streaming::FrameBudget prefetchBudget(config.maxPrefetchesPerFrame);
         streaming::FrameBudget unloadBudget(config.maxUnloadsPerFrame);
 
-        outActions.reserve(
-            std::min(static_cast<int>(unloadCandidates.size()), config.maxUnloadsPerFrame) +
-            std::min(static_cast<int>(activateCandidates.size()), activateLimit) +
-            std::min(static_cast<int>(prefetchCandidates.size()), config.maxPrefetchesPerFrame));
+        // Accumulate in size_t, and floor every term at 0. sanitizeStreamingConfig already clamps
+        // the budgets on the read path, but this is the expression that pays for a miss: a single
+        // negative term makes the int sum negative, and reserve() sign-extends it into a
+        // near-SIZE_MAX request that throws std::length_error - out of a main-thread-pinned frame
+        // task with no handler anywhere above it, which is a process kill, not a bad frame.
+        const auto budgetedCount = [](size_t candidates, int budget) noexcept -> size_t
+        {
+            if (budget <= 0)
+                return 0;
+            const size_t limit = static_cast<size_t>(budget);
+            return candidates < limit ? candidates : limit;
+        };
+
+        outActions.reserve(budgetedCount(unloadCandidates.size(), config.maxUnloadsPerFrame) +
+                           budgetedCount(activateCandidates.size(), activateLimit) +
+                           budgetedCount(prefetchCandidates.size(), config.maxPrefetchesPerFrame));
 
         for (const auto& candidate : unloadCandidates)
         {

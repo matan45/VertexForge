@@ -420,6 +420,87 @@ TEST_SUITE("StreamingPrimitives")
         CHECK(pool.residentCost() == 300);
     }
 
+    TEST_CASE("BudgetedEvictionPool: cost-0 admissions then resize leave it over budget")
+    {
+        // VK-1600 review. loadWorld discarded readSectorMetadata's return, so a .vfsector whose
+        // binary header would not parse (the JSON debug format, or a truncated file) kept
+        // estimatedMemory == 0 - and 0 is what handleSectorPrefetch charges to admit it. Every
+        // such sector was free, so admission refused nothing, and pollAsyncSectorLoads then
+        // resize()d each blob up to the bytes that actually landed.
+        //
+        // This pins the SHAPE of that failure: the pool is over budget with nothing refused. The
+        // fix is twofold - loadWorld now falls back to the file size, and refreshStreamingPools
+        // trims a prefetch pool that reports overBudget() rather than only on a capacity change.
+        Pool pool;
+        pool.setCapacity(250);
+        std::vector<int> evicted;
+
+        for (int key = 1; key <= 4; ++key)
+            REQUIRE(pool.admit(key, 0, 1, static_cast<float>(-key), evicted) == Pool::Admission::Admitted);
+
+        CHECK(evicted.empty());
+        CHECK(pool.residentCost() == 0);
+        CHECK_FALSE(pool.overBudget());
+
+        for (int key = 1; key <= 4; ++key)
+            REQUIRE(pool.resize(key, 100));
+
+        CHECK(pool.residentCost() == 400);
+        CHECK(pool.overBudget()); // the trigger the frame loop had no way to observe
+
+        // trim() (no candidate, so no strict-improvement filter) is what settles it.
+        pool.trim(evicted);
+        REQUIRE(evicted.size() == 2);
+        CHECK(evicted[0] == 4); // priority -4, worst
+        CHECK(evicted[1] == 3);
+        CHECK(pool.residentCost() == 200);
+        CHECK_FALSE(pool.overBudget());
+    }
+
+    TEST_CASE("BudgetedEvictionPool: put() may exceed the budget and only trim recovers it")
+    {
+        // put() states a fact rather than asking permission - it is how an explicitly requested
+        // load stays counted. It is therefore the other route to an over-budget pool, and the
+        // reason overBudget() has to be checked every frame rather than only when the capacity
+        // value changes.
+        Pool pool;
+        pool.setCapacity(100);
+        std::vector<int> evicted;
+
+        pool.put(1, 100, 1, -1.0f, /*pinned=*/false);
+        CHECK_FALSE(pool.overBudget());
+
+        pool.put(2, 100, 1, -2.0f, /*pinned=*/false);
+        CHECK(pool.residentCost() == 200);
+        CHECK(pool.overBudget());
+
+        // No capacity change anywhere - the pool is over budget purely from admissions it never
+        // got to vote on.
+        CHECK(pool.capacity() == 100);
+
+        pool.trim(evicted);
+        REQUIRE(evicted.size() == 1);
+        CHECK(evicted[0] == 2);
+        CHECK_FALSE(pool.overBudget());
+    }
+
+    TEST_CASE("BudgetedEvictionPool: an unlimited pool is never over budget")
+    {
+        // 0 = unlimited, and aggregateGridBudget returns 0 the moment any grid declares it. A
+        // trim-on-overBudget frame loop must not start evicting from such a pool.
+        Pool pool;
+        pool.setCapacity(0);
+        std::vector<int> evicted;
+
+        REQUIRE(pool.admit(1, 1'000'000, 1, 0.0f, evicted) == Pool::Admission::Admitted);
+        CHECK(pool.unlimited());
+        CHECK_FALSE(pool.overBudget());
+
+        pool.trim(evicted);
+        CHECK(evicted.empty());
+        CHECK(pool.contains(1));
+    }
+
     TEST_CASE("BudgetedEvictionPool refuses an entry larger than the whole pool")
     {
         Pool pool;

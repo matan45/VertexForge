@@ -477,10 +477,20 @@ namespace services
             const fs::path finalPath = sectorsDir / world::sectorFileName(gridIndex, target.coord);
             newDefinition.grid(gridIndex).sectorFilePaths[target.coord] = toProjectRelativePath(finalPath.string());
         }
-        // Every bake was built from the OLD partition, so all tiers are stale by definition. The
-        // files themselves go into the backup below, which is why invalidateHLODForSector is not
-        // called here - it keys on coords that are about to stop existing.
-        newDefinition.hlodCells.clear();
+        // VK-1599: HLOD is bound to the PRIMARY grid alone - hlodConfig and hlodCells live on
+        // WorldDefinition rather than GridDefinition, and HLODCellCoord carries no grid index. So
+        // only a repartition of the primary grid invalidates anything: repartitioning a clutter
+        // grid leaves every bake describing exactly the ground it always did, and wiping them
+        // would destroy a valid bake (and, below, move its .vfHLOD files into the backup) over a
+        // change that never touched the primary grid's sectors.
+        const bool repartitioningPrimaryGrid = (gridIndex == world::kPrimaryGridIndex);
+        if (repartitioningPrimaryGrid)
+        {
+            // Every bake was built from the OLD partition, so all tiers are stale by definition.
+            // The files themselves go into the backup below, which is why invalidateHLODForSector
+            // is not called here - it keys on coords that are about to stop existing.
+            newDefinition.hlodCells.clear();
+        }
 
         if (!world::WorldDefinitionSerialization::save(newDefinition, tmpWorldPath.string()))
         {
@@ -505,11 +515,17 @@ namespace services
             vfLogWarning("[Repartition] Could not write '{}': {}", bakWorldPath.string(), ec.message());
 
         // VK-1599: only the grid being repartitioned gives up its files - the other grids' sectors
-        // stay exactly where they are, so the outgoing set is this grid's inventory alone. HLOD is
-        // invalidated wholesale either way: its cells are keyed on primary-grid coords that a
-        // repartition of the primary grid stops meaning anything.
+        // stay exactly where they are, so the outgoing set is this grid's inventory alone. The bake
+        // inventory follows the same rule: its cells are keyed on primary-grid coords, so only a
+        // repartition of the primary grid stops them meaning anything. Hand over an empty set for
+        // any other grid, or a clutter-grid resize would carry the primary grid's .vfHLOD files
+        // off into sectors.bak while leaving its .vfsector files exactly where they were.
+        static const std::unordered_map<world::HLODCellCoord, std::string,
+                                        world::HLODCellCoordHash> kNoHLODCells;
         if (!moveWorldFilesToBackup(worldDefinition.grid(gridIndex).sectorFilePaths,
-                                    worldDefinition.hlodCells, backupDir))
+                                    repartitioningPrimaryGrid ? worldDefinition.hlodCells
+                                                              : kNoHLODCells,
+                                    backupDir))
         {
             // moveWorldFilesToBackup rolled itself back, so the live world is intact.
             vfLogError("[Repartition] Could not back up the outgoing sector set - aborting.");

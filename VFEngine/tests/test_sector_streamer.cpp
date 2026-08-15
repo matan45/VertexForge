@@ -80,6 +80,65 @@ namespace
 
 TEST_SUITE("SectorStreamer")
 {
+    // ---- VK-1600 review: hostile config must not take the process down ----
+
+    TEST_CASE("a negative per-frame budget does not throw out of update")
+    {
+        // outActions.reserve() was handed the sum of three std::min(int, budget) terms. One
+        // negative budget made that int sum negative, and reserve() sign-extended it into a
+        // near-SIZE_MAX request -> std::length_error, thrown out of SectorStreamer::update inside
+        // the main-thread-pinned WorldSector frame task, where nothing catches it. Process kill.
+        //
+        // sanitizeStreamingConfig clamps this on the .vfworld read path now, but the streamer must
+        // survive the value regardless - setConfig is reachable from a plugin directly.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+
+        world::SectorStreamer streamer;
+        streamer.setEnabled(true);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.unloadRadius = 3.0f;
+        config.maxLoadsPerFrame = -1;
+        config.maxPrefetchesPerFrame = -100;
+        config.maxUnloadsPerFrame = -1;
+        streamer.setConfig(config);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        CHECK_NOTHROW(streamer.update(sources, manager, actions));
+
+        // FrameBudget already refuses a non-positive allowance, so the correct outcome is "no
+        // work this frame" rather than an exception or unbounded work.
+        CHECK(actions.empty());
+    }
+
+    TEST_CASE("an absurd per-frame budget does not throw out of update")
+    {
+        // The other end of the same expression: a huge budget must not turn into a huge reserve.
+        world::WorldSectorManager manager(makeSectorConfig());
+        populateGrid(manager, 3);
+
+        world::SectorStreamer streamer;
+        streamer.setEnabled(true);
+
+        world::SectorStreamingConfig config;
+        config.loadRadius = 2.0f;
+        config.unloadRadius = 3.0f;
+        config.maxLoadsPerFrame = std::numeric_limits<int>::max();
+        streamer.setConfig(config);
+
+        std::vector<world::StreamingSource> sources{sourceAtSectorCenter(0, 0)};
+        std::vector<world::SectorStreamingAction> actions;
+
+        // reserve() is now clamped to the candidate count, so the allocation is bounded by how
+        // much work actually exists rather than by the number someone typed into the config.
+        CHECK_NOTHROW(streamer.update(sources, manager, actions));
+        CHECK_FALSE(actions.empty());
+    }
+
     TEST_CASE("disabled streamer emits no actions")
     {
         world::WorldSectorManager manager(makeSectorConfig());

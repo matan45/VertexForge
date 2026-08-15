@@ -538,6 +538,33 @@ TEST_SUITE("SectorRepartition")
         CHECK(world::overlappingTargetSectors({0, 0}, makeConfig(100000.0f), makeConfig(1.0f)).empty());
     }
 
+    TEST_CASE("both refusals are reported when a shrink triggers both")
+    {
+        // VK-1600 review: the out-of-range refusal assigned OVER summary.refusal, discarding the
+        // data-layer fan-out message set earlier in the same pass. A drastic shrink trips both by
+        // construction, so the user followed "use a larger sector size", did that, and walked
+        // straight into a fan-out refusal they had never been shown. Neither ever produced a bad
+        // plan - valid is false either way - but the diagnostic was actively misleading.
+        std::vector<world::RepartitionSourceSector> sources;
+        auto source = sourceSector({0, 0},
+            {entityNode("FarOut", 1598090, {50'000.0f, 0.0f, 0.0f})});
+        source.dataLayers["fog"] = {1};
+        sources.push_back(std::move(source));
+
+        // At 100000 the entity is sector 0 (in range); at 1 it is sector 50000, past
+        // kMaxSectorCoord. The same shrink explodes the data-layer fan-out.
+        world::RepartitionPlan plan = world::planRepartition(sources, makeConfig(100000.0f),
+                                                             makeConfig(1.0f));
+
+        CHECK_FALSE(plan.summary.valid);
+        REQUIRE(plan.summary.outOfRangeEntities == 1);
+
+        // Out-of-range still leads - it is the one the user can act on most directly - but the
+        // fan-out message has to survive underneath it.
+        CHECK(plan.summary.refusal.find("addressable sector range") != std::string::npos);
+        CHECK(plan.summary.refusal.find("data-layer blob") != std::string::npos);
+    }
+
     // ---- the JSON-driven writer ------------------------------------------------------------
 
     TEST_CASE("saveSectorFromEntityData round-trips through loadSector")

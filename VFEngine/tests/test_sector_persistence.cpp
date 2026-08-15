@@ -413,6 +413,77 @@ TEST_SUITE("SectorPersistence")
         CHECK(loaded.primaryGrid().sectorFilePaths.at({1, -2}) == "sectors/sector_1_-2.vfsector");
     }
 
+    // ── VK-1600 review: the .vfworld read path is untrusted input ───────
+
+    TEST_CASE(".vfworld round-trips the prefetchRadius sentinel unresolved")
+    {
+        // 0 means "no prefetch ring". It has to survive save/load VERBATIM: resolving it to the
+        // current loadRadius bakes today's value in, so a later loadRadius edit silently stops
+        // widening the prefetch ring with it. The two call sites that used to normalize the
+        // PERSISTED config (SetStreamingConfigCommand, addGrid) sanitize instead for this reason.
+        resetTestRoot();
+
+        world::WorldDefinition definition;
+        definition.name = "Sentinel";
+        definition.primaryGrid().streamingConfig.loadRadius = 8.0f;
+        definition.primaryGrid().streamingConfig.prefetchRadius = 0.0f;
+
+        const std::string path = (testRoot() / "sentinel.vfworld").string();
+        REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+
+        CHECK(loaded.primaryGrid().streamingConfig.prefetchRadius == doctest::Approx(0.0f));
+        CHECK(loaded.primaryGrid().streamingConfig.loadRadius == doctest::Approx(8.0f));
+
+        // ...and the sentinel still reads as "same as loadRadius" rather than as a literal 0 ring.
+        CHECK(world::effectivePrefetchRadius(loaded.primaryGrid().streamingConfig)
+              == doctest::Approx(8.0f));
+    }
+
+    TEST_CASE(".vfworld loading clamps a hostile streaming config")
+    {
+        // A hand-edited, plugin-written or older-tool .vfworld can carry anything; readStreamingConfig
+        // is 30 bare in.value() calls. The clamp has to happen where the bytes become a config,
+        // because a negative per-frame budget reaches std::vector::reserve as a near-SIZE_MAX count
+        // and a negative radius stalls streaming outright.
+        resetTestRoot();
+        const std::string path = (testRoot() / "hostile.vfworld").string();
+
+        {
+            world::WorldDefinition definition;
+            definition.name = "Hostile";
+            REQUIRE(world::WorldDefinitionSerialization::save(definition, path));
+        }
+
+        // Rewrite the saved file with values no UI can produce.
+        nlohmann::json doc;
+        {
+            std::ifstream in(path);
+            REQUIRE(in.is_open());
+            in >> doc;
+        }
+        doc["streamingConfig"]["maxLoadsPerFrame"] = -1;
+        doc["streamingConfig"]["maxUnloadsPerFrame"] = -100;
+        doc["streamingConfig"]["loadRadius"] = -4.0f;
+        doc["sectorConfig"]["sectorWorldSize"] = 0.0f;
+        {
+            std::ofstream out(path);
+            REQUIRE(out.is_open());
+            out << doc.dump(2);
+        }
+
+        world::WorldDefinition loaded;
+        REQUIRE(world::WorldDefinitionSerialization::load(path, loaded));
+
+        const auto& streaming = loaded.primaryGrid().streamingConfig;
+        CHECK(streaming.maxLoadsPerFrame >= 0);
+        CHECK(streaming.maxUnloadsPerFrame >= 0);
+        CHECK(streaming.loadRadius > 0.0f);
+        CHECK(loaded.primaryGrid().sectorConfig.sectorWorldSize > 0.0f);
+    }
+
     // ── VK-1594: per-cell HLOD bake inventory ───────────────────────────
 
     TEST_CASE(".vfworld round-trips the hlodCells inventory across all tiers")

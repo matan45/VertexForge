@@ -58,6 +58,75 @@ namespace
 
 TEST_SUITE("HLODStreamer")
 {
+    // ---- VK-1600 review: targetState ----
+
+    TEST_CASE("a prefetch-only source pulls no proxy geometry")
+    {
+        // registerWorldSourceEx(..., targetState = 1) is documented as "the sector's bytes come
+        // into memory, NO entities spawn" - a minimap hover, a speculative pre-warm. An HLOD proxy
+        // is rendered geometry, so honouring that contract means emitting nothing for such a
+        // source. HLODStreamer never looked at targetState at all, so a prefetch-only source
+        // popped terrain-scale proxies into view where the player had never been.
+        world::WorldSectorManager manager(makeSectorConfig());
+        world::HLODStreamer streamer;
+        streamer.setConfig(makeStreamConfig(), singleTierConfig(1, 10.0f));
+
+        world::StreamingSource prefetchOnly = sourceAt(50.0f, 50.0f);
+        prefetchOnly.targetState = world::SectorTargetState::Prefetched;
+
+        std::vector<world::StreamingSource> sources{prefetchOnly};
+        std::vector<world::HLODStreamingAction> actions;
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+
+        CHECK(actions.empty());
+        CHECK(streamer.getLoadedProxies().empty());
+    }
+
+    TEST_CASE("a source that wants nothing pulls no proxy geometry")
+    {
+        // Parity with SectorStreamer::buildSourceEvals and WorldSectorServiceImpl::poolPriorityAt,
+        // which both already skipped Unloaded sources. This was the one place that did not.
+        world::WorldSectorManager manager(makeSectorConfig());
+        world::HLODStreamer streamer;
+        streamer.setConfig(makeStreamConfig(), singleTierConfig(1, 10.0f));
+
+        world::StreamingSource disabled = sourceAt(50.0f, 50.0f);
+        disabled.targetState = world::SectorTargetState::Unloaded;
+
+        std::vector<world::StreamingSource> sources{disabled};
+        std::vector<world::HLODStreamingAction> actions;
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+
+        CHECK(actions.empty());
+        CHECK(streamer.getLoadedProxies().empty());
+    }
+
+    TEST_CASE("a prefetch-only source cannot keep a proxy an activating source dropped")
+    {
+        // The keep pass needs the same filter as the want pass, or a prefetch-only source would
+        // pin geometry it was never allowed to request in the first place.
+        world::WorldSectorManager manager(makeSectorConfig());
+        world::HLODStreamer streamer;
+        streamer.setConfig(makeStreamConfig(), singleTierConfig(1, 10.0f));
+
+        // Frame 1: a normal source brings a ring of proxies in.
+        std::vector<world::StreamingSource> sources{sourceAt(50.0f, 50.0f)};
+        std::vector<world::HLODStreamingAction> actions;
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+        REQUIRE_FALSE(streamer.getLoadedProxies().empty());
+
+        // Frame 2: that source becomes prefetch-only and nothing else wants anything. Every proxy
+        // must be released - not held alive by the hysteresis band of a source that cannot see it.
+        sources[0].targetState = world::SectorTargetState::Prefetched;
+        actions.clear();
+        streamer.update(sources, manager, makeSectorConfig(), actions);
+
+        CHECK(streamer.getLoadedProxies().empty());
+        CHECK_FALSE(actions.empty());
+        CHECK(std::all_of(actions.begin(), actions.end(),
+                          [](const world::HLODStreamingAction& a) { return !a.isLoad; }));
+    }
+
     TEST_CASE("disabled HLOD config emits nothing")
     {
         world::WorldSectorManager manager(makeSectorConfig());

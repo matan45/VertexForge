@@ -13,6 +13,7 @@
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/AssetDatabase.hpp"
 #include "resource/VirtualFileSystem.hpp"
+#include "serialization/SerializationFileAccess.hpp"
 #include "../common/ProjectPaths.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
@@ -45,6 +46,10 @@ namespace services
         worldDefinition.name = name;
         worldDefinition.primaryGrid().sectorConfig = sectorConfig;
         worldDefinition.primaryGrid().streamingConfig = streamingConfig;
+        // Clamp, but deliberately do NOT normalize: the creation wizard passes prefetchRadius
+        // through as the 0 sentinel and that has to survive into the .vfworld.
+        world::sanitizeSectorConfig(worldDefinition.primaryGrid().sectorConfig);
+        world::sanitizeStreamingConfig(worldDefinition.primaryGrid().streamingConfig);
 
         // Rebuilds the runtime list from the definition above, clearing every manager on the way.
         rebuildGridRuntimes();
@@ -322,7 +327,23 @@ namespace services
             sector.state = world::SectorState::Unloaded;
 
             // Pre-cache metadata from binary header (44 bytes, fast)
-            world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
+            if (!world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata))
+            {
+                // No parseable binary header: a JSON-format .vfsector (the debug writer produces
+                // one), a truncated file, or one created after this scan. estimatedMemory then
+                // stays 0 - and 0 is exactly what the prefetch pool CHARGES for admitting the
+                // sector, so every such sector is free and maxPrefetchBytes stops bounding
+                // anything at all.
+                //
+                // The blob cache holds the RAW FILE, so its size on disk is the exact cost, not an
+                // estimate. Same locate() the header read above already tried, so this costs
+                // nothing extra and works for uncompressed archive entries too. A compressed entry
+                // has no physical location and keeps a 0 estimate; refreshStreamingPools' trim of
+                // an over-budget prefetch pool is what bounds that case.
+                sector.metadata = {};
+                if (const auto location = serialization::locateSerializationFile(sectorPath))
+                    sector.metadata.estimatedMemory = location->size;
+            }
 
             // Restore the HLOD bake if one exists (the path isn't stored in the world
             // definition; GenerateHLODCommand uses this naming convention).
@@ -397,7 +418,11 @@ namespace services
         definition.name = name.empty() ? "Grid" : name;
         definition.sectorConfig = sectorConfig;
         definition.streamingConfig = streamingConfig;
-        world::normalizeStreamingConfig(definition.streamingConfig);
+        // Sanitize, not normalize: this definition is serialized, and normalizing would resolve the
+        // prefetchRadius == 0 sentinel into a literal. It bit hardest here - the Add Grid UI has no
+        // prefetch field at all, so the incoming value is ALWAYS the default 0 and this line always
+        // baked it. createWorld, which never normalized, is the correct precedent.
+        world::sanitizeStreamingConfig(definition.streamingConfig);
         worldDefinition.grids.push_back(std::move(definition));
 
         // Appending a runtime rather than rebuilding: the other grids may have sectors resident and
@@ -455,13 +480,17 @@ namespace services
         // Every entity on a HIGHER grid has just had its index shifted down by one. Their
         // components still name the old index, so re-resolve them all rather than letting
         // clampGridIndex quietly fold the last grid's entities onto the primary one.
-        auto& root = sceneGraph->GetRoot();
-        for (auto& child : root.getChildren())
+        //
+        // A registry view, NOT a walk over the scene root's children: Entity::getChildren reads
+        // ChildrenComponent one level deep, so a nested entity - anything inside a prefab, or any
+        // entity not parented directly to the root - kept its stale index. Once that index passes
+        // gridCount() clampGridIndex folds it onto grid 0, and the next reconcileAlwaysLoadedEntities
+        // moves it out of its own sector into a primary-grid one with a different cell size.
+        // There is no recursive scene-graph helper to reuse, and the view is both complete and
+        // cheaper - it visits exactly the entities that carry the component.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto&& [entity, policy] : registry.view<components::StreamingPolicyComponent>().each())
         {
-            if (!child.hasComponent<components::StreamingPolicyComponent>())
-                continue;
-
-            auto& policy = child.getComponent<components::StreamingPolicyComponent>();
             if (policy.gridIndex > gridIndex)
                 --policy.gridIndex;
         }

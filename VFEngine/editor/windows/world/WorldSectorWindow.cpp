@@ -146,7 +146,9 @@ namespace windows
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Top-down sector state panel pinned in the viewport,\n"
                                       "with source markers and load/prefetch/unload rings.\n"
-                                      "Works in play-in-editor.");
+                                      "Works in play-in-editor.\n"
+                                      "With the viewport focused, G steps through the world's\n"
+                                      "grids (rebindable: Viewport > Cycle Streaming Grid).");
 
                 ImGui::Separator();
                 if (ImGui::Button("Save World"))

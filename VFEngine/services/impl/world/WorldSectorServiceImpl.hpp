@@ -561,6 +561,8 @@ namespace services
         // VK-1594: the cell's baked .vfHLOD. Prefers the per-cell hlodCells inventory; for tier 0
         // it falls back to WorldSector::hlodFilePath so worlds baked before hlodCells existed
         // still resolve. Empty when the cell has no bake.
+        // Always returns an ABSOLUTE path - hlodCells is serialized and therefore project-relative,
+        // and every caller opens or deletes the result.
         [[nodiscard]] std::string resolveHLODCellPath(const world::HLODCellCoord& cell,
                                                       const world::HLODTierConfig& tierConfig) const;
 

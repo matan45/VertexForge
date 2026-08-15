@@ -337,14 +337,22 @@ namespace world
         // sectorCoordToId packs 16 bits per axis, so an entity folded onto the boundary sector
         // would share that sector's GPU streaming slot with whatever legitimately lives there.
         // Fatal rather than a warning - the world would be quietly wrong, not merely large.
-        // Reported first because it is the one the user can act on most directly.
+        // Reported FIRST because it is the one the user can act on most directly - but PREPENDED,
+        // not assigned over: a drastic shrink trips this and the data-layer fan-out refusal above
+        // by construction, and overwriting left the user following "use a larger sector size"
+        // straight into a fan-out refusal they were never shown.
         if (plan.summary.outOfRangeEntities > 0)
         {
-            plan.summary.refusal =
+            std::string message =
                 std::to_string(plan.summary.outOfRangeEntities) +
                 " entity(ies) would fall outside the addressable sector range [" +
                 std::to_string(kMinSectorCoord) + ", " + std::to_string(kMaxSectorCoord) +
                 "] and be clamped onto a boundary sector. Use a larger sector size.";
+
+            if (!plan.summary.refusal.empty())
+                message += "\n\nAlso: " + plan.summary.refusal;
+
+            plan.summary.refusal = std::move(message);
         }
 
         plan.summary.valid = plan.summary.refusal.empty();

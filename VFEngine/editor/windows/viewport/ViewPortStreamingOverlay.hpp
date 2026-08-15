@@ -31,15 +31,20 @@ namespace windows
     class ViewPortStreamingOverlay
     {
     public:
-        void draw();
-
-        // VK-1599: step to the next grid. Driven from the ViewPort's key handling rather than from
-        // a widget in the panel, because the panel carries ImGuiWindowFlags_NoInputs and adding an
-        // interactive control to it would re-open the sculpt-brush hazard the flag comment above
-        // describes. Wraps; a single-grid world is a no-op because the service clamps it back.
-        void cycleGrid() { displayedGrid = static_cast<uint8_t>(displayedGrid + 1); }
+        // `viewportFocused` gates the cycle-grid shortcut, which is handled inside draw() so it
+        // can never run while the panel is hidden. The panel itself carries
+        // ImGuiWindowFlags_NoInputs, so the shortcut cannot be a widget - but a key check is
+        // global and does not have to live outside this class to work.
+        void draw(bool viewportFocused);
 
     private:
+        // Registers the rebindable "Viewport.CycleStreamingGrid" action on first use and reports
+        // whether it fired this frame. Lazy because the keybinding service is wired during editor
+        // bootstrap and EventDispatcher::execute throws when no handler is registered yet.
+        bool isCycleGridPressed();
+
+        bool cycleGridActionRegistered = false;
+
         // Which grid the panel is showing. Clamped every frame against what the service reports,
         // so a world reload or a removed grid can never strand it out of range.
         uint8_t displayedGrid = 0;

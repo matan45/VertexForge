@@ -163,6 +163,82 @@ namespace services
         float deltaTime = std::chrono::duration<float>(now - lastUpdateTime).count();
         lastUpdateTime = now;
 
+        // Build this frame's streaming sources BEFORE anything reads them.
+        //
+        // VK-1600: promoted from a per-frame local to a service member, because the eviction pools
+        // rank against these and two of the three admission sites (the HLOD poll callback, the
+        // prefetch submit) are nowhere near the streaming pass's scope.
+        //
+        // VK-1600 review: hoisted out of the streaming gate as well. They used to be rebuilt inside
+        // it, below pollAsyncSectorLoads - yet finalizeSectorLoad, reached only from that poll,
+        // ranks every sector it finalizes against them. So every finalize ranked against the
+        // PREVIOUS frame's camera, which after a teleport is the wrong side of the world, and on
+        // the first frame of a newly loaded world against the previous WORLD's sources. Building
+        // them here costs one vector fill on a frame that may not stream and removes the hazard.
+        frameStreamingSources.clear();
+        auto& sources = frameStreamingSources;
+        {
+            // Camera is always source[0]. The editor camera isn't an ECS entity - use the cached
+            // viewport position.
+            world::StreamingSource cameraSrc;
+            if (isPlayMode)
+            {
+                // VK-1593: only the play camera has a look direction to offer. The editor
+                // viewport reaches us through CameraPositionUpdatedNotification, which carries
+                // position only, so edit-mode streaming stays omni (viewDir zero).
+                const CameraPose pose = getPrimaryCameraPose();
+                cameraSrc.position = pose.position;
+                cameraSrc.viewDir = pose.forward;
+            }
+            else
+            {
+                cameraSrc.position = cachedCameraPos;
+            }
+            cameraSrc.radiusMultiplier = 1.0f;
+            cameraSrc.priority = 0;
+            cameraSrc.id = 0;
+            // VK-1595: the overlay centres on exactly this position, so the panel and the
+            // rings it draws can never disagree with the ring the streamer resolved.
+            lastStreamingOrigin = cameraSrc.position;
+            sources.push_back(cameraSrc);
+        }
+        // VK-1589: snapshot under the lock, then release it. streamer.update() below is the
+        // long call and takes nothing, so holding across it would serialise script
+        // registration against the whole streaming pass for no benefit.
+        {
+            std::lock_guard lock(streamingSourcesMutex);
+            sources.reserve(sources.size() + streamingSources.size());
+            for (const auto& [id, src] : streamingSources)
+                sources.push_back(src);
+        }
+
+        // VK-1593: derive per-source velocity before the streamer runs. Script sources get
+        // lookahead out of this for free - Streaming::updateWorldSource only ever pushes a
+        // position, and the delta is all the lookahead needs.
+        updateStreamingSourceVelocities(sources, deltaTime);
+
+        // Edit-mode rail: never auto-unload the sector holding the selected entity - panels
+        // and gizmos hold live references to it.
+        //
+        // VK-1599: the selection lives on exactly one grid, and the reseed below has to fire
+        // on THAT grid's streamer. Reseeding every grid would drop the ring state of grids
+        // that had nothing to do with the selection.
+        //
+        // VK-1600: resolved before refreshStreamingPools, which has to pin the same sector - a
+        // count guardrail that evicted the selection would defeat the unload veto further down.
+        resolveEditorHeldSector();
+
+        // VK-1600: re-rank, reconcile and re-pin every resident pool entry against THIS frame's
+        // sources, and pick up any capacity change, BEFORE anything below consults the pools for
+        // admission. Ranking a candidate against last frame's residents is what would let a pool
+        // evict the wrong entry.
+        //
+        // VK-1600 review: unconditional, NOT inside the streaming gate. This reconcile pass is the
+        // only thing anywhere that unpins a loaded-sector entry, so with the gate shut - edit mode
+        // without editModeStreaming - a sector finalized by the poll below stayed pinned and held
+        // its slot for the life of the world, and no pool could ever come back under budget.
+        refreshStreamingPools(sources);
+
         // Poll completed async sector loads (works in both edit and play mode)
         pollAsyncSectorLoads();
 
@@ -189,73 +265,10 @@ namespace services
 
         if (isPlayMode || anyEditModeStreaming)
         {
-            // Build streaming sources: camera is always source[0].
-            // The editor camera isn't an ECS entity — use the cached viewport position.
-            //
-            // VK-1600: promoted from a per-frame local to a service member. The eviction pools
-            // rank against these, and two of the three admission sites (the HLOD poll callback,
-            // the prefetch submit) are nowhere near this scope. Reusing the buffer also stops
-            // the streaming pass reallocating it every frame, matching perGridActions above.
-            frameStreamingSources.clear();
-            auto& sources = frameStreamingSources;
-            {
-                world::StreamingSource cameraSrc;
-                if (isPlayMode)
-                {
-                    // VK-1593: only the play camera has a look direction to offer. The editor
-                    // viewport reaches us through CameraPositionUpdatedNotification, which carries
-                    // position only, so edit-mode streaming stays omni (viewDir zero).
-                    const CameraPose pose = getPrimaryCameraPose();
-                    cameraSrc.position = pose.position;
-                    cameraSrc.viewDir = pose.forward;
-                }
-                else
-                {
-                    cameraSrc.position = cachedCameraPos;
-                }
-                cameraSrc.radiusMultiplier = 1.0f;
-                cameraSrc.priority = 0;
-                cameraSrc.id = 0;
-                // VK-1595: the overlay centres on exactly this position, so the panel and the
-                // rings it draws can never disagree with the ring the streamer resolved.
-                lastStreamingOrigin = cameraSrc.position;
-                sources.push_back(cameraSrc);
-            }
-            // VK-1589: snapshot under the lock, then release it. streamer.update() below is the
-            // long call and takes nothing, so holding across it would serialise script
-            // registration against the whole streaming pass for no benefit.
-            {
-                std::lock_guard lock(streamingSourcesMutex);
-                sources.reserve(sources.size() + streamingSources.size());
-                for (const auto& [id, src] : streamingSources)
-                    sources.push_back(src);
-            }
-
-            // VK-1593: derive per-source velocity before the streamer runs. Script sources get
-            // lookahead out of this for free - Streaming::updateWorldSource only ever pushes a
-            // position, and the delta is all the lookahead needs.
-            updateStreamingSourceVelocities(sources, deltaTime);
-
-            // Update resource load scheduler with current camera position for priority re-computation
+            // Update resource load scheduler with current camera position for priority
+            // re-computation. Deliberately still inside the gate: this re-prioritises every queued
+            // resource load process-wide, which a world that is not streaming has no business doing.
             resource::ResourceLoadScheduler::instance().update(sources[0].position);
-
-            // Edit-mode rail: never auto-unload the sector holding the selected entity - panels
-            // and gizmos hold live references to it.
-            //
-            // VK-1599: the selection lives on exactly one grid, and the reseed below has to fire
-            // on THAT grid's streamer. Reseeding every grid would drop the ring state of grids
-            // that had nothing to do with the selection.
-            //
-            // VK-1600: resolved HERE rather than just before the dispatch loop, because
-            // refreshStreamingPools has to pin the same sector - a count guardrail that evicted
-            // the selection would defeat the veto that already exists twenty lines below.
-            resolveEditorHeldSector();
-
-            // VK-1600: re-rank and re-pin every resident pool entry against THIS frame's
-            // sources, and pick up any capacity change, BEFORE the actions below consult the
-            // pools for admission. Ranking a candidate against last frame's residents is what
-            // would let a pool evict the wrong entry.
-            refreshStreamingPools(sources);
 
             // VK-1599: one streamer per grid, all fed the SAME source list. Reach is per grid
             // because each streamer carries its own radii; the sources describe where the player
@@ -924,6 +937,12 @@ namespace services
         {
             return source.radiusMultiplier > 0.001f ? source.radiusMultiplier : 1.0f;
         }
+
+        // "Nothing values this entry" - first out. Every real priority is -(distance / sectorSize),
+        // i.e. 0 for a sector directly under a source and strictly NEGATIVE everywhere else, so a
+        // flat 0.0f here would rank an unrankable entry ABOVE every properly ranked one and make it
+        // the LAST candidate for eviction. Mirrors BudgetedEvictionPool's NaN fold exactly.
+        inline constexpr float kWorstPoolPriority = -std::numeric_limits<float>::max();
     }
 
     float WorldSectorServiceImpl::sectorPoolPriority(
@@ -932,7 +951,7 @@ namespace services
     {
         const float sectorSize = gridRuntime(gridIndex).manager.getConfig().sectorWorldSize;
         if (!(sectorSize > 0.0f))
-            return 0.0f;
+            return kWorstPoolPriority;
 
         const glm::vec3 center = sectorCenterWorld(gridIndex, coord);
         return poolPriorityAt(center, sectorSize, sources);
@@ -942,13 +961,15 @@ namespace services
         const world::HLODCellCoord& cell,
         const std::vector<world::StreamingSource>& sources) const
     {
+        // A proxy whose tier config no longer exists cannot be ranked and cannot be re-emitted,
+        // so it is exactly what a shrink should take first.
         const auto* tier = findHLODTier(cell.tier);
         if (!tier)
-            return 0.0f;
+            return kWorstPoolPriority;
 
         const float sectorSize = primaryRuntime().manager.getConfig().sectorWorldSize;
         if (!(sectorSize > 0.0f))
-            return 0.0f;
+            return kWorstPoolPriority;
 
         return poolPriorityAt(hlodCellCenterWorld(cell, *tier), sectorSize, sources);
     }
@@ -957,8 +978,6 @@ namespace services
         const glm::vec3& center, float sectorSize,
         const std::vector<world::StreamingSource>& sources) const
     {
-        // No source wants anything, so nothing resident has any value - a flat 0 leaves the
-        // pools' relative order untouched rather than inventing one.
         float nearest = std::numeric_limits<float>::max();
         for (const auto& source : sources)
         {
@@ -973,8 +992,11 @@ namespace services
             nearest = std::min(nearest, dist);
         }
 
+        // No source wants anything, so nothing resident has any value to anyone. Worst, not 0:
+        // see kWorstPoolPriority - a flat 0 outranks every real priority instead of leaving the
+        // order untouched, which quietly made unrankable entries the last ones evicted.
         if (nearest == std::numeric_limits<float>::max())
-            return 0.0f;
+            return kWorstPoolPriority;
 
         // Negated so HIGHER = nearer = keep, matching PriorityHysteresis. Expressed in SECTORS
         // so kEvictionHysteresisSectors is directly comparable to it.
@@ -1075,8 +1097,18 @@ namespace services
             hlodProxyPool.touch(cell, streamingFrame, hlodPoolPriority(cell, sources));
 
         // Only on an actual capacity change: trimming every frame would instantly undo an
-        // explicit, user-requested load that pushed a pool over budget.
-        if (prefetchCapChanged)
+        // explicit, user-requested load that pushed a pool over budget. That argument holds for
+        // the HLOD and loaded-sector pools below, whose entries all correspond to something a user
+        // or a script asked for by name.
+        //
+        // VK-1600 review: it does NOT hold for the prefetch pool, which is a pure speculative byte
+        // cache - nothing in it was ever explicitly requested, so there is no user intent to undo.
+        // It also needs the extra trigger most: put() and resize() are both documented as "may
+        // leave the pool over budget; the next trim() settles it", and pollAsyncSectorLoads
+        // resize()s every blob to its landed size. With a capacity change as the only trigger, a
+        // pool pushed over by a resize (or by admissions costed at 0, which is what an unreadable
+        // sector header yields) had no way back under its cap at all.
+        if (prefetchCapChanged || prefetchPool.overBudget())
         {
             prefetchEvictionScratch.clear();
             prefetchPool.trim(prefetchEvictionScratch);
@@ -1584,6 +1616,12 @@ namespace services
         // where the proxies themselves are destroyed, in unloadWorld.
         prefetchPool.clear();
         loadedSectorPool.clear();
+
+        // VK-1600 review: the sources describe where the player was in the world that is going
+        // away. update() rebuilds them before anything reads them, so this is belt and braces -
+        // but leaving the previous world's camera in a member that four admission sites rank
+        // against is exactly the kind of thing that survives a later reordering.
+        frameStreamingSources.clear();
     }
 
     void WorldSectorServiceImpl::pollAsyncSectorLoads()
