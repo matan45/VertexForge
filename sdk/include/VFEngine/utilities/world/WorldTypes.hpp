@@ -247,7 +247,9 @@ namespace world
         // VK-1600 turned this from a pure admission cap into the capacity of a real eviction
         // pool: at the cap a NEARER sector may now displace a farther resident blob, where
         // before the nearer one was simply refused. It is also enforced GLOBALLY across grids
-        // now (the pool sums the per-grid values), not per grid.
+        // now, not per grid: the shared pool's capacity is the SUM of the per-grid values, except
+        // that any grid declaring 0 makes the whole pool unlimited - a grid that opted out of a
+        // bound cannot be bounded by its neighbours' numbers.
         uint64_t maxPrefetchBytes = 0;
 
         // VK-1600: ceiling on resident HLOD proxy geometry bytes (vertex + index payload of
@@ -359,6 +361,97 @@ namespace world
         // With prefetchRadius == loadRadius this reduces exactly to the old rule.
         if (config.unloadRadius <= config.prefetchRadius)
             config.unloadRadius = config.prefetchRadius + 1.0f;
+    }
+
+    // The outer bound on per-frame streaming work. Generous - the editor sliders stop at 16 -
+    // because this exists to keep a hand-edited or third-party .vfworld inside arithmetic that
+    // cannot overflow or throw, not to second-guess a deliberate tuning choice. effectiveBurstLoads
+    // multiplies by 4, so the product still fits an int with several orders of magnitude to spare.
+    inline constexpr int kMaxPerFrameStreamingBudget = 4096;
+
+    // The outer bound on any ring radius, in sectors. SectorStreamer's scan box is derived straight
+    // from the radius with no independent cap (SectorStreamer::update), so a huge radius is a
+    // per-frame runaway loop rather than merely a large working set.
+    inline constexpr float kMaxStreamingRadiusSectors = 256.0f;
+
+    // Absorb values a .vfworld can carry but the streamer cannot survive. normalizeStreamingConfig
+    // enforces ring COHERENCE only and assumes its inputs are already sane; nothing on the read
+    // path guaranteed that. The editor sliders are the other bound, and they cover neither a
+    // hand-edited .vfworld, nor a plugin, nor a script SetStreamingConfigCommand - a gap this file
+    // already acknowledges elsewhere for unloadRadius.
+    //
+    // Every documented 0 SENTINEL is preserved: prefetchRadius, teleportThresholdSectors and the
+    // two burst budgets all mean something specific at 0, so a bad value folds TO the sentinel
+    // rather than past it.
+    inline void sanitizeStreamingConfig(SectorStreamingConfig& config) noexcept
+    {
+        const SectorStreamingConfig defaults;
+
+        // A non-finite radius survives every comparison in normalizeStreamingConfig (NaN < NaN is
+        // false), and a negative one is worse than useless: the scan box inverts so nothing ever
+        // loads, while the unload test squares the radius back into a large positive so nothing
+        // ever unloads. A silent, total streaming stall with no diagnostic.
+        const auto saneRingRadius = [](float value, float fallback) noexcept
+        {
+            if (!std::isfinite(value) || value <= 0.0f)
+                return fallback;
+            return value > kMaxStreamingRadiusSectors ? kMaxStreamingRadiusSectors : value;
+        };
+
+        // 0 is "off", or a documented sentinel, for every field these are applied to - so it is
+        // both a legal input and the safe landing for an illegal one. Split by unit: the first
+        // measures SECTORS and shares the ring cap, the second is a bare scalar (seconds, a bias
+        // weight) that only needs to be finite and non-negative.
+        const auto saneOptionalRadius = [](float value) noexcept
+        {
+            if (!std::isfinite(value) || value <= 0.0f)
+                return 0.0f;
+            return value > kMaxStreamingRadiusSectors ? kMaxStreamingRadiusSectors : value;
+        };
+        const auto saneOptionalScalar = [](float value) noexcept
+        {
+            return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
+        };
+
+        const auto saneBudget = [](int value) noexcept
+        {
+            if (value < 0)
+                return 0;
+            return value > kMaxPerFrameStreamingBudget ? kMaxPerFrameStreamingBudget : value;
+        };
+
+        config.loadRadius = saneRingRadius(config.loadRadius, defaults.loadRadius);
+        config.unloadRadius = saneRingRadius(config.unloadRadius, defaults.unloadRadius);
+        config.prefetchRadius = saneOptionalRadius(config.prefetchRadius);
+
+        config.maxLoadsPerFrame = saneBudget(config.maxLoadsPerFrame);
+        config.maxPrefetchesPerFrame = saneBudget(config.maxPrefetchesPerFrame);
+        config.maxUnloadsPerFrame = saneBudget(config.maxUnloadsPerFrame);
+        config.maxEntitiesPerFrame = saneBudget(config.maxEntitiesPerFrame);
+        config.maxTerrainLoadsPerFrame = saneBudget(config.maxTerrainLoadsPerFrame);
+        config.maxTerrainUnloadsPerFrame = saneBudget(config.maxTerrainUnloadsPerFrame);
+        config.burstFrames = saneBudget(config.burstFrames);
+        config.maxLoadsPerFrameBurst = saneBudget(config.maxLoadsPerFrameBurst);
+        config.maxEntitiesPerFrameBurst = saneBudget(config.maxEntitiesPerFrameBurst);
+
+        config.lookaheadSeconds = saneOptionalScalar(config.lookaheadSeconds);
+        config.viewBiasStrength = saneOptionalScalar(config.viewBiasStrength);
+        config.teleportThresholdSectors = saneOptionalRadius(config.teleportThresholdSectors);
+
+        config.hlodTier0Radius = saneOptionalRadius(config.hlodTier0Radius);
+        config.hlodTier1Radius = saneOptionalRadius(config.hlodTier1Radius);
+        config.hlodTier2Radius = saneOptionalRadius(config.hlodTier2Radius);
+    }
+
+    // sectorWorldSize is a DIVISOR in worldPositionToSectorCoord and in SectorStreamer's scan-box
+    // maths, so 0, negative or NaN there yields inf/NaN coords rather than a bounded mistake.
+    inline void sanitizeSectorConfig(SectorConfig& config) noexcept
+    {
+        const SectorConfig defaults;
+        if (!std::isfinite(config.sectorWorldSize) || config.sectorWorldSize <= 0.0f)
+            config.sectorWorldSize = defaults.sectorWorldSize;
+        if (config.tilesPerSector < 1)
+            config.tilesPerSector = defaults.tilesPerSector;
     }
 
     // VK-1595: the single rule for "which config is live". A session override (the editor's Debug

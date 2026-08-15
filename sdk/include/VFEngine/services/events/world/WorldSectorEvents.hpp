@@ -120,9 +120,11 @@ namespace events::world
         std::string_view getName() const override { return "RemoveWorldGrid"; }
     };
 
-    // Renames a grid, and/or changes its cell size. Changing the cell size of a grid that already
-    // owns sector files needs a repartition (ApplyRepartitionCommand) - this command only writes
-    // the definition, so the editor gates it the same way it gates the sector-size field.
+    // Renames a grid, and/or changes its cell size. Renaming always succeeds; a cell-size change is
+    // REFUSED (returns false) on a grid that already owns sector files, because it would orphan
+    // every one of them - use ApplyRepartitionCommand, which migrates the files cold. The handler
+    // enforces that itself rather than trusting a caller-side gate: there is no editor call site
+    // for this command, so a plugin is the only thing that can reach it.
     struct SetWorldGridCommand : ICommand<bool>
     {
         uint8_t gridIndex = ::world::kPrimaryGridIndex;
