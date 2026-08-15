@@ -14,6 +14,7 @@
 #include "components/Components.hpp"
 #include "data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "string/FileNameSanitize.hpp"
 #include "terrain/SplineSampling.hpp"
 #include "types/ProceduralMeshWriter.hpp"
 
@@ -24,28 +25,8 @@
 
 namespace
 {
-    // Strips characters illegal in Windows file names. Mirrors the importer's sanitizeFileStem
-    // (Mesh.cpp:371), which is TU-local there.
-    [[nodiscard]] std::string sanitizeFileStem(std::string_view name)
-    {
-        std::string out;
-        out.reserve(name.size());
-        for (char c : name)
-        {
-            const auto uc = static_cast<unsigned char>(c);
-            if (uc < 0x20 || c == '<' || c == '>' || c == ':' || c == '"' ||
-                c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
-                out.push_back('_');
-            else
-                out.push_back(c);
-        }
-
-        const size_t start = out.find_first_not_of(" .");
-        if (start == std::string::npos)
-            return {};
-        const size_t end = out.find_last_not_of(" .");
-        return out.substr(start, end - start + 1);
-    }
+    // Was a third byte-identical copy of the importer's TU-local helper; now the shared one.
+    using strutil::sanitizeFileStem;
 
     [[nodiscard]] std::string roadOutputDirectory()
     {

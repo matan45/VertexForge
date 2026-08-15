@@ -13,6 +13,7 @@
 #include "events/world/WorldSectorEvents.hpp"
 #include "events/editor/EditorModeEvents.hpp"
 #include "print/Log.hpp"
+#include "string/FileNameSanitize.hpp"
 #include "nfd/FileDialog.hpp"
 #include "imgui.h"
 #include "imgui_internal.h" // ImGuiItemFlags_MixedValue - the tri-state checkbox
@@ -75,24 +76,24 @@ namespace windows
             if (!data.empty())
                 file.write(reinterpret_cast<const char*>(data.data()),
                            static_cast<std::streamsize>(data.size()));
+
+            // Close explicitly, THEN check. ofstream buffers, so the final flush happens in the
+            // destructor - testing good() before that reports success for a write that then failed
+            // to reach the disk (full volume, dropped network share), and the caller counts a file
+            // it does not have.
+            file.close();
             return file.good();
         }
 
-        // Layer names are free-form map keys - nothing stops one containing a path separator, and
-        // "Export all" builds a filename out of the name.
+        // Layer names are free-form map keys (settable from a plugin, and read verbatim as msgpack
+        // object keys out of a .vfsector) - nothing stops one containing a path separator, and
+        // "Export all" builds a filename out of the name. Delegates to the shared helper, which
+        // additionally trims leading/trailing dots and spaces and escapes reserved device names.
         [[nodiscard]] std::string sanitizeFileName(std::string_view name)
         {
-            std::string safe;
-            safe.reserve(name.size());
-            for (const char c : name)
-            {
-                const bool illegal = c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' ||
-                                     c == '"' || c == '<' || c == '>' || c == '|' ||
-                                     static_cast<unsigned char>(c) < 0x20;
-                safe.push_back(illegal ? '_' : c);
-            }
-            return safe.empty() ? std::string{"layer"} : safe;
+            return strutil::toSafeFileStem(name, "layer");
         }
+
     } // namespace
 
     const world::DataLayerSummary* WorldSectorWindow::findCachedLayer(const std::string& name) const
@@ -566,8 +567,19 @@ namespace windows
                 layerError = failed > 0
                                  ? std::format("Exported {} file(s), {} failed", written, failed)
                                  : std::string{};
-                vfLogInfo("Exported data layer '{}' for {} sector(s) to {}", selectedLayer, written,
-                          folder);
+
+                // The log has to agree with layerError above. Reporting only the success count
+                // unconditionally read as a clean export even when half the files never landed.
+                if (failed > 0)
+                {
+                    vfLogWarning("Exported data layer '{}' for {} sector(s) to {} - {} FAILED",
+                                 selectedLayer, written, folder, failed);
+                }
+                else
+                {
+                    vfLogInfo("Exported data layer '{}' for {} sector(s) to {}", selectedLayer,
+                              written, folder);
+                }
             }
         }
     }
