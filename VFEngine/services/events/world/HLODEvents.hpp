@@ -19,9 +19,20 @@ namespace events::world::hlod
         std::string_view getName() const override { return "GenerateHLOD"; }
     };
 
+    // VK-1594: bakes EVERY configured tier, asynchronously on the JobSystem. Returns whether the
+    // bake was accepted and started, not whether it finished - poll GetHLODBakeProgressQuery.
     struct GenerateAllHLODCommand : ICommand<bool>
     {
+        // Skip cells that already have a bake recorded. Covers the "Generate Missing" case,
+        // including cells invalidated by a dirty-sector save.
+        bool missingOnly = false;
+
         std::string_view getName() const override { return "GenerateAllHLOD"; }
+    };
+
+    struct CancelHLODBakeCommand : ICommand<>
+    {
+        std::string_view getName() const override { return "CancelHLODBake"; }
     };
 
     struct SetHLODConfigCommand : ICommand<>
@@ -59,6 +70,28 @@ namespace events::world::hlod
         ::world::SectorCoord coord;
 
         std::string_view getName() const override { return "IsHLODGenerated"; }
+    };
+
+    // VK-1594: async bake progress, polled by the editor's HLOD tab.
+    struct HLODBakeProgress
+    {
+        bool running = false;
+        bool cancelled = false;
+        uint32_t cellsDone = 0;
+        uint32_t cellsTotal = 0;
+        uint32_t cellsFailed = 0;
+        uint8_t currentTier = 0;
+
+        [[nodiscard]] float fraction() const
+        {
+            return cellsTotal > 0 ? static_cast<float>(cellsDone) / static_cast<float>(cellsTotal)
+                                  : 0.0f;
+        }
+    };
+
+    struct GetHLODBakeProgressQuery : IQuery<HLODBakeProgress>
+    {
+        std::string_view getName() const override { return "GetHLODBakeProgress"; }
     };
 
     // ============================================

@@ -422,7 +422,18 @@ namespace services
             return false;
         }
 
-        return serialization::SceneSerialization::saveScene(*sceneGraph, filePath);;
+        if (!serialization::SceneSerialization::saveScene(*sceneGraph, filePath))
+        {
+            return false;
+        }
+
+        // VK-1597: the scene file is where always-loaded entities actually live, so this is the
+        // signal the World Sectors window uses to drop its "Save Scene still owed" warning.
+        events::scene::SceneSavedNotification notification;
+        notification.scenePath = filePath;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
     }
 
     void ScenePersistenceService::setIncrementalLoadBudget(int entitiesPerFrame)

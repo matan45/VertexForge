@@ -24,6 +24,13 @@ namespace services
             [vfsPtr] { return vfsPtr->isArchiveMode(); }});
 
         const bool serializationConfigured = serialization::setSerializationFileAccess({
+            [vfsPtr](const std::string& path) -> std::optional<serialization::SerializationFileLocation>
+            {
+                const auto location = vfsPtr->locate(path);
+                if (!location) return std::nullopt;
+                return serialization::SerializationFileLocation{
+                    location->filePath, location->baseOffset, location->size};
+            },
             [vfsPtr](const std::string& path) { return vfsPtr->readFile(path); },
             [vfsPtr](const std::string& path) { return vfsPtr->exists(path); },
             [vfsPtr] { return vfsPtr->isArchiveMode(); }});

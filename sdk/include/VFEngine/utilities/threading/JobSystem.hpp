@@ -58,6 +58,15 @@ namespace threading {
 		// for fork/join work (e.g. the Jolt physics adapter's GetMaxConcurrency).
 		uint32_t getWorkerThreadCount() const;
 
+		// True when the caller is the thread enkiTS registered as thread 0 - i.e. whoever called
+		// init() (MainLoop / RuntimeBootstrap, both on the process main thread). Pinned TaskGraph
+		// tasks (TaskGraphBuilder's enki::LambdaPinnedTask(0u, ...)) run exclusively on that
+		// thread, so this is the check a main-thread-only system uses to assert it was scheduled
+		// correctly. Returns true when the JobSystem was never initialized: with no worker pool
+		// every job path falls back to inline execution on the caller, so the caller IS the only
+		// thread (the Tests.exe case).
+		[[nodiscard]] bool isMainThread() const;
+
 		// Access the underlying enkiTS scheduler (used by TaskGraph for dependency-based execution)
 		enki::TaskScheduler* getScheduler();
 

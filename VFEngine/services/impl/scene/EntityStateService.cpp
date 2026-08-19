@@ -70,6 +70,30 @@ namespace services
             {
                 return isEntityStatic(query.entity);
             });
+
+        dispatcher.registerCommandHandler<events::scene::SetEntitySpatiallyLoadedCommand>(
+            [this](const events::scene::SetEntitySpatiallyLoadedCommand& cmd)
+            {
+                return setEntitySpatiallyLoaded(cmd.entity, cmd.spatiallyLoaded);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetEntityStreamingGridCommand>(
+            [this](const events::scene::SetEntityStreamingGridCommand& cmd)
+            {
+                return setEntityStreamingGrid(cmd.entity, cmd.gridIndex);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::GetEntityStreamingGridQuery>(
+            [this](const events::scene::GetEntityStreamingGridQuery& query)
+            {
+                return getEntityStreamingGrid(query.entity);
+            });
+
+        dispatcher.registerQueryHandler<events::scene::IsEntitySpatiallyLoadedQuery>(
+            [this](const events::scene::IsEntitySpatiallyLoadedQuery& query)
+            {
+                return isEntitySpatiallyLoaded(query.entity);
+            });
     }
 
     void EntityStateService::setSelectedEntity(std::optional<EntityHandle> entity)
@@ -249,5 +273,108 @@ namespace services
 
         const auto& transform = registry.get<components::TransformComponent>(enttEntity);
         return transform.isStatic;
+    }
+
+    bool EntityStateService::setEntitySpatiallyLoaded(EntityHandle entity, bool spatiallyLoaded)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+        auto* policy = registry.try_get<components::StreamingPolicyComponent>(enttEntity);
+
+        // Absence is the "spatially loaded" default, so setting true on an entity that never
+        // carried the component is a genuine no-op - do not mint one just to store the default.
+        if (!policy)
+        {
+            if (spatiallyLoaded)
+            {
+                return true;
+            }
+            policy = &registry.emplace<components::StreamingPolicyComponent>(enttEntity);
+        }
+        else if (policy->spatiallyLoaded == spatiallyLoaded)
+        {
+            return true;
+        }
+
+        policy->spatiallyLoaded = spatiallyLoaded;
+
+        events::scene::EntityStreamingPolicyChangedNotification notification;
+        notification.entity = entity;
+        notification.spatiallyLoaded = spatiallyLoaded;
+        notification.gridIndex = policy->gridIndex;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    bool EntityStateService::isEntitySpatiallyLoaded(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return true;
+        }
+
+        const auto* policy =
+            registry.try_get<components::StreamingPolicyComponent>(internal::fromHandle(entity));
+        return policy ? policy->spatiallyLoaded : true;
+    }
+
+    bool EntityStateService::setEntityStreamingGrid(EntityHandle entity, uint8_t gridIndex)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        auto enttEntity = internal::fromHandle(entity);
+        auto* policy = registry.try_get<components::StreamingPolicyComponent>(enttEntity);
+
+        // VK-1599: same rule as the spatially-loaded setter above - grid 0 is the default, so
+        // setting it on an entity that never carried the component is a genuine no-op rather than a
+        // reason to mint one. That is what keeps a scene byte-identical until a grid is really used.
+        if (!policy)
+        {
+            if (gridIndex == 0)
+            {
+                return true;
+            }
+            policy = &registry.emplace<components::StreamingPolicyComponent>(enttEntity);
+        }
+        else if (policy->gridIndex == gridIndex)
+        {
+            return true;
+        }
+
+        policy->gridIndex = gridIndex;
+
+        // Both fields travel on the notification: the world service unbuckets from wherever the
+        // entity sits and re-resolves, which is the same code path either field's change needs.
+        events::scene::EntityStreamingPolicyChangedNotification notification;
+        notification.entity = entity;
+        notification.spatiallyLoaded = policy->spatiallyLoaded;
+        notification.gridIndex = gridIndex;
+        events::EventDispatcher::instance().publish(notification);
+
+        return true;
+    }
+
+    uint8_t EntityStateService::getEntityStreamingGrid(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return 0;
+        }
+
+        const auto* policy =
+            registry.try_get<components::StreamingPolicyComponent>(internal::fromHandle(entity));
+        return policy ? policy->gridIndex : 0;
     }
 }

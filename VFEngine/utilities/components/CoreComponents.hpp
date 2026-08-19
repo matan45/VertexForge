@@ -68,11 +68,37 @@ namespace components
         std::string worldFilePath;
     };
 
+    // VK-1597: UE5 World Partition's "Is Spatially Loaded", per entity. false keeps the entity out
+    // of every World Sector, so it lives in the scene file and survives any sector unload - the
+    // same path the type skip-list (terrain / ocean / IBL / camera) has always used.
+    //
+    // ABSENT MEANS spatiallyLoaded == true. Only an entity the user has deliberately pinned carries
+    // the component, so nothing about existing scenes or .vfsector payloads changes.
+    //
+    // Engine infrastructure, deliberately not a plugin component: the sector bucketer in Services
+    // has to see it with no plugin loaded.
+    struct StreamingPolicyComponent
+    {
+        bool spatiallyLoaded = true;
+
+        // VK-1599: which named runtime grid this entity streams on. 0 is the primary grid, which
+        // every world has and which drives terrain, ocean, navmesh and HLOD; higher indices are
+        // the world's extra grids, each with its own cell size and radii. Serialized only when
+        // non-zero, so a scene that never touched grids is byte-identical.
+        uint8_t gridIndex = 0;
+    };
+
     struct HLODProxyComponent
     {
         int32_t cellX = 0;
         int32_t cellZ = 0;
         uint8_t tier = 0;
+
+        // VK-1594: 0 = fully visible, 1 = fully faded out. Written every frame by
+        // HLODProxyManager::update while a tier handoff is in flight and read by
+        // FramePreparationSystem, which forwards it to the GPU dither crossfade. Not serialized -
+        // proxy entities are runtime-only and are rebuilt on every load.
+        float crossfadeAlpha = 0.0f;
 
         HLODProxyComponent() = default;
         HLODProxyComponent(int32_t x, int32_t z, uint8_t t) : cellX(x), cellZ(z), tier(t) {}

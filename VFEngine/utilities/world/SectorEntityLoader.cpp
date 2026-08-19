@@ -8,11 +8,13 @@
 #include <nlohmann/json.hpp>
 namespace world
 {
-    void SectorEntityLoader::queueSectorLoadFromData(const SectorCoord& coord, std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson)
+    void SectorEntityLoader::queueSectorLoadFromData(uint8_t gridIndex, const SectorCoord& coord,
+                                                     std::vector<std::pair<std::string, nlohmann::json>>& entityNamesAndJson)
     {
         for (auto& [name, json] : entityNamesAndJson)
         {
             PendingLoad load;
+            load.gridIndex = gridIndex;
             load.coord = coord;
             load.entityName = std::move(name);
             load.entityJson = std::move(json);
@@ -21,20 +23,21 @@ namespace world
         }
     }
 
-    void SectorEntityLoader::queueSectorUnload(const SectorCoord& coord, const std::vector<uint64_t>& uuids)
+    void SectorEntityLoader::queueSectorUnload(uint8_t gridIndex, const SectorCoord& coord,
+                                               const std::vector<uint64_t>& uuids)
     {
         for (uint64_t uuid : uuids)
         {
-            pendingUnloads.push_back({coord, uuid});
+            pendingUnloads.push_back({gridIndex, coord, uuid});
         }
     }
 
-    void SectorEntityLoader::cancelPendingLoads(const SectorCoord& coord)
+    void SectorEntityLoader::cancelPendingLoads(uint8_t gridIndex, const SectorCoord& coord)
     {
         std::deque<PendingLoad> remaining;
         for (auto& load : pendingLoads)
         {
-            if (!(load.coord == coord))
+            if (load.gridIndex != gridIndex || !(load.coord == coord))
                 remaining.push_back(std::move(load));
         }
         // Cancelled loads will never be processed; drop them from the queued total
@@ -67,7 +70,7 @@ namespace world
 
                 if (onEntityUnloaded)
                 {
-                    onEntityUnloaded(pending.uuid, pending.coord);
+                    onEntityUnloaded(pending.uuid, pending.gridIndex, pending.coord);
                 }
             }
             else
@@ -148,7 +151,7 @@ namespace world
 
                 if (onEntityLoaded)
                 {
-                    onEntityLoaded(uuid, pending.coord);
+                    onEntityLoaded(uuid, pending.gridIndex, pending.coord);
                 }
             }
             catch (const std::exception& e)

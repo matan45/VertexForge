@@ -470,6 +470,11 @@ namespace render::gpudriven
         void setEnabled(bool enabled) { this->enabled = enabled; }
         bool isEnabled() const { return enabled; }
 
+        // VK-1594: HLOD proxies register their geometry here from memory rather than streaming it
+        // from a .vfMesh, so FramePreparationSystem needs to ask about them - the classic
+        // MeshGPUCache oracle has never heard of them.
+        mesh::MeshStreamManager* getMeshStreamManager() { return meshStreamManager.get(); }
+
         // VK-1490: editor selection outline — entt ids of the selected entities.
         // MergedMeshBuffer resolves them to GPU object slots while rebuilding
         // the object list; the regular scene shader records their visibility.

@@ -44,6 +44,23 @@ namespace services
             }
         );
 
+        // VK-1594: cmd.data is borrowed for the duration of this synchronous dispatch only.
+        dispatcher.registerCommandHandler<events::render::objectstreaming::RegisterHLODMeshCommand>(
+            [this](const events::render::objectstreaming::RegisterHLODMeshCommand& cmd) -> bool
+            {
+                if (!cmd.data || cmd.meshKey.empty())
+                    return false;
+                return provider->registerHLODMesh(cmd.meshKey, *cmd.data);
+            }
+        );
+
+        dispatcher.registerCommandHandler<events::render::objectstreaming::ReleaseHLODMeshCommand>(
+            [this](const events::render::objectstreaming::ReleaseHLODMeshCommand& cmd)
+            {
+                provider->releaseHLODMesh(cmd.meshKey);
+            }
+        );
+
         dispatcher.registerQueryHandler<events::render::objectstreaming::GetObjectStreamingStatsQuery>(
             [this](const events::render::objectstreaming::GetObjectStreamingStatsQuery&)
                 -> render::gpudriven::ObjectStreamingStats

@@ -123,7 +123,8 @@ namespace resource {
 					if (it->second.progress)
 						it->second.progress->setStage(LoadStage::Cancelled);
 					recordCompletion({it->second.requestId, it->second.guid, it->second.debugName,
-						LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0});
+						LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0,
+						it->second.assetType});
 					pendingRequests.erase(it);
 				}
 			}
@@ -134,7 +135,7 @@ namespace resource {
 					request.cancellation->cancel();
 				request.progress->setStage(LoadStage::Cancelled);
 				recordCompletion({id, request.guid, request.debugName,
-					LoadStage::Cancelled, 0.0f, 0.0f, 0});
+					LoadStage::Cancelled, 0.0f, 0.0f, 0, request.assetType});
 				return id;
 			}
 		}
@@ -175,7 +176,8 @@ namespace resource {
 				if (it->second.progress)
 					it->second.progress->setStage(LoadStage::Cancelled);
 				recordCompletion({it->second.requestId, it->second.guid, it->second.debugName,
-					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0});
+					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0,
+					it->second.assetType});
 				it = pendingRequests.erase(it);
 				++cancelledThisFrame;
 			}
@@ -203,7 +205,8 @@ namespace resource {
 				if (it->second.progress)
 					it->second.progress->setStage(LoadStage::Cancelled);
 				recordCompletion({it->second.requestId, it->second.guid, it->second.debugName,
-					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0});
+					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0,
+					it->second.assetType});
 				pendingRequests.erase(it);
 				return true;
 			}
@@ -223,6 +226,24 @@ namespace resource {
 		return false;
 	}
 
+	bool ResourceLoadScheduler::reprioritize(const asset::AssetGUID& guid, const LoadHint& hint)
+	{
+		std::scoped_lock lock(mutex);
+
+		for (auto& [id, req] : pendingRequests)
+		{
+			if (req.guid == guid)
+			{
+				req.hint = hint;
+				req.computedPriority = computePriority(hint, lastCameraPosition);
+				return true;
+			}
+		}
+
+		// Already in flight (or already finished) - nothing to reorder.
+		return false;
+	}
+
 	void ResourceLoadScheduler::cancelAll()
 	{
 		std::scoped_lock lock(mutex);
@@ -234,7 +255,7 @@ namespace resource {
 			if (req.progress)
 				req.progress->setStage(LoadStage::Cancelled);
 			recordCompletion({req.requestId, req.guid, req.debugName,
-				LoadStage::Cancelled, msSince(req.submitTime), 0.0f, 0});
+				LoadStage::Cancelled, msSince(req.submitTime), 0.0f, 0, req.assetType});
 		}
 		pendingRequests.clear();
 
@@ -273,6 +294,7 @@ namespace resource {
 			info.stage = LoadStage::Pending;
 			info.fraction = 0.0f;
 			info.queueWaitMs = msSince(req.submitTime);
+			info.assetType = req.assetType;
 			out.push_back(std::move(info));
 		}
 
@@ -288,6 +310,7 @@ namespace resource {
 			info.queueWaitMs = std::chrono::duration<float, std::milli>(
 				load.dispatchTime - load.submitTime).count();
 			info.runMs = msSince(load.dispatchTime);
+			info.assetType = load.assetType;
 			out.push_back(std::move(info));
 		}
 
@@ -399,7 +422,8 @@ namespace resource {
 				if (it->second.progress)
 					it->second.progress->setStage(LoadStage::Cancelled);
 				recordCompletion({it->second.requestId, it->second.guid, it->second.debugName,
-					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0});
+					LoadStage::Cancelled, msSince(it->second.submitTime), 0.0f, 0,
+					it->second.assetType});
 				pendingRequests.erase(it);
 				++cancelledThisFrame;
 				continue;
@@ -452,6 +476,7 @@ namespace resource {
 			auto debugName = std::move(it->second.debugName);
 			auto submitTime = it->second.submitTime;
 			float priority = it->second.computedPriority;
+			auto assetType = it->second.assetType; // VK-1592: read before the erase below
 			pendingRequests.erase(it);
 
 			if (progress)
@@ -488,6 +513,7 @@ namespace resource {
 			load.submitTime = submitTime;
 			load.dispatchTime = std::chrono::steady_clock::now();
 			load.future = std::move(future);
+			load.assetType = assetType;
 			inFlightLoads.push_back(std::move(load));
 		}
 
@@ -555,6 +581,7 @@ namespace resource {
 					it->dispatchTime - it->submitTime).count();
 				record.loadMs = msSince(it->dispatchTime);
 				record.bytes = it->progress ? it->progress->bytes() : 0;
+				record.assetType = it->assetType;
 				recordCompletion(std::move(record));
 
 				// VK-1434: release this load's CPU memory reservation (no-op if it never

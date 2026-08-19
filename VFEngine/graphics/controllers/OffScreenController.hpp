@@ -50,6 +50,12 @@ namespace render::gpudriven
     class HydraulicErosionPipeline;
 }
 
+// VK-1594: taken by const reference only, so the definition stays in the .cpp
+namespace render::mesh
+{
+    struct InMemoryMeshData;
+}
+
 namespace services
 {
     class IVFXRuntimeProvider;
@@ -322,17 +328,21 @@ namespace controllers
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);
         render::lighting::LightStreamingConfig getLightStreamingConfig() const;
         render::lighting::LightStreamingStats getLightStreamingStats() const;
-        void registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds);
-        void unregisterSectorLights(uint32_t sectorId);
+        void registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds);
+        void unregisterSectorLights(uint64_t sectorId);
 
         // Object streaming settings
         void setObjectStreamingEnabled(bool enabled);
         void setObjectStreamingConfig(const render::gpudriven::ObjectStreamConfig& config);
         render::gpudriven::ObjectStreamConfig getObjectStreamingConfig() const;
         render::gpudriven::ObjectStreamingStats getObjectStreamingStats() const;
-        void registerSectorObjects(uint32_t sectorId,
+        void registerSectorObjects(uint64_t sectorId,
                                    const std::vector<std::pair<uint64_t, entt::entity>>& entities);
-        void unregisterSectorObjects(uint32_t sectorId);
+        void unregisterSectorObjects(uint64_t sectorId);
+
+        // VK-1594: baked HLOD proxy geometry pushed into MergedMeshBuffer from memory
+        bool registerHLODMesh(const render::mesh::InMemoryMeshData& meshData);
+        void releaseHLODMesh(const std::string& meshKey);
 
     private:
         std::unique_ptr<render::gpudriven::BrushComputePipeline> brushComputePipeline;

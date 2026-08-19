@@ -37,7 +37,7 @@ namespace render::lighting
         spotAllocator.reset(0);
     }
 
-    void LightStreamManager::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+    void LightStreamManager::registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
         // Query ECS component data before acquiring the lock to avoid holding
         // the mutex during potentially slow registry lookups
@@ -112,7 +112,7 @@ namespace render::lighting
                   lightEntityIds.size(), sectorId);
     }
 
-    void LightStreamManager::unregisterSectorLights(uint32_t sectorId)
+    void LightStreamManager::unregisterSectorLights(uint64_t sectorId)
     {
         std::lock_guard<std::mutex> lock(mtx);
 
@@ -142,7 +142,7 @@ namespace render::lighting
     }
 
     bool LightStreamManager::registerLight(uint32_t entityId, LightStreamEntry::LightType type,
-                                           uint32_t sectorId)
+                                           uint64_t sectorId)
     {
         std::lock_guard<std::mutex> lock(mtx);
 

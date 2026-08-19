@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WorldTypes.hpp"
 #include "../math/Frustum.hpp"
 #include <cstdint>
 #include <functional>
@@ -15,7 +16,7 @@ namespace world
         uint8_t tier = 0;
 
         HLODCellCoord() = default;
-        HLODCellCoord(int32_t x, int32_t z, uint8_t tier) : x(x), z(z), tier(tier) {}
+        constexpr HLODCellCoord(int32_t x, int32_t z, uint8_t tier) : x(x), z(z), tier(tier) {}
 
         bool operator==(const HLODCellCoord& other) const
         {
@@ -64,6 +65,38 @@ namespace world
             return config;
         }
     };
+
+    // A cellSize of 0 would divide by zero below. .vfworld stores the value verbatim, so clamp
+    // once here rather than trusting every writer of the tier table.
+    [[nodiscard]] inline constexpr int32_t effectiveCellSize(const HLODTierConfig& tier) noexcept
+    {
+        return tier.cellSize > 0 ? static_cast<int32_t>(tier.cellSize) : 1;
+    }
+
+    // Floor division, NOT truncation: the cell index containing sector index v. Truncation folds
+    // -1 and 0 into cell 0 at cellSize 2, so a negative-coord sector would be baked into the wrong
+    // cell and streamed from a different one.
+    [[nodiscard]] inline constexpr int32_t floorDivCell(int32_t v, int32_t cellSize) noexcept
+    {
+        return (v >= 0) ? v / cellSize : (v - cellSize + 1) / cellSize;
+    }
+
+    // Single source of truth for sector -> cell mapping, shared by the bake planner, the streamer
+    // and HLOD invalidation.
+    [[nodiscard]] inline constexpr HLODCellCoord sectorToCell(const SectorCoord& coord,
+                                                              const HLODTierConfig& tier) noexcept
+    {
+        const int32_t cs = effectiveCellSize(tier);
+        return HLODCellCoord(floorDivCell(coord.x, cs), floorDivCell(coord.z, cs), tier.tier);
+    }
+
+    // The origin sector of a cell (its minimum corner), the inverse of sectorToCell.
+    [[nodiscard]] inline constexpr SectorCoord cellOriginSector(const HLODCellCoord& cell,
+                                                                const HLODTierConfig& tier) noexcept
+    {
+        const int32_t cs = effectiveCellSize(tier);
+        return SectorCoord(cell.x * cs, cell.z * cs);
+    }
 
     struct HLODProxySubmesh
     {

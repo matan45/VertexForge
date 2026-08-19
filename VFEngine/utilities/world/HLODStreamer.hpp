@@ -51,8 +51,6 @@ namespace world
         bool anySectorLoaded(const HLODCellCoord& cell, const HLODTierConfig& tier,
                              const WorldSectorManager& manager) const;
 
-        HLODCellCoord sectorToCell(const SectorCoord& coord, uint8_t cellSize) const;
-
         float cellDistanceSq(const HLODCellCoord& cell, uint8_t cellSize,
                              const glm::vec3& pos, float sectorWorldSize) const;
     };

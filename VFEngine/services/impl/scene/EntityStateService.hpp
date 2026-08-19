@@ -49,5 +49,16 @@ namespace services
         // Static state
         bool setEntityStatic(EntityHandle entity, bool isStatic);
         bool isEntityStatic(EntityHandle entity) const;
+
+        // VK-1597: World Sector streaming policy. The component is only ever ADDED here - absence
+        // means spatially loaded, so an entity the user has never touched keeps a clean payload,
+        // but once pinned it keeps the component (holding true again) so the value round-trips.
+        bool setEntitySpatiallyLoaded(EntityHandle entity, bool spatiallyLoaded);
+        bool isEntitySpatiallyLoaded(EntityHandle entity) const;
+
+        // VK-1599: which named runtime grid the entity streams on. 0 is the primary grid and the
+        // default; setting 0 on an entity with no StreamingPolicyComponent is deliberately a no-op.
+        bool setEntityStreamingGrid(EntityHandle entity, uint8_t gridIndex);
+        [[nodiscard]] uint8_t getEntityStreamingGrid(EntityHandle entity) const;
     };
 }

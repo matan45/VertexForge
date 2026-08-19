@@ -57,6 +57,25 @@ public class Entity {
         return _native_entity_isValid(entityId);
     }
 
+    // Get an entity's persistent scene UUID (0 when the entity has none).
+    //
+    // Every other Entity:: function takes the transient entity ID, which is only
+    // meaningful for the current session. The UUID is the identity that survives
+    // save/load, and it is what owner-keyed engine APIs want - notably
+    // Streaming::registerWorldSource, which uses it to release the source
+    // automatically when the owning entity is destroyed.
+    //
+    // Treat the result as an OPAQUE TOKEN: pass it straight to the API that asked
+    // for it. UUIDs above 2^63 read back as negative ints (mType has no unsigned
+    // 64-bit type) but round-trip bit-exactly, so printing or comparing one is
+    // meaningless while forwarding one is always correct.
+    public static function getUUID(int entityId): int {
+        if (entityId < 0) {
+            return 0;
+        }
+        return _native_entity_getUUID(entityId);
+    }
+
     // Check if an entity is active
     // When inactive, the entity and all its components are disabled
     public static function isActive(int entityId): bool {

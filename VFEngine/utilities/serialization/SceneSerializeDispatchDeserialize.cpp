@@ -423,6 +423,16 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::VolumetricAgentComponent>();
             deserializeVolumetricAgent(c["volumetricAgent"], comp);
         }
+        // VK-1597: the key is absent for every entity that was never pinned, which is exactly the
+        // spatiallyLoaded default - so nothing is added and the component stays off those entities.
+        if (c.contains("streamingPolicy"))
+        {
+            auto& policy = entity.addOrReplaceComponent<components::StreamingPolicyComponent>();
+            policy.spatiallyLoaded = c["streamingPolicy"].value("spatiallyLoaded", true);
+            // VK-1599: absent means the primary grid, which is what every scene written before
+            // named grids existed means.
+            policy.gridIndex = static_cast<uint8_t>(c["streamingPolicy"].value("gridIndex", 0));
+        }
         if (c.contains("prefabInstance"))
         {
             entity.addOrReplaceComponent<components::PrefabInstanceComponent>().sourcePrefabPath =

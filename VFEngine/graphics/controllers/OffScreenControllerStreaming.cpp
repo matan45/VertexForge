@@ -2,6 +2,7 @@
 #include "../render/OffScreenViewPort.hpp"
 #include "../render/RenderPassHandler.hpp"
 #include "../render/gpudriven/GPUDrivenRenderer.hpp"
+#include "../render/mesh/MeshStreamManager.hpp"
 #include "../render/gi/RadianceCascadeManager.hpp"
 #include "../render/gi/SSGIPipeline.hpp"
 #include "../render/gi/GIDebugRenderer.hpp"
@@ -160,7 +161,7 @@ namespace controllers
         return {};
     }
 
-    void OffScreenController::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+    void OffScreenController::registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -176,7 +177,7 @@ namespace controllers
         }
     }
 
-    void OffScreenController::unregisterSectorLights(uint32_t sectorId)
+    void OffScreenController::unregisterSectorLights(uint64_t sectorId)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -229,7 +230,7 @@ namespace controllers
     }
 
     void OffScreenController::registerSectorObjects(
-        uint32_t sectorId,
+        uint64_t sectorId,
         const std::vector<std::pair<uint64_t, entt::entity>>& entities)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
@@ -243,7 +244,7 @@ namespace controllers
         }
     }
 
-    void OffScreenController::unregisterSectorObjects(uint32_t sectorId)
+    void OffScreenController::unregisterSectorObjects(uint64_t sectorId)
     {
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
@@ -251,5 +252,31 @@ namespace controllers
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu && gpu->getObjectStreamManager())
             gpu->getObjectStreamManager()->unregisterSectorObjects(sectorId);
+    }
+
+    bool OffScreenController::registerHLODMesh(const render::mesh::InMemoryMeshData& meshData)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return false;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (!gpu) return false;
+
+        auto* streamManager = gpu->getMeshStreamManager();
+        if (!streamManager) return false;
+
+        return streamManager->registerInMemoryMesh(meshData);
+    }
+
+    void OffScreenController::releaseHLODMesh(const std::string& meshKey)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return;
+
+        auto* gpu = renderHandler->getGPUDrivenRenderer();
+        if (!gpu) return;
+
+        if (auto* streamManager = gpu->getMeshStreamManager())
+            streamManager->releaseInMemoryMesh(meshKey);
     }
 }

@@ -1,6 +1,7 @@
 #include "MeshTextureImport.hpp"
 #include "Texture.hpp"
 #include "print/Log.hpp"
+#include "string/FileNameSanitize.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -14,27 +15,12 @@ namespace types
 {
     namespace
     {
-        // Strips characters illegal in Windows file names. Kept local to this TU (a
-        // near-copy of Mesh.cpp's file-local helper) to avoid cross-TU coupling.
-        std::string sanitizeStem(std::string_view name)
+        // Strips characters illegal in Windows file names. Was a TU-local near-copy of Mesh.cpp's
+        // helper "to avoid cross-TU coupling"; both now name the shared header-only one, which
+        // costs no coupling at all. Behaviour unchanged.
+        inline std::string sanitizeStem(std::string_view name)
         {
-            std::string out;
-            out.reserve(name.size());
-            for (char c : name)
-            {
-                const auto uc = static_cast<unsigned char>(c);
-                if (uc < 0x20 || c == '<' || c == '>' || c == ':' || c == '"' ||
-                    c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
-                    out.push_back('_');
-                else
-                    out.push_back(c);
-            }
-
-            const size_t start = out.find_first_not_of(" .");
-            if (start == std::string::npos)
-                return {};
-            const size_t end = out.find_last_not_of(" .");
-            return out.substr(start, end - start + 1);
+            return strutil::sanitizeFileStem(name);
         }
 
         std::string toLower(std::string s)

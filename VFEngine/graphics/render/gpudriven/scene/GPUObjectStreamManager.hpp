@@ -21,7 +21,9 @@ namespace render::gpudriven
         uint64_t entityUUID = 0;
         entt::entity entity = entt::null;
         uint32_t gpuSlot = FreeListAllocator::ALLOCATION_FAILED;
-        uint32_t sectorId = 0;
+        // VK-1599: world::sectorRegistrationId - the grid index in the high 32 bits over the packed
+        // coord. Opaque here; the only requirement is that it is unique per (grid, sector).
+        uint64_t sectorId = 0;
         ObjectStreamState state = ObjectStreamState::NotLoaded;
         float distanceToCamera = 0.0f;
         float priority = 0.0f;
@@ -42,10 +44,10 @@ namespace render::gpudriven
         void init(const ObjectStreamConfig& config = {});
         void cleanup();
 
-        void registerSectorObjects(uint32_t sectorId,
+        void registerSectorObjects(uint64_t sectorId,
                                    const std::vector<std::pair<uint64_t, entt::entity>>& entities,
                                    entt::registry& registry);
-        void unregisterSectorObjects(uint32_t sectorId);
+        void unregisterSectorObjects(uint64_t sectorId);
 
         void update(const glm::vec3& cameraPosition,
                     const ObjectResolvers& resolvers,
@@ -68,7 +70,7 @@ namespace render::gpudriven
         ObjectStreamingStats stats;
 
         std::unordered_map<uint64_t, ObjectStreamEntry> entries;
-        std::unordered_map<uint32_t, std::unordered_set<uint64_t>> sectorObjects;
+        std::unordered_map<uint64_t, std::unordered_set<uint64_t>> sectorObjects;
 
         uint64_t currentFrame = 0;
 

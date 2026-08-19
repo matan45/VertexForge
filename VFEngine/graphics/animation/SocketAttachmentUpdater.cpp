@@ -4,6 +4,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "animator/SocketTypes.hpp"
+#include "print/Log.hpp"
 #include <glm/gtc/quaternion.hpp>
 
 namespace animation
@@ -115,43 +116,112 @@ namespace animation
         }
         auto& attachment = registry.get<components::SocketAttachmentComponent>(attachedEntity);
 
-        if (!attachment.needsParentResolution || attachment.parentEntityName.empty())
+        // VK-1590: a UUID-only attachment (no name) must still arm.
+        if (!attachment.needsParentResolution ||
+            (attachment.parentEntityName.empty() && attachment.parentEntityUUID == 0))
             return;
 
-        attachment.needsParentResolution = false;
-        attachment.parentEntity = entt::null;
-        attachment.cachedSocketIndex = -1;
-        attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
+        // VK-1590: a re-arm (RuntimeAnimatorSystemInit sets the flag on EVERY play/edit
+        // transition) that races an unloaded parent must not destroy a working link.
+        //
+        // Resolving into a local and committing at the end does NOT achieve that on its own -
+        // nothing between here and the commit reads parentEntity, so deferring the write is
+        // indistinguishable from nulling up front. What achieves it is keeping the handle we
+        // already have when every lookup misses, which is what `previous` is for. It is
+        // deliberately not seeded into `found`: all three lookups below are gated on
+        // `found == entt::null` and must still run, so that a parent that MOVED is re-resolved.
+        //
+        // The flag is still consumed unconditionally: retrying every frame for a permanently
+        // absent parent would be an O(attachments x entities) name scan per frame. Re-arming is
+        // event-driven instead - the world-sector service writes the handle directly via
+        // SectorRefFieldRegistry::applyReference when the target sector loads. NOTE that path
+        // covers UUID-carrying attachments only (socketCollectAll skips parentEntityUUID == 0),
+        // so a name-only attachment whose parent is absent stays unresolved until the next
+        // play/edit toggle or scene reload.
+        const entt::entity previous = attachment.parentEntity;
+        entt::entity found = entt::null;
 
-        entt::entity ancestor = entt::null;
-        if (registry.all_of<components::ParentComponent>(attachedEntity))
+        // 1. Exact UUID. O(1), and immune to duplicate names.
+        if (attachment.parentEntityUUID != 0)
         {
-            ancestor = registry.get<components::ParentComponent>(attachedEntity).parent;
+            found = scene::EntityRegistry::findByUUID(attachment.parentEntityUUID);
+            if (found != entt::null && !registry.valid(found))
+                found = entt::null;
         }
-        while (ancestor != entt::null && registry.valid(ancestor))
+
+        // 2. Ancestor walk by name — hierarchy-scoped, so it is the correct binding for prefab
+        //    instances, whose UUIDs are re-minted on instantiation.
+        if (found == entt::null && !attachment.parentEntityName.empty())
         {
-            if (registry.all_of<components::NameComponent>(ancestor) &&
-                registry.get<components::NameComponent>(ancestor).name == attachment.parentEntityName)
+            entt::entity ancestor = entt::null;
+            if (registry.all_of<components::ParentComponent>(attachedEntity))
             {
-                attachment.parentEntity = ancestor;
-                break;
+                ancestor = registry.get<components::ParentComponent>(attachedEntity).parent;
             }
-            if (registry.all_of<components::ParentComponent>(ancestor))
-                ancestor = registry.get<components::ParentComponent>(ancestor).parent;
-            else
-                break;
+            while (ancestor != entt::null && registry.valid(ancestor))
+            {
+                if (registry.all_of<components::NameComponent>(ancestor) &&
+                    registry.get<components::NameComponent>(ancestor).name == attachment.parentEntityName)
+                {
+                    found = ancestor;
+                    break;
+                }
+                if (registry.all_of<components::ParentComponent>(ancestor))
+                    ancestor = registry.get<components::ParentComponent>(ancestor).parent;
+                else
+                    break;
+            }
         }
 
-        if (attachment.parentEntity == entt::null)
+        // 3. Global name scan. Unlike the old code this does NOT break on the first match:
+        //    knowing whether the name was unique is what makes the UUID back-fill below safe.
+        //    Cold path (once per attachment per arm), and the full pass costs the same order
+        //    as the old early-exit scan's worst case.
+        bool nameWasAmbiguous = false;
+        if (found == entt::null && !attachment.parentEntityName.empty())
         {
             auto nameView = registry.view<components::NameComponent>();
             for (auto candidate : nameView)
             {
-                if (nameView.get<components::NameComponent>(candidate).name == attachment.parentEntityName)
+                if (nameView.get<components::NameComponent>(candidate).name != attachment.parentEntityName)
+                    continue;
+                if (found == entt::null)
                 {
-                    attachment.parentEntity = candidate;
+                    found = candidate;
+                }
+                else
+                {
+                    nameWasAmbiguous = true;
                     break;
                 }
+            }
+            if (nameWasAmbiguous)
+            {
+                vfLogWarning("[Socket] Parent name '{}' matches multiple entities; binding the "
+                             "first. Re-attach in the editor to pin it by UUID.",
+                             attachment.parentEntityName);
+            }
+        }
+
+        attachment.needsParentResolution = false;
+        attachment.cachedSocketIndex = -1;
+        attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
+
+        // A miss keeps the handle we already had, provided it is still a live entity: "I could not
+        // find the parent right now" is not the same statement as "this attachment has no parent",
+        // and only the second one justifies tearing the link down.
+        const bool previousStillLive = previous != entt::null && registry.valid(previous);
+        attachment.parentEntity = found != entt::null ? found
+                                  : previousStillLive ? previous
+                                                      : entt::null;
+
+        // VK-1590: self-heal content authored before parentEntityUUID existed. Only on an
+        // UNAMBIGUOUS resolve, so a first-match guess is never made permanent.
+        if (found != entt::null && attachment.parentEntityUUID == 0 && !nameWasAmbiguous)
+        {
+            if (const auto* uuidComp = registry.try_get<components::UUIDComponent>(found))
+            {
+                attachment.parentEntityUUID = uuidComp->id.getValue();
             }
         }
     }

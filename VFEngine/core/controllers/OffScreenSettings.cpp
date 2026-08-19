@@ -201,12 +201,12 @@ namespace controllers {
 		return offScreenController->getLightStreamingStats();
 	}
 
-	void OffScreen::registerSectorLights(uint32_t sectorId, const std::vector<uint32_t>& lightEntityIds)
+	void OffScreen::registerSectorLights(uint64_t sectorId, const std::vector<uint32_t>& lightEntityIds)
 	{
 		offScreenController->registerSectorLights(sectorId, lightEntityIds);
 	}
 
-	void OffScreen::unregisterSectorLights(uint32_t sectorId)
+	void OffScreen::unregisterSectorLights(uint64_t sectorId)
 	{
 		offScreenController->unregisterSectorLights(sectorId);
 	}
@@ -231,15 +231,25 @@ namespace controllers {
 		return offScreenController->getObjectStreamingStats();
 	}
 
-	void OffScreen::registerSectorObjects(uint32_t sectorId,
+	void OffScreen::registerSectorObjects(uint64_t sectorId,
 	                                       const std::vector<std::pair<uint64_t, entt::entity>>& entities)
 	{
 		offScreenController->registerSectorObjects(sectorId, entities);
 	}
 
-	void OffScreen::unregisterSectorObjects(uint32_t sectorId)
+	void OffScreen::unregisterSectorObjects(uint64_t sectorId)
 	{
 		offScreenController->unregisterSectorObjects(sectorId);
+	}
+
+	bool OffScreen::registerHLODMesh(const render::mesh::InMemoryMeshData& mesh)
+	{
+		return offScreenController->registerHLODMesh(mesh);
+	}
+
+	void OffScreen::releaseHLODMesh(const std::string& meshKey)
+	{
+		offScreenController->releaseHLODMesh(meshKey);
 	}
 
 }

@@ -4,6 +4,7 @@
 #include "components/Components.hpp"
 #include "world/WorldSectorSerialization.hpp"
 #include "world/WorldDefinitionSerialization.hpp"
+#include "world/SectorAssignment.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/world/WorldSectorEvents.hpp"
 #include "../../events/render/ObjectStreamingEvents.hpp"
@@ -11,23 +12,14 @@
 #include "scene/EntityRegistry.hpp"
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/AssetDatabase.hpp"
+#include "resource/VirtualFileSystem.hpp"
+#include "serialization/SerializationFileAccess.hpp"
+#include "../common/ProjectPaths.hpp"
 #include "print/Log.hpp"
 #include <filesystem>
 #include <chrono>
 #include <sstream>
 #include <iomanip>
-
-namespace
-{
-    bool isManagedBySeparateSystem(const scene::Entity& entity)
-    {
-        return entity.hasComponent<components::TerrainComponent>()
-            || entity.hasComponent<components::TerrainTileComponent>()
-            || entity.hasComponent<components::OceanComponent>()
-            || entity.hasComponent<components::IBLComponent>()
-            || entity.hasComponent<components::CameraComponent>();
-    }
-}
 
 namespace services
 {
@@ -35,19 +27,41 @@ namespace services
                                               const world::SectorConfig& sectorConfig,
                                               const world::SectorStreamingConfig& streamingConfig)
     {
-        sectorManager.clear();
-        sectorManager.setConfig(sectorConfig);
+        // Two domains, deliberately: currentWorldPath stays resolved because everything derived
+        // from it does file IO, while the copy tagged onto the scene is project-relative so it
+        // still names the right world on a player's machine.
+        const std::string worldPath = resolveProjectPath(filePath);
 
+        // VK-1591: same coord-collision hazard as loadWorld — never carry blobs across worlds
+        // VK-1592: drainSectorLoads, not a bare AsyncLoadQueue::drain — a request still queued in
+        // the scheduler has no worker behind it and would block the main thread forever.
+        drainSectorLoads();
+        drainHlodLoads();
+        clearStreamingResidency();
+
+        // VK-1599: a world is created with exactly one grid. Extra grids are added afterwards from
+        // the World Sectors window - the creation wizard stays a single-grid affair, which is also
+        // what keeps a brand-new world's .vfworld free of a "grids" key.
         worldDefinition = {};
         worldDefinition.name = name;
-        worldDefinition.sectorConfig = sectorConfig;
-        worldDefinition.streamingConfig = streamingConfig;
+        worldDefinition.primaryGrid().sectorConfig = sectorConfig;
+        worldDefinition.primaryGrid().streamingConfig = streamingConfig;
+        // Clamp, but deliberately do NOT normalize: the creation wizard passes prefetchRadius
+        // through as the 0 sentinel and that has to survive into the .vfworld.
+        world::sanitizeSectorConfig(worldDefinition.primaryGrid().sectorConfig);
+        world::sanitizeStreamingConfig(worldDefinition.primaryGrid().streamingConfig);
 
-        streamer.setConfig(streamingConfig);
-        streamer.setEnabled(true);
+        // Rebuilds the runtime list from the definition above, clearing every manager on the way.
+        rebuildGridRuntimes();
+
+        // VK-1595: a new world starts from its own config - a session override tuned against the
+        // previous world must not silently govern this one.
+        resetStreamingSessionState();
+        applyEffectiveStreamingConfig();
+        primaryRuntime().streamer.setEnabled(true);
 
         worldMode = true;
-        currentWorldPath = filePath;
+        currentWorldPath = worldPath;
 
         // Enable GPU object streaming if configured
         if (streamingConfig.enableGPUObjectStreaming)
@@ -59,26 +73,32 @@ namespace services
 
         // Tag root entity so the world auto-loads with the scene
         auto& root = sceneGraph->GetRoot();
-        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = filePath;
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+            toProjectRelativePath(worldPath);
 
-        // Assign existing entities to sectors (skip terrain/water/IBL/camera — they have their own systems)
+        // Assign existing entities to sectors. The decision skips terrain/water/IBL/camera (they
+        // have their own systems) and, since VK-1597, anything the user pinned as not spatially
+        // loaded — those stay scene-graph children and are persisted by the scene file.
         for (auto& child : root.getChildren())
         {
-            if (isManagedBySeparateSystem(child))
+            // A brand-new world has exactly one grid, so every spatial entity lands on it - but
+            // route through the grid-aware resolver anyway, so an entity carrying a
+            // StreamingPolicyComponent from a previous world does not silently resolve against
+            // the wrong sector size.
+            const auto assignment = resolveEntityAssignment(child);
+            if (!assignment.isSpatial())
                 continue;
 
-            if (child.hasComponent<components::TransformComponent>())
-            {
-                const auto& transform = child.getComponent<components::TransformComponent>();
-                uint64_t uuid = child.getUUID().getValue();
-                sectorManager.assignEntityToSector(uuid, transform.position);
-            }
+            gridRuntime(assignment.gridIndex)
+                .manager.assignEntityToSector(child.getUUID().getValue(), assignment.coord);
         }
 
         // Mark all sectors as Loaded since entities are already live in the scene,
         // and register their entities for GPU object/light streaming
         auto& registry = scene::EntityRegistry::getRegistry();
-        sectorManager.forEachSector([&](world::WorldSector& sector)
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
+        {
+        gridRuntime(gridIndex).manager.forEachSector([&](world::WorldSector& sector)
         {
             sector.state = world::SectorState::Loaded;
 
@@ -106,19 +126,24 @@ namespace services
                 if (!meshEntities.empty())
                 {
                     events::render::objectstreaming::RegisterSectorObjectsCommand cmd;
-                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.sectorId = world::sectorRegistrationId(gridIndex, sector.coord);
                     cmd.entities = std::move(meshEntities);
                     ::events::EventDispatcher::instance().execute(cmd);
                 }
                 if (!lightEntityIds.empty())
                 {
                     events::render::lightstreaming::RegisterSectorLightsCommand cmd;
-                    cmd.sectorId = world::sectorCoordToId(sector.coord);
+                    cmd.sectorId = world::sectorRegistrationId(gridIndex, sector.coord);
                     cmd.lightEntityIds = std::move(lightEntityIds);
                     ::events::EventDispatcher::instance().execute(cmd);
                 }
             }
         });
+        }
+
+        // VK-1590: the scene being converted is already fully populated, so its cross-entity
+        // references never pass through the sector spawn path. Register them once here.
+        rescanEntityReferences();
 
         return saveWorld(filePath);
     }
@@ -131,7 +156,17 @@ namespace services
             return false;
         }
 
-        std::string path = filePath.empty() ? currentWorldPath : filePath;
+        // VK-1594: the async HLOD bake holds an immutable snapshot of the sector file list and its
+        // workers are reading those .vfsector files right now. Saving would rewrite them mid-read
+        // and produce proxies baked from a mix of old and new geometry, so refuse rather than try
+        // to make the two concurrent. The bake is an explicit, cancellable user action.
+        if (hlodBaker.isRunning())
+        {
+            vfLogError("Cannot save world: an HLOD bake is in progress (cancel it first)");
+            return false;
+        }
+
+        std::string path = resolveProjectPath(filePath.empty() ? currentWorldPath : filePath);
         if (path.empty())
         {
             vfLogError("Cannot save world: no file path specified");
@@ -139,33 +174,61 @@ namespace services
         }
 
         auto& root = sceneGraph->GetRoot();
-        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath = path;
+        root.addOrReplaceComponent<components::WorldSectorComponent>().worldFilePath =
+            toProjectRelativePath(path);
         std::filesystem::path worldDir = std::filesystem::path(path).parent_path();
         std::filesystem::path sectorsDir = worldDir / "sectors";
         std::filesystem::create_directories(sectorsDir);
 
+        // VK-1597: the authoritative half of the streaming-policy migration, and the ticket's own
+        // "migrates it out on next Save World". The notification path only covers the inspector
+        // checkbox; the component can also arrive via prefab instantiation, a script, or undo, and
+        // EntityCreatedNotification fires on a bare entity before its components are deserialized.
+        // Runs BEFORE the save loop so the dirtied sectors it produces are written this pass.
+        alwaysLoadedMigrationCount += reconcileAlwaysLoadedEntities();
+
+        // VK-1599: every grid writes into the same sectors/ directory; the filenames are what keep
+        // them apart (world::sectorFileName prefixes grids 1+ with g<N>_). Only the PRIMARY grid
+        // can have HLOD bakes to invalidate.
         std::vector<world::SectorCoord> staleHLODs;
-        sectorManager.forEachSector([&](world::WorldSector& sector)
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
         {
-            if (sector.dirty || sector.filePath.empty())
+            auto& gridPaths = worldDefinition.grid(gridIndex).sectorFilePaths;
+
+            gridRuntime(gridIndex).manager.forEachSector([&](world::WorldSector& sector)
             {
-                std::string sectorFileName = "sector_" +
-                    std::to_string(sector.coord.x) + "_" +
-                    std::to_string(sector.coord.z) + ".vfsector";
-                std::string sectorPath = (sectorsDir / sectorFileName).string();
+                // VK-1591: a Prefetching/Prefetched sector holds bytes, not entities. Its
+                // entityUUIDs is deliberately empty, and saveSector rebuilds content by resolving
+                // those UUIDs against EntityRegistry - saving one would overwrite a good .vfsector
+                // with an empty one. Load-bearing, not belt-and-braces: assignEntityToSector
+                // dirties a sector unconditionally, so a dynamic entity wandering into a
+                // prefetched coord would otherwise pull it into this loop.
+                if (sector.state == world::SectorState::Prefetching ||
+                    sector.state == world::SectorState::Prefetched)
+                    return;
 
-                bool contentChanged = sector.dirty;
-                if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
+                if (sector.dirty || sector.filePath.empty())
                 {
-                    sector.filePath = sectorPath;
-                    worldDefinition.sectorFilePaths[sector.coord] = sectorPath;
+                    std::string sectorPath =
+                        (sectorsDir / world::sectorFileName(gridIndex, sector.coord)).string();
 
-                    // The baked HLOD no longer matches the saved content
-                    if (contentChanged && !sector.hlodFilePath.empty())
-                        staleHLODs.push_back(sector.coord);
+                    bool contentChanged = sector.dirty;
+                    if (world::WorldSectorSerialization::saveSector(sector, sectorPath))
+                    {
+                        sector.filePath = sectorPath;
+                        // Only the serialized copy is relativized — sector.filePath keeps doing IO
+                        gridPaths[sector.coord] = toProjectRelativePath(sectorPath);
+
+                        // The baked HLOD no longer matches the saved content
+                        if (contentChanged && !sector.hlodFilePath.empty() &&
+                            gridIndex == world::kPrimaryGridIndex)
+                        {
+                            staleHLODs.push_back(sector.coord);
+                        }
+                    }
                 }
-            }
-        });
+            });
+        }
 
         for (const auto& coord : staleHLODs)
             invalidateHLODForSector(coord);
@@ -204,49 +267,105 @@ namespace services
         return result;
     }
 
-    bool WorldSectorServiceImpl::loadWorld(const std::string& filePath)
+    bool WorldSectorServiceImpl::loadWorld(const std::string& rawFilePath)
     {
+        // The scene stores a project-relative world path; the file dialog hands back an absolute
+        // one. Both land here, so resolve into the IO domain the rest of this function works in.
+        const std::string filePath = resolveProjectPath(rawFilePath);
+
         world::WorldDefinition newDef;
         if (!world::WorldDefinitionSerialization::load(filePath, newDef))
             return false;
 
-        sectorManager.clear();
-        sectorManager.setConfig(newDef.sectorConfig);
+        // VK-1591: prefetch blobs are keyed on a bare SectorCoord, so without this the new world's
+        // (0,0) would activate the previous world's cached bytes. Drain first — an in-flight read
+        // would otherwise land in a later poll and be attributed to the new world's sector.
+        // VK-1592: drainSectorLoads (not a bare drain) or an undispatched request hangs the main
+        // thread; drainHlodLoads applies the same cross-world argument to .vfHLOD proxy reads.
+        drainSectorLoads();
+        drainHlodLoads();
+        clearStreamingResidency();
 
         worldDefinition = newDef;
-        streamer.setConfig(newDef.streamingConfig);
-        streamer.setEnabled(true);
-        hlodStreamer.setConfig(newDef.streamingConfig, newDef.hlodConfig);
+        // VK-1599: one runtime per grid the file declares, each configured from its own block.
+        rebuildGridRuntimes();
+
+        // VK-1595: same reasoning as createWorld - the loaded world governs itself, so any session
+        // override tuned against the previous one is dropped and the streamer is unpaused.
+        resetStreamingSessionState();
+        applyEffectiveStreamingConfig();
+        for (auto& grid : grids)
+            grid->streamer.setEnabled(true);
 
         worldMode = true;
         currentWorldPath = filePath;
 
-        // Enable GPU object streaming if configured
-        if (newDef.streamingConfig.enableGPUObjectStreaming)
+        // Enable GPU object streaming if ANY grid asks for it: the renderer-side toggle is global,
+        // so the honest reading of N per-grid flags is their OR.
+        bool wantsGPUObjectStreaming = false;
+        for (const auto& grid : worldDefinition.grids)
+            wantsGPUObjectStreaming = wantsGPUObjectStreaming || grid.streamingConfig.enableGPUObjectStreaming;
+
+        if (wantsGPUObjectStreaming)
         {
             events::render::objectstreaming::SetObjectStreamingEnabledCommand cmd;
             cmd.enabled = true;
             ::events::EventDispatcher::instance().execute(cmd);
         }
 
-        for (const auto& [coord, sectorPath] : worldDefinition.sectorFilePaths)
+        for (uint8_t gridIndex = 0; gridIndex < gridCount(); ++gridIndex)
         {
-            auto& sector = sectorManager.getOrCreateSector(coord);
+        auto& manager = gridRuntime(gridIndex).manager;
+        for (const auto& [coord, storedSectorPath] : worldDefinition.grid(gridIndex).sectorFilePaths)
+        {
+            // Stored relative to the project; resolves to a loose file in the editor and to an
+            // "Assets/..." archive key in a shipped game
+            const std::string sectorPath = resolveProjectPath(storedSectorPath);
+
+            auto& sector = manager.getOrCreateSector(coord);
             sector.filePath = sectorPath;
             sector.state = world::SectorState::Unloaded;
 
             // Pre-cache metadata from binary header (44 bytes, fast)
-            world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata);
+            if (!world::WorldSectorSerialization::readSectorMetadata(sectorPath, sector.metadata))
+            {
+                // No parseable binary header: a JSON-format .vfsector (the debug writer produces
+                // one), a truncated file, or one created after this scan. estimatedMemory then
+                // stays 0 - and 0 is exactly what the prefetch pool CHARGES for admitting the
+                // sector, so every such sector is free and maxPrefetchBytes stops bounding
+                // anything at all.
+                //
+                // The blob cache holds the RAW FILE, so its size on disk is the exact cost, not an
+                // estimate. Same locate() the header read above already tried, so this costs
+                // nothing extra and works for uncompressed archive entries too. A compressed entry
+                // has no physical location and keeps a 0 estimate; refreshStreamingPools' trim of
+                // an over-budget prefetch pool is what bounds that case.
+                sector.metadata = {};
+                if (const auto location = serialization::locateSerializationFile(sectorPath))
+                    sector.metadata.estimatedMemory = location->size;
+            }
 
-            // Restore the HLOD bake if one exists on disk (the path isn't stored in
-            // the world definition; GenerateHLODCommand uses this naming convention)
+            // Restore the HLOD bake if one exists (the path isn't stored in the world
+            // definition; GenerateHLODCommand uses this naming convention).
+            //
+            // VK-1599: the primary grid only. HLOD is bound to it, so a grid-1 sector can never
+            // have a bake - probing would be a pointless VFS lookup per sector, and a stray
+            // sector_g1_..._hlod0.vfHLOD left behind by hand would be adopted as if it were real.
+            if (gridIndex != world::kPrimaryGridIndex)
+                continue;
+
             std::string hlodPath = sectorPath;
             if (auto dotPos = hlodPath.rfind('.'); dotPos != std::string::npos)
                 hlodPath = hlodPath.substr(0, dotPos);
             hlodPath += "_hlod0.vfHLOD";
-            if (std::filesystem::exists(hlodPath))
+            if (resource::VirtualFileSystem::instance().exists(hlodPath))
                 sector.hlodFilePath = hlodPath;
         }
+        }
+
+        // VK-1590: register references held by entities that were already in the scene before
+        // the world opened — they never go through the sector spawn path.
+        rescanEntityReferences();
 
         ::events::world::WorldLoadedNotification notif;
         notif.worldPath = filePath;
@@ -255,21 +374,128 @@ namespace services
         return true;
     }
 
-    bool WorldSectorServiceImpl::saveSector(const world::SectorCoord& coord, const std::string& filePath)
+    bool WorldSectorServiceImpl::saveSector(uint8_t gridIndex, const world::SectorCoord& coord,
+                                            const std::string& filePath)
     {
-        auto* sector = sectorManager.getSector(coord);
+        auto* sector = gridRuntime(gridIndex).manager.getSector(coord);
         if (!sector)
         {
-            vfLogError("Cannot save sector ({},{}): not found", coord.x, coord.z);
+            vfLogError("Cannot save sector ({},{}) on grid {}: not found",
+                       coord.x, coord.z, static_cast<int>(gridIndex));
+            return false;
+        }
+
+        // VK-1591: same data-loss guard as saveWorld — a prefetched sector has no live entities
+        // to serialize, so writing it would truncate the file to an empty entity array.
+        if (sector->state == world::SectorState::Prefetching ||
+            sector->state == world::SectorState::Prefetched)
+        {
+            vfLogWarning("Skipping save of prefetched sector ({},{}): it holds no entities",
+                         coord.x, coord.z);
             return false;
         }
 
         bool result = world::WorldSectorSerialization::saveSector(*sector, filePath);
         if (result)
         {
-            worldDefinition.sectorFilePaths[coord] = filePath;
+            worldDefinition.grid(gridIndex).sectorFilePaths[coord] = toProjectRelativePath(filePath);
         }
         return result;
+    }
+
+    uint8_t WorldSectorServiceImpl::addGrid(const std::string& name,
+                                            const world::SectorConfig& sectorConfig,
+                                            const world::SectorStreamingConfig& streamingConfig)
+    {
+        if (worldDefinition.grids.size() >= world::kMaxGrids)
+        {
+            vfLogError("Cannot add grid '{}': a world may declare at most {} grids.",
+                       name, static_cast<int>(world::kMaxGrids));
+            return world::kMaxGrids;
+        }
+
+        world::GridDefinition definition;
+        definition.name = name.empty() ? "Grid" : name;
+        definition.sectorConfig = sectorConfig;
+        definition.streamingConfig = streamingConfig;
+        // Sanitize, not normalize: this definition is serialized, and normalizing would resolve the
+        // prefetchRadius == 0 sentinel into a literal. It bit hardest here - the Add Grid UI has no
+        // prefetch field at all, so the incoming value is ALWAYS the default 0 and this line always
+        // baked it. createWorld, which never normalized, is the correct precedent.
+        world::sanitizeStreamingConfig(definition.streamingConfig);
+        worldDefinition.grids.push_back(std::move(definition));
+
+        // Appending a runtime rather than rebuilding: the other grids may have sectors resident and
+        // reads in flight, and rebuildGridRuntimes deliberately keeps nothing. `grids` holds
+        // unique_ptrs precisely so this push_back cannot move the live GridRuntimes.
+        auto runtime = std::make_unique<GridRuntime>();
+        runtime->manager.setConfig(worldDefinition.grids.back().sectorConfig);
+        runtime->streamer.setConfig(worldDefinition.grids.back().streamingConfig);
+        runtime->streamer.setEnabled(worldMode);
+        grids.push_back(std::move(runtime));
+        perGridActions.resize(grids.size());
+
+        return static_cast<uint8_t>(grids.size() - 1);
+    }
+
+    std::string WorldSectorServiceImpl::removeGrid(uint8_t gridIndex)
+    {
+        if (gridIndex == world::kPrimaryGridIndex)
+            return "The Default grid cannot be removed - terrain, ocean, navmesh and HLOD are bound to it.";
+        if (gridIndex >= gridCount())
+            return "No such grid.";
+        if (isPlayMode)
+            return "Stop play mode before removing a grid.";
+
+        // Refuse rather than silently orphan: the .vfsector files are the only copy of those
+        // entities' data. Re-assign them to another grid (or delete them) first.
+        if (!worldDefinition.grid(gridIndex).sectorFilePaths.empty())
+        {
+            return "This grid still owns sector files. Move its entities to another grid and "
+                   "Save World first.";
+        }
+
+        bool hasEntities = false;
+        gridRuntime(gridIndex).manager.forEachSector([&](const world::WorldSector& sector)
+        {
+            if (!sector.entityUUIDs.empty())
+                hasEntities = true;
+        });
+        if (hasEntities)
+            return "This grid still has resident entities. Move them to another grid first.";
+
+        // Drop the runtime before the definition so nothing can index past the end in between.
+        grids.erase(grids.begin() + gridIndex);
+        worldDefinition.grids.erase(worldDefinition.grids.begin() + gridIndex);
+        perGridActions.resize(grids.size());
+
+        // VK-1600: every GridRuntime's own maps are keyed on a bare SectorCoord and travel with
+        // the runtime, so the erase above leaves them correct. The eviction pools do NOT: they
+        // are world-level and bake the grid index into their key (sectorRegistrationId). Every
+        // entry above the removed grid now names a grid one too high - it would release the
+        // wrong sector, and once the index passes gridCount() it would simply sit there holding
+        // budget nothing can reclaim. Re-key them to match the shift.
+        rekeySectorPoolsAfterGridRemoval(gridIndex);
+
+        // Every entity on a HIGHER grid has just had its index shifted down by one. Their
+        // components still name the old index, so re-resolve them all rather than letting
+        // clampGridIndex quietly fold the last grid's entities onto the primary one.
+        //
+        // A registry view, NOT a walk over the scene root's children: Entity::getChildren reads
+        // ChildrenComponent one level deep, so a nested entity - anything inside a prefab, or any
+        // entity not parented directly to the root - kept its stale index. Once that index passes
+        // gridCount() clampGridIndex folds it onto grid 0, and the next reconcileAlwaysLoadedEntities
+        // moves it out of its own sector into a primary-grid one with a different cell size.
+        // There is no recursive scene-graph helper to reuse, and the view is both complete and
+        // cheaper - it visits exactly the entities that carry the component.
+        auto& registry = scene::EntityRegistry::getRegistry();
+        for (auto&& [entity, policy] : registry.view<components::StreamingPolicyComponent>().each())
+        {
+            if (policy.gridIndex > gridIndex)
+                --policy.gridIndex;
+        }
+
+        return {};
     }
 
     void WorldSectorServiceImpl::clearWorld()
@@ -284,18 +510,22 @@ namespace services
             ::events::EventDispatcher::instance().execute(cmd);
         }
 
-        // Drain all pending async sector loads before clearing
-        pendingAsyncLoads.drain();
+        // Drain all pending async sector and HLOD loads before clearing
+        drainSectorLoads(); // VK-1592: cancels undispatched scheduler requests first
+        drainHlodLoads();
+        clearStreamingResidency(); // VK-1591
 
         entityLoader.clear();
+        // VK-1590: otherwise the ledger keeps entries keyed on the previous world's UUIDs.
+        referenceResolver.clear();
+        refTargetProbeQueue.clear();
         physicsSnapshots.clear();
         animationSnapshots.clear();
         vfxSnapshots.clear();
         audioSnapshots.clear();
-        streamingSources.clear();
-        streamingSourceOwners.clear();
-        nextStreamingSourceId = 1;
-        sectorManager.clear();
+        clearStreamingSources();
+        for (auto& grid : grids)
+            grid->manager.clear();
 
         auto& root = sceneGraph->GetRoot();
         if (root.hasComponent<components::WorldSectorComponent>())
@@ -303,12 +533,46 @@ namespace services
             root.removeComponent<components::WorldSectorComponent>();
         }
 
-        hlodProxyManager.unloadAll(*sceneGraph);
+        // VK-1594: free the GPU geometry too. In-memory HLOD meshes are pinned in
+        // MeshStreamManager precisely so the ordinary eviction sweep cannot drop them, which also
+        // means closing the world without this would leak every resident proxy's buffers.
+        {
+            std::vector<std::string> hlodMeshKeys;
+            hlodProxyManager.collectMeshKeys(hlodMeshKeys);
+            hlodProxyManager.unloadAll(*sceneGraph);
+
+            for (const auto& meshKey : hlodMeshKeys)
+            {
+                events::render::objectstreaming::ReleaseHLODMeshCommand relCmd;
+                relCmd.meshKey = meshKey;
+                try
+                {
+                    ::events::EventDispatcher::instance().execute(relCmd);
+                }
+                catch (const std::exception&)
+                {
+                    // execute() throws with no handler registered, which is the normal state
+                    // outside the Editor (ObjectStreamingServiceImpl is Editor-only). Nothing was
+                    // registered there in the first place.
+                }
+            }
+        }
         hlodStreamer.clear();
+        // VK-1600: unloadAll above destroyed every proxy without going through
+        // releaseHLODProxy, so this is the one place the HLOD budget has to be handed back in
+        // bulk. Deliberately not in clearStreamingResidency - proxies survive a play/edit mode
+        // change by design, and clearing the pool there would let the world hold twice its
+        // budget in proxies nothing is accounting for.
+        hlodProxyPool.clear();
         hlodRegenQueue.clear();
 
         worldDefinition = {};
-        streamer.setEnabled(false);
+        // VK-1599: back to the one default grid the emptied definition describes, so nothing
+        // outlives the world it belonged to.
+        rebuildGridRuntimes();
+        resetStreamingSessionState(); // VK-1595: the override and the freeze die with the world
+        for (auto& grid : grids)
+            grid->streamer.setEnabled(false);
         worldMode = false;
         currentWorldPath.clear();
     }

@@ -133,9 +133,15 @@ namespace services
         worldLoadedSub = std::make_unique<events::SubscriptionToken>(worldLoadedToken);
 
         // Sector-driven terrain streaming subscriptions
+        // VK-1599: only the primary grid drives terrain tiles. Every grid covers the same ground,
+        // so without this a two-grid world would activate each tile once per grid and the tile
+        // refcounts would never balance - a clutter sector leaving would release a tile the
+        // landmark grid still needs.
         auto activatedToken = dispatcher.subscribe<events::world::SectorActivatedNotification>(
             [this](const events::world::SectorActivatedNotification& notif)
             {
+                if (!notif.drivesWorldSystems)
+                    return;
                 onSectorActivated(notif.coord, notif.sectorConfig);
             });
         sectorActivatedSub = std::make_unique<events::SubscriptionToken>(activatedToken);
@@ -143,6 +149,8 @@ namespace services
         auto deactivatedToken = dispatcher.subscribe<events::world::SectorDeactivatedNotification>(
             [this](const events::world::SectorDeactivatedNotification& notif)
             {
+                if (!notif.drivesWorldSystems)
+                    return;
                 onSectorDeactivated(notif.coord, notif.sectorConfig);
             });
         sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);

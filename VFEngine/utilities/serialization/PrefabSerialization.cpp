@@ -154,8 +154,13 @@ namespace serialization
 
         if (entity.hasComponent<components::SocketAttachmentComponent>())
         {
-            out["socketAttachment"] = SceneSerialization::serializeSocketAttachment(
+            auto socketJson = SceneSerialization::serializeSocketAttachment(
                 entity.getComponent<components::SocketAttachmentComponent>());
+            // VK-1590: prefab instantiation re-mints UUIDs, so a baked scene UUID would either
+            // dangle or (worse) alias the original scene entity across every instance.
+            // Prefab-internal attachments resolve by name via the ancestor walk.
+            socketJson.erase("parentEntityUUID");
+            out["socketAttachment"] = std::move(socketJson);
         }
 
         if (entity.hasComponent<components::SocketOverrideComponent>())
@@ -174,6 +179,20 @@ namespace serialization
         {
             out["ikTarget"] = SceneSerialization::serializeIKTarget(
                 entity.getComponent<components::IKTargetComponent>());
+        }
+
+        // VK-1597: a prefab of an always-loaded landmark must instantiate still pinned, or the
+        // instance is silently bucketed into a sector and vanishes on the next unload.
+        if (entity.hasComponent<components::StreamingPolicyComponent>())
+        {
+            const auto& policy = entity.getComponent<components::StreamingPolicyComponent>();
+            out["streamingPolicy"] = {
+                {"spatiallyLoaded", policy.spatiallyLoaded}
+            };
+            // VK-1599: written only when non-zero, so a prefab that never touched grids keeps its
+            // exact current payload.
+            if (policy.gridIndex != 0)
+                out["streamingPolicy"]["gridIndex"] = policy.gridIndex;
         }
 
         // Behavior tree must be baked so instantiated entities carry their AI brain
@@ -520,6 +539,15 @@ namespace serialization
         {
             auto& ikTargetComp = entity.addOrReplaceComponent<components::IKTargetComponent>();
             SceneSerialization::deserializeIKTarget(componentsJson["ikTarget"], ikTargetComp);
+        }
+
+        if (componentsJson.contains("streamingPolicy")) // VK-1597
+        {
+            auto& policy = entity.addOrReplaceComponent<components::StreamingPolicyComponent>();
+            policy.spatiallyLoaded = componentsJson["streamingPolicy"].value("spatiallyLoaded", true);
+            // VK-1599: absent means the primary grid.
+            policy.gridIndex =
+                static_cast<uint8_t>(componentsJson["streamingPolicy"].value("gridIndex", 0));
         }
 
         if (componentsJson.contains("behaviorTree"))

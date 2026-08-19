@@ -1,8 +1,33 @@
 #include "WorldSectorManager.hpp"
+#include "SectorAssignment.hpp"
+#include "../print/Log.hpp"
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace world
 {
+    namespace
+    {
+        // VK-1597: floorToSectorAxis moved to SectorAssignment.cpp so the pure, unit-testable
+        // bucketing decision and this manager cannot drift apart. Behaviour is unchanged.
+
+        // Sectors created from an engine-derived position can no longer land out of range (see
+        // floorToSectorAxis), so this only fires for a hand-edited or corrupt .vfworld. The sector
+        // is still created - dropping it would lose data - but its streaming id aliases another's.
+        void logInvalidSectorCoordOnce(const SectorCoord& coord)
+        {
+            static std::atomic<bool> logged{false};
+            if (logged.exchange(true, std::memory_order_relaxed))
+                return;
+
+            vfLogError("[WorldSector] Sector ({}, {}) is outside the addressable range [{}, {}]. "
+                       "sectorCoordToId() packs each axis into 16 bits, so this sector aliases "
+                       "another sector's streaming id. Further occurrences suppressed.",
+                       coord.x, coord.z, kMinSectorCoord, kMaxSectorCoord);
+        }
+    }
+
     WorldSectorManager::WorldSectorManager(const SectorConfig& config)
         : config(config)
     {
@@ -15,25 +40,21 @@ namespace world
 
     SectorCoord WorldSectorManager::worldPositionToSectorCoord(const glm::vec3& pos) const
     {
-        return SectorCoord(
-            static_cast<int32_t>(std::floor(pos.x / config.sectorWorldSize)),
-            static_cast<int32_t>(std::floor(pos.z / config.sectorWorldSize))
-        );
+        return world::worldPositionToSectorCoord(pos, config);
     }
 
     SectorCoord WorldSectorManager::tileCoordToSectorCoord(const terrain::TileCoord& tileCoord, float worldTileSize) const
     {
-        float worldX = static_cast<float>(tileCoord.x) * worldTileSize;
-        float worldZ = static_cast<float>(tileCoord.z) * worldTileSize;
-        return SectorCoord(
-            static_cast<int32_t>(std::floor(worldX / config.sectorWorldSize)),
-            static_cast<int32_t>(std::floor(worldZ / config.sectorWorldSize))
-        );
+        return world::tileOriginToSectorCoord(tileCoord.x, tileCoord.z, worldTileSize, config);
     }
 
     void WorldSectorManager::assignEntityToSector(uint64_t uuid, const glm::vec3& position)
     {
-        SectorCoord coord = worldPositionToSectorCoord(position);
+        assignEntityToSector(uuid, worldPositionToSectorCoord(position));
+    }
+
+    void WorldSectorManager::assignEntityToSector(uint64_t uuid, const SectorCoord& coord)
+    {
         auto& sector = getOrCreateSector(coord);
         sector.entityUUIDs.push_back(uuid);
         sector.dirty = true;
@@ -95,6 +116,9 @@ namespace world
         if (it != sectors.end())
             return it->second;
 
+        if (!isValidSectorCoord(coord))
+            logInvalidSectorCoordOnce(coord);
+
         auto& sector = sectors[coord];
         sector.coord = coord;
         return sector;
@@ -121,6 +145,8 @@ namespace world
         std::vector<SectorCoord> result;
         for (const auto& [coord, sector] : sectors)
         {
+            // VK-1591: deliberately Loaded ONLY — callers expect live entities, and a
+            // Prefetched sector has none.
             if (sector.state == SectorState::Loaded)
                 result.push_back(coord);
         }

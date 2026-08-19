@@ -7,6 +7,10 @@ namespace serialization
     {
         json j;
         j["parentEntityName"] = attachment.parentEntityName;
+        // VK-1590: exact cross-sector identity. Omitted when 0 so prefab-internal and
+        // pre-VK-1590 attachments keep producing byte-identical JSON.
+        if (attachment.parentEntityUUID != 0)
+            j["parentEntityUUID"] = attachment.parentEntityUUID;
         j["socketName"] = attachment.socketName;
         j["isActive"] = attachment.isActive;
         return j;
@@ -15,11 +19,14 @@ namespace serialization
     void SceneSerialization::deserializeSocketAttachment(const json& j, components::SocketAttachmentComponent& attachment)
     {
         attachment.parentEntityName = j.value("parentEntityName", std::string(""));
+        attachment.parentEntityUUID = j.value("parentEntityUUID", static_cast<uint64_t>(0));
         attachment.parentEntity = entt::null;
         attachment.socketName = j.value("socketName", "");
         attachment.isActive = j.value("isActive", true);
         attachment.cachedSocketIndex = -1;
-        attachment.needsParentResolution = !attachment.parentEntityName.empty();
+        // VK-1590: a UUID-only attachment (no name) must still arm, or it would never resolve.
+        attachment.needsParentResolution =
+            !attachment.parentEntityName.empty() || attachment.parentEntityUUID != 0;
     }
 
     json SceneSerialization::serializeSocketOverride(const components::SocketOverrideComponent& override)

@@ -144,9 +144,13 @@ namespace services
         sceneClearedSubscription = std::make_unique<events::SubscriptionToken>(sceneToken);
 
         // Sector-driven water tile streaming subscriptions
+        // VK-1599: water tiles are ground, not entities - only the primary grid drives them. See
+        // the identical guard in TerrainServiceHandlers for the refcount argument.
         auto activatedToken = dispatcher.subscribe<events::world::SectorActivatedNotification>(
             [this](const events::world::SectorActivatedNotification& notif)
             {
+                if (!notif.drivesWorldSystems)
+                    return;
                 onSectorActivated(notif.coord, notif.sectorConfig);
             });
         sectorActivatedSub = std::make_unique<events::SubscriptionToken>(activatedToken);
@@ -154,6 +158,8 @@ namespace services
         auto deactivatedToken = dispatcher.subscribe<events::world::SectorDeactivatedNotification>(
             [this](const events::world::SectorDeactivatedNotification& notif)
             {
+                if (!notif.drivesWorldSystems)
+                    return;
                 onSectorDeactivated(notif.coord, notif.sectorConfig);
             });
         sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);

@@ -24,6 +24,9 @@ namespace world
         [[nodiscard]] SectorCoord tileCoordToSectorCoord(const terrain::TileCoord& tileCoord, float worldTileSize) const;
 
         void assignEntityToSector(uint64_t uuid, const glm::vec3& position);
+        // VK-1597: for callers that already resolved the coord through
+        // world::resolveSectorAssignment and must not re-derive it.
+        void assignEntityToSector(uint64_t uuid, const SectorCoord& coord);
         void removeEntityFromSector(uint64_t uuid, const SectorCoord& coord);
         void reassignEntity(uint64_t uuid, const glm::vec3& oldPos, const glm::vec3& newPos);
 

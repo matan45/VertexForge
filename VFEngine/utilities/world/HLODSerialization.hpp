@@ -6,7 +6,9 @@
 #include "../resource/Types.hpp"
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace world
@@ -70,8 +72,17 @@ namespace world
     {
     public:
         static bool save(const std::string& filePath, const HLODFileData& data);
+
+        // Reads through the serialization file-access bridge, so a packed .vfHLOD inside a
+        // .vfpak resolves exactly like a loose file.
         static bool load(const std::string& filePath, HLODFileData& outData);
         static bool readHeader(const std::string& filePath, HLODFileHeader& outHeader);
+
+        // Same parse, over bytes the caller already holds. sourceLabel only names the buffer
+        // in error logs.
+        static bool loadFromMemory(std::span<const uint8_t> bytes, HLODFileData& outData,
+                                   std::string_view sourceLabel = {});
+        static bool parseHeader(std::span<const uint8_t> bytes, HLODFileHeader& outHeader);
     };
 
 } // namespace world

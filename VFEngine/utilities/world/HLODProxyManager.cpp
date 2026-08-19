@@ -7,24 +7,25 @@
 
 namespace world
 {
-    void HLODProxyManager::loadProxy(const HLODCellCoord& cellCoord, const std::string& hlodFilePath)
+    void HLODProxyManager::loadProxyFromData(const HLODCellCoord& cellCoord, std::string meshKey,
+                                             HLODFileData data)
     {
         if (proxies.count(cellCoord) > 0) return;
 
         ProxyEntry entry;
         entry.cellCoord = cellCoord;
         entry.state = HLODProxyState::Loading;
+        entry.meshKey = std::move(meshKey);
         proxies[cellCoord] = std::move(entry);
 
-        // Async load the .vfHLOD file
+        // The bytes are already parsed, but they still go through the pending-load queue so
+        // update() remains the single place that touches the scene graph: creating entities here
+        // would run on whatever thread happened to deliver the data.
         PendingLoad pending;
         pending.cellCoord = cellCoord;
-        pending.future = std::async(std::launch::async, [hlodFilePath]() -> HLODFileData
-        {
-            HLODFileData data;
-            HLODSerialization::load(hlodFilePath, data);
-            return data;
-        });
+        std::promise<HLODFileData> ready;
+        ready.set_value(std::move(data));
+        pending.future = ready.get_future();
         pendingLoads.push_back(std::move(pending));
     }
 
@@ -67,7 +68,14 @@ namespace world
                 if (proxyIt != proxies.end() && data.header.submeshCount > 0)
                 {
                     createProxyEntities(proxyIt->second, data, sceneGraph);
-                    proxyIt->second.state = HLODProxyState::Loaded;
+
+                    // VK-1594: a proxy appears by fading in rather than popping. Alpha starts at
+                    // 1 (fully faded) so the first rendered frame is already correct - leaving it
+                    // at the default 0 would flash the proxy at full opacity for one frame.
+                    proxyIt->second.state = HLODProxyState::FadingIn;
+                    proxyIt->second.crossfadeAlpha = 1.0f;
+                    proxyIt->second.crossfadeTimer = CROSSFADE_DURATION;
+
                     vfLogInfo("HLOD proxy loaded: [{},{},T{}]",
                               it->cellCoord.x, it->cellCoord.z, it->cellCoord.tier);
                 }
@@ -88,6 +96,8 @@ namespace world
         // Update crossfades
         for (auto& [coord, proxy] : proxies)
         {
+            const float previousAlpha = proxy.crossfadeAlpha;
+
             if (proxy.state == HLODProxyState::FadingIn)
             {
                 proxy.crossfadeTimer -= deltaTime;
@@ -116,6 +126,22 @@ namespace world
                     proxy.crossfadeAlpha = 1.0f - (proxy.crossfadeTimer / CROSSFADE_DURATION);
                 }
             }
+
+            // VK-1594: publish the alpha onto the entity so FramePreparationSystem can forward it
+            // to the GPU dither. Written only on change - a proxy sitting at Loaded (alpha 0) for
+            // minutes must not dirty its component every frame.
+            if (proxy.crossfadeAlpha != previousAlpha)
+            {
+                for (auto& entity : proxy.entities)
+                {
+                    // isAlive() for the same reason destroyProxyEntities checks it - the entity
+                    // can be destroyed out from under the proxy (scene reload, undo), and
+                    // hasComponent on a stale handle is undefined.
+                    if (entity.isAlive() && entity.hasComponent<components::HLODProxyComponent>())
+                        entity.getComponent<components::HLODProxyComponent>().crossfadeAlpha =
+                            proxy.crossfadeAlpha;
+                }
+            }
         }
     }
 
@@ -126,8 +152,11 @@ namespace world
         if (it->second.state != HLODProxyState::Loaded && it->second.state != HLODProxyState::FadingIn)
             return;
 
+        // Seed the timer from the CURRENT alpha rather than restarting at the full duration, so
+        // reversing a fade mid-flight continues from where it is instead of popping. FadingOut
+        // reads alpha = 1 - timer/DURATION, hence timer = (1 - alpha) * DURATION.
         it->second.state = HLODProxyState::FadingOut;
-        it->second.crossfadeTimer = CROSSFADE_DURATION;
+        it->second.crossfadeTimer = (1.0f - it->second.crossfadeAlpha) * CROSSFADE_DURATION;
     }
 
     void HLODProxyManager::beginFadeIn(const HLODCellCoord& cellCoord)
@@ -137,8 +166,27 @@ namespace world
         if (it->second.state != HLODProxyState::Loaded && it->second.state != HLODProxyState::FadingOut)
             return;
 
+        // FadingIn reads alpha = timer/DURATION, hence timer = alpha * DURATION.
         it->second.state = HLODProxyState::FadingIn;
-        it->second.crossfadeTimer = CROSSFADE_DURATION;
+        it->second.crossfadeTimer = it->second.crossfadeAlpha * CROSSFADE_DURATION;
+    }
+
+    void HLODProxyManager::collectExpiredProxies(std::vector<HLODCellCoord>& out) const
+    {
+        for (const auto& [coord, proxy] : proxies)
+        {
+            if (proxy.state == HLODProxyState::Unloading)
+                out.push_back(coord);
+        }
+    }
+
+    void HLODProxyManager::collectMeshKeys(std::vector<std::string>& out) const
+    {
+        for (const auto& [coord, proxy] : proxies)
+        {
+            if (!proxy.meshKey.empty())
+                out.push_back(proxy.meshKey);
+        }
     }
 
     bool HLODProxyManager::isProxyLoaded(const HLODCellCoord& cellCoord) const
@@ -173,10 +221,12 @@ namespace world
         rootEntity.addComponent<components::HLODProxyComponent>(
             proxy.cellCoord.x, proxy.cellCoord.z, proxy.cellCoord.tier);
 
-        // Add mesh component pointing to the .vfHLOD file
-        // The rendering system treats this like a regular mesh entity
-        // Note: The .vfHLOD path must be accessible via the resource system
-        // For now, we store the file data and the rendering pipeline picks it up
+        // VK-1594: the geometry was uploaded into MergedMeshBuffer from memory under this key
+        // before we got here, so a plain MeshComponent is all the GPU-driven renderer needs -
+        // it enumerates registry.view<MeshComponent>() and resolves meshRef to that same key.
+        // Without this the proxy entity was inert and nothing HLOD ever drew.
+        rootEntity.addComponent<components::MeshComponent>().meshRef =
+            asset::AssetRef::fromPath(proxy.meshKey);
 
         // Add material component with per-submesh materials
         if (!data.submeshes.empty())
@@ -187,11 +237,14 @@ namespace world
                 matComp.defaultMaterialRef = asset::AssetRef::fromPath(data.submeshes[0].materialPath);
             }
 
-            for (size_t i = 1; i < data.submeshes.size(); ++i)
+            // Names MUST match the ones the upload reserved its submesh slots under
+            // (ObjectStreamingAdapter::registerHLODMesh), or the per-submesh material lookup
+            // silently misses and every submesh falls back to the default material.
+            for (size_t i = 0; i < data.submeshes.size(); ++i)
             {
                 if (!data.submeshes[i].materialPath.empty())
                 {
-                    std::string submeshName = "hlod_submesh_" + std::to_string(i);
+                    std::string submeshName = "hlod_" + std::to_string(i);
                     matComp.setSubMeshMaterial(submeshName,
                         asset::AssetRef::fromPath(data.submeshes[i].materialPath));
                 }

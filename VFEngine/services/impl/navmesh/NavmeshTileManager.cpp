@@ -80,6 +80,11 @@ namespace services
         sectorAboutToLoadToken = dispatcher.subscribe<::events::world::SectorAboutToLoadNotification>(
             [this](const ::events::world::SectorAboutToLoadNotification& notif)
             {
+                // VK-1599: navmesh tiles are refcounted per sector, and every grid covers the same
+                // ground - so only the primary grid drives them. Without this, a clutter sector
+                // leaving would release tiles the landmark grid is still standing on.
+                if (!notif.drivesWorldSystems)
+                    return;
                 if (!streamer.isEnabled())
                     return;
                 prioritizeTilesForBounds(notif.coord, notif.boundsMin, notif.boundsMax);
@@ -89,6 +94,8 @@ namespace services
         sectorUnloadedToken = dispatcher.subscribe<::events::world::SectorUnloadedNotification>(
             [this](const ::events::world::SectorUnloadedNotification& notif)
             {
+                if (!notif.drivesWorldSystems)
+                    return;
                 if (!streamer.isEnabled())
                     return;
                 float sectorSize = notif.sectorConfig.sectorWorldSize;

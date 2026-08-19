@@ -10,6 +10,7 @@
 #include "../../../services/events/project/SceneEvents.hpp"
 #include "../../../services/events/scene/ScenePersistenceEvents.hpp"
 #include "../../../services/events/project/ProjectEvents.hpp"
+#include "components/Components.hpp"
 #include <filesystem>
 
 namespace core::api
@@ -187,6 +188,28 @@ namespace core::api
                     events::scene::GetEntityQuery query;
                     query.entity = intToEntity(id);
                     return value::Value(dispatcher.query(query).has_value());
+                }});
+
+            // _native_entity_getUUID(entityId) -> int
+            // The persistent scene UUID, as opposed to the transient entt handle every other
+            // Entity:: native takes. Needed because RegisterStreamingSourceCommand (and any
+            // future owner-keyed API) keys ownership on the UUID, not the handle.
+            // Returned as a bit-preserving reinterpretation into mType's int64: a UUID above
+            // 2^63 reads back negative, and round-trips exactly through the
+            // static_cast<uint64_t>(extractInt64(...)) on the consuming side. Treat it as an
+            // opaque token - pass it through, never print or compare it. 0 means "no UUID".
+            interpreter->registerNativeFunction("_native_entity_getUUID",
+                {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                    if (args.empty()) return value::Value(static_cast<int64_t>(0));
+
+                    auto entity = resolveEntity(args[0]);
+                    if (!entity.has_value()) return value::Value(static_cast<int64_t>(0));
+
+                    auto& registry = scene::EntityRegistry::getRegistry();
+                    auto* uuidComp = registry.try_get<components::UUIDComponent>(*entity);
+                    if (!uuidComp) return value::Value(static_cast<int64_t>(0));
+
+                    return value::Value(static_cast<int64_t>(uuidComp->id.getValue()));
                 }});
 
             interpreter->registerNativeFunction("_native_entity_isActive",

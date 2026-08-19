@@ -10,6 +10,7 @@
 #include "config/Config.hpp"
 #include "resource/EndianUtils.hpp"
 #include "resource/VertexQuantization.hpp"
+#include "string/FileNameSanitize.hpp"
 
 #include "cpumem/CpuMemoryManager.hpp"
 #include "cpumem/CpuMemoryCategories.hpp"
@@ -353,29 +354,10 @@ namespace
         types::meshlayout::writeSubmeshHeader(outFile, meshName, vertexCount, triangleCount);
     }
 
-    // Strips characters illegal in Windows file names and trims awkward
-    // leading/trailing spaces and dots. Returns an empty string if nothing
-    // usable remains.
-    std::string sanitizeFileStem(std::string_view name)
-    {
-        std::string out;
-        out.reserve(name.size());
-        for (char c : name)
-        {
-            const auto uc = static_cast<unsigned char>(c);
-            if (uc < 0x20 || c == '<' || c == '>' || c == ':' || c == '"' ||
-                c == '/' || c == '\\' || c == '|' || c == '?' || c == '*')
-                out.push_back('_');
-            else
-                out.push_back(c);
-        }
-
-        const size_t start = out.find_first_not_of(" .");
-        if (start == std::string::npos)
-            return {};
-        const size_t end = out.find_last_not_of(" .");
-        return out.substr(start, end - start + 1);
-    }
+    // Strips characters illegal in Windows file names and trims awkward leading/trailing spaces
+    // and dots. Returns an empty string if nothing usable remains. Behaviour unchanged - this was
+    // the original of three byte-identical copies and now names the shared helper.
+    using strutil::sanitizeFileStem;
 
     std::string toLowerCopy(std::string s)
     {
