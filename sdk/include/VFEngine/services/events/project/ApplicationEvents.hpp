@@ -14,6 +14,15 @@ namespace events::application {
         std::string_view getName() const override { return "ApplicationClose"; }
     };
 
+    // Scripted shutdown (App::quit). Distinct from CloseCommand because it carries a
+    // process exit code and because the Editor must NOT close on it: there it stops Play
+    // mode instead, so an automated match can end itself without killing the editor.
+    struct QuitGameCommand : ICommand<> {
+        int exitCode = 0;
+
+        std::string_view getName() const override { return "ApplicationQuitGame"; }
+    };
+
     // ============================================
     // QUERIES - Window state reads
     // ============================================

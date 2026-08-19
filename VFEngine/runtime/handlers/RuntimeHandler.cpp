@@ -267,6 +267,39 @@ namespace {
             }
         }
 
+        // Bring the script VM up BEFORE the startup scene loads: nothing outside the editor
+        // dispatches BuildScriptsCommand, so without this the interpreter never holds a
+        // program and every ScriptComponent on the incoming entities fails with
+        // "Scripts not compiled". Prefer the prebuilt scripts.mtcLib an export produced;
+        // fall back to compiling from source when the project ships its scripts.mtproj.
+        if (scriptingService)
+        {
+            if (scriptingService->loadCompiledScripts())
+            {
+                vfLogInfo("[Runtime] scripts: loaded prebuilt library");
+            }
+            else
+            {
+                const std::filesystem::path manifestPath =
+                    std::filesystem::path(projectOpt->workingDirectory) / "scripts" / "scripts.mtproj";
+                if (std::filesystem::exists(manifestPath))
+                {
+                    if (scriptingService->buildScripts().success)
+                    {
+                        vfLogInfo("[Runtime] scripts: built from source");
+                    }
+                    else
+                    {
+                        vfLogError("[Runtime] scripts: build FAILED");
+                    }
+                }
+                else
+                {
+                    vfLogInfo("[Runtime] scripts: none");
+                }
+            }
+        }
+
         std::filesystem::path scenePath =
             std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
 
@@ -285,7 +318,11 @@ namespace {
         }
 
         // Runtime play-mode handlers listen for EditorModeChangedNotification.
-        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler)
+        // renderTexturePlayModeHandler is in the list because it is the notification that arms
+        // it; without it, scene-authored render textures never activate on a device where the
+        // physics/VFX providers happen to be absent.
+        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler ||
+            renderTexturePlayModeHandler)
         {
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = services::EditorMode::Edit;
@@ -530,6 +567,18 @@ namespace {
         sceneLoadedSubscription = dispatcher.subscribe<events::scene::SceneLoadedNotification>(
             [](const events::scene::SceneLoadedNotification&) {
                 applyPersistedGraphicsOverride();
+            });
+
+        // App::quit(code) from a script. Runs on the Scripts task (an enkiTS worker):
+        // record the exit code, then ask the window to close — glfwSetWindowShouldClose is
+        // documented thread-safe, and the main loop tears everything down in order.
+        dispatcher.registerCommandHandler<events::application::QuitGameCommand>(
+            [this](const events::application::QuitGameCommand& cmd) {
+                requestedExitCode.store(cmd.exitCode, std::memory_order_relaxed);
+                vfLogInfo("[App] quit({}) requested by script", cmd.exitCode);
+                if (windowStateService) {
+                    windowStateService->requestClose();
+                }
             });
     }
 

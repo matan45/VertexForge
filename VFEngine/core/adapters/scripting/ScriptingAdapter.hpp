@@ -1,10 +1,15 @@
 #pragma once
 #include "../../services/providers/scripting/IScriptingProvider.hpp"
 #include "NativeAPIRegistry.hpp"
+#include "events/EventTypes.hpp"
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <utility>
+#include <vector>
 #include <any>
 
 namespace services
@@ -76,6 +81,16 @@ namespace core
         // unregisterPluginNativeFunction / cleanUp).
         std::unordered_map<std::string, std::unique_ptr<::plugin::PluginNativeBinding>> pluginNativeBindings;
 
+        // PluginEventBus -> mType bridge. The bus runs its handlers inline on whichever thread
+        // published (a plugin update task, the main thread, ...), so the handler only appends
+        // {eventName, json.dump()} here; pumpPluginEvents() drains it on the script thread.
+        // A deque because nothing drains it while scripts are stopped (Edit mode) or game time
+        // is frozen, so the oldest entries are dropped once it saturates.
+        std::mutex pluginEventMutex;
+        std::deque<std::pair<std::string, std::string>> pendingPluginEvents;
+        std::vector<::events::SubscriptionToken> pluginEventTokens;
+        std::unordered_set<std::string> bridgedPluginEvents;
+
         mutable std::optional<::services::ScriptError> lastError;
 
         uint64_t nextInstanceId = 1;
@@ -120,6 +135,8 @@ namespace core
 
         void tickCoroutines(float deltaTime) override;
         void tickFixedUpdateCoroutines() override;
+
+        void pumpPluginEvents() override;
 
         std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                           const std::vector<std::any>& args = {}) override;

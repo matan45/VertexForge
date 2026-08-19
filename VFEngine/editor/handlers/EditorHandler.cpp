@@ -89,8 +89,19 @@ namespace handlers
             // point to apply a script-fatal-triggered Stop. Dispatching the mode
             // change here (rather than from inside the off-thread callback) avoids
             // re-entrancy and off-main-thread scene mutation.
-            if (playFatalErrorRequested.exchange(false, std::memory_order_relaxed) &&
-                editorModeService && editorModeService->isPlayMode())
+            const bool fatalStop = playFatalErrorRequested.exchange(false, std::memory_order_relaxed);
+
+            // App::quit(code) uses the same safe point: in the editor the request ends the
+            // play session instead of closing the application, so an automated match can
+            // finish itself without taking the editor down with it.
+            const bool quitStop = scriptQuitRequested.exchange(false, std::memory_order_relaxed);
+            if (quitStop)
+            {
+                vfLogInfo("[App] quit({}) requested by script -> stopping play mode",
+                          scriptQuitExitCode.load(std::memory_order_relaxed));
+            }
+
+            if ((fatalStop || quitStop) && editorModeService && editorModeService->isPlayMode())
             {
                 events::editor::SetEditorModeCommand stopCmd;
                 stopCmd.mode = services::EditorMode::Edit;
@@ -270,6 +281,16 @@ namespace handlers
             [this](const events::application::ApplyDisplaySettingsNotification& n)
             {
                 bootstrap->applyDisplaySettings(n.presentMode, n.msaa);
+            });
+
+        // App::quit(code) — flag only. The command arrives on the Scripts task's thread and a
+        // mode change tears scripts down, so the Stop is applied on the main thread in the
+        // frame callback once the task graph has joined.
+        dispatcher.registerCommandHandler<events::application::QuitGameCommand>(
+            [this](const events::application::QuitGameCommand& cmd)
+            {
+                scriptQuitExitCode.store(cmd.exitCode, std::memory_order_relaxed);
+                scriptQuitRequested.store(true, std::memory_order_relaxed);
             });
     }
 

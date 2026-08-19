@@ -96,7 +96,30 @@ namespace core::api
                 const auto& callback = args[1];
 
                 uint64_t instanceId = NativeAPIRegistry::getCurrentInstanceId();
-                uint64_t token = communicationManager->listen(eventName, instanceId, callback);
+                uint64_t token = communicationManager->listen(eventName, instanceId, callback,
+                                                              /*wantsPayload=*/false);
+                return value::Value(static_cast<int64_t>(token));
+            }});
+
+        // listenJson(eventName, callback) — same subscription list as listen(), but the
+        // callback takes one string argument. Plugin events published on PluginEventBus carry
+        // a JSON object; it arrives here as its serialized form. A separate native is needed
+        // because the VM rejects any arity mismatch, so a 1-arg callback cannot share a
+        // registration path with EventCallback's 0-arg invoke().
+        interpreter->registerNativeFunction("_native_scriptEvent_listenJson",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                if (!communicationManager || args.size() < 2)
+                    return value::Value(static_cast<int64_t>(-1));
+
+                std::string eventName = extractString(args[0], "ScriptEvent.listenJson");
+                if (eventName.empty())
+                    return value::Value(static_cast<int64_t>(-1));
+
+                const auto& callback = args[1];
+
+                uint64_t instanceId = NativeAPIRegistry::getCurrentInstanceId();
+                uint64_t token = communicationManager->listen(eventName, instanceId, callback,
+                                                              /*wantsPayload=*/true);
                 return value::Value(static_cast<int64_t>(token));
             }});
 

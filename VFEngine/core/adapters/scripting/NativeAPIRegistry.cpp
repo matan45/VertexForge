@@ -46,6 +46,7 @@
 #include "../api/LoadingAPI.hpp"
 #include "../api/GraphicsAPI.hpp"
 #include "../api/StatsAPI.hpp"
+#include "../api/AppAPI.hpp"
 
 #include "print/Log.hpp"
 namespace core
@@ -124,6 +125,7 @@ namespace core
         api::LoadingAPI::registerAPI(interpreter);
         api::GraphicsAPI::registerAPI(interpreter);
         api::StatsAPI::registerAPI(interpreter);
+        api::AppAPI::registerAPI(interpreter);
 
         vfLogInfo("[NativeAPIRegistry] Registered native engine APIs");
     }

@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <memory>
 
 #include "interfaces/project/ISceneService.hpp"
@@ -105,6 +106,10 @@ namespace handlers {
 
         std::unique_ptr<services::FrameTaskGraph> frameTaskGraph;
 
+        // Process exit code requested by App::quit(). Written from the Scripts task (an enkiTS
+        // worker) and read by main() after run() returns, so it has to be atomic.
+        std::atomic<int> requestedExitCode{0};
+
         events::SubscriptionToken resizeSubscription;
         events::SubscriptionToken displaySettingsSubscription;
         // VK-1534: re-applies the persisted gfx.* override after each scene load's
@@ -122,6 +127,9 @@ namespace handlers {
         void run() const;
         void cleanUp();
         bool loadProject(const std::string& projectPath);
+
+        // Exit code a script asked for via App::quit(). 0 unless QuitGameCommand ran.
+        int getExitCode() const { return requestedExitCode.load(std::memory_order_relaxed); }
 
     private:
         void initializeServices();

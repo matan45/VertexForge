@@ -6,6 +6,7 @@
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
@@ -38,6 +39,12 @@ namespace services
 
     ScriptingServiceImpl::~ScriptingServiceImpl()
     {
+        if (sceneClearedToken.isValid())
+        {
+            ::events::EventDispatcher::instance().unsubscribe(sceneClearedToken);
+            sceneClearedToken = {};
+        }
+
         auto& registry = scene::EntityRegistry::getRegistry();
         registry.on_construct<components::ScriptComponent>().disconnect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
         registry.on_destroy<components::ScriptComponent>().disconnect<&ScriptingServiceImpl::onScriptComponentChanged>(this);
@@ -192,6 +199,24 @@ namespace services
                     stopAllScripts();
                 }
             });
+
+        // === Scene Clear Subscription ===
+        // A full-scene clear destroys every entity without routing through detachScript,
+        // so the instances they owned would keep running (and never see onDestroy) after
+        // Scene::load / New Scene at runtime. Only raise a flag here: the publisher
+        // (ScenePersistenceService::update, on the Scene task) is not the thread that owns
+        // the interpreter, so the sweep itself is deferred to updateScripts.
+        // Additive scene loads/unloads deliberately do NOT publish this notification, and
+        // the sweep only touches instances whose entity is already invalid, so a surviving
+        // persistent scene keeps its scripts either way.
+        if (!sceneClearedToken.isValid())
+        {
+            sceneClearedToken = dispatcher.subscribe<events::scene::SceneClearedNotification>(
+                [this](const events::scene::SceneClearedNotification&)
+                {
+                    orphanSweepPending.store(true, std::memory_order_relaxed);
+                });
+        }
     }
 
     // === Build Methods ===
@@ -232,6 +257,25 @@ namespace services
         }
 
         return result;
+    }
+
+    bool ScriptingServiceImpl::loadCompiledScripts()
+    {
+        std::string manifestPath = getManifestPath();
+        if (manifestPath.empty())
+        {
+            return false;
+        }
+
+        // The provider reports a missing scripts.mtcLib as an error; a project with no
+        // scripts.mtproj at all is a normal configuration, so screen that case out here.
+        if (!std::filesystem::exists(manifestPath))
+        {
+            vfLogInfo("[Script] No script manifest at {} — nothing to load", manifestPath);
+            return false;
+        }
+
+        return scriptingProvider->loadCompiledScripts(manifestPath);
     }
 
     void ScriptingServiceImpl::cleanScripts()
@@ -435,6 +479,36 @@ namespace services
         scriptListDirty = false;
     }
 
+    void ScriptingServiceImpl::sweepOrphanedScripts()
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        size_t swept = 0;
+        for (uint64_t instanceId : scriptingProvider->getAllInstanceIds())
+        {
+            if (internal::isValidHandle(scriptingProvider->getInstanceEntity(instanceId), registry))
+            {
+                continue;
+            }
+
+            // The owning entity is gone, so the ScriptComponent that tracked "started"
+            // went with it. Every instance the provider still holds was started when it
+            // was loaded (updateScripts loads then playVFX->onStart in the same pass; the
+            // behavior-tree ScriptTask path calls callOnStart right after loadScript), so
+            // onDestroy is always the correct counterpart here. callOnDestroy is a no-op
+            // for an instance that is already unloaded.
+            scriptingProvider->callOnDestroy(instanceId);
+            scriptingProvider->unloadScript(instanceId);
+            ++swept;
+        }
+
+        if (swept > 0)
+        {
+            scriptListDirty = true;
+            vfLogInfo("[Script] Scene cleared: destroyed {} orphaned script instance(s)", swept);
+        }
+    }
+
     void ScriptingServiceImpl::updateScripts(float deltaTime)
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
@@ -442,6 +516,14 @@ namespace services
         // Clear per-frame action consumption (guard against handler being unregistered during shutdown)
         try { dispatcher.execute(events::input::ClearConsumedActionsCommand{}); }
         catch (...) {}
+
+        // Runs before anything else touches the interpreter this frame: both hand work
+        // queued from other threads to the thread that owns the VM.
+        if (orphanSweepPending.exchange(false, std::memory_order_relaxed))
+        {
+            sweepOrphanedScripts();
+        }
+        scriptingProvider->pumpPluginEvents();
 
         auto& registry = scene::EntityRegistry::getRegistry();
 

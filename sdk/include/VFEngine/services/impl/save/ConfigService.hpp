@@ -12,6 +12,11 @@ namespace services
         mutable nlohmann::json configData;
         mutable std::mutex configMutex;
         mutable bool loaded = false;
+        // The config file lives next to the open project, so the cache has to be keyed by it:
+        // a read taken before any project is open (or after switching projects) would otherwise
+        // latch `loaded` against the wrong file and the next write would overwrite the real
+        // config with the stale in-memory object.
+        mutable std::string loadedPath;
 
     public:
         ConfigService();

@@ -326,7 +326,12 @@ namespace services
 
         if (projectPath.has_value())
         {
-            return projectPath.value() + "/saves";
+            // GetProjectPathQuery returns the .vfproj FILE, not its folder — hanging "saves"
+            // straight off it produced "<project>/MyGame.vfproj/saves". Other consumers of the
+            // same query already take parent_path() (SceneAPI, EntityAPI).
+            // generic_string(): callers concatenate "/" + slot onto this, so keep the whole
+            // path in forward-slash form rather than mixing separators.
+            return (std::filesystem::path(projectPath.value()).parent_path() / "saves").generic_string();
         }
         return "saves";
     }

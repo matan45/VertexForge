@@ -133,10 +133,20 @@ namespace core
     }
 
     uint64_t ScriptCommunicationManager::listen(const std::string& eventName, uint64_t instanceId,
-                                                 const value::Value& callback)
+                                                 const value::Value& callback, bool wantsPayload)
     {
         uint64_t token = nextToken++;
-        eventListeners[eventName].push_back({token, instanceId, callback});
+
+        auto& listeners = eventListeners[eventName];
+        const bool firstListener = listeners.empty();
+        listeners.push_back({token, instanceId, callback, wantsPayload});
+
+        // Notify AFTER the listener is recorded: the hook may publish into this same name.
+        if (firstListener && onFirstListen)
+        {
+            onFirstListen(eventName);
+        }
+
         return token;
     }
 
@@ -155,8 +165,9 @@ namespace core
         }
     }
 
-    void ScriptCommunicationManager::emit(const std::string& eventName,
-                                           const std::vector<value::Value>& args)
+    void ScriptCommunicationManager::dispatchToListeners(const std::string& eventName,
+                                                          const std::vector<value::Value>& payloadArgs,
+                                                          const std::vector<value::Value>& plainArgs)
     {
         auto it = eventListeners.find(eventName);
         if (it == eventListeners.end()) return;
@@ -173,7 +184,8 @@ namespace core
                                                        : ::services::EntityHandle::invalid(),
                     listener.ownerInstanceId);
 
-                interpreter->callLambda(listener.callback, args);
+                interpreter->callLambda(listener.callback,
+                                        listener.wantsPayload ? payloadArgs : plainArgs);
             }
             catch (const std::exception& e)
             {
@@ -181,6 +193,29 @@ namespace core
                              eventName, e.what());
             }
         }
+    }
+
+    void ScriptCommunicationManager::emit(const std::string& eventName,
+                                           const std::vector<value::Value>& args)
+    {
+        // Plain EventCallback listeners keep receiving the emitted arguments verbatim.
+        // JsonEventCallback listeners always take exactly one string, so they get the first
+        // emitted argument, or an empty JSON object when the emitter supplied none.
+        std::vector<value::Value> payloadArgs;
+        payloadArgs.push_back(args.empty() ? value::Value(std::string("{}")) : args[0]);
+
+        dispatchToListeners(eventName, payloadArgs, args);
+    }
+
+    void ScriptCommunicationManager::emitPluginEvent(const std::string& eventName,
+                                                      const std::string& jsonPayload)
+    {
+        std::vector<value::Value> payloadArgs;
+        payloadArgs.push_back(value::Value(jsonPayload));
+
+        // EventCallback::invoke() takes no arguments, so a plain listener on a plugin event
+        // is still notified — it just cannot see the payload (use listenJson for that).
+        dispatchToListeners(eventName, payloadArgs, {});
     }
 
     void ScriptCommunicationManager::removeListenersForInstance(uint64_t instanceId)

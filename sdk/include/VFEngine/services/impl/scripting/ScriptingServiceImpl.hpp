@@ -4,8 +4,10 @@
 #include "scene/SceneGraphSystem.hpp"
 #include "components/Components.hpp"
 #include "scripting/ScriptTickGovernor.hpp"
+#include "../../events/EventTypes.hpp"
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
+#include <atomic>
 #include <string>
 
 namespace services
@@ -34,8 +36,18 @@ namespace services
         std::string crashContextScratch;
         std::string entityNameScratch;
 
+        // A full-scene clear (Scene::load, New Scene, Play/Stop snapshot restore) destroys
+        // entities WITHOUT going through detachScript, so their script instances would live
+        // on in the provider and never receive onDestroy. SceneClearedNotification only raises
+        // this flag; the sweep itself runs at the top of updateScripts so onDestroy is always
+        // invoked on the thread that owns the interpreter (the Scripts task), never on whatever
+        // thread happened to publish the notification.
+        std::atomic<bool> orphanSweepPending{false};
+        ::events::SubscriptionToken sceneClearedToken;
+
         void rebuildScriptUpdateList(entt::registry& registry);
         void onScriptComponentChanged(entt::registry& registry, entt::entity entity);
+        void sweepOrphanedScripts();
 
         std::string getManifestPath() const;
 
@@ -48,6 +60,7 @@ namespace services
 
         // === Script Building ===
         ScriptBuildResult buildScripts() override;
+        bool loadCompiledScripts() override;
         void cleanScripts() override;
         bool isCompiled() const override;
 

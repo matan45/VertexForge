@@ -150,10 +150,13 @@ namespace services
 
     void ConfigService::ensureLoaded() const
     {
-        if (loaded) return;
-        loaded = true;
-
         std::string path = getConfigPath();
+        if (loaded && path == loadedPath) return;
+
+        loaded = true;
+        loadedPath = path;
+        configData = json::object();
+
         if (path.empty() || !std::filesystem::exists(path)) return;
 
         try
@@ -193,7 +196,10 @@ namespace services
 
         if (projectPath.has_value())
         {
-            return projectPath.value() + "/config.json";
+            // GetProjectPathQuery returns the .vfproj FILE, not its folder — appending
+            // "/config.json" to it produced "<project>/MyGame.vfproj/config.json", which no
+            // directory ever contains, so every Config:: read fell back to its default.
+            return (std::filesystem::path(projectPath.value()).parent_path() / "config.json").generic_string();
         }
         return "";
     }

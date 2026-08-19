@@ -199,6 +199,13 @@ namespace handlers {
 		// are not catchable here and still route to the crash handler.
 		std::atomic<bool> playFatalErrorRequested{false};
 
+		// App::quit(code) from a script. Set by the QuitGameCommand handler, which runs on
+		// whatever thread the Scripts task landed on; consumed at the same post-frame safe
+		// point as playFatalErrorRequested. In the editor a quit request stops Play mode —
+		// it never closes the editor — so the exit code is only logged.
+		std::atomic<bool> scriptQuitRequested{false};
+		std::atomic<int> scriptQuitExitCode{0};
+
 	public:
 		explicit EditorHandler();
 		~EditorHandler();

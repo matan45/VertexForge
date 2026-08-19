@@ -13,6 +13,7 @@ int main(int argc, char* argv[])
     util::initLogFile("Runtime");
 
     handlers::RuntimeHandler runtime;
+    int exitCode = 0;
 
     try
     {
@@ -45,6 +46,10 @@ int main(int argc, char* argv[])
         }
 
         runtime.run();
+
+        // Read before cleanUp: App::quit(code) recorded it on the RuntimeHandler, and it is
+        // what the process returns so a harness can tell a passing run from a failing one.
+        exitCode = runtime.getExitCode();
         runtime.cleanUp();
     }
     catch (const std::exception& e)
@@ -53,5 +58,5 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    return 0;
+    return exitCode;
 }

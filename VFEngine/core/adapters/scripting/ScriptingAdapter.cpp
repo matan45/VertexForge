@@ -25,6 +25,7 @@
 #include "../api/ScriptCommunicationAPI.hpp"
 #include "../api/PluginComponentAPI.hpp"
 #include "../../../plugin/core/PluginContextImpl.hpp"
+#include "../../../plugin/core/PluginEventBus.hpp"
 #include <runtime/EventLoop.hpp>
 #include <vm/runtime/VirtualMachine.hpp>
 #include <environment/Environment.hpp>
@@ -43,6 +44,15 @@
 #include "print/Log.hpp"
 namespace core
 {
+    namespace
+    {
+        // Backstop for the plugin-event bridge: pumpPluginEvents() only runs while scripts
+        // are updating, so a plugin publishing in Edit mode (or while game time is frozen)
+        // would otherwise grow the queue without bound. Deep enough that a normal frame's
+        // burst never trips it.
+        constexpr size_t kMaxPendingPluginEvents = 4096;
+    }
+
     ScriptingAdapter::ScriptingAdapter() = default;
 
     ScriptingAdapter::~ScriptingAdapter()
@@ -63,6 +73,36 @@ namespace core
 
             communicationManager = std::make_unique<ScriptCommunicationManager>(
                 interpreter.get(), instanceToClassName, instanceToEntity, instanceToObject);
+
+            // Bridge PluginEventBus -> mType ScriptEvent, lazily and per event name: an engine
+            // plugin publishes on the bus (PluginContextImpl::publishEvent) and its handlers run
+            // INLINE on the publisher's thread, which is never the thread that owns the
+            // interpreter. So the bus handler only queues; pumpPluginEvents() drains it at the
+            // top of the script update, on the script thread.
+            communicationManager->setOnFirstListen([this](const std::string& eventName) {
+                {
+                    std::lock_guard<std::mutex> lock(pluginEventMutex);
+                    if (!bridgedPluginEvents.insert(eventName).second)
+                        return;  // already bridged (the listener list emptied and refilled)
+                }
+
+                // Subscribe OUTSIDE pluginEventMutex. PluginEventBus::publish takes the bus
+                // lock and then runs this handler, which takes pluginEventMutex; acquiring the
+                // two in the opposite order here would be a lock-order inversion.
+                auto token = plugin::PluginEventBus::instance().subscribe(
+                    eventName,
+                    [this, eventName](const nlohmann::json& data) {
+                        std::lock_guard<std::mutex> queueLock(pluginEventMutex);
+                        if (pendingPluginEvents.size() >= kMaxPendingPluginEvents)
+                        {
+                            pendingPluginEvents.pop_front();
+                        }
+                        pendingPluginEvents.emplace_back(eventName, data.dump());
+                    });
+
+                std::lock_guard<std::mutex> lock(pluginEventMutex);
+                pluginEventTokens.push_back(token);
+            });
 
             apiRegistry = std::make_unique<NativeAPIRegistry>(interpreter.get());
             api::CoroutineAPI::setCoroutineManager(coroutineManager.get());
@@ -182,6 +222,21 @@ namespace core
         if (animationEventBridge) animationEventBridge->unsubscribeAll();
         if (physicsEventBridge) physicsEventBridge->unsubscribeAll();
         if (uiEventBridge) uiEventBridge->unsubscribeAll();
+
+        // Drop the plugin-bus bridge before the interpreter goes away: its handlers capture
+        // `this`, and PluginEventBus outlives the adapter. Unsubscribe outside the queue lock
+        // (the bus takes its own lock and its handler takes ours).
+        std::vector<::events::SubscriptionToken> tokensToDrop;
+        {
+            std::lock_guard<std::mutex> lock(pluginEventMutex);
+            tokensToDrop.swap(pluginEventTokens);
+            pendingPluginEvents.clear();
+            bridgedPluginEvents.clear();
+        }
+        for (const auto& token : tokensToDrop)
+        {
+            plugin::PluginEventBus::instance().unsubscribe(token);
+        }
 
         instanceToClassName.clear();
         instanceToEntity.clear();
@@ -315,11 +370,10 @@ namespace core
             return false;
         }
 
-        if (!compiled)
-        {
-            vfLogWarning("[ScriptingAdapter] Scripts not compiled. Call buildScripts first.");
-            return false;
-        }
+        // No `compiled` precondition: loading a prebuilt scripts.mtcLib is the ONLY
+        // way a shipped Runtime gets script classes (nothing outside the editor ever
+        // dispatches BuildScriptsCommand). A successful load is what makes the VM
+        // "compiled" — see the flag set after loadFromProgram below.
 
         try
         {
@@ -356,6 +410,11 @@ namespace core
                 return false;
             }
             interpreter->loadFromProgram(std::move(libProgram.bytecodeProgram));
+
+            // The program is resident: loadScript/createObject can now resolve script
+            // classes, so the VM is compiled whether the bytecode came from a build in
+            // this process or from a prebuilt library on disk.
+            compiled = true;
 
             // Register mType classes for plugin struct types (requires stdlib loaded)
             api::PluginComponentAPI::registerStructClasses(interpreter.get());
@@ -516,7 +575,34 @@ namespace core
         instanceToPlaybackState.clear();
         instanceToPriority.clear();
         nextInstanceId = 1;
+
+        // No listeners are left to receive them, and nothing will drain the queue until the
+        // next play session starts.
+        {
+            std::lock_guard<std::mutex> lock(pluginEventMutex);
+            pendingPluginEvents.clear();
+        }
+
         vfLogDebug("[ScriptingAdapter] All scripts unloaded, instance counter reset");
+    }
+
+    void ScriptingAdapter::pumpPluginEvents()
+    {
+        if (!communicationManager) return;
+
+        std::deque<std::pair<std::string, std::string>> drained;
+        {
+            std::lock_guard<std::mutex> lock(pluginEventMutex);
+            if (pendingPluginEvents.empty()) return;
+            drained.swap(pendingPluginEvents);
+        }
+
+        // Dispatch outside the lock: a listener may call ScriptEvent.listenJson, which takes
+        // the same mutex through the onFirstListen hook.
+        for (const auto& [eventName, jsonPayload] : drained)
+        {
+            communicationManager->emitPluginEvent(eventName, jsonPayload);
+        }
     }
 
     bool ScriptingAdapter::isScriptLoaded(uint64_t instanceId) const

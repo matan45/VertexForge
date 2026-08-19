@@ -17,6 +17,12 @@ namespace services
         // === Script Building ===
         virtual ScriptBuildResult buildScripts() = 0;
 
+        // Load an already-compiled scripts.mtcLib without recompiling from source.
+        // This is the shipped-game path: Runtime never dispatches BuildScriptsCommand,
+        // so without this the VM stays uncompiled and every loadScript bails.
+        // Returns false when no project/manifest is loaded or the library is missing.
+        virtual bool loadCompiledScripts() = 0;
+
         virtual void cleanScripts() = 0;
 
         virtual bool isCompiled() const = 0;

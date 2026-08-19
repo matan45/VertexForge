@@ -55,6 +55,14 @@ namespace services {
         virtual void tickCoroutines(float deltaTime) = 0;
         virtual void tickFixedUpdateCoroutines() = 0;
 
+        // === Cross-thread event drain ===
+        // Deliver anything the provider queued from other threads (today: plugin
+        // PluginEventBus payloads bridged to mType ScriptEvent listeners) to the
+        // scripts. The caller must be the thread that owns the interpreter — the
+        // service calls this once per frame at the top of updateScripts.
+        // Non-pure so mock providers stay minimal.
+        virtual void pumpPluginEvents() {}
+
         // === Generic Method Call ===
         virtual std::string callMethodWithReturn(uint64_t instanceId, const std::string& methodName,
                                                   const std::vector<std::any>& args = {}) = 0;

@@ -2,6 +2,7 @@
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/render/RenderTextureEvents.hpp"
+#include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
 #include <components/CoreComponents.hpp>
@@ -29,6 +30,18 @@ namespace services
             {
                 onEditorModeChanged(notification.previousMode, notification.currentMode);
             });
+
+        // The Runtime's startup scene is loaded deferred/incrementally, so the Edit->Play
+        // notification that drives enterPlayMode arrives while the registry is still empty.
+        // Rescan once the scene has actually landed (mirrors VFXPlayModeHandler).
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+            [this](const ::events::scene::SceneLoadedNotification&)
+            {
+                if (rttActive.load(std::memory_order_relaxed))
+                {
+                    rescanPending.store(true, std::memory_order_relaxed);
+                }
+            });
     }
 
     void RenderTexturePlayModeHandler::unsubscribeFromEvents()
@@ -39,6 +52,12 @@ namespace services
         {
             dispatcher.unsubscribe(editorModeChangedToken);
             editorModeChangedToken = {};
+        }
+
+        if (sceneLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneLoadedToken);
+            sceneLoadedToken = {};
         }
     }
 
@@ -52,6 +71,54 @@ namespace services
         {
             exitPlayMode();
         }
+    }
+
+    bool RenderTexturePlayModeHandler::activateEntity(entt::entity entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        if (!registry.valid(entity) || !registry.all_of<components::RenderTextureComponent>(entity))
+            return false;
+
+        auto& rtComp = registry.get<components::RenderTextureComponent>(entity);
+
+        if (!rtComp.enabled)
+            return false;
+
+        if (registry.all_of<components::NameComponent>(entity))
+        {
+            const auto& nameComp = registry.get<components::NameComponent>(entity);
+            if (!nameComp.isActive)
+                return false;
+        }
+
+        // Need either this entity's own camera+transform, or a valid source-camera entity.
+        const bool hasOwnCamera =
+            registry.all_of<components::CameraComponent, components::TransformComponent>(entity);
+        const bool hasSourceCamera =
+            rtComp.sourceCamera != entt::null && registry.valid(rtComp.sourceCamera) &&
+            registry.all_of<components::CameraComponent, components::TransformComponent>(rtComp.sourceCamera);
+        if (!hasOwnCamera && !hasSourceCamera)
+            return false;
+
+        rendertexture::RenderTextureDesc desc;
+        desc.width = rtComp.width;
+        desc.height = rtComp.height;
+        desc.updateMode = rtComp.updateMode;
+        desc.fixedIntervalSeconds = rtComp.fixedIntervalSeconds;
+        desc.clearColor = rtComp.clearColor;
+        desc.priority = rtComp.priority;
+        desc.renderShadows = rtComp.renderShadows;
+        desc.tonemap = rtComp.tonemap;
+
+        rendertexture::RenderTextureId textureId = provider->createRenderTexture(desc);
+
+        if (textureId == rendertexture::INVALID_RENDER_TEXTURE_ID)
+            return false;
+
+        activeTextures[internal::toHandle(entity)] = textureId;
+        rtComp.textureId = textureId;
+        return true;
     }
 
     void RenderTexturePlayModeHandler::enterPlayMode()
@@ -68,48 +135,52 @@ namespace services
 
         for (auto entity : view)
         {
-            auto& rtComp = view.get<components::RenderTextureComponent>(entity);
-
-            if (!rtComp.enabled)
-                continue;
-
-            if (registry.all_of<components::NameComponent>(entity))
-            {
-                const auto& nameComp = registry.get<components::NameComponent>(entity);
-                if (!nameComp.isActive)
-                    continue;
-            }
-
-            // Need either this entity's own camera+transform, or a valid source-camera entity.
-            const bool hasOwnCamera =
-                registry.all_of<components::CameraComponent, components::TransformComponent>(entity);
-            const bool hasSourceCamera =
-                rtComp.sourceCamera != entt::null && registry.valid(rtComp.sourceCamera) &&
-                registry.all_of<components::CameraComponent, components::TransformComponent>(rtComp.sourceCamera);
-            if (!hasOwnCamera && !hasSourceCamera)
-                continue;
-
-            rendertexture::RenderTextureDesc desc;
-            desc.width = rtComp.width;
-            desc.height = rtComp.height;
-            desc.updateMode = rtComp.updateMode;
-            desc.fixedIntervalSeconds = rtComp.fixedIntervalSeconds;
-            desc.clearColor = rtComp.clearColor;
-            desc.priority = rtComp.priority;
-            desc.renderShadows = rtComp.renderShadows;
-            desc.tonemap = rtComp.tonemap;
-
-            rendertexture::RenderTextureId textureId = provider->createRenderTexture(desc);
-
-            if (textureId != rendertexture::INVALID_RENDER_TEXTURE_ID)
-            {
-                EntityHandle handle = internal::toHandle(entity);
-                activeTextures[handle] = textureId;
-                rtComp.textureId = textureId;
-            }
+            activateEntity(entity);
         }
 
-        rttActive = true;
+        rttActive.store(true, std::memory_order_relaxed);
+    }
+
+    void RenderTexturePlayModeHandler::activatePendingEntities()
+    {
+        if (!provider)
+            return;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Release targets whose entity the scene load destroyed. Without this a repeated
+        // Scene::load leaks one render target per scene-authored RTT, and — if EnTT hands the
+        // reloaded entity the same handle — the stale entry would make the loop below skip it,
+        // leaving its RenderTextureComponent::textureId invalid (a permanently blank RTT).
+        for (auto it = activeTextures.begin(); it != activeTextures.end(); )
+        {
+            const auto enttEntity = internal::fromHandle(it->first);
+            if (registry.valid(enttEntity) && registry.all_of<components::RenderTextureComponent>(enttEntity))
+            {
+                ++it;
+                continue;
+            }
+            provider->destroyRenderTexture(it->second);
+            it = activeTextures.erase(it);
+        }
+
+        auto view = registry.view<components::RenderTextureComponent>();
+
+        int activated = 0;
+        for (auto entity : view)
+        {
+            if (activeTextures.find(internal::toHandle(entity)) != activeTextures.end())
+                continue;
+
+            if (activateEntity(entity))
+                ++activated;
+        }
+
+        if (activated > 0)
+        {
+            vfLogInfo("[RenderTexture] Activated {} scene-authored render texture(s) after scene load",
+                      activated);
+        }
     }
 
     void RenderTexturePlayModeHandler::exitPlayMode()
@@ -134,13 +205,22 @@ namespace services
         }
 
         activeTextures.clear();
-        rttActive = false;
+        rttActive.store(false, std::memory_order_relaxed);
+        rescanPending.store(false, std::memory_order_relaxed);
     }
 
     void RenderTexturePlayModeHandler::update(float deltaTime)
     {
-        if (!rttActive || !provider)
+        if (!rttActive.load(std::memory_order_relaxed) || !provider)
             return;
+
+        // Runs before any command recording this frame (OffScreenViewPort::render invokes the
+        // pre-render callback right after the frame-in-flight fence wait), so creating and
+        // destroying render targets here is safe.
+        if (rescanPending.exchange(false, std::memory_order_relaxed))
+        {
+            activatePendingEntities();
+        }
 
         auto& registry = scene::EntityRegistry::getRegistry();
 
