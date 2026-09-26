@@ -141,11 +141,17 @@ namespace core {
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+		// Dear ImGui 1.92.9 turned ImGuiItemFlags_LiveEditOnInputScalar OFF by default (typed
+		// Drag/Slider/InputScalar values are only written on Enter/tab-out/focus loss). Re-enable it
+		// for the whole frame to keep the editor's pre-1.92.9 behavior (write while typing).
+		// Popped in endFrame().
+		ImGui::PushItemFlag(ImGuiItemFlags_LiveEditOnInputScalar, true);
 		ImGuizmo::BeginFrame();
 	}
 
 	void MainLoop::endFrame() const
 	{
+		ImGui::PopItemFlag(); // ImGuiItemFlags_LiveEditOnInputScalar, pushed in newFrame()
 		ImGui::EndFrame();
 	}
 

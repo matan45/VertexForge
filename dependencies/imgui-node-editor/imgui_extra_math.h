@@ -30,9 +30,17 @@ struct ImLine
 
 
 //------------------------------------------------------------------------------
+// Only forward-declare operators that imgui.h does not already define (mirrors the
+// version guards in imgui_extra_math.inl). Re-declaring imgui's own definitions is
+// redundant, and since 1.93 they carry IM_NODEBUGSTEP (__declspec(non_user_code) on
+// MSVC), which a plain redeclaration would not repeat.
+# if IMGUI_VERSION_NUM < 19100
 inline bool operator==(const ImVec2& lhs, const ImVec2& rhs);
 inline bool operator!=(const ImVec2& lhs, const ImVec2& rhs);
+# endif
+# if IMGUI_VERSION_NUM < 19270
 inline ImVec2 operator*(const float lhs, const ImVec2& rhs);
+# endif
 # if IMGUI_VERSION_NUM < 18955
 inline ImVec2 operator-(const ImVec2& lhs);
 # endif

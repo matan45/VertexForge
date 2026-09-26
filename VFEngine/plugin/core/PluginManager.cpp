@@ -405,7 +405,7 @@ namespace plugin {
                     {
                         auto val = member.get(instance);
                         if (!val) continue;
-                        const char* name = member.name();
+                        const char* name = member.name().data();
                         if (!name) continue;
                         // AssetRef field — emit GUID hex + <name>Path sibling inside the
                         // component object (engine owns AssetRef serialization).
@@ -445,7 +445,7 @@ namespace plugin {
                     std::unordered_set<std::string> reflectedNames;
                     for (auto&& [id, member] : bridge.metaType.data())
                     {
-                        const char* name = member.name();
+                        const char* name = member.name().data();
                         if (!name) continue;
                         reflectedNames.insert(name);
                         // AssetRef field — read GUID hex + <name>Path sibling from the

@@ -39,11 +39,12 @@ namespace imguiPass
         {
             clear();
 
-            if (!src || src->CmdListsCount == 0)
+            if (!src || src->CmdLists.Size == 0)
                 return;
 
             // Copy scalar fields
             drawData.Valid = src->Valid;
+            drawData.FrameCount = src->FrameCount;
             drawData.TotalIdxCount = src->TotalIdxCount;
             drawData.TotalVtxCount = src->TotalVtxCount;
             drawData.DisplayPos = src->DisplayPos;
@@ -52,10 +53,10 @@ namespace imguiPass
             drawData.OwnerViewport = src->OwnerViewport;
 
             // Deep copy each draw list
-            drawListCopies.resize(src->CmdListsCount);
-            drawListPtrs.resize(src->CmdListsCount);
+            drawListCopies.resize(src->CmdLists.Size);
+            drawListPtrs.resize(src->CmdLists.Size);
 
-            for (int i = 0; i < src->CmdListsCount; i++)
+            for (int i = 0; i < src->CmdLists.Size; i++)
             {
                 drawListCopies[i] = src->CmdLists[i]->CloneOutput();
                 drawListPtrs[i] = drawListCopies[i];
@@ -63,8 +64,8 @@ namespace imguiPass
 
             // Point drawData.CmdLists to our copies
             drawData.CmdLists.Data = drawListPtrs.data();
-            drawData.CmdLists.Size = src->CmdListsCount;
-            drawData.CmdLists.Capacity = src->CmdListsCount;
+            drawData.CmdLists.Size = src->CmdLists.Size;
+            drawData.CmdLists.Capacity = src->CmdLists.Size;
 
             valid = true;
         }

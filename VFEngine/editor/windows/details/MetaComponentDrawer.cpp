@@ -71,7 +71,7 @@ namespace windows::details
             std::vector<std::pair<const char*, entt::meta_any>> enumEntries;
             for (auto [id, member] : elemType.data())
             {
-                const char* entryName = member.name();
+                const char* entryName = member.name().data();
                 if (!entryName) continue;
                 auto entryVal = member.get({});
                 if (entryVal == elem) { currentName = entryName; currentIndex = idx; }
@@ -131,7 +131,7 @@ namespace windows::details
             {
                 for (auto&& [id, member] : elemType.data())
                 {
-                    const char* fieldName = member.name();
+                    const char* fieldName = member.name().data();
                     if (!fieldName) continue;
                     auto fieldVal = member.get(elem);
                     if (!fieldVal) continue;
@@ -174,7 +174,7 @@ namespace windows::details
     static bool drawMetaData(entt::meta_data data, entt::meta_any& instance, const char* componentName)
     {
         bool changed = false;
-        const char* name = data.name();
+        const char* name = data.name().data();
         if (!name) return false;
 
         // Per-field inspector attributes (nullptr when the plugin registered none —
@@ -363,7 +363,7 @@ namespace windows::details
             std::vector<std::pair<const char*, entt::meta_any>> enumEntries;
             for (auto [id, member] : type.data())
             {
-                const char* entryName = member.name();
+                const char* entryName = member.name().data();
                 if (!entryName) continue;
                 auto entryVal = member.get({});
                 if (entryVal == value)
@@ -677,7 +677,7 @@ namespace windows::details
                 {
                     fields.push_back(member);
 
-                    const char* fieldName = member.name();
+                    const char* fieldName = member.name().data();
                     if (!fieldName)
                         continue;
                     const auto* attr = plugin::PluginContextImpl::getFieldAttributes(compName, fieldName);
@@ -691,7 +691,7 @@ namespace windows::details
 
                 // Returns the field's group name ("" when ungrouped).
                 const auto groupOf = [&](const entt::meta_data& member) -> std::string {
-                    const char* fieldName = member.name();
+                    const char* fieldName = member.name().data();
                     if (!fieldName)
                         return std::string();
                     const auto* attr = plugin::PluginContextImpl::getFieldAttributes(compName, fieldName);

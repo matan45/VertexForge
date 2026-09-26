@@ -54,7 +54,7 @@ namespace serialization::meta
             {
                 if (member.get({}) == value)
                 {
-                    const char* n = member.name();
+                    const char* n = member.name().data();
                     if (n) return std::string(n);
                 }
             }
@@ -103,7 +103,7 @@ namespace serialization::meta
             auto obj = nlohmann::json::object();
             for (auto&& [id, member] : type.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (!n) continue;
                 auto val = member.get(value);
                 if (!val) continue;
@@ -158,7 +158,7 @@ namespace serialization::meta
             std::string valName = j.get<std::string>();
             for (auto [id, member] : type.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (n && valName == n)
                     return member.get({});
             }
@@ -180,7 +180,7 @@ namespace serialization::meta
             if (!instance) return {};
             for (auto&& [id, member] : type.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (!n) continue;
                 // AssetRef member — read GUID hex + <name>Path sibling from this object.
                 if (member.type().info() == entt::type_id<asset::AssetRef>())
@@ -276,7 +276,7 @@ namespace serialization::meta
             std::string valName = value.get<std::string>();
             for (auto [id, member] : type.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (n && valName == n)
                 {
                     data.set(instance, member.get({}));
@@ -307,7 +307,7 @@ namespace serialization::meta
         // Diagnostics: nothing matched — warn so plugin authors can debug bad data.
         else
         {
-            const char* fieldName = data.name();
+            const char* fieldName = data.name().data();
             vfLogWarning("Plugin component field '{}' skipped: JSON value type does not match reflected field type",
                          fieldName ? fieldName : "<unnamed>");
         }

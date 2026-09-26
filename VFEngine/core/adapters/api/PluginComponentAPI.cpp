@@ -133,7 +133,7 @@ namespace core::api
         // Scan fields
         for (auto&& [id, member] : type.data())
         {
-            const char* n = member.name();
+            const char* n = member.name().data();
             if (!n) continue;
 
             StructFieldMapping field;
@@ -486,7 +486,7 @@ namespace core::api
             bool found = false;
             for (auto&& [id, member] : currentType.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (n && parts[i] == n)
                 {
                     if (i == parts.size() - 1) {
@@ -912,7 +912,7 @@ namespace core::api
                 {
                     if (member.get({}) == val)
                     {
-                        const char* n = member.name();
+                        const char* n = member.name().data();
                         if (n) return value::Value(std::string(n));
                     }
                 }
@@ -929,7 +929,7 @@ namespace core::api
                 std::string valName = extractString(args[3]);
                 for (auto [id, member] : res->member.type().data())
                 {
-                    const char* n = member.name();
+                    const char* n = member.name().data();
                     if (n && valName == n)
                     {
                         res->member.set(res->instance, member.get({}));
@@ -950,7 +950,7 @@ namespace core::api
                 std::vector<std::string> names;
                 for (auto [id, member] : res->member.type().data())
                 {
-                    const char* n = member.name();
+                    const char* n = member.name().data();
                     if (n) names.emplace_back(n);
                 }
                 auto arr = std::make_shared<value::NativeArray>(names.size(), value::ValueType::STRING);
@@ -1004,7 +1004,7 @@ namespace core::api
 
             for (auto&& [id, member] : bridge.metaType.data())
             {
-                const char* n = member.name();
+                const char* n = member.name().data();
                 if (!n) continue;
 
                 auto memberType = member.type();

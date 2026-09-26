@@ -12,7 +12,12 @@
 // keeps this TU's view identical regardless of project-level defines.
 #define BASISD_SUPPORT_KTX2 1
 #define BASISD_SUPPORT_KTX2_ZSTD 0
+// C4828: vendored basisu headers contain non-UTF-8 bytes in comments (same
+// suppression as the `basisu` premake project, scoped to this include only).
+#pragma warning(push)
+#pragma warning(disable : 4828)
 #include <basisu_transcoder.h>
+#pragma warning(pop)
 
 #include <cstdint>
 #include <cstring>

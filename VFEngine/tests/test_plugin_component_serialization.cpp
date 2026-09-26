@@ -105,7 +105,7 @@ namespace
         nlohmann::json out = nlohmann::json::object();
         for (auto&& [id, member] : metaType.data())
         {
-            const char* name = member.name();
+            const char* name = member.name().data();
             if (!name) continue;
             auto val = member.get(any);
             if (!val) continue;
@@ -132,7 +132,7 @@ namespace
         REQUIRE(static_cast<bool>(instance));
         for (auto&& [id, member] : metaType.data())
         {
-            const char* name = member.name();
+            const char* name = member.name().data();
             if (!name) continue;
             if (member.type().info() == entt::type_id<asset::AssetRef>())
             {

@@ -31,7 +31,7 @@ end
 -- Development = optimized like Release (NDEBUG, /O2) but keeps debug symbols
 -- and a VF_DEVELOPMENT define for editor-only niceties. Vulkan validation
 -- layers and Jolt asserts stay OFF (NDEBUG path), giving a fast day-to-day
--- play-test build. Debug-only extras (JPH_ENABLE_ASSERTS, VF_ENABLE_VALIDATION)
+-- play-test build. Debug-only extras (JPH_ENABLE_ASSERTS, JPH_DEBUG, VF_ENABLE_VALIDATION)
 -- are passed via extraDebugDefines.
 function vfStandardConfigs(extraDebugDefines)
    filter "configurations:Debug"
@@ -217,7 +217,7 @@ project "Core"
    links { "Graphics", "Audio", "Physics", "Animation", "mType", "jolt", "recast" }
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
-   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS", "JPH_DEBUG" })
 
 
 project "Import"
@@ -783,7 +783,7 @@ project "Physics"
 
    defines { "_CRT_SECURE_NO_WARNINGS", "JPH_OBJECT_STREAM", "JPH_SHARED_LIBRARY" }
 
-   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS", "JPH_DEBUG" })
 
 
 -- Memory subsystem (extracted from Utilities)
@@ -1287,7 +1287,7 @@ project "Tests"
       "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"
    }
 
-   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS", "JPH_DEBUG" })
 
    -- Streamline interposer: use the development build in every config (the
    -- production DLLs require an NVIDIA App ID and are not shipped in the
@@ -1443,6 +1443,11 @@ project "jolt"
       "JPH_BUILD_SHARED_LIBRARY"    -- Building the DLL: JPH_EXPORT = __declspec(dllexport)
    }
 
+   -- Jolt >= 5.6.1 no longer derives JPH_DEBUG from !NDEBUG, so Debug passes it
+   -- explicitly (here AND in every Jolt consumer: Core, Physics, Tests) to keep
+   -- Jolt's extra Debug validation (NaN poisoning, tree/free-list checks) on.
+   -- Not ABI-relevant, but keep the DLL and its consumers in agreement.
+
    postbuildcommands {
       "{MKDIR} ../bin/Editor/%{cfg.buildcfg}/x64",
       "{MKDIR} ../bin/Runtime/%{cfg.buildcfg}/x64",
@@ -1450,7 +1455,7 @@ project "jolt"
       "{COPY} ../bin/jolt/%{cfg.buildcfg}/x64/jolt.dll ../bin/Runtime/%{cfg.buildcfg}/x64/"
    }
 
-   vfStandardConfigs({ "JPH_ENABLE_ASSERTS" })
+   vfStandardConfigs({ "JPH_ENABLE_ASSERTS", "JPH_DEBUG" })
 
 
 -- Project: mType (Scripting language interpreter)
@@ -1531,13 +1536,16 @@ project "meshoptimizer"
       "dependencies/meshoptimizer/src/indexgenerator.cpp",
       "dependencies/meshoptimizer/src/meshletcodec.cpp",
       "dependencies/meshoptimizer/src/meshletutils.cpp",
+      "dependencies/meshoptimizer/src/opacitymap.cpp",
       "dependencies/meshoptimizer/src/overdrawoptimizer.cpp",
       "dependencies/meshoptimizer/src/partition.cpp",
       "dependencies/meshoptimizer/src/quantization.cpp",
       "dependencies/meshoptimizer/src/rasterizer.cpp",
+      "dependencies/meshoptimizer/src/remesher.cpp",
       "dependencies/meshoptimizer/src/simplifier.cpp",
       "dependencies/meshoptimizer/src/spatialorder.cpp",
       "dependencies/meshoptimizer/src/stripifier.cpp",
+      "dependencies/meshoptimizer/src/tangentspace.cpp",
       "dependencies/meshoptimizer/src/vcacheoptimizer.cpp",
       "dependencies/meshoptimizer/src/vertexcodec.cpp",
       "dependencies/meshoptimizer/src/vertexfilter.cpp",
