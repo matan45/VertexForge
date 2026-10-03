@@ -578,6 +578,7 @@ project "Mcp"
       "dependencies/json/single_include",
       "dependencies/glfw/include",         -- Services headers (InputService window types)
       "dependencies/imgui",                -- Services headers that forward ImGui types
+      "dependencies/stb",                  -- stb_image_write (util/ImageEncode, private static copy)
       "VFEngine/utilities",
       "VFEngine/services",
       "VFEngine/window/controllers",       -- Services headers (InputService window types)

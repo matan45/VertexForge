@@ -18,6 +18,18 @@ namespace mcp
         return result;
     }
 
+    ToolResult ToolResult::image(std::string base64, std::string mimeType, nlohmann::json structured,
+                                 std::string text)
+    {
+        ToolResult result = ok(std::move(structured), std::move(text));
+        result.extraContent.push_back(nlohmann::json{
+            {"type", "image"},
+            {"data", std::move(base64)},
+            {"mimeType", std::move(mimeType)}
+        });
+        return result;
+    }
+
     nlohmann::json ToolResult::toJson() const
     {
         std::string contentText = text;
@@ -33,6 +45,10 @@ namespace mcp
             {"content", nlohmann::json::array({nlohmann::json{{"type", "text"}, {"text", contentText}}})},
             {"isError", isError}
         };
+        for (const nlohmann::json& block : extraContent)
+        {
+            out["content"].push_back(block);
+        }
 
         if (!structured.is_null())
         {

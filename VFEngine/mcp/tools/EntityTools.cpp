@@ -1,5 +1,8 @@
 #include "CoreTools.hpp"
+#include "ToolHelpers.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "../undo/McpUndo.hpp"
+#include "../undo/McpUndoCommands.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
@@ -7,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -15,130 +19,6 @@ namespace mcp::tools
 {
     namespace
     {
-        services::EntityHandle toHandle(uint32_t id)
-        {
-            services::EntityHandle handle;
-            handle.id = static_cast<uint64_t>(id);
-            return handle;
-        }
-
-        nlohmann::json entityId(const services::EntityHandle& handle)
-        {
-            return handle.isValid() ? nlohmann::json(static_cast<uint32_t>(handle.id)) : nlohmann::json(nullptr);
-        }
-
-        nlohmann::json entityId(const std::optional<services::EntityHandle>& handle)
-        {
-            return handle.has_value() ? entityId(*handle) : nlohmann::json(nullptr);
-        }
-
-        nlohmann::json transformToJson(const services::TransformData& transform)
-        {
-            return {
-                {"position", vec3ToJson(transform.position)},
-                {"rotation", vec3ToJson(transform.rotation)},
-                {"scale", vec3ToJson(transform.scale)}
-            };
-        }
-
-        // Every entity argument is checked against the live registry first so the
-        // model gets "does not exist" instead of a silent no-op from the handler.
-        services::EntityData requireEntity(const ArgReader& reader, const char* name)
-        {
-            uint32_t id = reader.requireEntity(name);
-            events::scene::GetEntityQuery query;
-            query.entity = toHandle(id);
-            auto data = events::EventDispatcher::instance().query(query);
-            if (!data.has_value())
-            {
-                throw std::runtime_error("Entity " + std::to_string(id) + " (argument '" + name +
-                                         "') does not exist; use entity_find or scene_get_hierarchy");
-            }
-            return *data;
-        }
-
-        services::EntityHandle sceneRoot()
-        {
-            return events::EventDispatcher::instance().query(events::scene::GetRootEntityQuery{});
-        }
-
-        void rejectRoot(const services::EntityData& entity, const char* action)
-        {
-            if (entity.handle == sceneRoot())
-            {
-                throw std::runtime_error(std::string("Cannot ") + action + " the scene root entity");
-            }
-        }
-
-        nlohmann::json entitySummary(const services::EntityData& entity)
-        {
-            nlohmann::json children = nlohmann::json::array();
-            for (const services::EntityHandle& child : entity.children)
-            {
-                children.push_back(entityId(child));
-            }
-            return {
-                {"id", entityId(entity.handle)},
-                {"name", entity.name},
-                {"active", entity.isActive},
-                {"effectivelyActive", entity.isEffectivelyActive},
-                {"parent", entityId(entity.parent)},
-                {"children", std::move(children)},
-                {"transform", transformToJson(entity.localTransform)},
-                {"worldTransform", transformToJson(entity.worldTransform)}
-            };
-        }
-
-        // Overlays the provided position / rotationEuler / scale onto the current
-        // local transform and writes it back. Returns the transform written.
-        services::TransformData applyTransform(const ArgReader& reader, const services::EntityHandle& entity)
-        {
-            auto& dispatcher = events::EventDispatcher::instance();
-
-            events::scene::GetTransformQuery query;
-            query.entity = entity;
-            auto current = dispatcher.query(query);
-            if (!current.has_value())
-            {
-                throw std::runtime_error("Entity " + std::to_string(static_cast<uint32_t>(entity.id)) +
-                                         " has no transform");
-            }
-
-            services::TransformData transform = *current;
-            if (auto position = reader.optVec3("position"))
-            {
-                transform.position = *position;
-            }
-            if (auto rotation = reader.optVec3("rotationEuler"))
-            {
-                transform.rotation = *rotation;  // TransformData stores Euler degrees
-            }
-            if (auto scale = reader.optVec3("scale"))
-            {
-                transform.scale = *scale;
-            }
-
-            events::scene::SetTransformCommand command;
-            command.entity = entity;
-            command.transform = transform;
-            dispatcher.execute(command);
-            return transform;
-        }
-
-        bool hasTransformArgs(const ArgReader& reader)
-        {
-            return reader.has("position") || reader.has("rotationEuler") || reader.has("scale");
-        }
-
-        nlohmann::json transformProperties()
-        {
-            return {
-                {"position", schema::vec3("Local position [x,y,z] relative to the parent")},
-                {"rotationEuler", schema::vec3("Local rotation as Euler angles in DEGREES [pitch(x), yaw(y), roll(z)]")},
-                {"scale", schema::vec3("Local scale [x,y,z]")}
-            };
-        }
-
         std::string lowercase(std::string text)
         {
             std::transform(text.begin(), text.end(), text.begin(),
@@ -237,7 +117,7 @@ namespace mcp::tools
             tool.description =
                 "Create an empty entity (transform only) under 'parent' (default: scene root) with an optional "
                 "local transform. Add components with component_add / material_assign / script_attach. "
-                "Returns {id, name, parent, transform}.";
+                "Undoable (one undo step). Returns {id, name, parent, transform}.";
             nlohmann::json properties = transformProperties();
             properties["name"] = schema::string("Entity name. Default 'Entity'.");
             properties["parent"] = schema::entity("Parent entity id. Omit for the scene root.");
@@ -275,8 +155,13 @@ namespace mcp::tools
                 };
                 if (hasTransformArgs(reader))
                 {
-                    out["transform"] = transformToJson(applyTransform(reader, created));
+                    out["transform"] = transformToJson(applyTransform(reader, created).after);
                 }
+
+                // Snapshot after the transform so one entry covers the whole creation.
+                undo::UndoRecorder recorder("MCP: Create entity (" + command.name + ")");
+                recorder.add(undo::EntityLifetimeUndo::capture(undo::EntityLifetimeUndo::Kind::Created, created));
+                recorder.push();
                 return ToolResult::ok(std::move(out));
             };
             registry.add(std::move(tool));
@@ -287,7 +172,9 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "entity_delete";
             tool.title = "Delete entity";
-            tool.description = "Delete an entity together with all of its children. Their ids become invalid.";
+            tool.description =
+                "Delete an entity together with all of its children. Their ids become invalid. Undoable: undo "
+                "re-creates the subtree with NEW ids (undo/redo report them in remappedEntities) and fresh UUIDs.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.destructive = true;
             tool.handler = [](const nlohmann::json& args) -> ToolResult
@@ -296,12 +183,17 @@ namespace mcp::tools
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "delete");
 
+                // Snapshot before the delete; it is only pushed if the delete succeeds.
+                undo::UndoRecorder recorder("MCP: Delete entity (" + entity.name + ")");
+                recorder.add(undo::EntityLifetimeUndo::capture(undo::EntityLifetimeUndo::Kind::Deleted, entity.handle));
+
                 events::scene::DeleteEntityCommand command;
                 command.entity = entity.handle;
                 if (!events::EventDispatcher::instance().execute(command))
                 {
                     return ToolResult::error("DeleteEntity failed");
                 }
+                recorder.push();
                 return ToolResult::ok({{"deleted", entityId(entity.handle)}, {"name", entity.name}});
             };
             registry.add(std::move(tool));
@@ -312,7 +204,8 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "entity_duplicate";
             tool.title = "Duplicate entity";
-            tool.description = "Duplicate an entity and its whole subtree (components included) under the same parent. Returns the new root id.";
+            tool.description = "Duplicate an entity and its whole subtree (components included) under the same parent. Undoable. "
+                                "Returns the new root id.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.handler = [](const nlohmann::json& args) -> ToolResult
             {
@@ -327,6 +220,10 @@ namespace mcp::tools
                 {
                     return ToolResult::error("DuplicateEntity failed");
                 }
+
+                undo::UndoRecorder recorder("MCP: Duplicate entity (" + entity.name + ")");
+                recorder.add(undo::EntityLifetimeUndo::capture(undo::EntityLifetimeUndo::Kind::Created, duplicate));
+                recorder.push();
                 return ToolResult::ok({{"id", entityId(duplicate)}, {"source", entityId(entity.handle)}});
             };
             registry.add(std::move(tool));
@@ -340,7 +237,7 @@ namespace mcp::tools
             tool.description =
                 "Move an entity (with its subtree) under a new parent, appended as the last child. Omit 'parent' "
                 "(or pass null) to move it to the scene root. The LOCAL transform values are kept as-is, so the "
-                "world placement changes if the new parent is transformed.";
+                "world placement changes if the new parent is transformed. Undoable (undo restores the old sibling position).";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"parent", schema::entity("New parent entity id. Omit or null for the scene root.")}
@@ -359,6 +256,10 @@ namespace mcp::tools
                     throw ArgError("an entity cannot be its own parent");
                 }
 
+                // Record the old slot before the move (rejectRoot guarantees a parent).
+                const services::EntityHandle oldParent = entity.parent.value_or(sceneRoot());
+                const int oldIndex = childIndex(oldParent, entity.handle).value_or(-1);
+
                 events::scene::ReparentEntityCommand command;
                 command.entity = entity.handle;
                 command.newParent = parent;
@@ -366,6 +267,11 @@ namespace mcp::tools
                 {
                     return ToolResult::error("Reparent failed (the new parent may be a descendant of the entity)");
                 }
+
+                undo::UndoRecorder recorder("MCP: Reparent (" + entity.name + ")");
+                recorder.add(std::make_unique<undo::ReparentUndo>(toId(entity.handle), entity.name, toId(oldParent),
+                                                                  oldIndex, toId(parent)));
+                recorder.push();
                 return ToolResult::ok({{"id", entityId(entity.handle)}, {"parent", entityId(parent)}});
             };
             registry.add(std::move(tool));
@@ -376,7 +282,7 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "entity_rename";
             tool.title = "Rename entity";
-            tool.description = "Set an entity's name.";
+            tool.description = "Set an entity's name. Undoable.";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"name", schema::string("New name")}
@@ -395,6 +301,10 @@ namespace mcp::tools
                 command.entity = entity.handle;
                 command.newName = name;
                 events::EventDispatcher::instance().execute(command);
+
+                undo::UndoRecorder recorder("MCP: Rename (" + entity.name + " -> " + name + ")");
+                recorder.add(std::make_unique<undo::RenameUndo>(toId(entity.handle), entity.name, name));
+                recorder.push();
                 return ToolResult::ok({{"id", entityId(entity.handle)}, {"name", name}});
             };
             registry.add(std::move(tool));
@@ -405,7 +315,7 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "entity_set_active";
             tool.title = "Activate / deactivate entity";
-            tool.description = "Enable or disable an entity. A disabled entity (and its subtree) is not rendered or simulated.";
+            tool.description = "Enable or disable an entity. A disabled entity (and its subtree) is not rendered or simulated. Undoable.";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"active", schema::boolean("true = enabled")}
@@ -419,6 +329,12 @@ namespace mcp::tools
                 command.entity = entity.handle;
                 command.isActive = reader.requireBool("active");
                 events::EventDispatcher::instance().execute(command);
+
+                undo::UndoRecorder recorder(std::string("MCP: ") + (command.isActive ? "Activate" : "Deactivate") +
+                                            " (" + entity.name + ")");
+                recorder.add(std::make_unique<undo::ActiveUndo>(toId(entity.handle), entity.name, entity.isActive,
+                                                                command.isActive));
+                recorder.push();
                 return ToolResult::ok({{"id", entityId(entity.handle)}, {"active", command.isActive}});
             };
             registry.add(std::move(tool));
@@ -454,7 +370,7 @@ namespace mcp::tools
             tool.title = "Set entity transform";
             tool.description =
                 "Partially update an entity's LOCAL transform: only the provided fields change. "
-                "rotationEuler is in degrees. Returns the resulting local transform.";
+                "rotationEuler is in degrees. Undoable. Returns the resulting local transform.";
             nlohmann::json properties = transformProperties();
             properties["entity"] = schema::entity();
             tool.inputSchema = schema::object(std::move(properties), {"entity"});
@@ -466,8 +382,14 @@ namespace mcp::tools
                 {
                     throw ArgError("provide at least one of 'position', 'rotationEuler', 'scale'");
                 }
-                services::TransformData transform = applyTransform(reader, entity.handle);
-                nlohmann::json out = transformToJson(transform);
+                const TransformEdit edit = applyTransform(reader, entity.handle);
+
+                undo::UndoRecorder recorder("MCP: Set transform (" + entity.name + ")");
+                recorder.add(std::make_unique<undo::TransformUndo>(toId(entity.handle), entity.name, edit.before,
+                                                                   edit.after));
+                recorder.push();
+
+                nlohmann::json out = transformToJson(edit.after);
                 out["id"] = entityId(entity.handle);
                 return ToolResult::ok(std::move(out));
             };
@@ -522,7 +444,7 @@ namespace mcp::tools
             tool.description =
                 "Create an entity subtree from prefab-format JSON (the 'json' value returned by entity_get), "
                 "under 'parent' (default: scene root). Fresh ids/UUIDs are assigned and referenced assets are "
-                "loaded. Use this for components that have no dedicated tool. Returns the new root id.";
+                "loaded. Use this for components that have no dedicated tool. Undoable. Returns the new root id.";
             tool.inputSchema = schema::object({
                 {"json", {{"type", {"object", "string"}}, {"description", "Prefab-format JSON, as an object or as a JSON string"}}},
                 {"parent", schema::entity("Parent entity id. Omit for the scene root.")}
@@ -560,6 +482,10 @@ namespace mcp::tools
                 {
                     return ToolResult::error("InstantiateEntityFromJson failed (see logs_read for the parse error)");
                 }
+
+                undo::UndoRecorder recorder("MCP: Instantiate entity from JSON");
+                recorder.add(undo::EntityLifetimeUndo::capture(undo::EntityLifetimeUndo::Kind::Created, *created));
+                recorder.push();
                 return ToolResult::ok({{"id", entityId(*created)}, {"parent", entityId(command.parent)}});
             };
             registry.add(std::move(tool));

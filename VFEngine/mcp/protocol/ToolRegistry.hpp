@@ -26,9 +26,14 @@ namespace mcp
         nlohmann::json structured;  // returned as structuredContent (wrapped in {"result":..} when not an object)
         std::string text;           // human-readable text; defaults to structured.dump(2)
         bool isError = false;
+        // Content blocks emitted after the text block (MCP 2025-06-18), e.g. images.
+        std::vector<nlohmann::json> extraContent;
 
         static ToolResult ok(nlohmann::json structured, std::string text = {});
         static ToolResult error(std::string message);
+        // One {type:"image", data, mimeType} block; `base64` is the encoded image bytes.
+        static ToolResult image(std::string base64, std::string mimeType, nlohmann::json structured,
+                                std::string text = {});
 
         nlohmann::json toJson() const;
     };

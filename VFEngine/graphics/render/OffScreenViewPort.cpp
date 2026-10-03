@@ -38,6 +38,7 @@ namespace render
     OffScreenViewPort::OffScreenViewPort(core::Device& device, core::SwapChain& swapChain) : device{device}
         , swapChain{swapChain}
         , commandPool{std::make_unique<core::CommandPool>(device, swapChain)}
+        , viewportReadback{device}
     {
     }
 
@@ -74,6 +75,8 @@ namespace render
                                    offscreenResources.depthImage.depthImage,
                                    offscreenResources.depthImage.depthImageView,
                                    swapChain.getSwapchainDepthStencilFormat());
+
+        viewportReadback.setAvailable(true);
     }
 
     vk::DescriptorSet OffScreenViewPort::render(const PreRenderCallback& preRenderCallback)
@@ -90,6 +93,10 @@ namespace render
 
         result = device.getLogicalDevice().resetFences(1, &inFlightFences[currentFrame]);
         (void)result;
+
+        // VK-1651: a viewport readback recorded in this slot is complete now that its fence
+        // has been waited — move the pixels to the CPU before the slot is reused.
+        viewportReadback.onFenceWaited(currentFrame);
 
         // VK-1531: run the adaptive dynamic-resolution controller here — after this frame-in-flight
         // slot's fence is signaled (so its GPU work is done and recreate()'s waitIdle is safe) and
@@ -152,6 +159,31 @@ namespace render
         commandBuffer.begin(vk::CommandBufferBeginInfo{});
 
         draw(commandBuffer, imageIndex);
+
+        // The image the editor viewport presents this frame: the display-resolution
+        // composite when the upscaler is active, else the render-resolution scene color.
+        auto* upscaleManager = device.getUpscaleManager();
+        const bool presentDisplayImage = upscaleManager && upscaleManager->isActive()
+                                         && !offscreenResources.displayColorImages.empty();
+
+        // VK-1651: record a pending viewport readback of exactly that image. End-of-frame
+        // layouts: the render graph leaves the scene color in eColorAttachmentOptimal (UIOverlays
+        // is always its last image write and the graph adds no final transition); the post-upscale
+        // path and the UI composite leave the display images in eShaderReadOnlyOptimal.
+        if (presentDisplayImage)
+        {
+            viewportReadback.recordIfArmed(commandBuffer,
+                                           offscreenResources.displayColorImages[imageIndex].colorImage,
+                                           vk::ImageLayout::eShaderReadOnlyOptimal,
+                                           swapChain.getDisplayExtent(), currentFrame);
+        }
+        else
+        {
+            viewportReadback.recordIfArmed(commandBuffer,
+                                           offscreenResources.colorImages[imageIndex].colorImage,
+                                           vk::ImageLayout::eColorAttachmentOptimal,
+                                           swapChain.getSwapchainExtent(), currentFrame);
+        }
 
         commandBuffer.end();
 
@@ -224,8 +256,7 @@ namespace render
         // Fence-based sync: inFlightFences[currentFrame] is waited on at the top of render()
         // when this frame-in-flight slot comes around again. No need to stall the entire queue.
 
-        auto* upscaleManager = device.getUpscaleManager();
-        if (upscaleManager && upscaleManager->isActive() && !offscreenResources.displayColorImages.empty())
+        if (presentDisplayImage)
             return offscreenResources.displayColorImages[imageIndex].descriptorSet;
         return offscreenResources.colorImages[imageIndex].descriptorSet;
     }
@@ -238,6 +269,8 @@ namespace render
     void OffScreenViewPort::cleanUp()
     {
         device.getLogicalDevice().waitIdle();
+
+        viewportReadback.cleanUp();
 
         renderPassHandler->cleanUp();
         commandPool->cleanUp();
@@ -357,6 +390,10 @@ namespace render
         }
 
         device.getLogicalDevice().waitIdle();
+
+        // VK-1651: the device is idle, so a recorded readback has landed — finish it before the
+        // images are reallocated. A request not yet recorded stays pending for the new targets.
+        viewportReadback.onRecreate();
 
         if (ImGui::GetCurrentContext())
         {

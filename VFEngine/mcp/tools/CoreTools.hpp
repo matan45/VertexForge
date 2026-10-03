@@ -32,6 +32,9 @@ namespace mcp::tools
     void registerPlayModeTools(ToolRegistry& registry, const ToolContext& context);   // play_*
     void registerLogTools(ToolRegistry& registry, const ToolContext& context);        // logs_read
     void registerUndoTools(ToolRegistry& registry, const ToolContext& context);       // undo, redo
+    void registerViewTools(ToolRegistry& registry, const ToolContext& context);       // viewport_screenshot (VK-1651)
+    void registerPluginComponentTools(ToolRegistry& registry, const ToolContext& context); // component_*_generic, component_list_types (VK-1651)
+    void registerExportTools(ToolRegistry& registry, const ToolContext& context);     // game_export, game_export_status (VK-1651)
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);

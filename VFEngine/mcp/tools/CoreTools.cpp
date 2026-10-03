@@ -15,5 +15,8 @@ namespace mcp::tools
         registerPlayModeTools(registry, context);
         registerLogTools(registry, context);
         registerUndoTools(registry, context);
+        registerViewTools(registry, context);
+        registerPluginComponentTools(registry, context);
+        registerExportTools(registry, context);
     }
 }

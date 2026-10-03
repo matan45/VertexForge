@@ -71,6 +71,7 @@
 #include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "ExportHandler.hpp"
+#include "PluginComponentHandler.hpp"
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
@@ -98,6 +99,7 @@ namespace handlers
         createAIServices();
         createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
+        pluginComponentHandler = std::make_unique<handlers::PluginComponentHandler>();
         registerAllEventHandlers();
     }
 
@@ -381,6 +383,7 @@ namespace handlers
         controllerService->registerEventHandlers();
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
+        pluginComponentHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         customPipelineService->registerEventHandlers();
         postProcessEffectService->registerEventHandlers();

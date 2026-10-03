@@ -39,6 +39,16 @@ namespace controllers {
 		return offScreenController->getColorImage(imageIndex);
 	}
 
+	uint64_t OffScreen::requestViewportReadback(uint32_t settleFrames)
+	{
+		return offScreenController->requestViewportReadback(settleFrames);
+	}
+
+	services::ViewportReadbackResult OffScreen::takeViewportReadback(uint64_t ticket)
+	{
+		return offScreenController->takeViewportReadback(ticket);
+	}
+
 	void OffScreen::iblSet(std::string_view iblPath)
 	{
 		offScreenController->iblSet(iblPath);

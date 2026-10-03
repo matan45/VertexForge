@@ -1,4 +1,5 @@
 #include "EditorMcpHost.hpp"
+#include "EditorCameraTools.hpp"
 #include "tools/CoreTools.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "Import.hpp"
@@ -59,6 +60,8 @@ namespace editor
         info.instructions = buildInstructions();
         service = std::make_unique<mcp::McpService>(std::move(info));
         mcp::tools::registerCoreTools(service->registry(), service->mainThreadQueue());
+        if (editorCamera)
+            registerEditorCameraTools(service->registry(), editorCamera);
 
         auto& dispatcher = events::EventDispatcher::instance();
         lastPreference = dispatcher.query(events::editor::GetEditorSettingsQuery{}).mcp;

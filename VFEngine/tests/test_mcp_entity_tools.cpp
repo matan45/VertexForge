@@ -6,9 +6,12 @@
 #include "tools/CoreTools.hpp"
 
 #include "events/EventDispatcher.hpp"
+#include "events/editor/UndoRedoEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -68,6 +71,8 @@ namespace
         std::string createdName;
         std::optional<services::EntityHandle> createdParent;
         int setTransformCount = 0;
+        // VK-1651: mutating tools push one undo entry each.
+        std::vector<std::shared_ptr<services::IUndoableCommand>> undoStack;
 
         void registerHandlers()
         {
@@ -115,6 +120,23 @@ namespace
                 {
                     ++setTransformCount;
                     transforms[command.entity.id] = command.transform;
+                });
+
+            dispatcher.registerQueryHandler<events::scene::CopyEntityToJsonQuery>(
+                [this](const events::scene::CopyEntityToJsonQuery& query) -> std::string
+                {
+                    if (!alive.contains(query.entity.id) || query.entity.id == rootId)
+                    {
+                        return {};
+                    }
+                    return nlohmann::json{{"name", "Entity" + std::to_string(query.entity.id)},
+                                          {"children", nlohmann::json::array()}}.dump();
+                });
+
+            dispatcher.registerCommandHandler<events::undoredo::PushUndoableCommand>(
+                [this](const events::undoredo::PushUndoableCommand& command)
+                {
+                    undoStack.push_back(command.command);
                 });
 
             dispatcher.registerQueryHandler<events::scene::GetSceneHierarchyQuery>(
@@ -208,6 +230,7 @@ TEST_SUITE("McpEntityTools")
         CHECK(written.position == glm::vec3(1.0f, 2.0f, 3.0f));
         CHECK(written.rotation == glm::vec3(0.0f, 90.0f, 0.0f));
         CHECK(written.scale == glm::vec3(1.0f, 1.0f, 1.0f));
+        CHECK(fixture.scene.undoStack.size() == 1);
     }
 
     TEST_CASE("entity_create without parent or transform targets the root and skips SetTransform")

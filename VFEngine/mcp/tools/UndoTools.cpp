@@ -1,53 +1,78 @@
 #include "CoreTools.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "../undo/EntityIdRemap.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
+#include "events/scene/ScenePersistenceEvents.hpp"
+
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <string>
 
 namespace mcp::tools
 {
     namespace
     {
-        nlohmann::json historyState(bool performed)
+        // Undo/redo of agent edits may re-create entities with new ids; the agent
+        // needs the old -> new pairs to keep addressing them.
+        constexpr const char* historyNote =
+            " Agent entity, component and material_assign edits are undoable (one step per tool call); asset, "
+            "script, scene and play-mode operations are not. Undo of a delete re-creates entities with NEW ids: "
+            "follow remappedEntities [{from, to}].";
+
+        nlohmann::json historyState(bool performed, const std::map<uint32_t, uint32_t>& remapBefore)
         {
             const services::UndoHistoryStats stats =
                 events::EventDispatcher::instance().query(events::undoredo::GetUndoHistoryStatsQuery{});
+
+            nlohmann::json remapped = nlohmann::json::array();
+            const auto& remap = undo::EntityIdRemap::instance();
+            for (const auto& [from, to] : undo::EntityIdRemap::changes(remapBefore, remap.snapshot()))
+            {
+                remapped.push_back({{"from", from}, {"to", to}});
+            }
             return {
                 {"performed", performed},
                 {"undoCount", stats.undoCount},
-                {"redoCount", stats.redoCount}
+                {"redoCount", stats.redoCount},
+                {"remappedEntities", std::move(remapped)}
             };
         }
 
-        void registerUndo(ToolRegistry& registry)
+        void registerUndo(ToolRegistry& registry, std::shared_ptr<events::ScopedSubscription> sceneCleared)
         {
             ToolDef tool;
             tool.name = "undo";
             tool.title = "Undo";
             tool.description =
-                "Undo the most recent undoable editor action (the editor undo stack). Not every MCP edit is "
-                "recorded on the undo stack. Returns {performed, undoCount, redoCount}; performed=false when "
-                "there was nothing to undo.";
-            tool.handler = [](const nlohmann::json&) -> ToolResult
+                std::string("Undo the most recent undoable editor action (the editor undo stack, shared with Ctrl+Z). "
+                            "Returns {performed, undoCount, redoCount, remappedEntities}; performed=false when "
+                            "there was nothing to undo.") + historyNote;
+            tool.handler = [sceneCleared](const nlohmann::json&) -> ToolResult
             {
+                const auto remapBefore = undo::EntityIdRemap::instance().snapshot();
                 const bool performed = events::EventDispatcher::instance().execute(events::undoredo::UndoCommand{});
-                return ToolResult::ok(historyState(performed));
+                return ToolResult::ok(historyState(performed, remapBefore));
             };
             registry.add(std::move(tool));
         }
 
-        void registerRedo(ToolRegistry& registry)
+        void registerRedo(ToolRegistry& registry, std::shared_ptr<events::ScopedSubscription> sceneCleared)
         {
             ToolDef tool;
             tool.name = "redo";
             tool.title = "Redo";
             tool.description =
-                "Redo the most recently undone editor action. Returns "
-                "{performed, undoCount, redoCount}; performed=false when there was nothing to redo.";
-            tool.handler = [](const nlohmann::json&) -> ToolResult
+                std::string("Redo the most recently undone editor action (Ctrl+Y). Returns "
+                            "{performed, undoCount, redoCount, remappedEntities}; performed=false when there was "
+                            "nothing to redo.") + historyNote;
+            tool.handler = [sceneCleared](const nlohmann::json&) -> ToolResult
             {
+                const auto remapBefore = undo::EntityIdRemap::instance().snapshot();
                 const bool performed = events::EventDispatcher::instance().execute(events::undoredo::RedoCommand{});
-                return ToolResult::ok(historyState(performed));
+                return ToolResult::ok(historyState(performed, remapBefore));
             };
             registry.add(std::move(tool));
         }
@@ -55,7 +80,19 @@ namespace mcp::tools
 
     void registerUndoTools(ToolRegistry& registry, const ToolContext&)
     {
-        registerUndo(registry);
-        registerRedo(registry);
+        // The id remap dies with the undo history it serves (UndoRedoServiceImpl clears
+        // on the same notification). The subscription lives as long as these tools:
+        // a restarted MCP service re-registers and drops the old one instead of
+        // stacking subscriptions, and unsubscribing a token a cleared dispatcher no
+        // longer knows is a no-op.
+        auto sceneCleared = std::make_shared<events::ScopedSubscription>(
+            events::EventDispatcher::instance().subscribe<events::scene::SceneClearedNotification>(
+                [](const events::scene::SceneClearedNotification&)
+                {
+                    undo::EntityIdRemap::instance().clear();
+                }));
+
+        registerUndo(registry, sceneCleared);
+        registerRedo(registry, sceneCleared);
     }
 }

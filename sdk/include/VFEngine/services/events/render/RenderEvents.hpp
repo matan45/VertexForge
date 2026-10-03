@@ -2,6 +2,7 @@
 #include "../EventTypes.hpp"
 #include "../../data/DTOs.hpp"
 #include "../../data/AsyncLoadingTypes.hpp"
+#include "../../data/ViewportReadbackTypes.hpp"
 #include "../../providers/render/IOffScreenProvider.hpp"
 #include "resource/Types.hpp"
 #include "types/RenderSettings.hpp"
@@ -141,6 +142,24 @@ namespace events::render {
 
     struct GetViewportTextureQuery : IQuery<services::ViewportTextureHandle> {
         std::string_view getName() const override { return "GetViewportTexture"; }
+    };
+
+    // VK-1651: one-shot GPU readback of the editor viewport. The copy is recorded
+    // after settleFrames more viewport renders (so edits made just before the
+    // request are visible) and completes once that frame's fence is waited.
+    // Returns a ticket (0 = no provider); a new request replaces a pending one.
+    struct RequestViewportReadbackCommand : ICommand<uint64_t> {
+        uint32_t settleFrames = 2;
+
+        std::string_view getName() const override { return "RequestViewportReadback"; }
+    };
+
+    // Polls a ticket. Pending until the pixels are on the CPU; Ready hands the
+    // pixels over once (the ticket is consumed); Failed for unknown/replaced tickets.
+    struct TakeViewportReadbackQuery : IQuery<services::ViewportReadbackResult> {
+        uint64_t ticket = 0;
+
+        std::string_view getName() const override { return "TakeViewportReadback"; }
     };
 
     struct GetMeshBoundingBoxQuery : IQuery<std::optional<services::MeshBoundingBox>> {

@@ -1,5 +1,8 @@
 #include "CoreTools.hpp"
+#include "ToolHelpers.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "../undo/McpUndo.hpp"
+#include "../undo/McpUndoCommands.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/scene/ComponentMediaEvents.hpp"
@@ -10,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -686,15 +690,34 @@ namespace mcp::tools
             return table;
         }
 
-        const ComponentBinding& requireBinding(const ArgReader& reader)
+        const ComponentBinding* findBinding(const std::string& type)
         {
-            std::string type = reader.requireString("type");
             for (const ComponentBinding& binding : bindings())
             {
                 if (binding.name == type)
                 {
-                    return binding;
+                    return &binding;
                 }
+            }
+            return nullptr;
+        }
+
+        const ComponentBinding& bindingByName(const std::string& type)
+        {
+            const ComponentBinding* binding = findBinding(type);
+            if (binding == nullptr)
+            {
+                throw std::runtime_error("unknown built-in component type '" + type + "'");
+            }
+            return *binding;
+        }
+
+        const ComponentBinding& requireBinding(const ArgReader& reader)
+        {
+            std::string type = reader.requireString("type");
+            if (const ComponentBinding* binding = findBinding(type))
+            {
+                return *binding;
             }
             std::string allowed;
             for (const ComponentBinding& binding : bindings())
@@ -766,7 +789,7 @@ namespace mcp::tools
             tool.description =
                 "Add a component to an entity, optionally initialising fields from 'data' (same keys as "
                 "component_set). Fails if the entity already has that component - use component_set instead. "
-                "Returns the component's resulting fields." + fieldReference();
+                "Undoable. Returns the component's resulting fields." + fieldReference();
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"type", typeSchema()},
@@ -799,6 +822,11 @@ namespace mcp::tools
                     binding.remove(entity);
                     throw;
                 }
+
+                undo::UndoRecorder recorder("MCP: Add " + binding.name + " component");
+                recorder.add(std::make_unique<undo::BuiltinComponentPresenceUndo>(
+                    toId(entity), binding.name, fields.value_or(nlohmann::json::object()), true));
+                recorder.push();
                 return ToolResult::ok({
                     {"entity", static_cast<uint32_t>(entity.id)},
                     {"type", binding.name},
@@ -814,7 +842,8 @@ namespace mcp::tools
             tool.name = "component_remove";
             tool.title = "Remove component";
             tool.description = "Remove a component from an entity. Supported types: Mesh, Camera, DirectionalLight, "
-                               "PointLight, SpotLight, RigidBody, Collider, AudioSource3D, AudioSource2D.";
+                               "PointLight, SpotLight, RigidBody, Collider, AudioSource3D, AudioSource2D. "
+                               "Undoable (undo restores the component with its field values).";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"type", typeSchema()}
@@ -826,7 +855,8 @@ namespace mcp::tools
                 services::EntityHandle entity = requireExistingEntity(reader);
                 const ComponentBinding& binding = requireBinding(reader);
 
-                if (!binding.get(entity).has_value())
+                std::optional<nlohmann::json> fields = binding.get(entity);
+                if (!fields.has_value())
                 {
                     return ToolResult::error("Entity has no " + binding.name + " component");
                 }
@@ -834,6 +864,11 @@ namespace mcp::tools
                 {
                     return ToolResult::error("Remove" + binding.name + "Component failed");
                 }
+
+                undo::UndoRecorder recorder("MCP: Remove " + binding.name + " component");
+                recorder.add(std::make_unique<undo::BuiltinComponentPresenceUndo>(
+                    toId(entity), binding.name, std::move(*fields), false));
+                recorder.push();
                 return ToolResult::ok({{"entity", static_cast<uint32_t>(entity.id)}, {"removed", binding.name}});
             };
             registry.add(std::move(tool));
@@ -879,7 +914,7 @@ namespace mcp::tools
             tool.title = "Set component fields";
             tool.description =
                 "Partially update an existing component: only the keys present in 'data' change, everything "
-                "else keeps its current value. Unknown keys are rejected. Returns the resulting fields."
+                "else keeps its current value. Unknown keys are rejected. Undoable. Returns the resulting fields."
                 + fieldReference();
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
@@ -893,11 +928,21 @@ namespace mcp::tools
                 const ComponentBinding& binding = requireBinding(reader);
                 const nlohmann::json& data = requireDataObject(reader);
 
+                std::optional<nlohmann::json> before = binding.get(entity);
+                if (!before.has_value())
+                {
+                    return ToolResult::error("Entity has no " + binding.name + " component; use component_add");
+                }
                 std::optional<nlohmann::json> fields = binding.patch(entity, data);
                 if (!fields.has_value())
                 {
                     return ToolResult::error("Entity has no " + binding.name + " component; use component_add");
                 }
+
+                undo::UndoRecorder recorder("MCP: Set " + binding.name + " fields");
+                recorder.add(std::make_unique<undo::BuiltinComponentPatchUndo>(
+                    toId(entity), binding.name, std::move(*before), *fields));
+                recorder.push();
                 return ToolResult::ok({
                     {"entity", static_cast<uint32_t>(entity.id)},
                     {"type", binding.name},
@@ -906,6 +951,37 @@ namespace mcp::tools
             };
             registry.add(std::move(tool));
         }
+    }
+
+    std::vector<BuiltinComponentInfo> builtinComponentTypes()
+    {
+        std::vector<BuiltinComponentInfo> types;
+        for (const ComponentBinding& binding : bindings())
+        {
+            types.push_back({binding.name, binding.fieldHelp});
+        }
+        return types;
+    }
+
+    bool addBuiltinComponent(const std::string& type, const services::EntityHandle& entity)
+    {
+        return bindingByName(type).add(entity);
+    }
+
+    bool removeBuiltinComponent(const std::string& type, const services::EntityHandle& entity)
+    {
+        return bindingByName(type).remove(entity);
+    }
+
+    std::optional<nlohmann::json> getBuiltinComponent(const std::string& type, const services::EntityHandle& entity)
+    {
+        return bindingByName(type).get(entity);
+    }
+
+    std::optional<nlohmann::json> patchBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
+                                                        const nlohmann::json& patch)
+    {
+        return bindingByName(type).patch(entity, patch);
     }
 
     void registerComponentTools(ToolRegistry& registry, const ToolContext&)

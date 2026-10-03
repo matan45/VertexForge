@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "EditorHandler.hpp"
 #include "ExportHandler.hpp"
+#include "PluginComponentHandler.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
@@ -183,6 +184,7 @@ namespace handlers
         // down while their vtables still exist.
         controllers::Import::shutdown();
 
+        pluginComponentHandler.reset();
         pluginManager.reset();
         exportHandler.reset();
         cleanupEventSubscriptions();

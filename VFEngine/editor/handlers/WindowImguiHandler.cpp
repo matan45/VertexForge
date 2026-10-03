@@ -14,6 +14,7 @@
 #include "../windows/config/NavmeshWindow.hpp"
 #include "../windows/asset/AssetLifecycleWindow.hpp"
 #include "../windows/config/GIConfigWindow.hpp"
+#include "../mcp/EditorMcpHost.hpp"
 
 namespace handlers
 {
@@ -26,6 +27,10 @@ namespace handlers
         // Connect editor camera from ViewPort to MainImguiWindow
         mainWindow->setEditorCamera(viewPort->getEditorCamera());
         mainWindow->setMcpHost(mcpHost);
+        if (mcpHost)
+        {
+            mcpHost->setEditorCamera(viewPort->getEditorCamera());
+        }
 
         // Add all windows
         controllers::imguiHandler::ImguiWindowHandler::add(mainWindow);

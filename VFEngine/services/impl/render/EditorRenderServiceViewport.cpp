@@ -21,6 +21,25 @@ namespace services
                 return getViewportTexture();
             });
 
+        // VK-1651: viewport screenshot (MCP). No provider -> ticket 0, and every take fails.
+        dispatcher.registerCommandHandler<events::render::RequestViewportReadbackCommand>(
+            [this](const events::render::RequestViewportReadbackCommand& cmd)
+            {
+                return offScreenProvider ? offScreenProvider->requestViewportReadback(cmd.settleFrames) : uint64_t{0};
+            });
+
+        dispatcher.registerQueryHandler<events::render::TakeViewportReadbackQuery>(
+            [this](const events::render::TakeViewportReadbackQuery& q)
+            {
+                if (!offScreenProvider || q.ticket == 0)
+                {
+                    ViewportReadbackResult result;
+                    result.state = ViewportReadbackResult::State::Failed;
+                    return result;
+                }
+                return offScreenProvider->takeViewportReadback(q.ticket);
+            });
+
         dispatcher.registerCommandHandler<events::render::UpdateMeshCameraCommand>(
             [this](const events::render::UpdateMeshCameraCommand& cmd)
             {

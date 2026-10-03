@@ -54,6 +54,19 @@ namespace core {
         return offScreen ? offScreen->render(preRenderCallback) : nullptr;
     }
 
+    uint64_t OffScreenAdapter::requestViewportReadback(uint32_t settleFrames) {
+        return offScreen ? offScreen->requestViewportReadback(settleFrames) : 0;
+    }
+
+    services::ViewportReadbackResult OffScreenAdapter::takeViewportReadback(uint64_t ticket) {
+        if (!offScreen) {
+            services::ViewportReadbackResult result;
+            result.state = services::ViewportReadbackResult::State::Failed;
+            return result;
+        }
+        return offScreen->takeViewportReadback(ticket);
+    }
+
     void OffScreenAdapter::iblSet(std::string_view iblPath) {
         if (offScreen) {
             offScreen->iblSet(iblPath);

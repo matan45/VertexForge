@@ -96,6 +96,7 @@ namespace services {
 
 namespace handlers {
 	class ExportHandler;
+	class PluginComponentHandler;
 }
 
 namespace handlers {
@@ -179,6 +180,7 @@ namespace handlers {
 		std::shared_ptr<services::IDestructionService> destructionService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
+		std::unique_ptr<handlers::PluginComponentHandler> pluginComponentHandler;
 
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;

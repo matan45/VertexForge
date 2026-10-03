@@ -10,6 +10,8 @@
 
 namespace editor
 {
+    class EditorCamera;
+
     // MCP flags parsed from the editor command line (Main.cpp). They override the
     // saved preference for this session only and are never written back.
     struct McpLaunchOptions
@@ -40,6 +42,11 @@ namespace editor
         // Registers the core tools, then starts the server if the preference or the
         // command line enables it. Call once, after services and plugins are up.
         void init(const McpLaunchOptions& launchOptions);
+
+        // The viewport camera for the camera_* tools (VK-1651). Set before init(); the
+        // tools are only registered when it is non-null. Not owned: the ViewPort window
+        // owns it and outlives the server (shutdown() runs before UI teardown).
+        void setEditorCamera(EditorCamera* camera) { editorCamera = camera; }
 
         // Runs queued tool work on the main thread (8 ms budget) and applies a pending
         // restart requested by a preference change.
@@ -78,6 +85,7 @@ namespace editor
         void applyEndpoint(const Endpoint& endpoint);
 
         std::unique_ptr<mcp::McpService> service;
+        EditorCamera* editorCamera = nullptr;
         Endpoint active;
         // Restarts are deferred to drain(): a settings change may be published from
         // inside a tool call that drain() is running, and stopping the server there

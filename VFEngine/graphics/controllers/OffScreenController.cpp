@@ -398,4 +398,14 @@ namespace controllers
         vk::Image img = offScreen->getColorImage(imageIndex);
         return static_cast<VkImage>(img);
     }
+
+    uint64_t OffScreenController::requestViewportReadback(uint32_t settleFrames)
+    {
+        return offScreen->requestViewportReadback(settleFrames);
+    }
+
+    services::ViewportReadbackResult OffScreenController::takeViewportReadback(uint64_t ticket)
+    {
+        return offScreen->takeViewportReadback(ticket);
+    }
 }

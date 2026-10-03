@@ -1,6 +1,8 @@
 #include "CoreTools.hpp"
 #include "PathSandbox.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "../undo/McpUndo.hpp"
+#include "../undo/McpUndoCommands.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/asset/AssetDatabaseEvents.hpp"
@@ -13,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -239,6 +242,7 @@ namespace mcp::tools
                 "Assign a material asset to an entity (adds a MaterialComponent if missing). Without 'subMesh' "
                 "it sets the default material used by every submesh without its own assignment; with 'subMesh' "
                 "it overrides that submesh (by submesh name). An empty 'material' clears the assignment. "
+                "Undoable (material_create / material_set are not). "
                 "Returns the entity's material state {defaultMaterial, subMeshMaterials, parameterOverrides}.";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
@@ -257,6 +261,15 @@ namespace mcp::tools
                 const std::string materialPath = material.empty() ? std::string{} : resolveMaterialFile(root, material).string();
 
                 auto& dispatcher = events::EventDispatcher::instance();
+
+                // The assignment as it was, for undo. A missing component means this
+                // call adds it, so undo removes it again.
+                events::material::GetMaterialDataQuery beforeQuery;
+                beforeQuery.entity = entity;
+                const std::optional<services::MaterialData> before = dispatcher.query(beforeQuery);
+                std::optional<std::string> undoSubMesh;
+                std::string beforePath;
+
                 bool applied = false;
                 if (reader.has("subMesh"))
                 {
@@ -264,6 +277,15 @@ namespace mcp::tools
                     if (subMesh.empty())
                     {
                         throw ArgError("argument 'subMesh' must not be empty");
+                    }
+                    undoSubMesh = subMesh;
+                    if (before.has_value())
+                    {
+                        auto it = before->subMeshMaterials.find(subMesh);
+                        if (it != before->subMeshMaterials.end() && it->second.isValid())
+                        {
+                            beforePath = it->second.resolve();
+                        }
                     }
                     events::material::SetSubMeshMaterialCommand command;
                     command.entity = entity;
@@ -273,6 +295,10 @@ namespace mcp::tools
                 }
                 else
                 {
+                    if (before.has_value() && before->defaultMaterialRef.isValid())
+                    {
+                        beforePath = before->defaultMaterialRef.resolve();
+                    }
                     events::material::SetDefaultMaterialCommand command;
                     command.entity = entity;
                     command.materialPath = materialPath;
@@ -283,6 +309,11 @@ namespace mcp::tools
                 {
                     return ToolResult::error("The material service rejected the assignment");
                 }
+
+                undo::UndoRecorder recorder("MCP: Assign material");
+                recorder.add(std::make_unique<undo::MaterialAssignUndo>(static_cast<uint32_t>(entity.id), undoSubMesh,
+                                                                        before.has_value(), beforePath, materialPath));
+                recorder.push();
                 return ToolResult::ok(materialState(entity, root));
             };
             registry.add(std::move(tool));

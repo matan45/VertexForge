@@ -70,6 +70,10 @@ namespace controllers
         // Get the offscreen color image for runtime blit (returns VkImage as void*)
         void* getColorImage(uint32_t imageIndex) const;
 
+        // VK-1651: CPU readback of the final viewport image (thread-safe)
+        uint64_t requestViewportReadback(uint32_t settleFrames);
+        services::ViewportReadbackResult takeViewportReadback(uint64_t ticket);
+
         void iblSet(std::string_view iblPath);
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
         void iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint); // VK-1574
