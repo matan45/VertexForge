@@ -2,6 +2,8 @@
 
 #include "transport/HttpMessage.hpp"
 
+#include <ostream>  // doctest stringifies std::string_view operands via operator<<
+
 using mcp::http::HttpRequestParser;
 using State = HttpRequestParser::State;
 
