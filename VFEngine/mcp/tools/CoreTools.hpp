@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../dispatch/MainThreadQueue.hpp"
+#include "../protocol/PromptRegistry.hpp"
+#include "../protocol/ResourceRegistry.hpp"
 #include "../protocol/ToolRegistry.hpp"
 
 #include <chrono>
@@ -38,4 +40,11 @@ namespace mcp::tools
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);
+
+    // VK-1652 (ResourceDefs.cpp): vf://scene/hierarchy, vf://logs, vf://scripts/{+path},
+    // vf://docs/components, vf://docs/mtype-api, vf://docs/mtype-api/{+module}.
+    void registerCoreResources(ResourceRegistry& registry, MainThreadQueue& queue);
+
+    // VK-1652 (PromptDefs.cpp): create_platformer_template, create_top_down_template.
+    void registerCorePrompts(PromptRegistry& registry);
 }

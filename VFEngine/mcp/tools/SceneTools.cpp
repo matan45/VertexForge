@@ -1,5 +1,6 @@
 #include "CoreTools.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "ContentHelpers.hpp"
 #include "PathSandbox.hpp"
 
 #include "events/EventDispatcher.hpp"
@@ -391,42 +392,47 @@ namespace mcp::tools
                 {
                     throw ArgError("argument 'maxDepth' must be between 0 and 1000");
                 }
-
-                services::SceneHierarchyData hierarchy =
-                    events::EventDispatcher::instance().query(events::scene::GetSceneHierarchyQuery{});
-
-                HierarchyBuilder builder;
-                builder.maxDepth = static_cast<int>(maxDepth);
-                builder.includeTransforms = reader.optBool("includeTransforms", true);
-                for (const services::EntityData& entity : hierarchy.entities)
-                {
-                    builder.byId.emplace(entity.handle.id, &entity);
-                }
-
-                nlohmann::json entities = nlohmann::json::array();
-                auto rootIt = builder.byId.find(hierarchy.root.id);
-                if (rootIt != builder.byId.end())
-                {
-                    builder.visited.insert(hierarchy.root.id);
-                    for (const services::EntityHandle& child : rootIt->second->children)
-                    {
-                        auto it = builder.byId.find(child.id);
-                        if (it != builder.byId.end() && !builder.visited.contains(child.id))
-                        {
-                            entities.push_back(builder.node(*it->second, 0));
-                        }
-                    }
-                }
-
-                return ToolResult::ok({
-                    {"root", entityId(hierarchy.root)},
-                    {"entityCount", hierarchy.entities.empty() ? 0 : hierarchy.entities.size() - 1},
-                    {"returned", builder.emitted},
-                    {"entities", std::move(entities)}
-                });
+                const bool includeTransforms = reader.optBool("includeTransforms", true);
+                return ToolResult::ok(buildSceneHierarchy(static_cast<int>(maxDepth), includeTransforms));
             };
             registry.add(std::move(tool));
         }
+    }
+
+    nlohmann::json buildSceneHierarchy(int maxDepth, bool includeTransforms)
+    {
+        services::SceneHierarchyData hierarchy =
+            events::EventDispatcher::instance().query(events::scene::GetSceneHierarchyQuery{});
+
+        HierarchyBuilder builder;
+        builder.maxDepth = maxDepth;
+        builder.includeTransforms = includeTransforms;
+        for (const services::EntityData& entity : hierarchy.entities)
+        {
+            builder.byId.emplace(entity.handle.id, &entity);
+        }
+
+        nlohmann::json entities = nlohmann::json::array();
+        auto rootIt = builder.byId.find(hierarchy.root.id);
+        if (rootIt != builder.byId.end())
+        {
+            builder.visited.insert(hierarchy.root.id);
+            for (const services::EntityHandle& child : rootIt->second->children)
+            {
+                auto it = builder.byId.find(child.id);
+                if (it != builder.byId.end() && !builder.visited.contains(child.id))
+                {
+                    entities.push_back(builder.node(*it->second, 0));
+                }
+            }
+        }
+
+        return {
+            {"root", entityId(hierarchy.root)},
+            {"entityCount", hierarchy.entities.empty() ? 0 : hierarchy.entities.size() - 1},
+            {"returned", builder.emitted},
+            {"entities", std::move(entities)}
+        };
     }
 
     void registerSceneTools(ToolRegistry& registry, const ToolContext&)

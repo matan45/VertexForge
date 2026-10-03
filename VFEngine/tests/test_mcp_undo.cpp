@@ -369,7 +369,7 @@ namespace
 
         mcp::ToolResult call(const char* name, const nlohmann::json& args)
         {
-            const mcp::ToolDef* tool = registry.find(name);
+            auto tool = registry.find(name);
             REQUIRE(tool != nullptr);
             return tool->handler(args);
         }

@@ -1,4 +1,5 @@
 #include "CoreTools.hpp"
+#include "ContentHelpers.hpp"
 #include "PathSandbox.hpp"
 #include "../protocol/ArgReader.hpp"
 
@@ -28,20 +29,6 @@ namespace mcp::tools
 
         // mType sources are small; anything larger is almost certainly a mistake.
         constexpr std::uintmax_t maxScriptBytes = 1024 * 1024;
-
-        // Main thread only. ProjectConfig::workingDirectory is the asset root (the
-        // project's "Assets" folder); scripts live in <workingDirectory>/scripts with
-        // the compiled sources under game/ (see scripts.mtproj: Include game/**/*.mt).
-        fs::path scriptsRootOnMain()
-        {
-            auto project = events::EventDispatcher::instance().query(events::project::GetCurrentProjectQuery{});
-            if (!project.has_value() || project->workingDirectory.empty())
-            {
-                throw std::runtime_error("No project is loaded; open one with project_open first");
-            }
-            // workingDirectory is built with path::string() (narrow) by ProjectServiceImpl.
-            return fs::absolute(fs::path(project->workingDirectory)) / "scripts";
-        }
 
         // Worker thread: hop to the main thread for the project query.
         fs::path scriptsRoot(const ToolContext& context)
@@ -217,27 +204,21 @@ namespace mcp::tools
                 ArgReader reader(args);
                 const std::string path = reader.requireString("path");
                 const fs::path root = scriptsRoot(context);
-                const fs::path file = resolveScript(root, path, false);
+                ScriptReadResult script = readScript(root, path);
 
-                std::error_code ec;
-                if (!fs::is_regular_file(file, ec))
+                switch (script.status)
                 {
+                case ScriptReadStatus::NotFound:
                     return ToolResult::error("Script not found: " + path + " (use script_list)");
-                }
-                const std::uintmax_t bytes = fs::file_size(file, ec);
-                if (ec || bytes > maxScriptBytes)
-                {
+                case ScriptReadStatus::Unreadable:
                     return ToolResult::error("Script is unreadable or larger than 1 MB: " + path);
-                }
-
-                std::ifstream stream(file, std::ios::binary);
-                if (!stream)
-                {
+                case ScriptReadStatus::OpenFailed:
                     return ToolResult::error("Failed to open script: " + path);
+                case ScriptReadStatus::Ok:
+                    break;
                 }
-                std::string source((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 
-                return ToolResult::ok({{"path", relativeToRoot(root, file)}, {"source", std::move(source)}});
+                return ToolResult::ok({{"path", std::move(script.path)}, {"source", std::move(script.source)}});
             };
             registry.add(std::move(tool));
         }
@@ -251,20 +232,34 @@ namespace mcp::tools
                 "Create or overwrite an mType game script. 'path' is relative to the scripts root and must be "
                 "under game/ with a .mt extension (folders are created). Call scripts_build afterwards: "
                 "writing does NOT recompile, and play_start only builds when nothing is compiled yet.\n"
-                "mType primer: a behaviour is a class annotated @Script with lifecycle methods "
-                "onStart(), onUpdate(float deltaTime), onFixedUpdate(float dt), onLateUpdate(float dt), "
-                "onDestroy(). Import the engine API with paths relative to the file, e.g. from "
-                "game/Foo.mt: import * from \"../lib/engine/Log.mt\"; (one more ../ per sub-folder). "
-                "Declarations are typed (int, float, bool, string, class types) — no 'var'; 'match' is a "
-                "keyword; circular imports are errors. Minimal reference: script_read game/SimpleTest.mt; "
-                "fuller example: game/PlayerController.mt; API: script_list includeLib=true.\n"
-                "Example:\n"
-                "import * from \"../lib/engine/Log.mt\";\n"
+                "READ the resource vf://docs/mtype-api before writing a script (rules, verified example, API). "
+                "mType primer: a behaviour is an @Script class that extends Behaviour "
+                "(lib/engine/oop/Behaviour.mt) with a no-argument constructor `public constructor() : super() { }`; "
+                "Behaviour supplies onStart(), onUpdate(float deltaTime) and onDestroy(), so override only what "
+                "you need, with @Override. Optional hooks onLateUpdate(float deltaTime), "
+                "onFixedUpdate(float fixedDeltaTime), onEnable(), onDisable() are NOT declared by Behaviour: "
+                "no @Override on them (@Override on a method that overrides nothing is a compile error). "
+                "Import with paths relative to the file, e.g. from game/Foo.mt: "
+                "import * from \"../lib/engine/oop/Behaviour.mt\"; (one more ../ per sub-folder). "
+                "Access fields as this.field. Declarations are typed (int, float, bool, string, class types) — "
+                "no 'var'; 'match' is a keyword; avoid circular imports; class names must be unique "
+                "across the project. Verified example: game/examples/PlayerMovement.mt (script_read it); "
+                "API: vf://docs/mtype-api/<module> or script_list includeLib=true.\n"
+                "Example (game/GameTimer.mt):\n"
+                "import * from \"../lib/engine/oop/Behaviour.mt\";\n"
                 "@Script\n"
-                "public class Spinner {\n"
-                "    private float elapsed = 0.0;\n"
-                "    public function onStart(): void { Log::info(\"Spinner started\"); }\n"
-                "    public function onUpdate(float deltaTime): void { elapsed = elapsed + deltaTime; }\n"
+                "public class GameTimer extends Behaviour {\n"
+                "    private float age = 0.0;\n"
+                "    public constructor() : super() {\n"
+                "    }\n"
+                "    @Override\n"
+                "    public function onStart(): void {\n"
+                "        this.log(\"GameTimer ready\");\n"
+                "    }\n"
+                "    @Override\n"
+                "    public function onUpdate(float deltaTime): void {\n"
+                "        this.age = this.age + deltaTime;\n"
+                "    }\n"
                 "}";
             tool.inputSchema = schema::object({
                 {"path", schema::string("Path relative to the scripts root, under game/, ending in .mt "
@@ -486,6 +481,81 @@ namespace mcp::tools
             };
             registry.add(std::move(tool));
         }
+    }
+
+    // Main thread only. ProjectConfig::workingDirectory is the asset root (the
+    // project's "Assets" folder); scripts live in <workingDirectory>/scripts with
+    // the compiled sources under game/ (see scripts.mtproj: Include game/**/*.mt).
+    fs::path scriptsRootOnMain()
+    {
+        auto project = events::EventDispatcher::instance().query(events::project::GetCurrentProjectQuery{});
+        if (!project.has_value() || project->workingDirectory.empty())
+        {
+            throw std::runtime_error("No project is loaded; open one with project_open first");
+        }
+        // workingDirectory is built with path::string() (narrow) by ProjectServiceImpl.
+        return fs::absolute(fs::path(project->workingDirectory)) / "scripts";
+    }
+
+    ScriptReadResult readScript(const fs::path& root, const std::string& relativePath)
+    {
+        const fs::path file = resolveScript(root, relativePath, false);
+
+        ScriptReadResult result;
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec))
+        {
+            result.status = ScriptReadStatus::NotFound;
+            return result;
+        }
+        const std::uintmax_t bytes = fs::file_size(file, ec);
+        if (ec || bytes > maxScriptBytes)
+        {
+            result.status = ScriptReadStatus::Unreadable;
+            return result;
+        }
+
+        std::ifstream stream(file, std::ios::binary);
+        if (!stream)
+        {
+            result.status = ScriptReadStatus::OpenFailed;
+            return result;
+        }
+        result.source.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+        result.path = relativeToRoot(root, file);
+        result.status = ScriptReadStatus::Ok;
+        return result;
+    }
+
+    std::vector<std::string> listGameScripts(const fs::path& root, std::size_t cap, bool* truncated)
+    {
+        std::vector<std::string> scripts;
+        std::error_code ec;
+        const fs::path gameDir = root / "game";
+        if (fs::is_directory(gameDir, ec))
+        {
+            fs::recursive_directory_iterator it(gameDir, fs::directory_options::skip_permission_denied, ec);
+            for (; !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
+            {
+                std::error_code entryEc;
+                if (it->is_regular_file(entryEc) && detail::componentEquals(it->path().extension(), ".mt"))
+                {
+                    scripts.push_back(relativeToRoot(root, it->path()));
+                }
+            }
+        }
+
+        // Sort before capping so the listing is stable across calls.
+        std::sort(scripts.begin(), scripts.end());
+        if (truncated != nullptr)
+        {
+            *truncated = scripts.size() > cap;
+        }
+        if (scripts.size() > cap)
+        {
+            scripts.resize(cap);
+        }
+        return scripts;
     }
 
     void registerScriptTools(ToolRegistry& registry, const ToolContext& context)

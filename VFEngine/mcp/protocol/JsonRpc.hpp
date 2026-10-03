@@ -21,6 +21,8 @@ namespace mcp::jsonrpc
         // Implementation-defined (-32000..-32099): the editor main thread did not
         // pick the request up within the tool's timeout.
         constexpr int mainThreadTimeout = -32001;
+        // MCP: resources/read for a URI that names nothing.
+        constexpr int resourceNotFound = -32002;
     }
 
     enum class MessageKind
@@ -56,14 +58,17 @@ namespace mcp::jsonrpc
     class RpcError : public std::runtime_error
     {
     public:
-        RpcError(int code, const std::string& message)
-            : std::runtime_error(message), errorCode(code)
+        RpcError(int code, const std::string& message, nlohmann::json errorData = nullptr)
+            : std::runtime_error(message), errorCode(code), payload(std::move(errorData))
         {
         }
 
         int code() const noexcept { return errorCode; }
+        // The optional JSON-RPC error `data` member (null = omitted).
+        const nlohmann::json& data() const noexcept { return payload; }
 
     private:
         int errorCode;
+        nlohmann::json payload;
     };
 }

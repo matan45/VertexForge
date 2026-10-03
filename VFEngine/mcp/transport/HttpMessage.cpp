@@ -96,6 +96,7 @@ namespace mcp::http
         case 403: return "Forbidden";
         case 404: return "Not Found";
         case 405: return "Method Not Allowed";
+        case 406: return "Not Acceptable";
         case 408: return "Request Timeout";
         case 411: return "Length Required";
         case 413: return "Payload Too Large";
@@ -177,6 +178,38 @@ namespace mcp::http
         {
             out += body;
         }
+        return out;
+    }
+
+    std::string HttpResponse::serializeStreamHead() const
+    {
+        std::string out;
+        out.reserve(256);
+        out += "HTTP/1.1 ";
+        out += std::to_string(status);
+        out += ' ';
+        out += reasonPhrase(status);
+        out += "\r\n";
+        for (const auto& [key, value] : headers)
+        {
+            std::string lowered = toLower(key);
+            if (lowered == "content-type" || lowered == "content-length" || lowered == "transfer-encoding" ||
+                lowered == "connection" || lowered == "cache-control")
+            {
+                continue;
+            }
+            out += key;
+            out += ": ";
+            out += value;
+            out += "\r\n";
+        }
+        out += "Content-Type: text/event-stream\r\n";
+        out += "Cache-Control: no-cache\r\n";
+        out += "Transfer-Encoding: chunked\r\n";
+        out += "Connection: close\r\n";
+        // Stops a buffering reverse proxy from holding events back.
+        out += "X-Accel-Buffering: no\r\n";
+        out += "\r\n";
         return out;
     }
 

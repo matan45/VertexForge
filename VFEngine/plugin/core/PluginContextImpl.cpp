@@ -2,6 +2,7 @@
 #include "PluginContextImpl.hpp"
 #include "PluginManager.hpp"
 #include "PluginEventBus.hpp"
+#include "PluginMcpToolRegistry.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "events/render/RenderHookEvents.hpp"
@@ -83,6 +84,33 @@ namespace plugin {
             controllers::imguiHandler::PluginWindowRegistry::add(pluginName, title, window);
         }
         registeredWindows.push_back(std::move(window));
+    }
+
+    bool PluginContextImpl::registerMcpTool(PluginMcpToolDesc tool)
+    {
+        if (!hasCapability(std::string(capability::editor))) {
+            vfLogWarning("[Plugin:{}] Cannot register MCP tool '{}' - editor capability not available", pluginName, tool.name);
+            return false;
+        }
+
+        const std::string toolName = tool.name;
+        auto outcome = PluginMcpToolRegistry::add(pluginName, std::move(tool));
+        if (!outcome.ok) {
+            vfLogWarning("[Plugin:{}] Rejected MCP tool '{}': {}", pluginName, toolName, outcome.error);
+            return false;
+        }
+
+        vfLogInfo("[Plugin:{}] {} MCP tool '{}'", pluginName, outcome.replaced ? "Replaced" : "Registered",
+                  outcome.qualifiedName);
+        events::EventDispatcher::instance().publish(events::editor::PluginMcpToolsChangedNotification{});
+        return true;
+    }
+
+    void PluginContextImpl::unregisterMcpTool(const std::string& name)
+    {
+        if (PluginMcpToolRegistry::remove(pluginName, name)) {
+            events::EventDispatcher::instance().publish(events::editor::PluginMcpToolsChangedNotification{});
+        }
     }
 
     void PluginContextImpl::registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage)
@@ -565,6 +593,11 @@ namespace plugin {
         // clobbers) the user's per-window visibility toggle in the Plugins menu.
         // No-op in Runtime, where no windows are registered.
         controllers::imguiHandler::PluginWindowRegistry::setPluginActive(pluginName, active);
+
+        // VK-1652: hide/restore this plugin's MCP tools; the MCP server re-lists them.
+        if (PluginMcpToolRegistry::setPluginActive(pluginName, active)) {
+            events::EventDispatcher::instance().publish(events::editor::PluginMcpToolsChangedNotification{});
+        }
 
         // Suppress/restore the bound world mask via the existing params.enabled
         // runtime gate (UBO write only — no rebind, hitch-free). Restoring replays
@@ -1446,6 +1479,15 @@ namespace plugin {
         }
         controllers::imguiHandler::PluginWindowRegistry::removeByPlugin(pluginName);
         registeredWindows.clear();
+
+        // VK-1652: drop this plugin's MCP tool handlers (plugin-DLL std::functions)
+        // before the DLL unloads.
+        if (PluginMcpToolRegistry::removeByPlugin(pluginName)) {
+            try {
+                dispatcher.publish(events::editor::PluginMcpToolsChangedNotification{});
+            } catch (...) {
+            }
+        }
 
         for (const auto& token : pluginEventSubscriptions) {
             PluginEventBus::instance().unsubscribe(token);

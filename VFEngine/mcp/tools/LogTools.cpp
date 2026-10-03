@@ -1,5 +1,6 @@
 #include "CoreTools.hpp"
 #include "../protocol/ArgReader.hpp"
+#include "ContentHelpers.hpp"
 
 #include "print/Log.hpp"
 
@@ -17,19 +18,6 @@ namespace mcp::tools
     namespace
     {
         constexpr int64_t maxEntriesCap = 2000;
-
-        const char* levelName(util::LogLevel level)
-        {
-            switch (level)
-            {
-            case util::LogLevel::Trace:   return "trace";
-            case util::LogLevel::Debug:   return "debug";
-            case util::LogLevel::Info:    return "info";
-            case util::LogLevel::Warning: return "warning";
-            case util::LogLevel::Error:   return "error";
-            default:                      return "info";
-            }
-        }
 
         util::LogLevel parseLevel(const std::string& name)
         {
@@ -91,98 +79,119 @@ namespace mcp::tools
                 }
                 const std::size_t limit = static_cast<std::size_t>(max);
 
-                auto matches = [&](const util::LogEntry& entry)
-                {
-                    if (entry.level < minLevel)
-                    {
-                        return false;
-                    }
-                    return needle.empty() || lowercase(entry.message).find(needle) != std::string::npos;
-                };
-
-                // Copy under the lock (the logger appends from every thread); format outside it.
-                std::vector<util::LogEntry> selected;
-                bool truncated = false;
-                std::optional<uint64_t> lastSeq = sinceSeq;
-                {
-                    std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
-                    const std::vector<util::LogEntry>& buffer = util::imguiConsoleBuffer;
-
-                    // Sequence numbers are assigned under this same lock and never reset
-                    // (the console's Clear empties the buffer but keeps the counter), so
-                    // the buffer is sorted by seq and sinceSeq stays meaningful.
-                    auto begin = buffer.begin();
-                    if (sinceSeq.has_value())
-                    {
-                        const uint64_t since = *sinceSeq;
-                        begin = std::upper_bound(buffer.begin(), buffer.end(), since,
-                                                 [](uint64_t value, const util::LogEntry& entry)
-                                                 {
-                                                     return value < entry.sequenceNumber;
-                                                 });
-                    }
-
-                    if (sinceSeq.has_value())
-                    {
-                        // Oldest first; stop at the cap so the caller can page forward.
-                        for (auto it = begin; it != buffer.end(); ++it)
-                        {
-                            if (!matches(*it))
-                            {
-                                lastSeq = it->sequenceNumber;
-                                continue;
-                            }
-                            if (selected.size() == limit)
-                            {
-                                truncated = true;
-                                break;
-                            }
-                            selected.push_back(*it);
-                            lastSeq = it->sequenceNumber;
-                        }
-                    }
-                    else
-                    {
-                        // Newest 'limit' matches, collected backwards then restored to order.
-                        for (auto it = buffer.rbegin(); it != buffer.rend(); ++it)
-                        {
-                            if (!matches(*it))
-                            {
-                                continue;
-                            }
-                            if (selected.size() == limit)
-                            {
-                                truncated = true;
-                                break;
-                            }
-                            selected.push_back(*it);
-                        }
-                        std::reverse(selected.begin(), selected.end());
-                        if (!buffer.empty())
-                        {
-                            lastSeq = buffer.back().sequenceNumber;
-                        }
-                    }
-                }
+                const LogSelection selection = collectLogs(sinceSeq, minLevel, limit, needle);
 
                 nlohmann::json entries = nlohmann::json::array();
-                for (const util::LogEntry& entry : selected)
+                for (const util::LogEntry& entry : selection.entries)
                 {
                     entries.push_back({
                         {"seq", entry.sequenceNumber},
-                        {"level", levelName(entry.level)},
+                        {"level", logLevelName(entry.level)},
                         {"message", entry.message}
                     });
                 }
 
                 return ToolResult::ok({
                     {"entries", std::move(entries)},
-                    {"lastSeq", lastSeq.has_value() ? nlohmann::json(*lastSeq) : nlohmann::json(nullptr)},
-                    {"truncated", truncated}
+                    {"lastSeq", selection.lastSeq.has_value() ? nlohmann::json(*selection.lastSeq)
+                                                              : nlohmann::json(nullptr)},
+                    {"truncated", selection.truncated}
                 });
             };
             registry.add(std::move(tool));
         }
+    }
+
+    const char* logLevelName(util::LogLevel level)
+    {
+        switch (level)
+        {
+        case util::LogLevel::Trace:   return "trace";
+        case util::LogLevel::Debug:   return "debug";
+        case util::LogLevel::Info:    return "info";
+        case util::LogLevel::Warning: return "warning";
+        case util::LogLevel::Error:   return "error";
+        default:                      return "info";
+        }
+    }
+
+    LogSelection collectLogs(std::optional<uint64_t> sinceSeq, util::LogLevel minLevel, std::size_t max,
+                             const std::string& containsLower)
+    {
+        auto matches = [&](const util::LogEntry& entry)
+        {
+            if (entry.level < minLevel)
+            {
+                return false;
+            }
+            return containsLower.empty() || lowercase(entry.message).find(containsLower) != std::string::npos;
+        };
+
+        // Copy under the lock (the logger appends from every thread); format outside it.
+        LogSelection selection;
+        selection.lastSeq = sinceSeq;
+        std::vector<util::LogEntry>& selected = selection.entries;
+        {
+            std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
+            const std::vector<util::LogEntry>& buffer = util::imguiConsoleBuffer;
+
+            // Sequence numbers are assigned under this same lock and never reset
+            // (the console's Clear empties the buffer but keeps the counter), so
+            // the buffer is sorted by seq and sinceSeq stays meaningful.
+            auto begin = buffer.begin();
+            if (sinceSeq.has_value())
+            {
+                const uint64_t since = *sinceSeq;
+                begin = std::upper_bound(buffer.begin(), buffer.end(), since,
+                                         [](uint64_t value, const util::LogEntry& entry)
+                                         {
+                                             return value < entry.sequenceNumber;
+                                         });
+            }
+
+            if (sinceSeq.has_value())
+            {
+                // Oldest first; stop at the cap so the caller can page forward.
+                for (auto it = begin; it != buffer.end(); ++it)
+                {
+                    if (!matches(*it))
+                    {
+                        selection.lastSeq = it->sequenceNumber;
+                        continue;
+                    }
+                    if (selected.size() == max)
+                    {
+                        selection.truncated = true;
+                        break;
+                    }
+                    selected.push_back(*it);
+                    selection.lastSeq = it->sequenceNumber;
+                }
+            }
+            else
+            {
+                // Newest 'max' matches, collected backwards then restored to order.
+                for (auto it = buffer.rbegin(); it != buffer.rend(); ++it)
+                {
+                    if (!matches(*it))
+                    {
+                        continue;
+                    }
+                    if (selected.size() == max)
+                    {
+                        selection.truncated = true;
+                        break;
+                    }
+                    selected.push_back(*it);
+                }
+                std::reverse(selected.begin(), selected.end());
+                if (!buffer.empty())
+                {
+                    selection.lastSeq = buffer.back().sequenceNumber;
+                }
+            }
+        }
+        return selection;
     }
 
     void registerLogTools(ToolRegistry& registry, const ToolContext&)

@@ -10,6 +10,9 @@
 
 namespace
 {
+    const mcp::ResourceRegistry noResources{};
+    const mcp::PromptRegistry noPrompts{};
+
     mcp::ToolRegistry makeRegistry()
     {
         mcp::ToolRegistry registry;
@@ -56,7 +59,7 @@ namespace
 TEST_CASE("mcp lifecycle: initialize negotiates the protocol version")
 {
     mcp::ToolRegistry registry = makeRegistry();
-    mcp::McpServer server(registry, {});
+    mcp::McpServer server(registry, noResources, noPrompts, {});
 
     SUBCASE("supported version is echoed")
     {
@@ -66,7 +69,11 @@ TEST_CASE("mcp lifecycle: initialize negotiates the protocol version")
                         {"clientInfo", {{"name", "claude-code"}, {"version", "2.0"}}}}}
         });
         CHECK(r["result"]["protocolVersion"] == "2025-03-26");
-        CHECK(r["result"]["capabilities"]["tools"]["listChanged"] == false);
+        const nlohmann::json& capabilities = r["result"]["capabilities"];
+        CHECK(capabilities["tools"]["listChanged"] == true);
+        CHECK(capabilities["resources"]["subscribe"] == false);
+        CHECK(capabilities["resources"]["listChanged"] == false);
+        CHECK(capabilities["prompts"]["listChanged"] == false);
         CHECK(r["result"]["serverInfo"]["name"] == "vertexforge-editor");
         CHECK(server.clientName() == "claude-code 2.0");
     }
@@ -83,7 +90,7 @@ TEST_CASE("mcp lifecycle: initialize negotiates the protocol version")
 TEST_CASE("mcp lifecycle: ping, notifications and unknown methods")
 {
     mcp::ToolRegistry registry = makeRegistry();
-    mcp::McpServer server(registry, {});
+    mcp::McpServer server(registry, noResources, noPrompts, {});
 
     nlohmann::json pong = call(server, {{"jsonrpc", "2.0"}, {"id", 2}, {"method", "ping"}});
     CHECK(pong["result"].is_object());
@@ -91,14 +98,14 @@ TEST_CASE("mcp lifecycle: ping, notifications and unknown methods")
 
     CHECK_FALSE(server.handleBody(R"({"jsonrpc":"2.0","method":"notifications/initialized"})"));
 
-    nlohmann::json missing = call(server, {{"jsonrpc", "2.0"}, {"id", 3}, {"method", "resources/list"}});
+    nlohmann::json missing = call(server, {{"jsonrpc", "2.0"}, {"id", 3}, {"method", "completion/complete"}});
     CHECK(missing["error"]["code"] == mcp::jsonrpc::errc::methodNotFound);
 }
 
 TEST_CASE("mcp lifecycle: tools/list exposes schema and annotations")
 {
     mcp::ToolRegistry registry = makeRegistry();
-    mcp::McpServer server(registry, {});
+    mcp::McpServer server(registry, noResources, noPrompts, {});
 
     nlohmann::json r = call(server, {{"jsonrpc", "2.0"}, {"id", 4}, {"method", "tools/list"}});
     const nlohmann::json& tools = r["result"]["tools"];
@@ -112,7 +119,7 @@ TEST_CASE("mcp lifecycle: tools/list exposes schema and annotations")
 TEST_CASE("mcp lifecycle: tools/call results and in-band errors")
 {
     mcp::ToolRegistry registry = makeRegistry();
-    mcp::McpServer server(registry, {});
+    mcp::McpServer server(registry, noResources, noPrompts, {});
 
     SUBCASE("success returns text + structuredContent")
     {
@@ -149,7 +156,7 @@ TEST_CASE("mcp lifecycle: tools/call results and in-band errors")
 TEST_CASE("mcp lifecycle: main-affinity tools go through the invoker")
 {
     mcp::ToolRegistry registry = makeRegistry();
-    mcp::McpServer server(registry, {});
+    mcp::McpServer server(registry, noResources, noPrompts, {});
 
     int invoked = 0;
     server.setMainThreadInvoker([&](std::function<nlohmann::json()> task, std::chrono::milliseconds)
@@ -201,9 +208,9 @@ TEST_CASE("mcp lifecycle: HTTP routing through McpService")
         auto response = service.handleHttp(makeRequest("POST", R"({"jsonrpc":"2.0","method":"notifications/initialized"})"));
         CHECK(response.status == 202);
     }
-    SUBCASE("GET is 405, DELETE is 204, other path is 404")
+    SUBCASE("GET without an event-stream Accept is 406, DELETE is 204, other path is 404")
     {
-        CHECK(service.handleHttp(makeRequest("GET", "")).status == 405);
+        CHECK(service.handleHttp(makeRequest("GET", "")).status == 406);
         CHECK(service.handleHttp(makeRequest("DELETE", "")).status == 204);
         auto other = makeRequest("POST", "{}");
         other.target = "/other";

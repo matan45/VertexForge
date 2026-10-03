@@ -63,7 +63,7 @@ namespace
 
         const mcp::ToolDef& tool(const char* name) const
         {
-            const mcp::ToolDef* found = registry.find(name);
+            auto found = registry.find(name);
             REQUIRE(found != nullptr);
             return *found;
         }

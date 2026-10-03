@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -8,9 +9,28 @@
 #include <vector>
 
 // Minimal HTTP/1.1 message handling for the MCP Streamable HTTP transport.
-// Supports Content-Length bodies only (MCP clients POST fixed-size JSON).
+// Requests: Content-Length bodies only (MCP clients POST fixed-size JSON).
+// Responses: Content-Length, or a chunked text/event-stream (VK-1652).
 namespace mcp::http
 {
+    // Write side of a streamed (chunked) response. Implemented over the socket by
+    // HttpServer; tests substitute their own. Used from the connection thread only.
+    class StreamSink
+    {
+    public:
+        virtual ~StreamSink() = default;
+
+        // Sends `data` as one HTTP/1.1 chunk (an empty write sends nothing).
+        // False on a send error / timeout or once the server is stopping.
+        virtual bool write(std::string_view data) = 0;
+
+        // Non-blocking: true when the peer closed the connection or it failed.
+        virtual bool peerClosed() = 0;
+
+        // False once the server is stopping.
+        virtual bool running() const = 0;
+    };
+
     struct HttpRequest
     {
         std::string method;
@@ -34,6 +54,11 @@ namespace mcp::http
         std::vector<std::pair<std::string, std::string>> headers;
         std::string body;
 
+        // When set the response is streamed: HttpServer sends serializeStreamHead(),
+        // runs this on the connection thread until it returns, terminates the chunked
+        // body and closes the connection. `body` is ignored.
+        std::function<void(StreamSink&)> stream;
+
         static HttpResponse json(int status, std::string body);
         static HttpResponse empty(int status);
         static HttpResponse text(int status, std::string body);
@@ -41,6 +66,12 @@ namespace mcp::http
         HttpResponse& setHeader(std::string name, std::string value);
 
         std::string serialize(bool keepAlive) const;
+
+        // Status line + headers of a text/event-stream response with a chunked
+        // body (no Content-Length, Connection: close). Headers that the stream
+        // framing owns (Content-Type, Content-Length, Transfer-Encoding,
+        // Connection, Cache-Control) are not copied from `headers`.
+        std::string serializeStreamHead() const;
     };
 
     std::string_view reasonPhrase(int status);

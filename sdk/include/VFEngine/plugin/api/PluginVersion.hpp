@@ -42,6 +42,10 @@ namespace plugin {
     //      SDK-exported and embedded by value, so a plugin built against v20 would lay the
     //      trailing fields out at the wrong offsets. services::AudioParams::priority is
     //      untouched — it still arbitrates the pooled 3D path.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 21;
+    // v22: registerMcpTool/unregisterMcpTool on PluginContext + PluginMcpToolDesc/
+    //      PluginMcpToolResult (VK-1652) — plugins contribute tools to the Editor's MCP
+    //      server. The two virtuals are inserted after registerEditorWindow, so every
+    //      later vtable slot shifts: every plugin must rebuild.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 22;
 
 }

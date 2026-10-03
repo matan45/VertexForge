@@ -89,6 +89,8 @@ namespace plugin {
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
                                   const std::string& title) override;
+        bool registerMcpTool(PluginMcpToolDesc tool) override;
+        void unregisterMcpTool(const std::string& name) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
         void registerAssetImporter(std::unique_ptr<import::AssetImporter> importer) override;
         PluginAssetTypeHandle registerAssetType(const PluginAssetTypeDesc& desc) override;

@@ -3,6 +3,8 @@
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -51,23 +53,47 @@ namespace mcp
         std::chrono::milliseconds timeout{10000};
         bool readOnly = false;     // annotations.readOnlyHint
         bool destructive = false;  // annotations.destructiveHint
+        // Registration group: empty = core tools; "plugins" = PluginToolBridge (VK-1652).
+        std::string owner;
     };
 
-    // Immutable once the server starts: tools are registered on the main thread
-    // before HttpServer::start, then only read from connection threads.
+    // Thread-safe (VK-1652): core tools are added on the main thread before start;
+    // plugin tools are swapped in and out at runtime by PluginToolBridge while
+    // connection threads read. find() hands out shared ownership, so a tool removed
+    // mid-call stays alive until that call finishes.
     class ToolRegistry
     {
     public:
-        // Replaces an existing tool with the same name.
+        ToolRegistry();
+        ToolRegistry(ToolRegistry&& other) noexcept;
+        ToolRegistry& operator=(ToolRegistry&& other) noexcept;
+        ToolRegistry(const ToolRegistry&) = delete;
+        ToolRegistry& operator=(const ToolRegistry&) = delete;
+
+        // Replaces an existing tool with the same name (and owner).
         void add(ToolDef tool);
-        const ToolDef* find(std::string_view name) const;
-        std::size_t size() const { return tools.size(); }
+        std::shared_ptr<const ToolDef> find(std::string_view name) const;
+        std::size_t size() const;
+
+        // Atomically replaces every tool whose owner == `owner` with `defs` (each
+        // def's owner is forced to `owner`). A def whose name belongs to another
+        // owner (e.g. a core tool) is skipped and reported in `rejected`. Returns
+        // true when the tools/list output changed.
+        bool replaceGroup(const std::string& owner, std::vector<ToolDef> defs,
+                          std::vector<std::string>* rejected = nullptr);
+
+        // Bumped on every change to the listing.
+        uint64_t revision() const;
 
         // The `tools` array for a tools/list result, in registration order.
         nlohmann::json listJson() const;
 
     private:
-        std::vector<ToolDef> tools;
+        void rebuildIndex();
+
+        std::unique_ptr<std::mutex> mutex;  // unique_ptr keeps the registry movable
+        std::vector<std::shared_ptr<const ToolDef>> tools;
         std::unordered_map<std::string, std::size_t> indexByName;
+        uint64_t rev = 0;
     };
 }

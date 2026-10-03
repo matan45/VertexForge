@@ -2,6 +2,7 @@
 #include "EditorHandler.hpp"
 #include "ExportHandler.hpp"
 #include "PluginComponentHandler.hpp"
+#include "PluginMcpToolHandler.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
@@ -185,6 +186,7 @@ namespace handlers
         controllers::Import::shutdown();
 
         pluginComponentHandler.reset();
+        pluginMcpToolHandler.reset();
         pluginManager.reset();
         exportHandler.reset();
         cleanupEventSubscriptions();

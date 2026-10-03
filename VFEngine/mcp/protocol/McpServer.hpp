@@ -1,6 +1,8 @@
 #pragma once
 
 #include "JsonRpc.hpp"
+#include "PromptRegistry.hpp"
+#include "ResourceRegistry.hpp"
 #include "ToolRegistry.hpp"
 
 #include <atomic>
@@ -13,7 +15,7 @@
 
 namespace mcp
 {
-    // Transport-agnostic MCP method dispatcher (lifecycle + tools).
+    // Transport-agnostic MCP method dispatcher (lifecycle, tools, resources, prompts).
     // Thread-safe: may be called concurrently from several connection threads.
     class McpServer
     {
@@ -29,11 +31,13 @@ namespace mcp
         };
 
         // Runs a task on the editor main thread (MainThreadQueue::invoke). When
-        // unset, Main-affinity tools run inline on the calling thread (tests).
+        // unset, Main-affinity tools and resource readers run inline on the
+        // calling thread (tests).
         using MainThreadInvoker =
             std::function<nlohmann::json(std::function<nlohmann::json()>, std::chrono::milliseconds)>;
 
-        McpServer(const ToolRegistry& tools, Info info);
+        McpServer(const ToolRegistry& tools, const ResourceRegistry& resources,
+                  const PromptRegistry& prompts, Info info);
 
         void setMainThreadInvoker(MainThreadInvoker invoker);
 
@@ -53,8 +57,13 @@ namespace mcp
     private:
         nlohmann::json handleInitialize(const nlohmann::json& params);
         nlohmann::json handleToolsCall(const nlohmann::json& params);
+        nlohmann::json handleResourcesList();
+        nlohmann::json handleResourcesRead(const nlohmann::json& params);
+        nlohmann::json handlePromptsGet(const nlohmann::json& params);
 
         const ToolRegistry& tools;
+        const ResourceRegistry& resources;
+        const PromptRegistry& prompts;
         Info info;
         MainThreadInvoker invoker;
 

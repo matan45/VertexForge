@@ -48,7 +48,13 @@ namespace editor
             "script_attach -> play_start -> logs_read -> play_stop -> scene_save.\n"
             "Conventions: entity ids are integers; vectors are [x, y, z]; rotations are Euler "
             "angles in degrees; paths are relative to the project directory unless a tool says "
-            "otherwise. Always play_stop before editing the scene again, and scene_save to persist.";
+            "otherwise. Always play_stop before editing the scene again, and scene_save to persist.\n"
+            "Resources: read vf://docs/mtype-api BEFORE writing any script (language rules, a verified "
+            "example, the core API; vf://docs/mtype-api/<module> for any other module). vf://docs/components "
+            "lists component fields, vf://scene/hierarchy the open scene, vf://logs the recent log, and "
+            "vf://scripts/<path> a script's source.\n"
+            "Prompts: create_platformer_template and create_top_down_template walk through building a "
+            "playable game.";
     }
 
     void EditorMcpHost::init(const McpLaunchOptions& launchOptions)
@@ -62,6 +68,10 @@ namespace editor
         mcp::tools::registerCoreTools(service->registry(), service->mainThreadQueue());
         if (editorCamera)
             registerEditorCameraTools(service->registry(), editorCamera);
+        mcp::tools::registerCoreResources(service->resourceRegistry(), service->mainThreadQueue());
+        mcp::tools::registerCorePrompts(service->promptRegistry());
+        // Plugins are initialised before the host, so their tools are already registered.
+        service->enablePluginTools();
 
         auto& dispatcher = events::EventDispatcher::instance();
         lastPreference = dispatcher.query(events::editor::GetEditorSettingsQuery{}).mcp;

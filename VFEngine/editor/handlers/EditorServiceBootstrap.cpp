@@ -72,6 +72,7 @@
 #include "events/render/RenderEvents.hpp"
 #include "ExportHandler.hpp"
 #include "PluginComponentHandler.hpp"
+#include "PluginMcpToolHandler.hpp"
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
@@ -100,6 +101,7 @@ namespace handlers
         createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
         pluginComponentHandler = std::make_unique<handlers::PluginComponentHandler>();
+        pluginMcpToolHandler = std::make_unique<handlers::PluginMcpToolHandler>();
         registerAllEventHandlers();
     }
 
@@ -384,6 +386,7 @@ namespace handlers
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
         pluginComponentHandler->registerEventHandlers();
+        pluginMcpToolHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         customPipelineService->registerEventHandlers();
         postProcessEffectService->registerEventHandlers();

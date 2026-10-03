@@ -1,4 +1,5 @@
 #include "CoreTools.hpp"
+#include "ContentHelpers.hpp"
 #include "ToolHelpers.hpp"
 #include "../protocol/ArgReader.hpp"
 #include "../undo/McpUndo.hpp"
@@ -109,13 +110,7 @@ namespace mcp::tools
                 {
                     builtin.push_back({{"name", info.name}, {"fieldHelp", info.fieldHelp}});
                 }
-                nlohmann::json plugin =
-                    events::EventDispatcher::instance().query(events::scene::GetPluginComponentTypesQuery{});
-                if (!plugin.is_array())
-                {
-                    plugin = nlohmann::json::array();
-                }
-                return ToolResult::ok({{"builtin", std::move(builtin)}, {"plugin", std::move(plugin)}});
+                return ToolResult::ok({{"builtin", std::move(builtin)}, {"plugin", pluginComponentTypes()}});
             };
             registry.add(std::move(tool));
         }
@@ -299,6 +294,17 @@ namespace mcp::tools
             };
             registry.add(std::move(tool));
         }
+    }
+
+    nlohmann::json pluginComponentTypes()
+    {
+        nlohmann::json plugin =
+            events::EventDispatcher::instance().query(events::scene::GetPluginComponentTypesQuery{});
+        if (!plugin.is_array())
+        {
+            plugin = nlohmann::json::array();
+        }
+        return plugin;
     }
 
     void registerPluginComponentTools(ToolRegistry& registry, const ToolContext&)

@@ -10,6 +10,7 @@
 #include "HttpServer.hpp"
 
 #include <algorithm>
+#include <charconv>
 
 namespace mcp::http
 {
@@ -42,6 +43,75 @@ namespace mcp::http
         {
             return std::string(what) + " failed (WSA error " + std::to_string(WSAGetLastError()) + ")";
         }
+
+        // Chunked-body writer for a streamed response (VK-1652).
+        class SocketStreamSink : public StreamSink
+        {
+        public:
+            SocketStreamSink(SOCKET s, const std::atomic<bool>& runningFlag)
+                : handle(s), serverRunning(runningFlag)
+            {
+            }
+
+            bool write(std::string_view data) override
+            {
+                if (failed || !running())
+                {
+                    return false;
+                }
+                if (data.empty())
+                {
+                    return true;  // a zero-size chunk would terminate the body
+                }
+
+                char size[32];
+                auto [end, ec] = std::to_chars(size, size + sizeof(size), data.size(), 16);
+                std::string chunk;
+                chunk.reserve(static_cast<std::size_t>(end - size) + data.size() + 4);
+                chunk.append(size, end);
+                chunk += "\r\n";
+                chunk.append(data.data(), data.size());
+                chunk += "\r\n";
+                failed = !sendAll(handle, chunk);
+                return !failed;
+            }
+
+            bool peerClosed() override
+            {
+                if (failed)
+                {
+                    return true;
+                }
+                fd_set readable;
+                FD_ZERO(&readable);
+                FD_SET(handle, &readable);
+                timeval immediate{0, 0};
+                int ready = ::select(0, &readable, nullptr, nullptr, &immediate);
+                if (ready == SOCKET_ERROR)
+                {
+                    return true;
+                }
+                if (ready == 0)
+                {
+                    return false;
+                }
+                // Readable: 0 = orderly close, error = reset/shutdown. Stray bytes
+                // from the client are left in place and ignored.
+                char probe = 0;
+                int peeked = ::recv(handle, &probe, 1, MSG_PEEK);
+                return peeked <= 0;
+            }
+
+            bool running() const override
+            {
+                return serverRunning.load(std::memory_order_acquire);
+            }
+
+        private:
+            SOCKET handle;
+            const std::atomic<bool>& serverRunning;
+            bool failed = false;
+        };
     }
 
     HttpServer::HttpServer()
@@ -282,6 +352,31 @@ namespace mcp::http
                 catch (...)
                 {
                     response = HttpResponse::text(500, "internal error");
+                }
+
+                if (response.stream)
+                {
+                    // Streamed body: the connection is dedicated to it and closed
+                    // afterwards (keep-alive does not apply).
+                    if (!sendAll(s, response.serializeStreamHead()))
+                    {
+                        break;
+                    }
+                    // A client that stops reading fails the stream after 5 s
+                    // instead of blocking this thread forever.
+                    DWORD sendTimeoutMs = 5000;
+                    ::setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeoutMs),
+                                 sizeof(sendTimeoutMs));
+                    SocketStreamSink sink(s, running);
+                    try
+                    {
+                        response.stream(sink);
+                    }
+                    catch (...)
+                    {
+                    }
+                    sendAll(s, "0\r\n\r\n");
+                    break;
                 }
 
                 if (!sendAll(s, response.serialize(keepAlive)))

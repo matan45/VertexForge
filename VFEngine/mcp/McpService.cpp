@@ -48,10 +48,26 @@ namespace mcp
             }
             return value.size() == wanted.size() || value[wanted.size()] == ';' || value[wanted.size()] == ' ';
         }
+
+        bool acceptsEventStream(std::string_view accept)
+        {
+            // Case-insensitive substring: "text/event-stream" anywhere in the list.
+            std::string lowered(accept);
+            for (char& c : lowered)
+            {
+                if (c >= 'A' && c <= 'Z')
+                {
+                    c = static_cast<char>(c - 'A' + 'a');
+                }
+            }
+            return lowered.find("text/event-stream") != std::string::npos;
+        }
     }
 
     McpService::McpService(McpServer::Info info)
-        : server(tools, std::move(info)), sessionId(makeSessionId())
+        : server(tools, resources, prompts, std::move(info)),
+          pluginTools(tools, [this](const std::string& notification) { hub.broadcast(notification); }),
+          sessionId(makeSessionId())
     {
         server.setMainThreadInvoker(
             [this](std::function<nlohmann::json()> task, std::chrono::milliseconds timeout)
@@ -63,12 +79,33 @@ namespace mcp
     McpService::~McpService()
     {
         stop();
+        // Released before EditorHandler unloads the plugins.
+        pluginTools.unsubscribe();
+    }
+
+    void McpService::enablePluginTools()
+    {
+        pluginTools.subscribe();
+        pluginToolsEnabled = true;
+    }
+
+    void McpService::broadcastNotification(const std::string& jsonText)
+    {
+        hub.broadcast(jsonText);
     }
 
     bool McpService::start(uint16_t port, const std::string& token)
     {
         stop();
         queue.reset();
+        hub.reset();
+
+        // Plugins registered their tools before the host existed. No stream is
+        // open yet, so the first listing goes out without a list_changed.
+        if (pluginToolsEnabled)
+        {
+            pluginTools.syncIfDirty(false);
+        }
 
         http::HttpServer::Options options;
         options.port = port;
@@ -94,16 +131,19 @@ namespace mcp
 
         lastError.clear();
         security = http::SecurityPolicy(http.boundPort(), token);
-        vfLogInfo("[MCP] listening on http://127.0.0.1:{}{} ({} tools{})", http.boundPort(), endpointPath,
-                  tools.size(), token.empty() ? "" : ", bearer token required");
+        vfLogInfo("[MCP] listening on http://127.0.0.1:{}{} ({} tools, {} resources, {} prompts{})", http.boundPort(),
+                  endpointPath, tools.size(), resources.resources().size() + resources.templates().size(),
+                  prompts.all().size(), token.empty() ? "" : ", bearer token required");
         return true;
     }
 
     void McpService::stop()
     {
-        // Fail pending main-thread work first so connection threads blocked in
-        // invoke() return and HttpServer::stop() can join them.
+        // Fail pending main-thread work and end every SSE stream first so the
+        // connection threads blocked in invoke() / EventStreamHub::serve() return
+        // and HttpServer::stop() can join them.
         queue.shutdown();
+        hub.close();
         if (http.isRunning())
         {
             http.stop();
@@ -113,6 +153,10 @@ namespace mcp
 
     void McpService::drain(std::chrono::milliseconds budget)
     {
+        if (pluginToolsEnabled)
+        {
+            pluginTools.syncIfDirty(true);
+        }
         queue.drain(budget);
     }
 
@@ -138,6 +182,7 @@ namespace mcp
         s.toolErrors = server.toolErrorCount();
         s.connections = http.activeConnections();
         s.toolCount = tools.size();
+        s.eventStreams = hub.streamCount();
         return s;
     }
 
@@ -169,8 +214,29 @@ namespace mcp
 
         if (request.method == "GET")
         {
-            // No server-initiated SSE stream in P1 (spec: 405 when unsupported).
-            return http::HttpResponse::empty(405).setHeader("Allow", "POST, DELETE");
+            // Standalone SSE stream for server -> client notifications (VK-1652).
+            // Last-Event-ID is accepted and ignored: there is no replay.
+            auto accept = request.header("accept");
+            if (!accept || !acceptsEventStream(*accept))
+            {
+                return http::HttpResponse::text(406, "GET /mcp requires Accept: text/event-stream");
+            }
+            if (!hub.isOpen())
+            {
+                return http::HttpResponse::text(503, "server shutting down");
+            }
+            // The stream registers once the response head is out, so a connection
+            // that fails before that never occupies a hub slot. The hub outlives
+            // the connection: stop() closes it, then joins every connection.
+            http::HttpResponse out;
+            out.stream = [streamHub = &hub](http::StreamSink& sink)
+            {
+                if (std::shared_ptr<http::EventStreamHub::Stream> stream = streamHub->open())
+                {
+                    streamHub->serve(stream, sink);
+                }
+            };
+            return out;
         }
         if (request.method == "DELETE")
         {
@@ -178,7 +244,7 @@ namespace mcp
         }
         if (request.method != "POST")
         {
-            return http::HttpResponse::empty(405).setHeader("Allow", "POST, DELETE");
+            return http::HttpResponse::empty(405).setHeader("Allow", "GET, POST, DELETE");
         }
 
         if (auto contentType = request.header("content-type"); contentType && !isJsonContentType(*contentType))

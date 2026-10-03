@@ -22,6 +22,7 @@
 #include "../../services/data/VFXTypes.hpp"
 #include "FieldAttributes.hpp"
 #include "PluginAssetType.hpp"      // VK-1449: PluginAssetTypeDesc / PluginAssetTypeHandle
+#include "PluginMcpTool.hpp"        // VK-1652: PluginMcpToolDesc / PluginMcpToolResult
 
 #include <plugin/PluginHostApi.h>   // mType plugin C ABI (MTypeNativeFn, MTypePluginHost)
 
@@ -97,6 +98,19 @@ namespace plugin {
         // With an empty title it is always drawn (legacy behavior).
         virtual void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
                                           const std::string& title = "") = 0;
+
+        // === MCP Tools (API v22) ===
+        // Only available when hasCapability(capability::editor) is true.
+        // Contributes a tool to the Editor's MCP server so an AI agent can call it
+        // next to the built-in tools. The agent sees it as "<plugin>_<name>" (plugin
+        // name lower-cased, other characters replaced by '_', at most 48 chars).
+        // The handler always runs on the editor main thread. Returns false (and logs)
+        // when the tool is invalid (name not [a-z0-9_]{1,32}, empty handler,
+        // inputSchema.type != "object") or its qualified name collides with another
+        // plugin's tool; re-registering the same name replaces this plugin's tool.
+        // Tools are hidden while the plugin is inactive and dropped on unload.
+        virtual bool registerMcpTool(PluginMcpToolDesc tool) = 0;
+        virtual void unregisterMcpTool(const std::string& name) = 0;
 
         // === Import Pipeline Extension ===
         // Only available when hasCapability(capability::import_) is true.

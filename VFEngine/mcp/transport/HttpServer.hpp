@@ -18,6 +18,11 @@ namespace mcp::http
     // One accept thread + one thread per connection (capped). Written against
     // winsock directly: mType's WinSocketServer binds INADDR_ANY, which would
     // expose the editor to the network.
+    //
+    // A handler may return a streamed response (HttpResponse::stream); it then
+    // owns the connection thread until it returns. stop() shuts the sockets down
+    // so its writes fail, but a stream blocked waiting for data must be woken by
+    // its owner first (McpService closes the EventStreamHub before stop()).
     class HttpServer
     {
     public:
@@ -26,7 +31,7 @@ namespace mcp::http
         struct Options
         {
             uint16_t port = 7878;  // 0 = ephemeral (tests)
-            int maxConnections = 4;
+            int maxConnections = 6;  // room for 2 SSE streams next to the POSTs
             std::chrono::milliseconds idleTimeout{60000};  // keep-alive idle before close
             std::size_t maxBodyBytes = 4u * 1024u * 1024u;
         };

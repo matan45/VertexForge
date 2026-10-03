@@ -97,6 +97,7 @@ namespace services {
 namespace handlers {
 	class ExportHandler;
 	class PluginComponentHandler;
+	class PluginMcpToolHandler;
 }
 
 namespace handlers {
@@ -181,6 +182,7 @@ namespace handlers {
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
 		std::unique_ptr<handlers::PluginComponentHandler> pluginComponentHandler;
+		std::unique_ptr<handlers::PluginMcpToolHandler> pluginMcpToolHandler;
 
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;
