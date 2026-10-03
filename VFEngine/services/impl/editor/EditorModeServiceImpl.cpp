@@ -281,10 +281,10 @@ namespace services
                     bool compiled = d.query(events::scripting::IsScriptsCompiledQuery{});
                     if (!compiled)
                     {
-                        // BuildScriptsCommand is synchronous and returns true on a
+                        // BuildScriptsCommand is synchronous; success is set on a
                         // successful compile. On failure, abort the mode change so we
                         // never enter Play with stale/broken scripts.
-                        bool built = d.execute(events::scripting::BuildScriptsCommand{});
+                        bool built = d.execute(events::scripting::BuildScriptsCommand{}).success;
                         if (!built)
                         {
                             vfLogError("[EditorMode] Play aborted: script build failed");

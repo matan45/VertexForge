@@ -6,10 +6,72 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/MaterialEvents.hpp"
+#include "../../events/project/ResourceEvents.hpp"
 #include "resource/AssetLifecycleManager.hpp"
 #include <asset/AssetRef.hpp>
+#include <material/MaterialAsset.hpp>
+#include <filesystem>
+#include <system_error>
 
 namespace services {
+
+    namespace {
+
+        // Paths cross the event boundary as UTF-8; go through u8string so non-ASCII
+        // folders survive on Windows (narrow fs::path uses the ANSI code page).
+        std::filesystem::path pathFromUtf8(const std::string& utf8) {
+            return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
+        }
+
+        std::string pathToUtf8(const std::filesystem::path& path) {
+            const std::u8string utf8 = path.u8string();
+            return std::string(utf8.begin(), utf8.end());
+        }
+
+        ::events::material::CreateMaterialAssetResult createMaterialAsset(const std::string& directory,
+                                                                          const std::string& name) {
+            namespace fs = std::filesystem;
+            ::events::material::CreateMaterialAssetResult result;
+
+            if (name.empty()) {
+                result.error = "Material name is empty";
+                return result;
+            }
+
+            // Relative directories resolve against the process CWD, matching what
+            // the content browser's currentPath means when a project was opened
+            // with a relative path.
+            std::error_code ec;
+            const fs::path dir = fs::absolute(pathFromUtf8(directory), ec);
+            if (ec || !fs::is_directory(dir, ec)) {
+                result.error = "Not an existing directory: " + directory;
+                return result;
+            }
+
+            const std::string extension = ".vfMat";
+            fs::path materialPath = dir / pathFromUtf8(name + extension);
+            int counter = 1;
+            while (fs::exists(materialPath, ec)) {
+                materialPath = dir / pathFromUtf8(name + "_" + std::to_string(counter) + extension);
+                counter++;
+            }
+
+            const std::string pathStr = pathToUtf8(materialPath);
+            const auto defaultMaterial = ::material::MaterialAsset::createDefault(name);
+            if (!::material::MaterialAsset::save(pathStr, defaultMaterial)) {
+                result.error = "Failed to save material: " + pathStr;
+                return result;
+            }
+
+            ::events::resource::AssetSavedNotification notification;
+            notification.filePath = pathStr;
+            ::events::EventDispatcher::instance().publish(notification);
+
+            result.success = true;
+            result.path = pathStr;
+            return result;
+        }
+    }
 
     MaterialComponentService::MaterialComponentService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph)
         : sceneGraph(std::move(sceneGraph)) {}
@@ -336,6 +398,11 @@ namespace services {
         dispatcher.registerCommandHandler<events::material::SetMaterialParameterCommand>(
             [this](const events::material::SetMaterialParameterCommand& cmd) {
                 return setMaterialParameter(cmd.entity, cmd.parameterName, cmd.value);
+            });
+
+        dispatcher.registerCommandHandler<events::material::CreateMaterialAssetCommand>(
+            [](const events::material::CreateMaterialAssetCommand& cmd) {
+                return createMaterialAsset(cmd.directory, cmd.name);
             });
 
         dispatcher.registerCommandHandler<events::material::ClearMaterialParameterCommand>(

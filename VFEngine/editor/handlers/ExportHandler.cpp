@@ -164,7 +164,7 @@ namespace handlers
 
 		vfLogInfo("Export: building scripts...");
 		auto& dispatcher = events::EventDispatcher::instance();
-		if (!dispatcher.execute(events::scripting::BuildScriptsCommand{}))
+		if (!dispatcher.execute(events::scripting::BuildScriptsCommand{}).success)
 		{
 			errorMessage = "Script build failed — fix script errors before exporting (see console log).";
 			return false;

@@ -203,6 +203,27 @@ namespace config
     }
 
     // ============================================
+    // McpSettings
+    // ============================================
+
+    inline void to_json(json& j, const McpSettings& s)
+    {
+        j = json{
+            {"enabled", s.enabled},
+            {"port", s.port},
+            {"token", s.token}
+        };
+    }
+
+    inline void from_json(const json& j, McpSettings& s)
+    {
+        McpSettings defaults;
+        s.enabled = j.value("enabled", defaults.enabled);
+        s.port = j.value("port", defaults.port);
+        s.token = j.value("token", defaults.token);
+    }
+
+    // ============================================
     // EditorPreferences (master struct)
     // ============================================
 
@@ -217,7 +238,8 @@ namespace config
             {"previewWindows", prefs.previewWindows},
             {"memory", prefs.memory},
             {"audio", prefs.audio},
-            {"undo", prefs.undo}
+            {"undo", prefs.undo},
+            {"mcp", prefs.mcp}
         };
     }
 
@@ -249,5 +271,9 @@ namespace config
         // Old settings files predate the configurable undo history and get the defaults.
         if (j.contains("undo") && j["undo"].is_object())
             prefs.undo = j["undo"].get<UndoSettings>();
+
+        // Old settings files predate the MCP server and keep it disabled.
+        if (j.contains("mcp") && j["mcp"].is_object())
+            prefs.mcp = j["mcp"].get<McpSettings>();
     }
 }

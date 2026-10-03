@@ -200,6 +200,13 @@ namespace controllers
     ImportResult Import::importFiles(const std::vector<importConfig::ImportFiles>& paths,
                                      ImportProgressCallback progressCallback)
     {
+        return importFilesInto(paths, location, std::move(progressCallback));
+    }
+
+    ImportResult Import::importFilesInto(const std::vector<importConfig::ImportFiles>& paths,
+                                         std::string_view targetLocation,
+                                         ImportProgressCallback progressCallback)
+    {
         ImportResult result;
         if (paths.empty()) return result;
 
@@ -218,7 +225,10 @@ namespace controllers
 
         vfLogInfo("Starting import of {} files", paths.size());
 
-        auto futures = importPipeline->processFiles(paths, location, progressCallback);
+        // Own a copy: targetLocation may alias the static `location`, which the UI
+        // thread can reassign while the pipeline is still running.
+        const std::string targetCopy(targetLocation);
+        auto futures = importPipeline->processFiles(paths, targetCopy, progressCallback);
         result = waitForCompletion(std::move(futures), progressCallback, static_cast<uint32_t>(paths.size()), paths);
 
         vfLogInfo("Import process completed");

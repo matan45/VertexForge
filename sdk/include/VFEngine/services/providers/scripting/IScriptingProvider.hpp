@@ -8,13 +8,6 @@
 #include <any>
 
 namespace services {
-    
-    struct ScriptBuildResult {
-        bool success = true;
-        size_t filesCompiled = 0;
-        size_t filesFailed = 0;
-        std::vector<std::string> errors;
-    };
 
     class IScriptingProvider {
     public:

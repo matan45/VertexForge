@@ -8,6 +8,11 @@
 
 struct ImGuiViewport;
 
+namespace editor
+{
+    class EditorMcpHost;
+}
+
 namespace windows
 {
     class StatusBar
@@ -32,6 +37,9 @@ namespace windows
 
         config::DebugSettings debugSettings;
 
+        // VK-1650: owned by EditorHandler, outlives this bar. Null = no indicator.
+        const editor::EditorMcpHost* mcpHost = nullptr;
+
         events::SubscriptionToken sceneLoadedToken;
         events::SubscriptionToken sceneClearedToken;
         events::SubscriptionToken settingsChangedToken;
@@ -43,5 +51,9 @@ namespace windows
 
         void draw(const ImGuiViewport* viewport);
         float getHeight() const { return height; }
+        void setMcpHost(const editor::EditorMcpHost* host) { mcpHost = host; }
+
+    private:
+        void drawMcpStatus();
     };
 }

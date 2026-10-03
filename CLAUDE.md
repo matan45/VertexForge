@@ -61,16 +61,17 @@ Add new tests by dropping a `test_<feature>.cpp` into `VFEngine/tests/` — prem
 ### Module Dependency Graph
 
 ```
-Editor   ──> Services, Import, Core, Plugin, ProceduralGen, ImageProcessing, GameExport, ECSRegistry (ONLY)
+Editor   ──> Services, Import, Core, Plugin, Mcp, ProceduralGen, ImageProcessing, GameExport, ECSRegistry (ONLY)
 Import   ──> Utilities (SharedLib/DLL, requires CMake-built libs: assimp, freetype, libogg, libvorbis)
 Runtime  ──> Services, Core (ONLY)
 Services ──> Utilities, Terrain, Serialization, World, Window
 Core     ──> Graphics, Audio, Physics, Animation, mType, jolt, recast
 Graphics ──> Window, VFX, imgui
 Plugin   ──> Services, Utilities (engine-side plugin SDK + loader)
+Mcp      ──> Services, Import, Utilities (MCP server for AI agents; NO Core/Graphics/ImGui)
 ```
 
-**Premake groups**: `Engine` (Editor, Runtime, Core, Graphics, Window, Import, Services, Plugin, Utilities), `Subsystems` (extracted modules — see table below), `libs` (vendored third-party), `Plugins` (sample/external plugin DLLs under `plugins/`).
+**Premake groups**: `Engine` (Editor, Runtime, Core, Graphics, Window, Import, Services, Plugin, Mcp, Utilities), `Subsystems` (extracted modules — see table below), `libs` (vendored third-party), `Plugins` (sample/external plugin DLLs under `plugins/`).
 
 Module kinds: Editor/Runtime/Tests are `ConsoleApp`. Most modules are `StaticLib`. `SharedLib/DLL`: Import, Audio, Animation, Terrain, World, Serialization, ProceduralGen, ImageProcessing, GameExport, ECSRegistry, jolt, meshoptimizer, and external plugins.
 
@@ -156,6 +157,11 @@ VFEngine/
 ├── plugin/                  # Engine-side plugin SDK + loader (links into Editor)
 │   ├── api/                 # IPlugin, PluginContext, PluginDescriptor, PluginExport, PluginVersion
 │   └── core/                # PluginManager, DynamicLibrary, PluginContextImpl, PluginEventBus
+├── mcp/                     # MCP server StaticLib (links into Editor + Tests) — see "MCP Server" below
+│   ├── protocol/            # JsonRpc, McpServer (lifecycle + tools/*), ToolRegistry, ArgReader
+│   ├── transport/           # HttpMessage parser, loopback HttpServer (winsock), SecurityPolicy
+│   ├── dispatch/            # MainThreadQueue (connection thread -> editor main thread)
+│   └── tools/               # Tool groups (EditorTools, SceneTools, ...) + CoreTools registration
 └── tests/                   # doctest-based unit tests (Tests.exe)
     ├── main.cpp             # doctest entry point — do not duplicate
     └── test_*.cpp           # one TU per feature area; auto-globbed by premake
@@ -167,6 +173,17 @@ External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `p
 - ships a `<PluginName>.vfplugin` descriptor (JSON) alongside the DLL
 - copies its DLL back into `plugins/<PluginName>/` via postbuild, where `PluginManager` discovers it at runtime
 - out-of-tree development: `premake5 export-sdk` packages `sdk/` (headers + imgui.lib + project template); see `sdk/README.md`
+
+### MCP Server (AI agent control)
+
+The Editor embeds a Model Context Protocol server (`VFEngine/mcp/`, owned by `editor/mcp/EditorMcpHost`) so an AI agent such as Claude Code can build scenes, write and build mType scripts, run Play mode and read logs. It lives in Editor.exe because `EventDispatcher` is per-binary. Transport is Streamable HTTP on **127.0.0.1 only** (`POST /mcp`, one JSON response per request, no SSE) — stdio is impossible because every `vfLog*` writes to stdout.
+
+- **Enable**: Preferences > AI / MCP (enable, port, optional bearer token, "Copy Claude Code command"), or per session with `Editor.exe <project> --mcp` / `--mcp-port <n>` / `--mcp-token <t>` (command-line flags are never saved; applying an MCP preference change takes over). The status bar shows `MCP off` / `MCP :<port>` / `MCP error`.
+- **Connect**: `claude mcp add --transport http vertexforge http://127.0.0.1:7878/mcp` (add `--header "Authorization: Bearer <token>"` when a token is set).
+- **Adding a tool**: add a `mcp::ToolDef` (name, description, JSON `inputSchema`, handler returning `ToolResult::ok/error`) to the matching `register*Tools` group in `mcp/tools/*.cpp`; new groups are declared in `CoreTools.hpp` and called from `registerCoreTools`. Tools use only Services/Import/Utilities headers and reach the engine through `EventDispatcher`.
+  - **Affinity**: `ThreadAffinity::Main` (default) runs the handler on the editor main thread inside `EditorMcpHost::drain()` — required for anything touching EventDispatcher handlers, EnTT or ImGui. `ThreadAffinity::Worker` runs on the HTTP connection thread and is only for filesystem/long work (script writes, imports); such a handler must wrap every dispatcher call in `context.runOnMain(...)`. Raise `timeout` for long tools (build/import).
+  - **Capture by value**: handlers outlive the `register*Tools` call, and a main-thread task can still run after its caller timed out, so handler and `runOnMain` lambdas capture the `ToolContext`, arguments and any other state BY VALUE — never `[&]`.
+  - Bad arguments throw `ArgError` from `ArgReader` helpers and engine failures throw or return `ToolResult::error`; both reach the agent in-band as `isError:true` results. Only a main-thread timeout is a JSON-RPC error (-32001).
 
 ### Services Layer
 

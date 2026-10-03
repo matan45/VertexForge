@@ -17,7 +17,7 @@
 
 namespace handlers
 {
-    void WindowImguiHandler::init()
+    void WindowImguiHandler::init(editor::EditorMcpHost* mcpHost)
     {
         // Create windows
         auto mainWindow = std::make_shared<windows::MainImguiWindow>();
@@ -25,6 +25,7 @@ namespace handlers
         
         // Connect editor camera from ViewPort to MainImguiWindow
         mainWindow->setEditorCamera(viewPort->getEditorCamera());
+        mainWindow->setMcpHost(mcpHost);
 
         // Add all windows
         controllers::imguiHandler::ImguiWindowHandler::add(mainWindow);

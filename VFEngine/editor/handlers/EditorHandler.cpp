@@ -96,6 +96,13 @@ namespace handlers
                 stopCmd.mode = services::EditorMode::Edit;
                 events::EventDispatcher::instance().execute(stopCmd);
             }
+
+            // VK-1650: MCP tool calls run here, on the main thread with no graph task
+            // in flight — the same safe point as the play-mode stop above.
+            if (mcpHost)
+            {
+                mcpHost->drain();
+            }
         });
 
         editorRenderServiceImpl = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
@@ -141,7 +148,13 @@ namespace handlers
         setupEventSubscriptions();
 
         editor::SplashScreen::instance().setStatus("Setting up UI...");
-        windowImguiHandler->init();
+        // Created before the UI so the status bar and preferences window can hold it;
+        // started after, once every service and plugin the tools dispatch to is up.
+        mcpHost = std::make_unique<editor::EditorMcpHost>();
+        windowImguiHandler->init(mcpHost.get());
+
+        editor::SplashScreen::instance().setStatus("Starting MCP server...");
+        mcpHost->init(mcpLaunchOptions);
     }
 
     void EditorHandler::run() const
@@ -151,6 +164,13 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        // VK-1650: first, so no tool call runs against services being torn down.
+        // Pending calls fail with "shutting down".
+        if (mcpHost)
+        {
+            mcpHost->shutdown();
+        }
+
         bootstrap->stopRenderThread();
 
         if (frameTaskGraph) {

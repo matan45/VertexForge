@@ -57,6 +57,7 @@
 namespace editor
 {
     class EditorCamera;
+    class EditorMcpHost;
 }
 
 namespace windows
@@ -140,6 +141,13 @@ namespace windows
         void setEditorCamera(editor::EditorCamera* camera)
         {
             editorCameraWindow.setEditorCamera(camera);
+        }
+
+        // VK-1650: MCP server status shown in the status bar and the preferences window.
+        void setMcpHost(const editor::EditorMcpHost* host)
+        {
+            statusBar.setMcpHost(host);
+            editorPreferencesWindow.setMcpHost(host);
         }
 
     private:

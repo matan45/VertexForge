@@ -31,7 +31,9 @@ namespace events::scripting {
         std::string_view getName() const override { return "SetScriptEnabled"; }
     };
 
-    struct BuildScriptsCommand : ICommand<bool> {
+    // Synchronous. Returns the full build outcome so callers (and the MCP
+    // scripts_build tool) can surface the compile errors, not just pass/fail.
+    struct BuildScriptsCommand : ICommand<services::ScriptBuildResult> {
         std::string_view getName() const override { return "BuildScripts"; }
     };
 

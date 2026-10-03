@@ -109,8 +109,7 @@ namespace services
         dispatcher.registerCommandHandler<events::scripting::BuildScriptsCommand>(
             [this](const auto& cmd)
             {
-                auto result = buildScripts();
-                return result.success;
+                return buildScripts();
             });
 
         dispatcher.registerCommandHandler<events::scripting::CleanScriptsCommand>(

@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+namespace editor
+{
+    class EditorMcpHost;
+}
+
 namespace windows
 {
     class EditorPreferencesWindow
@@ -18,6 +23,7 @@ namespace windows
             EditorShortcuts,
             Debug,
             WindowLayout,
+            Mcp,
             COUNT
         };
 
@@ -40,6 +46,11 @@ namespace windows
 
         // Window Layout UI state
         char saveLayoutNameBuffer[128] = {};
+
+        // AI / MCP section (VK-1650). The host is owned by EditorHandler and outlives
+        // this window; null when the editor was built without it.
+        const editor::EditorMcpHost* mcpHost = nullptr;
+        bool showMcpToken = false;
 
         // Custom theme UI state
         std::vector<std::string> customThemes;
@@ -81,6 +92,8 @@ namespace windows
         void drawEditorShortcutsSection();
         void drawDebugSection();
         void drawWindowLayoutSection();
+        void drawMcpSection();
+        void drawMcpStatusLine();
 
         void refreshShortcutActions();
         void captureShortcutBinding();
@@ -97,5 +110,6 @@ namespace windows
         void draw();
         void show();
         void setDockSpaceId(ImGuiID id) { dockSpaceId = id; }
+        void setMcpHost(const editor::EditorMcpHost* host) { mcpHost = host; }
     };
 }

@@ -3,6 +3,7 @@
 #include <string>
 #include <atomic>
 #include "WindowImguiHandler.hpp"
+#include "../mcp/EditorMcpHost.hpp"
 #include "events/EventDispatcher.hpp"
 
 #include "interfaces/project/ISceneService.hpp"
@@ -199,6 +200,11 @@ namespace handlers {
 		// are not catchable here and still route to the crash handler.
 		std::atomic<bool> playFatalErrorRequested{false};
 
+		// VK-1650: MCP server for AI agent control. Declared LAST so it is destroyed
+		// first; cleanUp() also shuts it down before any service it dispatches to.
+		editor::McpLaunchOptions mcpLaunchOptions;
+		std::unique_ptr<editor::EditorMcpHost> mcpHost;
+
 	public:
 		explicit EditorHandler();
 		~EditorHandler();
@@ -208,6 +214,9 @@ namespace handlers {
 		void cleanUp();
 
 		bool loadProject(const std::string& projectPath);
+
+		// Command-line MCP flags (--mcp, --mcp-port, --mcp-token). Call before init().
+		void setMcpLaunchOptions(const editor::McpLaunchOptions& options) { mcpLaunchOptions = options; }
 
 	private:
 		void initializeServices();

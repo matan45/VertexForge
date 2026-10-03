@@ -82,6 +82,7 @@ project "Editor"
 	  "VFEngine/import/types",            -- For MeshSocketWriter, AnimationEventIO
 	  "VFEngine/services",                -- Services layer interfaces
 	  "VFEngine/plugin",                  -- Plugin system
+	  "VFEngine/mcp",                     -- MCP server for AI agent control (VK-1650)
 	  "dependencies/mType/mType",         -- mType plugin C ABI (PluginContext.hpp -> plugin/PluginHostApi.h)
 	  "VFEngine/utilities/procedural",    -- Procedural heightmap generation
 	  "VFEngine/utilities/imageprocessing" -- Image background removal
@@ -92,6 +93,7 @@ project "Editor"
 	  "Import",
 	  "Services",                       -- Link Services project
 	  "Plugin",                         -- Plugin system
+	  "Mcp",                            -- MCP server for AI agent control (VK-1650)
 	  "imgui",                          -- For imgui-node-editor in ShaderGraphEditor
 	  "ProceduralGen",                  -- Procedural heightmap generation
 	  "ImageProcessing",                -- Image background removal
@@ -550,6 +552,42 @@ project "Plugin"
    }
 
    links { "Services", "Utilities" }
+
+   defines { "_CRT_SECURE_NO_WARNINGS" }
+
+   vfStandardConfigs()
+
+
+-- Project: Mcp (Model Context Protocol server for AI agent control, VK-1650)
+-- Loopback Streamable-HTTP JSON-RPC server + tool bindings over Services/Import.
+-- Linked into Editor.exe only: EventDispatcher is per-binary, so the tools must
+-- run inside the binary that owns the real event handlers. NO Core/Graphics/ImGui.
+project "Mcp"
+   kind "StaticLib"
+   language "C++"
+   cppdialect "C++20"
+   location "VFEngine/mcp"
+   targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
+
+   files { "VFEngine/mcp/**.hpp", "VFEngine/mcp/**.cpp" }
+
+   includedirs {
+      "dependencies/spdlog/include",
+      "dependencies/glm",
+      "dependencies/entt/single_include",
+      "dependencies/json/single_include",
+      "dependencies/glfw/include",         -- Services headers (InputService window types)
+      "dependencies/imgui",                -- Services headers that forward ImGui types
+      "VFEngine/utilities",
+      "VFEngine/services",
+      "VFEngine/window/controllers",       -- Services headers (InputService window types)
+      "VFEngine/import",                   -- For registry/AssetImporter.hpp
+      "VFEngine/import/controllers",       -- controllers::Import (assets_import tool)
+      "VFEngine/mcp",
+      vulkanLibPath.."/Include"            -- Services headers that use vulkan.hpp types
+   }
+
+   links { "Services", "Utilities", "Import" }
 
    defines { "_CRT_SECURE_NO_WARNINGS" }
 
@@ -1245,6 +1283,8 @@ project "Tests"
       "VFEngine/window/controllers",
       "VFEngine/plugin",                   -- header-only PluginScaffolder (VK-1284), no link needed
       "VFEngine/import",                   -- ImporterRegistry tests
+      "VFEngine/import/controllers",       -- controllers::Import (MCP assets_import tool)
+      "VFEngine/mcp",                      -- MCP protocol/transport/tool tests (VK-1650)
       "VFEngine/editor",                   -- header-only content browser type table / query parser tests
       vulkanLibPath.."/Include"
    }
@@ -1255,10 +1295,11 @@ project "Tests"
 
    links {
       "Utilities", "Memory", "CpuMemory", "Destruction", "Weather", "Terrain", "World", "Serialization",
-      "Animation", "ECSRegistry", "AssetDB", "Threading", "Services", "Import",
+      "Animation", "ECSRegistry", "AssetDB", "Threading", "Mcp", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
       "spdLog", "meshoptimizer", "lz4", "recast",
-      "vulkan-1.lib", "shaderc_shared.lib"
+      "vulkan-1.lib", "shaderc_shared.lib",
+      "ws2_32"                              -- MCP loopback HTTP server (Mcp)
    }
 
    defines {

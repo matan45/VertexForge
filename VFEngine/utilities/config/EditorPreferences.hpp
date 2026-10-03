@@ -10,7 +10,7 @@ namespace config
     struct EditorSettingsSchemaVersion
     {
         static constexpr uint32_t major = 1;
-        static constexpr uint32_t minor = 4;
+        static constexpr uint32_t minor = 5;
     };
 
     struct AppearanceSettings
@@ -85,6 +85,19 @@ namespace config
         uint64_t maxHistoryBytes = 512ull * 1024 * 1024;
     };
 
+    // MCP server (VK-1650): lets an AI agent drive the editor over a loopback-only
+    // Streamable-HTTP endpoint. Off by default; the --mcp / --mcp-port command-line
+    // flags override these for one session without touching the saved preference.
+    struct McpSettings
+    {
+        bool enabled = false;
+        int port = 7878;
+        // Empty = no Authorization header required. Non-empty = clients must send
+        // "Authorization: Bearer <token>". Stored in PLAIN TEXT in the per-user
+        // editor_settings.json; acceptable because the endpoint is loopback-only.
+        std::string token;
+    };
+
     struct EditorPreferences
     {
         AppearanceSettings appearance;
@@ -95,6 +108,7 @@ namespace config
         MemorySettings memory;
         EditorAudioSettings audio;
         UndoSettings undo;
+        McpSettings mcp;
 
         static EditorPreferences createDefault()
         {

@@ -52,6 +52,12 @@ namespace controllers
     public:
         static ImportResult importFiles(const std::vector<importConfig::ImportFiles>& paths,
                                         ImportProgressCallback progressCallback = nullptr);
+        // Same as importFiles, but writes into an explicit folder instead of the
+        // process-wide location (which tracks the content browser). Used by the
+        // MCP server so agent imports never redirect the user's next import.
+        static ImportResult importFilesInto(const std::vector<importConfig::ImportFiles>& paths,
+                                            std::string_view targetLocation,
+                                            ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
         static void shutdown();
