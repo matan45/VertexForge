@@ -96,6 +96,7 @@ namespace services {
 
 namespace handlers {
 	class ExportHandler;
+	class HeightmapGenerationHandler;
 	class PluginComponentHandler;
 	class PluginMcpToolHandler;
 }
@@ -181,6 +182,7 @@ namespace handlers {
 		std::shared_ptr<services::IDestructionService> destructionService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
+		std::unique_ptr<handlers::HeightmapGenerationHandler> heightmapGenerationHandler; // VK-1653: MCP heightmap jobs
 		std::unique_ptr<handlers::PluginComponentHandler> pluginComponentHandler;
 		std::unique_ptr<handlers::PluginMcpToolHandler> pluginMcpToolHandler;
 

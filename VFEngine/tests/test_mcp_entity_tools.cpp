@@ -66,6 +66,8 @@ namespace
 
         std::set<uint64_t> alive{rootId, 1, 2, 3};
         std::map<uint64_t, services::TransformData> transforms;
+        // VK-1653: entities GetEntityQuery serves with their real children and components.
+        std::map<uint64_t, services::EntityData> detailed;
 
         int createCount = 0;
         std::string createdName;
@@ -73,6 +75,22 @@ namespace
         int setTransformCount = 0;
         // VK-1651: mutating tools push one undo entry each.
         std::vector<std::shared_ptr<services::IUndoableCommand>> undoStack;
+
+        // root -> 60 "Level" -> 50 "Terrain" -> 51 "Tile_0_0"
+        void addTerrain()
+        {
+            auto add = [this](uint64_t id, const char* name, uint64_t parent, std::vector<uint64_t> children,
+                              std::vector<services::ComponentTypeId> components)
+            {
+                services::EntityData data = entityData(id, name, parent, std::move(children));
+                data.components = std::move(components);
+                detailed[id] = std::move(data);
+                alive.insert(id);
+            };
+            add(60, "Level", rootId, {50}, {});
+            add(50, "Terrain", 60, {51}, {services::ComponentTypeId::Terrain});
+            add(51, "Tile_0_0", 50, {}, {services::ComponentTypeId::TerrainTile});
+        }
 
         void registerHandlers()
         {
@@ -84,6 +102,11 @@ namespace
                     if (!alive.contains(query.entity.id))
                     {
                         return std::nullopt;
+                    }
+                    auto it = detailed.find(query.entity.id);
+                    if (it != detailed.end())
+                    {
+                        return it->second;
                     }
                     return entityData(query.entity.id, "Entity" + std::to_string(query.entity.id), rootId);
                 });
@@ -201,6 +224,11 @@ namespace
         CHECK(value[1].get<float>() == doctest::Approx(y));
         CHECK(value[2].get<float>() == doctest::Approx(z));
     }
+
+    bool contains(const std::string& text, const std::string& needle)
+    {
+        return text.find(needle) != std::string::npos;
+    }
 }
 
 TEST_SUITE("McpEntityTools")
@@ -315,6 +343,42 @@ TEST_SUITE("McpEntityTools")
     {
         ToolFixture fixture;
         CHECK_THROWS_AS((fixture.call("entity_delete", {{"entity", FakeScene::rootId}})), std::runtime_error);
+    }
+
+    TEST_CASE("terrains and their tiles are refused by the generic entity tools")
+    {
+        ToolFixture fixture;
+        fixture.scene.addTerrain();
+
+        auto error = [&fixture](const char* tool, const nlohmann::json& args)
+        {
+            try
+            {
+                fixture.call(tool, args);
+            }
+            catch (const std::runtime_error& e)
+            {
+                return std::string(e.what());
+            }
+            return std::string();
+        };
+
+        CHECK(contains(error("entity_delete", {{"entity", 50}}), "terrain_delete"));
+        CHECK(contains(error("entity_delete", {{"entity", 51}}), "it is a terrain tile"));
+        CHECK(contains(error("entity_delete", {{"entity", 60}}), "contains terrain entity 50"));
+        CHECK(contains(error("entity_duplicate", {{"entity", 50}}), "terrain_create"));
+        CHECK(contains(error("entity_duplicate", {{"entity", 60}}), "contains terrain entity 50"));
+        CHECK(contains(error("entity_set_parent", {{"entity", 50}}), "it is a terrain"));
+        CHECK(contains(error("entity_set_parent", {{"entity", 1}, {"parent", 51}}), "it is a terrain tile"));
+        CHECK(contains(error("entity_set_parent", {{"entity", 1}, {"parent", 50}}), "it is a terrain"));
+        CHECK(contains(error("entity_set_transform", {{"entity", 51}, {"position", {0.0, 0.0, 0.0}}}), "terrain tile"));
+        CHECK(contains(error("entity_create", {{"name", "Rock"}, {"parent", 50}}), "it is a terrain"));
+        CHECK(fixture.scene.createCount == 0);
+        CHECK(fixture.scene.setTransformCount == 0);
+        CHECK(fixture.scene.undoStack.empty());
+
+        // rejectRoot still runs first.
+        CHECK(contains(error("entity_delete", {{"entity", FakeScene::rootId}}), "scene root"));
     }
 
     TEST_CASE("scene_get_hierarchy nests children and maps component names")

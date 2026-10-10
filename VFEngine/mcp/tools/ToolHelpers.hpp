@@ -9,6 +9,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 // Entity / transform helpers shared by the tool groups and by mcp/undo.
@@ -78,6 +79,58 @@ namespace mcp::tools
         if (entity.handle == sceneRoot())
         {
             throw std::runtime_error(std::string("Cannot ") + action + " the scene root entity");
+        }
+    }
+
+    // VK-1653. A terrain and its tile entities belong to the terrain service: the generic entity tools
+    // would leave a duplicate reloading the same .vfTerrain, or an entity_delete whose undo cannot
+    // bring the terrain back. The terrain_* tools own them.
+    inline bool isTerrainEntity(const services::EntityData& entity)
+    {
+        return entity.hasComponent(services::ComponentTypeId::Terrain) ||
+            entity.hasComponent(services::ComponentTypeId::TerrainTile);
+    }
+
+    // Throws when `entity` is a terrain or a terrain tile; `hint` says what to do instead.
+    inline void rejectTerrain(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        if (!isTerrainEntity(entity))
+        {
+            return;
+        }
+        const char* what = entity.hasComponent(services::ComponentTypeId::Terrain) ? "a terrain" : "a terrain tile";
+        throw std::runtime_error(std::string("Cannot ") + action + " entity " + std::to_string(toId(entity.handle)) +
+                                 " ('" + entity.name + "'): it is " + what + ". " + hint);
+    }
+
+    // rejectTerrain over `entity` and every entity below it.
+    inline void rejectTerrainSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        rejectTerrain(entity, action, hint);
+
+        std::vector<services::EntityHandle> pending = entity.children;
+        std::unordered_set<uint64_t> seen{entity.handle.id};
+        while (!pending.empty())
+        {
+            const services::EntityHandle handle = pending.back();
+            pending.pop_back();
+            if (!seen.insert(handle.id).second)
+            {
+                continue;
+            }
+            const std::optional<services::EntityData> child = findEntity(handle);
+            if (!child.has_value())
+            {
+                continue;
+            }
+            if (isTerrainEntity(*child))
+            {
+                throw std::runtime_error(std::string("Cannot ") + action + " entity " +
+                                         std::to_string(toId(entity.handle)) + " ('" + entity.name +
+                                         "'): it contains terrain entity " + std::to_string(toId(child->handle)) +
+                                         " ('" + child->name + "'). " + hint);
+            }
+            pending.insert(pending.end(), child->children.begin(), child->children.end());
         }
     }
 

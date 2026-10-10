@@ -12,8 +12,10 @@
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/terrain/TerrainAuthoringEvents.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -608,6 +610,33 @@ TEST_SUITE("McpUndo")
         CHECK_FALSE(fixture.world.pointLights.contains(3));
         fixture.call("undo", nlohmann::json::object());
         CHECK(fixture.world.pointLights.at(3).intensity == doctest::Approx(4.0f));
+    }
+
+    TEST_CASE("undo and redo are refused while a terrain save holds the brush lock")
+    {
+        UndoFixture fixture;
+        bool locked = true;
+        events::EventDispatcher::instance().registerQueryHandler<events::terrainAuthoring::IsTerrainSaveLockedQuery>(
+            [&locked](const events::terrainAuthoring::IsTerrainSaveLockedQuery&) { return locked; });
+
+        REQUIRE_FALSE(fixture.call("entity_rename", {{"entity", 1}, {"name", "Ground"}}).isError);
+        REQUIRE(fixture.world.undoStack.size() == 1);
+
+        // A terrain undo rewrites tiles in place; it must not run under an in-flight terrain save.
+        const mcp::ToolResult refused = fixture.call("undo", nlohmann::json::object());
+        CHECK(refused.isError);
+        CHECK(refused.text.find("terrain save") != std::string::npos);
+        CHECK(fixture.world.nodes.at(1).name == "Ground");
+        CHECK(fixture.world.undoStack.size() == 1);
+        CHECK(fixture.call("redo", nlohmann::json::object()).isError);
+
+        locked = false;
+        mcp::ToolResult undone = fixture.call("undo", nlohmann::json::object());
+        CHECK(undone.structured["performed"] == true);
+        CHECK(fixture.world.nodes.at(1).name == "Floor");
+
+        CHECK(fixture.registry.find("undo")->timeout == std::chrono::milliseconds(60000));
+        CHECK(fixture.registry.find("redo")->timeout == std::chrono::milliseconds(60000));
     }
 
     TEST_CASE("a failed tool pushes nothing")

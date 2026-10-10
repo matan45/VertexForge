@@ -71,6 +71,7 @@
 #include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "ExportHandler.hpp"
+#include "HeightmapGenerationHandler.hpp"
 #include "PluginComponentHandler.hpp"
 #include "PluginMcpToolHandler.hpp"
 #include "resource/PathResolver.hpp"
@@ -100,6 +101,7 @@ namespace handlers
         createAIServices();
         createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
+        heightmapGenerationHandler = std::make_unique<handlers::HeightmapGenerationHandler>();
         pluginComponentHandler = std::make_unique<handlers::PluginComponentHandler>();
         pluginMcpToolHandler = std::make_unique<handlers::PluginMcpToolHandler>();
         registerAllEventHandlers();
@@ -385,6 +387,7 @@ namespace handlers
         controllerService->registerEventHandlers();
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
+        heightmapGenerationHandler->registerEventHandlers();
         pluginComponentHandler->registerEventHandlers();
         pluginMcpToolHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();

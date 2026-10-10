@@ -1,4 +1,5 @@
 #include "CoreTools.hpp"
+#include "TerrainToolSupport.hpp"
 #include "../protocol/ArgReader.hpp"
 
 #include "events/EventDispatcher.hpp"
@@ -7,14 +8,66 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace mcp::tools
 {
     namespace
     {
         constexpr int64_t maxStepFrames = 60;
+
+        const std::vector<std::string> unsavedTerrainModes{"refuse", "save", "discard"};
+
+        // VK-1653. play_stop reloads every terrain from its .vfTerrain (ScenePersistenceService), so terrain
+        // edits that are not on disk are lost then, and a never-saved terrain comes back as an empty shell.
+        // Returns why Play must not start, or nullopt; `saved` and `warnings` report what was done.
+        std::optional<std::string> settleUnsavedTerrain(const std::string& mode, nlohmann::json& saved,
+                                                        std::vector<std::string>& warnings)
+        {
+            const std::optional<std::vector<services::TerrainSummary>> terrains = tryListTerrains();
+            if (!terrains.has_value() || isWorldModeActive())
+            {
+                return std::nullopt; // no terrain service, or World mode (its sectors own the terrain)
+            }
+
+            std::string pending;
+            for (const services::TerrainSummary& terrain : *terrains)
+            {
+                const std::string reason = terrainSaveReason(terrain);
+                if (!reason.empty())
+                {
+                    pending += (pending.empty() ? "" : ", ") + describeTerrain(terrain) + " (" + reason + ")";
+                }
+            }
+            if (pending.empty())
+            {
+                return std::nullopt;
+            }
+
+            if (mode == "refuse")
+            {
+                return "Play NOT started: terrain " + pending + " is not saved, and play_stop reloads terrain from its "
+                       ".vfTerrain, so those edits would be lost. Call play_start with unsavedTerrain:\"save\" (or "
+                       "scene_save / terrain_save first), or unsavedTerrain:\"discard\" to accept losing them";
+            }
+            if (mode == "save")
+            {
+                TerrainSaveReport report = saveUnsavedTerrains();
+                if (!report.ok)
+                {
+                    return "Play NOT started: " + report.error;
+                }
+                saved = std::move(report.saved);
+                warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
+                return std::nullopt;
+            }
+            warnings.push_back("Terrain " + pending + " will revert to its saved file when Play stops (a never-saved "
+                               "terrain comes back as an empty shell)");
+            return std::nullopt;
+        }
 
         nlohmann::json playState()
         {
@@ -37,19 +90,33 @@ namespace mcp::tools
                 "built first; on build failure Play is NOT entered and the compile errors are returned. "
                 "NOTE: after script_write, call scripts_build yourself — an already-compiled project is not "
                 "rebuilt here. Use logs_read to watch script output and play_stop to return to Edit mode "
-                "(the edit-time scene is restored). Returns {mode, paused, timeScale}.";
+                "(the edit-time scene is restored). play_stop reloads terrain from its .vfTerrain file, so "
+                "'unsavedTerrain' decides what happens to unsaved terrain edits: 'refuse' (default) does not start "
+                "Play, 'save' saves them first (like scene_save does), 'discard' starts anyway and they are lost "
+                "on play_stop. Returns {mode, paused, timeScale} (+ terrainsSaved, warnings).";
             tool.inputSchema = schema::object({
-                {"withDebugger", schema::boolean("Also start the mType debug server for VS Code. Default false.")}
+                {"withDebugger", schema::boolean("Also start the mType debug server for VS Code. Default false.")},
+                {"unsavedTerrain", schema::enumString("Terrain with unsaved changes: refuse (default), save, discard.",
+                                                      unsavedTerrainModes)}
             });
             tool.timeout = std::chrono::milliseconds(120000);
             tool.handler = [](const nlohmann::json& args) -> ToolResult
             {
                 ArgReader reader(args);
+                const std::string unsavedTerrain = reader.optEnum("unsavedTerrain", unsavedTerrainModes, "refuse");
+                const bool withDebugger = reader.optBool("withDebugger", false);
                 auto& dispatcher = events::EventDispatcher::instance();
 
                 if (dispatcher.query(events::editor::IsPlayModeQuery{}))
                 {
                     return ToolResult::ok(playState(), "Already in Play mode.");
+                }
+
+                nlohmann::json terrainsSaved = nlohmann::json::array();
+                std::vector<std::string> warnings;
+                if (const std::optional<std::string> refusal = settleUnsavedTerrain(unsavedTerrain, terrainsSaved, warnings))
+                {
+                    return ToolResult::error(*refusal);
                 }
 
                 // SetEditorModeCommand builds on its own when needed but only logs the
@@ -79,10 +146,18 @@ namespace mcp::tools
 
                 events::editor::SetEditorModeCommand command;
                 command.mode = services::EditorMode::Play;
-                command.withDebugger = reader.optBool("withDebugger", false);
+                command.withDebugger = withDebugger;
                 dispatcher.execute(command);
 
                 nlohmann::json state = playState();
+                if (!terrainsSaved.empty())
+                {
+                    state["terrainsSaved"] = std::move(terrainsSaved);
+                }
+                if (!warnings.empty())
+                {
+                    state["warnings"] = warnings;
+                }
                 if (state["mode"] != "play")
                 {
                     ToolResult result = ToolResult::ok(std::move(state),

@@ -2,6 +2,7 @@
 #include "../protocol/ArgReader.hpp"
 #include "ContentHelpers.hpp"
 #include "PathSandbox.hpp"
+#include "TerrainToolSupport.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
@@ -11,12 +12,14 @@
 #include "events/scene/EntityTransformEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 namespace mcp::tools
 {
@@ -195,17 +198,40 @@ namespace mcp::tools
                     out["scale"] = vec3ToJson(entity.localTransform.scale);
                 }
 
+                // VK-1653: a terrain's tile entities (one per grid tile, up to 1024) are engine
+                // bookkeeping the terrain_* tools manage; report how many there are instead of listing them.
+                const std::vector<services::EntityHandle>* listed = &entity.children;
+                std::vector<services::EntityHandle> nonTileChildren;
+                if (entity.hasComponent(services::ComponentTypeId::Terrain))
+                {
+                    std::size_t tiles = 0;
+                    for (const services::EntityHandle& child : entity.children)
+                    {
+                        auto it = byId.find(child.id);
+                        if (it != byId.end() && it->second->hasComponent(services::ComponentTypeId::TerrainTile))
+                        {
+                            ++tiles;
+                        }
+                        else
+                        {
+                            nonTileChildren.push_back(child);
+                        }
+                    }
+                    out["terrainTileCount"] = tiles;
+                    listed = &nonTileChildren;
+                }
+
                 if (maxDepth >= 0 && depth >= maxDepth)
                 {
-                    if (!entity.children.empty())
+                    if (!listed->empty())
                     {
-                        out["childCount"] = entity.children.size();
+                        out["childCount"] = listed->size();
                     }
                     return out;
                 }
 
                 nlohmann::json children = nlohmann::json::array();
-                for (const services::EntityHandle& child : entity.children)
+                for (const services::EntityHandle& child : *listed)
                 {
                     auto it = byId.find(child.id);
                     if (it == byId.end() || visited.contains(child.id))
@@ -257,14 +283,21 @@ namespace mcp::tools
                 "working directory; '.vfScene' is appended when there is no extension. Without 'path' the scene "
                 "is saved over the file it was loaded from (error if it was never loaded from a file). Not allowed in Play mode. Saving "
                 "to a new path does not change the scene's current path - pass 'path' again on later saves, "
-                "or scene_load the file to make it current.";
+                "or scene_load the file to make it current. Terrain data lives in its own .vfTerrain file, so first "
+                "every terrain with unsaved changes is saved (a never-saved one to terrains/<name>.vfTerrain); if any "
+                "terrain fails to save, the scene is NOT written. Returns {saved, path, terrains:[{terrain, name, "
+                "path, incremental}], warnings}.";
             tool.inputSchema = schema::object({
-                {"path", schema::string("Target .vfScene path (absolute or project-relative). Optional.")}
+                {"path", schema::string("Target .vfScene path (absolute or project-relative). Optional.")},
+                {"saveTerrains", schema::boolean("Save terrains with unsaved changes first. Default true.")}
             });
+            // Writing a large terrain takes seconds.
+            tool.timeout = std::chrono::milliseconds(300000);
             tool.handler = [](const nlohmann::json& args) -> ToolResult
             {
                 ArgReader reader(args);
                 auto& dispatcher = events::EventDispatcher::instance();
+                const bool saveTerrains = reader.optBool("saveTerrains", true);
 
                 if (isPlayMode())
                 {
@@ -307,13 +340,31 @@ namespace mcp::tools
                     }
                 }
 
+                // VK-1653: SaveSceneCommand only records where each terrain lives; its heights, layers and
+                // material reference are in the .vfTerrain. Save those first, so the scene written below
+                // references files that exist and hold the current terrain.
+                TerrainSaveReport terrains;
+                if (saveTerrains)
+                {
+                    terrains = saveUnsavedTerrains();
+                    if (!terrains.ok)
+                    {
+                        return ToolResult::error("Scene NOT saved: " + terrains.error);
+                    }
+                }
+
                 events::scene::SaveSceneCommand command;
                 command.filePath = target.string();
                 if (!dispatcher.execute(command))
                 {
                     return ToolResult::error("Failed to save scene to '" + pathToUtf8(target) + "' (see logs_read)");
                 }
-                return ToolResult::ok({{"saved", true}, {"path", pathToUtf8(target)}});
+                return ToolResult::ok({
+                    {"saved", true},
+                    {"path", pathToUtf8(target)},
+                    {"terrains", terrains.saved},
+                    {"warnings", terrains.warnings}
+                });
             };
             registry.add(std::move(tool));
         }
@@ -377,7 +428,8 @@ namespace mcp::tools
                 "Return the scene's entity tree. Each node: {id, name, active, components:[type names], "
                 "position, rotation (Euler degrees), scale (all LOCAL to the parent), children:[...]}. "
                 "'effectivelyActive': false marks an entity hidden by an inactive ancestor; 'childCount' "
-                "replaces 'children' where maxDepth cut the tree. 'root' is the hidden scene root id "
+                "replaces 'children' where maxDepth cut the tree; a terrain lists 'terrainTileCount' instead of "
+                "its tile entities (use the terrain_* tools for terrain). 'root' is the hidden scene root id "
                 "(entities without a parent are its children).";
             tool.inputSchema = schema::object({
                 {"maxDepth", schema::integer("Maximum depth below the top-level entities to expand (0 = top level only). Default: unlimited.")},

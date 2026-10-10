@@ -269,6 +269,9 @@ TEST_SUITE("MCP content resources")
         CHECK(contains(withoutPlugins, "### Mesh\n"));
         CHECK(contains(withoutPlugins, "### RigidBody\n"));
         CHECK(contains(withoutPlugins, "_Plugin component types are unavailable._"));
+        // VK-1653: terrain is authored through the terrain_* tools, not component_add.
+        CHECK(contains(withoutPlugins, "Terrain is not a component_add type"));
+        CHECK(contains(withoutPlugins, "terrain_create"));
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

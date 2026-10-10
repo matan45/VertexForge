@@ -29,8 +29,10 @@ namespace mcp
 
     // Marshals MCP tool work from HTTP connection threads onto the editor main
     // thread. EventDispatcher handlers mutate EnTT / ImGui state and are only safe
-    // there; EditorHandler drains this queue once per frame, after the frame task
-    // graph has joined.
+    // there; EditorHandler drains this queue once per frame at the TOP of its frame
+    // callback, before the frame task graph runs, while the render thread is idle
+    // (VK-1653). A task must therefore never wait for a rendered frame: nothing
+    // renders until the drain returns.
     class MainThreadQueue
     {
     public:

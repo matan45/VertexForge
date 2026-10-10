@@ -17,6 +17,8 @@
 #include "../../events/terrain/HoleModeEvents.hpp"
 #include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/terrain/TerrainRuntimeEditEvents.hpp"
+#include "../../events/terrain/TerrainAuthoringEvents.hpp"
+#include "../../events/terrain/TerrainMaterialAssetEvents.hpp"
 #include "../../events/vegetation/VegetationBrushEvents.hpp"
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/foliage/FoliageEvents.hpp"
@@ -109,6 +111,7 @@ namespace services
         registerCaveBrushHandlers(dispatcher);
         registerTerrainDataHandlers(dispatcher);
         registerAsyncLoadHandlers(dispatcher);
+        registerAuthoringHandlers(dispatcher);
 
         auto token = dispatcher.subscribe<events::scene::EntityDeletedNotification>(
             [this](const events::scene::EntityDeletedNotification& notification)
@@ -154,6 +157,84 @@ namespace services
                 onSectorDeactivated(notif.coord, notif.sectorConfig);
             });
         sectorDeactivatedSub = std::make_unique<events::SubscriptionToken>(deactivatedToken);
+    }
+
+    // VK-1653 terrain authoring (MCP P4). Every handler is a thin forward; the bodies live in
+    // TerrainAuthoringStrokeOps.cpp, TerrainAuthoringQueryOps.cpp, TerrainPersistenceOps.cpp and
+    // TerrainMaterialAssetOps.cpp.
+    void TerrainService::registerAuthoringHandlers(::events::EventDispatcher& dispatcher)
+    {
+        dispatcher.registerCommandHandler<events::terrainAuthoring::SculptTerrainStrokeCommand>(
+            [this](const events::terrainAuthoring::SculptTerrainStrokeCommand& cmd)
+            {
+                return sculptTerrainStroke(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainAuthoring::PaintTerrainLayerStrokeCommand>(
+            [this](const events::terrainAuthoring::PaintTerrainLayerStrokeCommand& cmd)
+            {
+                return paintTerrainLayerStroke(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainAuthoring::ApplyHeightmapCommand>(
+            [this](const events::terrainAuthoring::ApplyHeightmapCommand& cmd)
+            {
+                return applyHeightmapToTerrain(cmd);
+            });
+
+        dispatcher.registerQueryHandler<events::terrainAuthoring::ListTerrainsQuery>(
+            [this](const events::terrainAuthoring::ListTerrainsQuery&)
+            {
+                return listTerrains();
+            });
+
+        dispatcher.registerQueryHandler<events::terrainAuthoring::GetTerrainHeightsQuery>(
+            [this](const events::terrainAuthoring::GetTerrainHeightsQuery& query)
+            {
+                return getTerrainHeights(query.terrainEntity, query.positions, query.pageIn);
+            });
+
+        dispatcher.registerQueryHandler<events::terrainAuthoring::IsTerrainSaveLockedQuery>(
+            [this](const events::terrainAuthoring::IsTerrainSaveLockedQuery&)
+            {
+                return isSaveLocked();
+            });
+
+        dispatcher.registerQueryHandler<events::terrainAuthoring::IsTerrainCreationPendingQuery>(
+            [this](const events::terrainAuthoring::IsTerrainCreationPendingQuery&)
+            {
+                return isCreationPending();
+            });
+
+        dispatcher.registerQueryHandler<events::terrainAuthoring::ProbeHeightmapQuery>(
+            [this](const events::terrainAuthoring::ProbeHeightmapQuery& query)
+            {
+                return probeHeightmap(query.path);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainAuthoring::SaveTerrainsCommand>(
+            [this](const events::terrainAuthoring::SaveTerrainsCommand& cmd)
+            {
+                return saveTerrains(cmd.requests);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainMaterial::CreateTerrainMaterialAssetCommand>(
+            [this](const events::terrainMaterial::CreateTerrainMaterialAssetCommand& cmd)
+            {
+                return createTerrainMaterialAsset(cmd);
+            });
+
+        dispatcher.registerCommandHandler<events::terrainMaterial::EditTerrainMaterialLayerCommand>(
+            [this](const events::terrainMaterial::EditTerrainMaterialLayerCommand& cmd)
+            {
+                return editTerrainMaterialLayer(cmd);
+            });
+
+        dispatcher.registerQueryHandler<events::terrainMaterial::GetTerrainMaterialInfoQuery>(
+            [this](const events::terrainMaterial::GetTerrainMaterialInfoQuery& query)
+            {
+                return getTerrainMaterialInfo(query.materialPath);
+            });
     }
 
     void TerrainService::registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher)
@@ -1740,6 +1821,11 @@ namespace services
                     {
                         lifecycle.release(comp.terrainMaterialRef.getGUID());
                     }
+
+                    // VK-1653: the material reference is persisted in the .vfTerrain HEADER, so a
+                    // change no save hears about is silently reverted on the next reload.
+                    if (comp.terrainMaterialRef != newRef)
+                        comp.saveDirty = true;
 
                     comp.terrainMaterialRef = newRef;
 

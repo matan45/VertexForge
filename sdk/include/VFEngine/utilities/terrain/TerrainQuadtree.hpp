@@ -25,6 +25,11 @@ namespace terrain
         // Incremental updates
         void insert(TerrainTile* tile);
         void remove(const TileCoord& coord);
+        // VK-1653: re-derives the Y bounds of every node on the path to `coord` after that tile's
+        // worldBounds changed. Node Y bounds are otherwise only accumulated on insert and refit on
+        // remove, so a tile raised by an edit kept the node range of its old surface and the
+        // frustum query culled it from below.
+        void refitTile(const TileCoord& coord);
 
         // Spatial queries
         void queryFrustum(const math::Frustum& frustum, float worldTileSize,
@@ -75,6 +80,7 @@ namespace terrain
         uint32_t allocNode(int32_t minX, int32_t minZ, int32_t maxX, int32_t maxZ);
         void insertRecursive(uint32_t nodeIdx, TerrainTile* tile, int depth);
         bool removeRecursive(uint32_t nodeIdx, const TileCoord& coord);
+        bool refitRecursive(uint32_t nodeIdx, const TileCoord& coord);
         void splitNode(uint32_t nodeIdx);
         int getQuadrant(const Node& node, int32_t x, int32_t z) const;
         void expandRoot(int32_t x, int32_t z);

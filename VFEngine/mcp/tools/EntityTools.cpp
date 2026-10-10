@@ -19,6 +19,18 @@ namespace mcp::tools
 {
     namespace
     {
+        // VK-1653 rejectTerrain hints.
+        constexpr const char* deleteTerrainHint =
+            "Remove a terrain with terrain_delete (a tile cannot be removed on its own).";
+        constexpr const char* duplicateTerrainHint =
+            "Create another terrain with terrain_create instead (a duplicate would reload the same .vfTerrain).";
+        constexpr const char* moveTerrainHint =
+            "Terrains and their tiles keep their place in the hierarchy; the tile grid is centred on the world origin.";
+        constexpr const char* transformTerrainHint =
+            "The tile grid is placed by the terrain itself; reshape it with terrain_sculpt / terrain_generate_heightmap.";
+        constexpr const char* parentTerrainHint =
+            "Create the entity elsewhere (e.g. at the scene root) and stand it on the ground with terrain_height_at.";
+
         std::string lowercase(std::string text)
         {
             std::transform(text.begin(), text.end(), text.begin(),
@@ -117,6 +129,7 @@ namespace mcp::tools
             tool.description =
                 "Create an empty entity (transform only) under 'parent' (default: scene root) with an optional "
                 "local transform. Add components with component_add / material_assign / script_attach. "
+                "A terrain or terrain tile cannot be the parent. "
                 "Undoable (one undo step). Returns {id, name, parent, transform}.";
             nlohmann::json properties = transformProperties();
             properties["name"] = schema::string("Entity name. Default 'Entity'.");
@@ -135,7 +148,9 @@ namespace mcp::tools
                 }
                 if (reader.has("parent"))
                 {
-                    command.parent = requireEntity(reader, "parent").handle;
+                    const services::EntityData parent = requireEntity(reader, "parent");
+                    rejectTerrain(parent, "create a child under", parentTerrainHint);
+                    command.parent = parent.handle;
                 }
                 // Validate vectors before creating anything so a bad argument leaves no orphan.
                 reader.optVec3("position");
@@ -174,7 +189,8 @@ namespace mcp::tools
             tool.title = "Delete entity";
             tool.description =
                 "Delete an entity together with all of its children. Their ids become invalid. Undoable: undo "
-                "re-creates the subtree with NEW ids (undo/redo report them in remappedEntities) and fresh UUIDs.";
+                "re-creates the subtree with NEW ids (undo/redo report them in remappedEntities) and fresh UUIDs. "
+                "Refused for terrains and their tiles (or a subtree containing one): use terrain_delete.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.destructive = true;
             tool.handler = [](const nlohmann::json& args) -> ToolResult
@@ -182,6 +198,7 @@ namespace mcp::tools
                 ArgReader reader(args);
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "delete");
+                rejectTerrainSubtree(entity, "delete", deleteTerrainHint);
 
                 // Snapshot before the delete; it is only pushed if the delete succeeds.
                 undo::UndoRecorder recorder("MCP: Delete entity (" + entity.name + ")");
@@ -205,6 +222,7 @@ namespace mcp::tools
             tool.name = "entity_duplicate";
             tool.title = "Duplicate entity";
             tool.description = "Duplicate an entity and its whole subtree (components included) under the same parent. Undoable. "
+                                "Refused for terrains and their tiles (or a subtree containing one). "
                                 "Returns the new root id.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.handler = [](const nlohmann::json& args) -> ToolResult
@@ -212,6 +230,7 @@ namespace mcp::tools
                 ArgReader reader(args);
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "duplicate");
+                rejectTerrainSubtree(entity, "duplicate", duplicateTerrainHint);
 
                 events::scene::DuplicateEntityCommand command;
                 command.entity = entity.handle;
@@ -237,7 +256,8 @@ namespace mcp::tools
             tool.description =
                 "Move an entity (with its subtree) under a new parent, appended as the last child. Omit 'parent' "
                 "(or pass null) to move it to the scene root. The LOCAL transform values are kept as-is, so the "
-                "world placement changes if the new parent is transformed. Undoable (undo restores the old sibling position).";
+                "world placement changes if the new parent is transformed. Terrains and terrain tiles can be neither "
+                "moved nor used as the parent. Undoable (undo restores the old sibling position).";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"parent", schema::entity("New parent entity id. Omit or null for the scene root.")}
@@ -247,10 +267,19 @@ namespace mcp::tools
                 ArgReader reader(args);
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "reparent");
+                rejectTerrain(entity, "reparent", moveTerrainHint);
 
-                services::EntityHandle parent = reader.has("parent")
-                    ? requireEntity(reader, "parent").handle
-                    : sceneRoot();
+                services::EntityHandle parent;
+                if (reader.has("parent"))
+                {
+                    const services::EntityData parentData = requireEntity(reader, "parent");
+                    rejectTerrain(parentData, "reparent an entity under", moveTerrainHint);
+                    parent = parentData.handle;
+                }
+                else
+                {
+                    parent = sceneRoot();
+                }
                 if (parent == entity.handle)
                 {
                     throw ArgError("an entity cannot be its own parent");
@@ -370,7 +399,8 @@ namespace mcp::tools
             tool.title = "Set entity transform";
             tool.description =
                 "Partially update an entity's LOCAL transform: only the provided fields change. "
-                "rotationEuler is in degrees. Undoable. Returns the resulting local transform.";
+                "rotationEuler is in degrees. Refused for terrains and terrain tiles. Undoable. Returns the resulting "
+                "local transform.";
             nlohmann::json properties = transformProperties();
             properties["entity"] = schema::entity();
             tool.inputSchema = schema::object(std::move(properties), {"entity"});
@@ -378,6 +408,7 @@ namespace mcp::tools
             {
                 ArgReader reader(args);
                 services::EntityData entity = requireEntity(reader, "entity");
+                rejectTerrain(entity, "transform", transformTerrainHint);
                 if (!hasTransformArgs(reader))
                 {
                     throw ArgError("provide at least one of 'position', 'rotationEuler', 'scale'");

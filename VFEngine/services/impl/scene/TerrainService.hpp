@@ -3,6 +3,7 @@
 #include "../../providers/terrain/ITerrainRenderProvider.hpp"
 #include "../../data/EntityHandle.hpp"
 #include "../../data/HeightLayerStackView.hpp"
+#include "../../data/TerrainAuthoringData.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "terrain/TerrainTypes.hpp"
@@ -15,6 +16,7 @@
 #include "terrain/TerrainSerializer.hpp"
 #include "terrain/TerrainWeightMap.hpp"
 #include "terrain/SurfaceMaskBrushApplicator.hpp"
+#include "terrain/PaintBrushTypes.hpp"
 #include "terrain/TerrainFileCache.hpp"
 #include "terrain/TerrainWorldStreamer.hpp"
 #include "world/WorldTypes.hpp"
@@ -66,6 +68,19 @@ namespace events::terrainEdit
     struct DeformTerrainCommand;
     struct PaintTerrainLayerCommand;
     struct SetTerrainHolesCommand;
+}
+
+namespace events::terrainAuthoring
+{
+    struct SculptTerrainStrokeCommand;
+    struct PaintTerrainLayerStrokeCommand;
+    struct ApplyHeightmapCommand;
+}
+
+namespace events::terrainMaterial
+{
+    struct CreateTerrainMaterialAssetCommand;
+    struct EditTerrainMaterialLayerCommand;
 }
 
 namespace services
@@ -172,6 +187,10 @@ namespace services
         uint64_t strokeEntityId = 0;
         StrokeTool strokeTool = StrokeTool::None;
         bool strokeActive = false;
+        // VK-1653: undo label override for the open stroke ("MCP: Sculpt terrain (flatten)"). Empty
+        // means strokeLabelFor(strokeTool). Set by beginStroke when it OPENS a stroke, cleared by
+        // discardTerrainStroke, so a human stroke can never inherit an MCP label or vice versa.
+        std::string strokeLabel;
 
         // VK-1616: tiles whose physics collider is owed a rebuild when the stroke closes. The
         // hydraulic brush dabs every held frame over a multi-tile region, and
@@ -399,11 +418,45 @@ namespace services
         void drainRuntimeTerrainEdits(const glm::vec3& cameraPosition);
         void discardRuntimeTerrainEdits();
 
+        // --- VK-1653 authoring (MCP P4). MAIN THREAD ONLY, render thread idle. ---
+        //
+        // Unlike the VK-1624 runtime edits above these are AUTHORING edits: they stream tiles in,
+        // load heights, write the authoritative plane, markDirty for save, weld seams, rebuild
+        // colliders and push exactly zero or one VK-1615 stroke undo entry -- all before returning.
+
+        // Strokes, in TerrainAuthoringStrokeOps.cpp.
+        TerrainStrokeResult sculptTerrainStroke(
+            const ::events::terrainAuthoring::SculptTerrainStrokeCommand& cmd);
+        TerrainStrokeResult paintTerrainLayerStroke(
+            const ::events::terrainAuthoring::PaintTerrainLayerStrokeCommand& cmd);
+        TerrainStrokeResult applyHeightmapToTerrain(
+            const ::events::terrainAuthoring::ApplyHeightmapCommand& cmd);
+
+        // Queries, in TerrainAuthoringQueryOps.cpp.
+        std::vector<TerrainSummary> listTerrains() const;
+        std::vector<TerrainHeightSample> getTerrainHeights(EntityHandle terrainEntity,
+                                                           const std::vector<glm::vec2>& positions,
+                                                           bool pageIn);
+        HeightmapProbeResult probeHeightmap(const std::string& path) const;
+        [[nodiscard]] bool isSaveLocked() const { return saveInProgress.load(std::memory_order_acquire); }
+        [[nodiscard]] bool isCreationPending() const { return pendingCreation != nullptr; }
+
+        // Synchronous multi-terrain save, in TerrainPersistenceOps.cpp.
+        std::vector<TerrainSaveOutcome> saveTerrains(const std::vector<TerrainSaveRequest>& requests);
+
+        // .vfTerrainMat authoring, in TerrainMaterialAssetOps.cpp.
+        CreateTerrainMaterialAssetResult createTerrainMaterialAsset(
+            const ::events::terrainMaterial::CreateTerrainMaterialAssetCommand& cmd);
+        TerrainMaterialEditResult editTerrainMaterialLayer(
+            const ::events::terrainMaterial::EditTerrainMaterialLayerCommand& cmd);
+        std::optional<TerrainMaterialInfo> getTerrainMaterialInfo(const std::string& materialPath) const;
+
     private:
         void registerTerrainCoreHandlers(::events::EventDispatcher& dispatcher);
         void registerBrushHandlers(::events::EventDispatcher& dispatcher);
         void registerTerrainDataHandlers(::events::EventDispatcher& dispatcher);
         void registerAsyncLoadHandlers(::events::EventDispatcher& dispatcher);
+        void registerAuthoringHandlers(::events::EventDispatcher& dispatcher); // VK-1653
 
         void createTileEntities(EntityHandle parentEntity, terrain::TerrainGrid& grid);
         void remapTerrainEntities();
@@ -540,6 +593,55 @@ namespace services
                                    float deltaTime, bool invert);
         void flushPendingStrokeColliders();
 
+        // --- VK-1653: mode-free brush cores (TerrainBrushOps.cpp) ---
+        //
+        // The editor wrappers applyBrush / applyPaintBrush read the tool-mode state (target entity,
+        // brush type and params, flatten capture, stamp, ramp) and then call these; the MCP authoring
+        // strokes call them directly with explicit parameters. A core never queries editor state,
+        // never touches flattenTarget* / rampStart*, never opens or closes a stroke and never checks
+        // saveInProgress -- every one of those belongs to the caller.
+        enum class ColliderTiming : uint8_t
+        {
+            PerDab,     // rebuild the dab's tiles immediately (the editor brushes)
+            AtStrokeEnd // queue them on strokeColliderPending, drained by finalizeTerrainStroke
+        };
+        enum class ChannelEviction : uint8_t
+        {
+            Allow,  // the editor brush: a 9th layer evicts the least-used channel of the tile
+            Refuse  // skip such a tile and count it in DabOutcome::refusedTiles
+        };
+        struct DabOutcome
+        {
+            std::vector<terrain::TileCoord> modifiedTiles; // tiles whose plane this dab wrote
+            uint32_t footprintTiles = 0; // tiles the brush footprint touched
+            uint32_t missingTiles = 0;   // not in the grid and not file-cached
+            uint32_t unloadedTiles = 0;  // resident or cached, but heights / weights failed to load
+            uint32_t failedTiles = 0;    // GPU dispatch failed
+            uint32_t refusedTiles = 0;   // paint skipped under ChannelEviction::Refuse
+        };
+
+        // TerrainBrushOps.cpp:249-369 of the pre-VK-1653 applyBrush, unchanged in behaviour. The
+        // flatten target and the stamp size are parameters instead of members/queries.
+        DabOutcome applySculptDab(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                  terrain::BrushType brushType, const terrain::BrushParams& brushParams,
+                                  const glm::vec3& worldPosition, float deltaTime, bool invert,
+                                  float flattenTarget, glm::uvec2 stampSize, ColliderTiming colliders);
+        // The weight-map (PaintTarget::Layers) half of the pre-VK-1653 applyPaintBrush.
+        DabOutcome applyLayerPaintDab(EntityHandle targetEntity, terrain::TerrainGrid* grid,
+                                      terrain::PaintBrushType brushType,
+                                      const terrain::PaintBrushParams& brushParams,
+                                      const glm::vec3& worldPosition, float deltaTime, bool invert,
+                                      ChannelEviction eviction);
+        // Queues tiles on strokeColliderPending (extracted from applyHydraulicErosion).
+        void deferStrokeColliders(EntityHandle targetEntity, const std::vector<terrain::TileCoord>& tiles);
+
+        // VK-1653 (TerrainAuthoringQueryOps.cpp). The grid an authoring command addresses:
+        // `requested` when it is a live terrain, the parent terrain when it is a terrain TILE, or --
+        // when `requested` is invalid -- the only live terrain. Null with an agent-readable reason
+        // otherwise (none, ambiguous, not a terrain, an empty shell).
+        terrain::TerrainGrid* resolveAuthoringGrid(EntityHandle requested, EntityHandle& terrainOut,
+                                                   std::string& errorOut);
+
         // VK-1624 helpers, in TerrainRuntimeEditOps.cpp.
         // Resolves the terrain whose grid owns the tile under a world XZ position. Unlike
         // getTerrainHeightAt, which just takes terrainGrids.begin(), this is deterministic with more
@@ -583,7 +685,10 @@ namespace services
         void restoreCaveState(uint64_t entityId, const std::vector<::events::caveBrush::CaveTileState>& tiles);
 
         // VK-1615 stroke undo. Implemented in TerrainStrokeUndoOps.cpp.
-        void beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication);
+        // VK-1653: `label` overrides strokeLabelFor(tool) for the stroke this call OPENS (ignored when
+        // it continues an open stroke).
+        void beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication,
+                         std::string_view label = {});
         // VK-1645: takes the grid so ONE function decides whether a Heights request snapshots the
         // tile's derived plane or its authoritative base. Every call site still passes
         // StrokeDataKind::Heights; the routing lives here and nowhere else.
@@ -591,7 +696,8 @@ namespace services
                                      const terrain::TerrainTile& tile, uint8_t kinds);
         void beginSurfaceMaskStroke(uint64_t entityId, uint32_t channel, bool isFirstApplication);
         void accumulateStrokeMaskDirty(const terrain::SurfaceMaskBrushApplicator::DirtyRect& rect);
-        void finalizeTerrainStroke();
+        // VK-1653: returns the number of tiles in the pushed undo entry; 0 = nothing was pushed.
+        size_t finalizeTerrainStroke();
         void discardTerrainStroke();
         void restoreStrokeState(uint64_t entityId,
                                 const std::vector<::events::terrain::StrokeTileState>& tiles);

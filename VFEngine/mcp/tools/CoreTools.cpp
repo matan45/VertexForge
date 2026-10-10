@@ -18,5 +18,6 @@ namespace mcp::tools
         registerViewTools(registry, context);
         registerPluginComponentTools(registry, context);
         registerExportTools(registry, context);
+        registerTerrainTools(registry, context);
     }
 }

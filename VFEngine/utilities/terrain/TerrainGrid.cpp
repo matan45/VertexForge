@@ -179,6 +179,29 @@ namespace terrain
             return this->getTile(coord);
         };
 
+        // VK-1653: a tile's worldBounds were set once (initializeFlat / load) and never followed its
+        // heights, yet the GPU tile cull and LOD error (TerrainGPUAdapter, which re-reads them on
+        // every upload "because sculpting may change them") and the quadtree's node Y bounds all
+        // test against them. A flat tile raised into a 30 m hill kept a +/-0.5 m box and was culled
+        // whenever that thin slab left the frustum or fell behind an occluder. Refreshed here, right
+        // after the mesh is rebuilt from the same heights, so every edit path (editor brushes, undo,
+        // layers, MCP authoring) is covered. GROW-only: bounds also cover geometry the heights do
+        // not describe (a cave mesh below the surface), so they are never shrunk here.
+        auto growBoundsToHeights = [this](TerrainTile& tile)
+        {
+            const math::AABB before = tile.worldBounds;
+            tile.updateWorldBounds();
+            math::AABB& after = tile.worldBounds;
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (before.min[axis] < after.min[axis])
+                    after.min[axis] = before.min[axis];
+                if (before.max[axis] > after.max[axis])
+                    after.max[axis] = before.max[axis];
+            }
+            quadtree.refitTile(tile.coord);
+        };
+
         // Pre-load neighbor heights so overrideBoundaryNormals can access
         // cross-tile height data (neighbors may not have heights during streaming).
         //
@@ -223,13 +246,18 @@ namespace terrain
 
             ensureTileHeights(*tile);
 
+            bool edgeRegenerated = false;
             for (uint32_t lod = 0; lod < TERRAIN_LOD_COUNT; ++lod)
             {
                 if (tile->isLODDirty(lod))
                 {
                     generator->regenerateLOD(*tile, lod, getTile);
+                    edgeRegenerated = true;
                 }
             }
+
+            if (edgeRegenerated)
+                growBoundsToHeights(*tile);
 
             // Clear topologyDirty after all LODs have been regenerated
             if (tile->dirtyLODMask == 0)
@@ -263,7 +291,10 @@ namespace terrain
                 tile->topologyDirty = false;
 
             if (anyRegenerated)
+            {
+                growBoundsToHeights(*tile);
                 ++tileRegenCount;
+            }
         }
 
         // VK-1648. Retire the layer-owed rebuilds that are done (or whose tile streamed out), so

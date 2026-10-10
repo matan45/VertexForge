@@ -246,6 +246,26 @@ namespace services
         // !isFirstApplication early-out never open one.
         beginStroke(targetEntity->id, StrokeTool::Sculpt, isFirstApplication);
 
+        // VK-1653: everything past the mode state is the mode-free core the MCP strokes share.
+        // An absent or invalid stamp dispatches a 0x0 stamp size, exactly what BrushGPUParams'
+        // defaults always sent when the old guarded assignment was skipped.
+        const glm::uvec2 stampSize = (stampData && stampData->isValid())
+            ? glm::uvec2(stampData->width, stampData->height)
+            : glm::uvec2(0u);
+        applySculptDab(*targetEntity, grid, brushType, brushParams, worldPosition, deltaTime, invert,
+                       flattenTargetHeight, stampSize, ColliderTiming::PerDab);
+    }
+
+    TerrainService::DabOutcome TerrainService::applySculptDab(
+        EntityHandle targetEntity, terrain::TerrainGrid* grid, terrain::BrushType brushType,
+        const terrain::BrushParams& brushParams, const glm::vec3& worldPosition, float deltaTime,
+        bool invert, float flattenTarget, glm::uvec2 stampSize, ColliderTiming colliders)
+    {
+        DabOutcome outcome;
+        std::vector<terrain::TileCoord>& modifiedTiles = outcome.modifiedTiles;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
@@ -255,21 +275,22 @@ namespace services
         }
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
+        outcome.footprintTiles = static_cast<uint32_t>(affectedTiles.size());
 
-        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto cacheIt = fileCaches.find(targetEntity.id);
         auto fileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
         // VK-1616: hydraulic erosion is not a per-tile dispatch -- water has to cross tile seams --
-        // so it owns the rest of the flow itself (gather, simulate, scatter, sync, notify). Placed
-        // after beginStroke above so it inherits the sculpt stroke's undo capture unchanged.
+        // so it owns the rest of the flow itself (gather, simulate, scatter, sync, notify). The
+        // caller has already opened the sculpt stroke, so it inherits the stroke's undo capture
+        // unchanged. It always defers its colliders, whatever `colliders` says.
         if (brushType == terrain::BrushType::Hydraulic)
         {
-            applyHydraulicErosion(*targetEntity, grid, fileCache, worldPosition, brushParams,
+            applyHydraulicErosion(targetEntity, grid, fileCache, worldPosition, brushParams,
                                   deltaTime, invert);
-            return;
+            return outcome;
         }
 
-        std::vector<terrain::TileCoord> modifiedTiles;
         for (const auto& coord : affectedTiles)
         {
             terrain::TerrainTile* tile = grid->getTile(coord);
@@ -277,20 +298,29 @@ namespace services
             {
                 if (fileCache && fileCache->hasCoord(coord))
                 {
-                    streamInTile(*targetEntity, coord.x, coord.z);
+                    streamInTile(targetEntity, coord.x, coord.z);
                     tile = grid->getTile(coord);
                 }
                 if (!tile)
+                {
+                    ++outcome.missingTiles;
                     continue;
+                }
             }
 
             if (!brushComputeProvider)
+            {
+                ++outcome.failedTiles;
                 continue;
+            }
 
             if (fileCache && !tile->hasHeightData())
             {
                 if (!fileCache->ensureHeightsLoaded(*tile))
+                {
+                    ++outcome.unloadedTiles;
                     continue;
+                }
             }
             if (fileCache)
                 fileCache->markDirty(coord);
@@ -308,7 +338,7 @@ namespace services
             gpuParams.shape = brushParams.shape;
             gpuParams.brushType = brushType;
             gpuParams.deltaTime = deltaTime;
-            gpuParams.targetHeight = flattenTargetHeight;
+            gpuParams.targetHeight = flattenTarget;
             gpuParams.minHeight = tile->config.minHeight;
             gpuParams.maxHeight = tile->config.maxHeight;
             gpuParams.invert = (brushType == terrain::BrushType::Stamp)
@@ -319,11 +349,8 @@ namespace services
             gpuParams.talusAngle = brushParams.talusAngle;
             gpuParams.terraceStepHeight = brushParams.terraceStepHeight;
             gpuParams.terraceSharpness = brushParams.terraceSharpness;
-            if (stampData && stampData->isValid())
-            {
-                gpuParams.stampWidth = stampData->width;
-                gpuParams.stampHeight = stampData->height;
-            }
+            gpuParams.stampWidth = stampSize.x;
+            gpuParams.stampHeight = stampSize.y;
 
             // VK-1615: snapshot the CPU height mirror BEFORE the first dispatch that
             // touches this tile. applyBrushGPU takes the plane by non-const reference --
@@ -349,6 +376,7 @@ namespace services
             }
             else
             {
+                ++outcome.failedTiles;
                 vfLogError("GPU brush application failed for tile ({}, {})", coord.x, coord.z);
             }
         }
@@ -366,7 +394,15 @@ namespace services
         notification.type = brushType;
         dispatcher.publish(notification);
 
-        rebuildModifiedColliders(*targetEntity, grid, modifiedTiles);
+        // VK-1653: the editor brush keeps its immediate per-dab rebuild. An authoring stroke runs
+        // every dab inside one call, so it settles each tile's collider once, when the stroke
+        // finalizes, exactly like the hydraulic brush does across a held drag.
+        if (colliders == ColliderTiming::PerDab)
+            rebuildModifiedColliders(targetEntity, grid, modifiedTiles);
+        else
+            deferStrokeColliders(targetEntity, modifiedTiles);
+
+        return outcome;
     }
 
     void TerrainService::applyPaintBrush(const glm::vec3& worldPosition, float deltaTime, bool invert, bool isFirstApplication)
@@ -436,6 +472,25 @@ namespace services
         // opened its own surface-mask stroke and returned.
         beginStroke(targetEntity->id, StrokeTool::Paint, isFirstApplication);
 
+        // VK-1653: the weight-map half is the mode-free core the MCP paint strokes share. The
+        // editor keeps today's behaviour: a 9th layer evicts the least-used channel of the tile.
+        applyLayerPaintDab(*targetEntity, grid, brushType, brushParams, worldPosition, deltaTime,
+                           invert, ChannelEviction::Allow);
+    }
+
+    TerrainService::DabOutcome TerrainService::applyLayerPaintDab(
+        EntityHandle targetEntity, terrain::TerrainGrid* grid, terrain::PaintBrushType brushType,
+        const terrain::PaintBrushParams& brushParams, const glm::vec3& worldPosition, float deltaTime,
+        bool invert, ChannelEviction eviction)
+    {
+        // VK-1653: modifiedTiles here lists every tile the brush was APPLIED to, whether or not
+        // the falloff reached one of its texels -- the paint counterpart of the sculpt core, where
+        // a dispatch rewrites the whole plane. What actually changed is decided by the stroke's
+        // undo entry, which prunes unchanged tiles.
+        DabOutcome outcome;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
         float worldTileSize = 32.0f;
         const auto& allTiles = grid->getAllTiles();
         if (!allTiles.empty())
@@ -446,8 +501,9 @@ namespace services
         glm::vec2 brushCenter(worldPosition.x, worldPosition.z);
         auto affectedTiles = terrain::BrushSampler::getAffectedTiles(
             brushCenter, brushParams.radius, worldTileSize);
+        outcome.footprintTiles = static_cast<uint32_t>(affectedTiles.size());
 
-        auto cacheIt = fileCaches.find(targetEntity->id);
+        auto cacheIt = fileCaches.find(targetEntity.id);
         auto paintFileCache = (cacheIt != fileCaches.end()) ? cacheIt->second : nullptr;
 
         for (const auto& coord : affectedTiles)
@@ -457,11 +513,14 @@ namespace services
             {
                 if (paintFileCache && paintFileCache->hasCoord(coord))
                 {
-                    streamInTile(*targetEntity, coord.x, coord.z);
+                    streamInTile(targetEntity, coord.x, coord.z);
                     tile = grid->getTile(coord);
                 }
                 if (!tile)
+                {
+                    ++outcome.missingTiles;
                     continue;
+                }
             }
 
             if (paintFileCache && !tile->hasHeightData())
@@ -470,7 +529,10 @@ namespace services
                 paintFileCache->markDirty(coord);
 
             if (!tile->hasWeightMap())
+            {
+                ++outcome.unloadedTiles;
                 continue;
+            }
 
             if (brushParams.activeLayer >= terrain::MAX_TERRAIN_LAYERS)
                 continue;
@@ -490,7 +552,41 @@ namespace services
                     tile->weightMapDirty = true;
                     tile->weightMapGPUDirty = true;
                 }
+                outcome.modifiedTiles.push_back(coord);
                 continue;
+            }
+
+            // VK-1653: WeightBrushApplicator::apply calls assignChannel BEFORE it looks at the
+            // brush type, and assignChannel evicts the least-used channel -- zeroing it and
+            // renormalising the WHOLE tile -- when the layer has no channel and none is free.
+            // Refuse decides here, ahead of the Weights capture, so a refused tile is neither
+            // mutated nor snapshotted.
+            if (eviction == ChannelEviction::Refuse)
+            {
+                const auto paletteLayer = static_cast<uint8_t>(brushParams.activeLayer);
+
+                // apply() swaps Paint and Erase under invert; mirror it so the right test runs.
+                terrain::PaintBrushType effectiveType = brushType;
+                if (invert && brushType == terrain::PaintBrushType::PaintLayer)
+                    effectiveType = terrain::PaintBrushType::EraseLayer;
+                else if (invert && brushType == terrain::PaintBrushType::EraseLayer)
+                    effectiveType = terrain::PaintBrushType::PaintLayer;
+
+                if (effectiveType == terrain::PaintBrushType::EraseLayer
+                    && tile->weightMap.findChannel(paletteLayer) == 0xFF)
+                {
+                    // Nothing to erase on this tile: that completes the dab here, it is not a skip.
+                    outcome.modifiedTiles.push_back(coord);
+                    continue;
+                }
+
+                if ((effectiveType == terrain::PaintBrushType::PaintLayer
+                     || effectiveType == terrain::PaintBrushType::FillLayer)
+                    && !canPaintWithoutEviction(tile->weightMap, paletteLayer))
+                {
+                    ++outcome.refusedTiles;
+                    continue;
+                }
             }
 
             terrain::WeightBrushApplicator::ApplyParams applyParams;
@@ -522,6 +618,7 @@ namespace services
                 tile->weightMapDirty = true;
                 tile->weightMapGPUDirty = true;
             }
+            outcome.modifiedTiles.push_back(coord);
         }
 
         events::paintBrush::PaintBrushAppliedNotification paintNotification;
@@ -531,12 +628,14 @@ namespace services
 
         {
             auto& registry = scene::EntityRegistry::getRegistry();
-            entt::entity ent = internal::fromHandle(*targetEntity);
+            entt::entity ent = internal::fromHandle(targetEntity);
             if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             {
                 registry.get<components::TerrainComponent>(ent).saveDirty = true;
             }
         }
+
+        return outcome;
     }
 
     void TerrainService::applyHoleBrush(const glm::vec3& worldPosition, bool erase, bool isFirstApplication)
@@ -1160,12 +1259,25 @@ namespace services
         if (registry.valid(ent) && registry.all_of<components::TerrainComponent>(ent))
             registry.get<components::TerrainComponent>(ent).saveDirty = true;
 
+        deferStrokeColliders(targetEntity, touched);
+    }
+
+    // VK-1653: extracted from applyHydraulicErosion so the authoring strokes (ColliderTiming::
+    // AtStrokeEnd) queue the same way. Drained by flushPendingStrokeColliders below.
+    void TerrainService::deferStrokeColliders(EntityHandle targetEntity,
+                                              const std::vector<terrain::TileCoord>& tiles)
+    {
+        // A dab that modified nothing must not reset a queue another terrain still owes. The
+        // hydraulic caller never passes an empty list, so this changes nothing for it.
+        if (tiles.empty())
+            return;
+
         if (strokeColliderEntityId != targetEntity.id)
         {
             strokeColliderPending.clear();
             strokeColliderEntityId = targetEntity.id;
         }
-        for (const auto& coord : touched)
+        for (const auto& coord : tiles)
         {
             if (std::find(strokeColliderPending.begin(), strokeColliderPending.end(), coord) ==
                 strokeColliderPending.end())

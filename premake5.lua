@@ -1298,6 +1298,7 @@ project "Tests"
       "Utilities", "Memory", "CpuMemory", "Destruction", "Weather", "Terrain", "World", "Serialization",
       "Animation", "ECSRegistry", "AssetDB", "Threading", "Mcp", "Services", "Import",
       "Graphics", "Window", "VFX", "imgui", "ispc_texcomp", "GLFW", "GameExport",
+      "ProceduralGen",                      -- heightmap preset table (VK-1653)
       "spdLog", "meshoptimizer", "lz4", "recast",
       "vulkan-1.lib", "shaderc_shared.lib",
       "ws2_32"                              -- MCP loopback HTTP server (Mcp)
@@ -1324,6 +1325,7 @@ project "Tests"
       "{COPY} ../../bin/Animation/%{cfg.buildcfg}/x64/Animation.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/meshoptimizer/%{cfg.buildcfg}/x64/meshoptimizer.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/GameExport/%{cfg.buildcfg}/x64/GameExport.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
+      "{COPY} ../../bin/ProceduralGen/%{cfg.buildcfg}/x64/ProceduralGen.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/Import/%{cfg.buildcfg}/x64/Import.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} ../../bin/CpuMemory/%{cfg.buildcfg}/x64/CpuMemory.dll ../../bin/Tests/%{cfg.buildcfg}/x64/",
       "{COPY} " .. vulkanLibPath .. "/Bin/shaderc_shared.dll ../../bin/Tests/%{cfg.buildcfg}/x64/"

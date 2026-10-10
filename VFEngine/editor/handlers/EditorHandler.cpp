@@ -1,6 +1,7 @@
 #include "print/Log.hpp"
 #include "EditorHandler.hpp"
 #include "ExportHandler.hpp"
+#include "HeightmapGenerationHandler.hpp"
 #include "PluginComponentHandler.hpp"
 #include "PluginMcpToolHandler.hpp"
 #include "impl/save/SaveService.hpp"
@@ -83,6 +84,21 @@ namespace handlers
 
         bootstrap->setFrameCallback([this]()
         {
+            // VK-1650 / VK-1653: MCP tool calls run FIRST, on the main thread, with no graph
+            // task in flight AND the render thread idle. MainLoop::run called
+            // renderController->beginFrame() before this callback, which waits for the
+            // previous frame's render to finish, and the render thread is not woken again
+            // until this frame's "Render" task calls FrameSynchronizer::endFrame(). After
+            // execute() it is NOT idle: the render thread is then walking the scene and the
+            // terrain grids (getRawVisibleTiles streams tiles, regenerates meshes and drains
+            // runtime terrain edits), so a tool that mutated EnTT or a terrain from there
+            // raced it. Corollary: a Main-affinity tool must never wait for a rendered frame
+            // -- nothing renders until this callback returns.
+            if (mcpHost)
+            {
+                mcpHost->drain();
+            }
+
             frameTaskGraph->execute();
 
             // Phase 4c: execute() blocks until every task (including the worker that
@@ -97,13 +113,6 @@ namespace handlers
                 events::editor::SetEditorModeCommand stopCmd;
                 stopCmd.mode = services::EditorMode::Edit;
                 events::EventDispatcher::instance().execute(stopCmd);
-            }
-
-            // VK-1650: MCP tool calls run here, on the main thread with no graph task
-            // in flight — the same safe point as the play-mode stop above.
-            if (mcpHost)
-            {
-                mcpHost->drain();
             }
         });
 
@@ -189,6 +198,7 @@ namespace handlers
         pluginMcpToolHandler.reset();
         pluginManager.reset();
         exportHandler.reset();
+        heightmapGenerationHandler.reset(); // waits for a running heightmap job
         cleanupEventSubscriptions();
         windowImguiHandler->cleanUp();
 

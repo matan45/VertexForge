@@ -86,7 +86,8 @@ namespace mcp::tools
             resource.description =
                 "The open scene's entity tree, same JSON as scene_get_hierarchy with no depth limit: "
                 "{root, entityCount, returned, entities:[{id, name, active, components, position, rotation, "
-                "scale, children}]}. Transforms are local; rotations are Euler degrees.";
+                "scale, children}]}. Transforms are local; rotations are Euler degrees. A terrain reports "
+                "terrainTileCount instead of listing its tile entities.";
             resource.mimeType = "application/json";
             resource.affinity = ThreadAffinity::Main;
             resource.reader = []() -> ResourceContents
@@ -222,6 +223,14 @@ namespace mcp::tools
                 {
                     text += "### " + info.name + "\n\n" + info.fieldHelp + "\n\n";
                 }
+
+                // VK-1653: Terrain / TerrainTile show up in scene_get_hierarchy but are owned by the terrain
+                // service, not editable component data.
+                text += "## Terrain\n\n"
+                        "Terrain is not a component_add type: use the terrain_* tools (terrain_create, "
+                        "terrain_generate_heightmap, terrain_sculpt, terrain_add_layer, terrain_paint_layer, "
+                        "terrain_height_at, terrain_save, terrain_delete; terrain_get_info describes it). The generic "
+                        "entity tools refuse terrain and terrain tile entities.\n\n";
 
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "

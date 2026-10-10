@@ -53,6 +53,13 @@ namespace editor
             "example, the core API; vf://docs/mtype-api/<module> for any other module). vf://docs/components "
             "lists component fields, vf://scene/hierarchy the open scene, vf://logs the recent log, and "
             "vf://scripts/<path> a script's source.\n"
+            "Terrain: units are metres, Y is up and the ground is the XZ plane (the tile grid is centred on the "
+            "origin); terrain tools take ground points as [x, z]. Flow: terrain_create -> "
+            "terrain_generate_heightmap (e.g. preset hills) -> terrain_sculpt (flatten a play area: falloff "
+            "constant, shape square) -> terrain_add_layer + terrain_paint_layer -> terrain_height_at (stand "
+            "entities on the ground) -> scene_save (it saves the terrain too). Each terrain_sculpt, "
+            "terrain_paint_layer and applied terrain_generate_heightmap is one undo step. Entity ids, terrain ids "
+            "included, change after scene_load and play_stop.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
             "playable game.";
     }
