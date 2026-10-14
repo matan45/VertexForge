@@ -1,4 +1,5 @@
 #include "EditorRenderServiceImpl.hpp"
+#include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/render/PostProcessEvents.hpp"
@@ -255,54 +256,74 @@ namespace services
 
     void EditorRenderServiceImpl::registerAtmosphereHandlers(events::EventDispatcher& dispatcher)
     {
-        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsCommand>(
-            [this](const events::atmosphere::ApplyAtmosphereSettingsCommand& cmd)
+        // manageSunEntity: create a "Sun" directional light when the atmosphere is enabled and the
+        // scene has none, and delete that auto-created Sun when the atmosphere is disabled.
+        // VK-1654: ApplyAtmosphereSettingsNoSunCommand passes false - the MCP environment tools
+        // manage the sun light themselves so that every change stays undoable.
+        auto applyAtmosphere = [this](const ::render::atmosphere::AtmosphereSettings& settings, bool manageSunEntity)
+        {
+            if (offScreenProvider)
+                offScreenProvider->applyAtmosphereSettings(settings);
+
+            if (autoCreatedSunEntity.isValid())
             {
-                if (offScreenProvider)
-                    offScreenProvider->applyAtmosphereSettings(cmd.settings);
+                auto& registry = scene::EntityRegistry::getRegistry();
+                auto entity = static_cast<entt::entity>(static_cast<uint32_t>(autoCreatedSunEntity.id));
+                if (!registry.valid(entity))
+                    autoCreatedSunEntity = {};
+            }
 
-                if (autoCreatedSunEntity.isValid())
-                {
-                    auto& registry = scene::EntityRegistry::getRegistry();
-                    auto entity = static_cast<entt::entity>(static_cast<uint32_t>(autoCreatedSunEntity.id));
-                    if (!registry.valid(entity))
-                        autoCreatedSunEntity = {};
-                }
+            if (!manageSunEntity)
+                return;
 
-                if (cmd.settings.enabled)
-                {
-                    auto& registry = scene::EntityRegistry::getRegistry();
-                    auto dirLightView = registry.view<components::DirectionalLightComponent>();
-                    if (dirLightView.begin() == dirLightView.end())
-                    {
-                        auto& disp = events::EventDispatcher::instance();
-
-                        events::scene::CreateEntityCommand createCmd;
-                        createCmd.name = "Sun";
-                        auto handle = disp.execute(createCmd);
-
-                        events::scene::AddDirectionalLightComponentCommand addLight;
-                        addLight.entity = handle;
-                        disp.execute(addLight);
-
-                        events::scene::SetTransformCommand xformCmd;
-                        xformCmd.entity = handle;
-                        xformCmd.transform.position = {0.0f, 0.0f, 0.0f};
-                        xformCmd.transform.rotation = {-cmd.settings.sunElevation, cmd.settings.sunAzimuth, 0.0f};
-                        xformCmd.transform.scale = {1.0f, 1.0f, 1.0f};
-                        disp.execute(xformCmd);
-
-                        autoCreatedSunEntity = handle;
-                    }
-                }
-                else if (autoCreatedSunEntity.isValid())
+            if (settings.enabled)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (!findSunEntity(registry, false))
                 {
                     auto& disp = events::EventDispatcher::instance();
-                    events::scene::DeleteEntityCommand deleteCmd;
-                    deleteCmd.entity = autoCreatedSunEntity;
-                    disp.execute(deleteCmd);
-                    autoCreatedSunEntity = {};
+
+                    events::scene::CreateEntityCommand createCmd;
+                    createCmd.name = "Sun";
+                    auto handle = disp.execute(createCmd);
+
+                    events::scene::AddDirectionalLightComponentCommand addLight;
+                    addLight.entity = handle;
+                    disp.execute(addLight);
+
+                    // Same mapping as the day-night sun sync; the naive {-elevation, azimuth, 0}
+                    // triple is only correct near azimuth 0 (see SunEntitySync.hpp).
+                    events::scene::SetTransformCommand xformCmd;
+                    xformCmd.entity = handle;
+                    xformCmd.transform.position = {0.0f, 0.0f, 0.0f};
+                    xformCmd.transform.rotation = ::render::atmosphere::directionalLightEulerForSun(settings.sunAzimuth,
+                                                                                                    settings.sunElevation);
+                    xformCmd.transform.scale = {1.0f, 1.0f, 1.0f};
+                    disp.execute(xformCmd);
+
+                    autoCreatedSunEntity = handle;
                 }
+            }
+            else if (autoCreatedSunEntity.isValid())
+            {
+                auto& disp = events::EventDispatcher::instance();
+                events::scene::DeleteEntityCommand deleteCmd;
+                deleteCmd.entity = autoCreatedSunEntity;
+                disp.execute(deleteCmd);
+                autoCreatedSunEntity = {};
+            }
+        };
+
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsCommand>(
+            [applyAtmosphere](const events::atmosphere::ApplyAtmosphereSettingsCommand& cmd)
+            {
+                applyAtmosphere(cmd.settings, true);
+            });
+
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsNoSunCommand>(
+            [applyAtmosphere](const events::atmosphere::ApplyAtmosphereSettingsNoSunCommand& cmd)
+            {
+                applyAtmosphere(cmd.settings, false);
             });
 
         dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereSettingsQuery>(
@@ -336,6 +357,16 @@ namespace services
             [this](const events::atmosphere::UpdateDayNightCommand& cmd)
             {
                 tickDayNightAndSyncSun(offScreenProvider, cmd.deltaTime);
+            });
+
+        // VK-1654: the sun light for the MCP environment tools (Editor only).
+        dispatcher.registerQueryHandler<events::atmosphere::GetSunEntityQuery>(
+            [](const events::atmosphere::GetSunEntityQuery& q) -> std::optional<EntityHandle>
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (const auto sun = findSunEntity(registry, q.activeOnly))
+                    return internal::toHandle(*sun);
+                return std::nullopt;
             });
     }
 

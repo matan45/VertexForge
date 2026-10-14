@@ -9,10 +9,12 @@
 #include "../../events/vegetation/GrassEvents.hpp"
 #include "../../events/audio/AudioEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "weather/WeatherPresets.hpp"
 #include <glm/glm.hpp>
 #include <cmath>
+#include <optional>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -266,7 +268,9 @@ namespace services
             if (lightning.flashIntensity > 0.0f)
                 settings.sunIrradiance *= (1.0f + lightning.flashIntensity * 2.0f);
 
-            events::atmosphere::ApplyAtmosphereSettingsCommand cmd;
+            // VK-1654: weather only modulates the live sky; it must never create or delete the editor's
+            // auto-"Sun" (it re-applies every frame, outside any undo entry).
+            events::atmosphere::ApplyAtmosphereSettingsNoSunCommand cmd;
             cmd.settings = settings;
             dispatcher.execute(cmd);
         }
@@ -443,7 +447,7 @@ namespace services
                 settings.sunIrradiance = baseSunIrradiance;
                 settings.aerialIntensity = baseAerialIntensity;
                 settings.ambientIntensity = baseAmbientIntensity;
-                events::atmosphere::ApplyAtmosphereSettingsCommand cmd;
+                events::atmosphere::ApplyAtmosphereSettingsNoSunCommand cmd;
                 cmd.settings = settings;
                 dispatcher.execute(cmd);
             }
@@ -451,12 +455,35 @@ namespace services
             basesAtmosCaptured = false;
         }
 
+        // VK-1654: weather only overrides the LIVE fog and clouds, so turning it off restores the
+        // scene's authored values for exactly the fields applyFogWeather / applyCloudWeather write
+        // instead of zeroing them. Without a scene-settings handler (e.g. some tests) fall back to
+        // the old clear values.
+        std::optional<types::RenderSettings> authored;
+        try
+        {
+            authored = ::events::EventDispatcher::instance().query(events::scene::GetRenderSettingsQuery{});
+        }
+        catch (...) {}
+
         try
         {
             auto& dispatcher = ::events::EventDispatcher::instance();
             auto settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-            settings.volumetricFog.uniformDensity = 0.0f;
-            settings.volumetricFog.heightFogDensity = 0.0f;
+            if (authored)
+            {
+                const auto& authoredFog = authored->postProcess.volumetricFog;
+                settings.volumetricFog.uniformDensity = authoredFog.uniformDensity;
+                settings.volumetricFog.heightFogDensity = authoredFog.heightFogDensity;
+                settings.volumetricFog.fogColor[0] = authoredFog.fogColor[0];
+                settings.volumetricFog.fogColor[1] = authoredFog.fogColor[1];
+                settings.volumetricFog.fogColor[2] = authoredFog.fogColor[2];
+            }
+            else
+            {
+                settings.volumetricFog.uniformDensity = 0.0f;
+                settings.volumetricFog.heightFogDensity = 0.0f;
+            }
             events::postprocess::ApplyPostProcessSettingsCommand cmd;
             cmd.settings = settings;
             dispatcher.execute(cmd);
@@ -467,11 +494,25 @@ namespace services
         {
             auto& dispatcher = ::events::EventDispatcher::instance();
             auto settings = dispatcher.query(events::cloud::GetCloudSettingsQuery{});
-            settings.globalCoverage = 0.0f;
-            settings.globalDensity = 0.0f;
-            settings.windSpeed = 0.0f;
-            settings.ambientIntensity = 1.0f;
-            settings.cloudColorTint = glm::vec3(1.0f);
+            if (authored)
+            {
+                const auto& authoredCloud = authored->cloud;
+                settings.globalCoverage = authoredCloud.globalCoverage;
+                settings.globalDensity = authoredCloud.globalDensity;
+                settings.cloudType = authoredCloud.cloudType;
+                settings.windSpeed = authoredCloud.windSpeed;
+                settings.windDirectionDeg = authoredCloud.windDirectionDeg;
+                settings.cloudColorTint = authoredCloud.cloudColorTint;
+                settings.ambientIntensity = authoredCloud.ambientIntensity;
+            }
+            else
+            {
+                settings.globalCoverage = 0.0f;
+                settings.globalDensity = 0.0f;
+                settings.windSpeed = 0.0f;
+                settings.ambientIntensity = 1.0f;
+                settings.cloudColorTint = glm::vec3(1.0f);
+            }
             events::cloud::ApplyCloudSettingsCommand cmd;
             cmd.settings = settings;
             dispatcher.execute(cmd);

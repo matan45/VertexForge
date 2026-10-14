@@ -60,6 +60,13 @@ namespace editor
             "entities on the ground) -> scene_save (it saves the terrain too). Each terrain_sculpt, "
             "terrain_paint_layer and applied terrain_generate_heightmap is one undo step. Entity ids, terrain ids "
             "included, change after scene_load and play_stop.\n"
+            "Environment: environment_get / environment_set (procedural sky, clouds, timeOfDay 0-24 h, sun), ibl_set "
+            "(HDR skybox or dynamic-sky lighting) + ibl_bake, gi_set (preset Off / Medium / High / Ultra), fog_set "
+            "(volumetric distance + height fog; light shafts where geometry shadows the sun, brightest toward the "
+            "sun with anisotropy 0.6-0.9) and weather_set (presets such as Fog). Updates are strict "
+            "(unknown keys or out-of-range values change nothing; the *_get tools list the ranges); each *_set is "
+            "one undo step, is saved by scene_save (weather is session-only) and is refused in Play mode. Check the "
+            "look with viewport_screenshot.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
             "playable game.";
     }

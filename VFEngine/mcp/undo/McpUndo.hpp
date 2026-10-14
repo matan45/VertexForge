@@ -65,7 +65,7 @@ namespace mcp::undo
 
         void add(std::unique_ptr<services::IUndoableCommand> command)
         {
-            if (command)
+            if (command && batch)
             {
                 batch->addCommand(std::move(command));
             }
@@ -80,6 +80,18 @@ namespace mcp::undo
             events::undoredo::PushUndoableCommand command;
             command.command = std::move(batch);
             events::EventDispatcher::instance().execute(command);
+        }
+
+        // VK-1654: a multi-step edit failed part-way. Undoes what was recorded so far, newest first
+        // (McpBatchUndoCommand logs a step that fails and stops there), and drops the batch, so push()
+        // and add() become no-ops. The tool then reports the failure.
+        void rollback()
+        {
+            const std::shared_ptr<McpBatchUndoCommand> recorded = std::move(batch);
+            if (recorded && recorded->hasCommands())
+            {
+                recorded->undo();
+            }
         }
 
     private:

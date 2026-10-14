@@ -48,11 +48,15 @@ namespace core::adapters
         return {};
     }
 
+    // The debug flags go through the settings (no structural change, so no GI rebuild) so that
+    // GetGISettingsQuery reports them and a later apply does not revert them.
     void GIAdapter::setShowProbes(bool show)
     {
         if (offScreen)
         {
-            offScreen->setGIShowProbes(show);
+            auto settings = offScreen->getGISettings();
+            settings.showProbes = show;
+            offScreen->applyGISettings(settings);
         }
     }
 
@@ -60,7 +64,9 @@ namespace core::adapters
     {
         if (offScreen)
         {
-            offScreen->setGIShowCascadeBounds(show);
+            auto settings = offScreen->getGISettings();
+            settings.showCascadeBounds = show;
+            offScreen->applyGISettings(settings);
         }
     }
 
@@ -68,7 +74,9 @@ namespace core::adapters
     {
         if (offScreen)
         {
-            offScreen->setGIShowProbeValidity(show);
+            auto settings = offScreen->getGISettings();
+            settings.showProbeValidity = show;
+            offScreen->applyGISettings(settings);
         }
     }
 

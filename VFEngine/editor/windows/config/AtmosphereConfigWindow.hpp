@@ -28,6 +28,7 @@ namespace windows
     public:
         void show();
         void notifySceneLoaded();
+        void notifyRenderSettingsChanged();
         void draw();
         void drawContent();
         bool isVisible() const { return visible; }

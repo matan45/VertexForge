@@ -58,8 +58,23 @@ namespace controllers
 
     void OffScreenController::applyGISettings(const render::gi::GISettings& settings)
     {
+        pendingGISettings = settings;
+        hasPendingGISettings = !applyGISettingsInternal(settings);
+    }
+
+    void OffScreenController::retryPendingGISettings()
+    {
+        if (!hasPendingGISettings) return;
+        if (applyGISettingsInternal(pendingGISettings))
+            hasPendingGISettings = false;
+    }
+
+    bool OffScreenController::applyGISettingsInternal(const render::gi::GISettings& settings)
+    {
         auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
+        // The GPU-driven renderer initializes lazily on the first prepared frame, after scene load;
+        // initGI needs its light layout, color formats and mesh pipelines, so wait for it.
+        if (!renderHandler || !renderHandler->isGPUDrivenRendererInitialized()) return false;
 
         auto* gpu = renderHandler->getGPUDrivenRenderer();
         if (gpu)
@@ -75,10 +90,14 @@ namespace controllers
         {
             renderHandler->resetSSGI();
         }
+        return true;
     }
 
     render::gi::GISettings OffScreenController::getGISettings() const
     {
+        // Report the requested settings while they wait for the renderer.
+        if (hasPendingGISettings) return pendingGISettings;
+
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return {};
 
@@ -97,36 +116,6 @@ namespace controllers
         if (gpu && gpu->getGICascadeManager())
             return gpu->getGICascadeManager()->getDebugStats();
         return {};
-    }
-
-    void OffScreenController::setGIShowProbes(bool show)
-    {
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
-
-        auto* gpu = renderHandler->getGPUDrivenRenderer();
-        if (gpu && gpu->getGIDebugRenderer())
-            gpu->getGIDebugRenderer()->setShowProbes(show);
-    }
-
-    void OffScreenController::setGIShowCascadeBounds(bool show)
-    {
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
-
-        auto* gpu = renderHandler->getGPUDrivenRenderer();
-        if (gpu && gpu->getGIDebugRenderer())
-            gpu->getGIDebugRenderer()->setShowCascadeBounds(show);
-    }
-
-    void OffScreenController::setGIShowProbeValidity(bool show)
-    {
-        auto* renderHandler = offScreen->getRenderPassHandler();
-        if (!renderHandler) return;
-
-        auto* gpu = renderHandler->getGPUDrivenRenderer();
-        if (gpu && gpu->getGIDebugRenderer())
-            gpu->getGIDebugRenderer()->setShowProbeValidity(show);
     }
 
     void OffScreenController::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)

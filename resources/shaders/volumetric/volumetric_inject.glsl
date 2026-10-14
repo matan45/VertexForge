@@ -397,7 +397,34 @@ vec2 vsmLookupPhysicalUVVol(ShadowData sd, vec2 uv, out bool valid) {
     return physicalUV;
 }
 
-// Directional lights use RT shadows — no VSM sampling needed in volumetrics
+// VK-1654: the sun's shadow at a froxel, from its VSM clipmap (light shafts). Level i of the clipmap
+// is shadowData[base + i], finest first; every page of every level is resident, so a mid-air point
+// normally hits a valid page — a brief invalid one (first frame, pool full) falls through to the next
+// coarser level. One hardware-PCF compare tap per froxel: the Halton jitter and the temporal blend
+// soften it, so the surface path's PCSS (64+ taps) is not used here. Outside every level = lit, and
+// the coarsest level fades to lit toward its edge so the shafts do not end in a hard ring.
+float sampleDirectionalShadowVolumetric(int base, vec3 worldPos) {
+    if (base < 0 || base >= MAX_SHADOW_VIEWS) return 1.0;
+
+    int levels = clamp(int(shadowData[base].rangeParams.z), 1, MAX_SHADOW_VIEWS - base);
+    for (int lvl = 0; lvl < levels; ++lvl) {
+        ShadowData sd = shadowData[base + lvl];
+        vec3 ndc = (sd.viewProjection * vec4(worldPos, 1.0)).xyz; // orthographic: w == 1
+        vec2 uv = ndc.xy * 0.5 + 0.5;
+        if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
+
+        bool valid;
+        vec2 physicalUV = vsmLookupPhysicalUVVol(sd, min(uv, vec2(0.999)), valid);
+        if (!valid) continue;
+
+        float lit = textureLod(physicalPoolShadow, vec3(physicalUV, clamp(ndc.z, 0.0, 1.0)), 0.0);
+        if (lvl == levels - 1) {
+            lit = mix(lit, 1.0, smoothstep(0.85, 1.0, max(abs(ndc.x), abs(ndc.y))));
+        }
+        return lit;
+    }
+    return 1.0;
+}
 
 float smoothDistanceAttenuation(float distance, float range) {
     float distRatio = distance / range;
@@ -508,7 +535,12 @@ void main() {
         float phase = henyeyGreenstein(dot(viewDir, L), anisotropy);
         vec3 lightContrib = light.color * light.intensity * phase;
 
-        float shadowFactor = 1.0; // Directional lights use RT shadows, not VSM
+        // Sun shadow from the VSM clipmap -> light shafts. With RT sun shadows active the clipmap pages
+        // are not re-rendered (stale), so the fog stays unshadowed in that mode.
+        float shadowFactor = 1.0;
+        if (light.shadowIndex >= 0 && light.shadowMode == 1 && lightCounts.rtShadowActive == 0u) {
+            shadowFactor = sampleDirectionalShadowVolumetric(light.shadowIndex, worldPos);
+        }
 
         inScattered += lightContrib * shadowFactor;
     }

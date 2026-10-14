@@ -384,12 +384,16 @@ namespace controllers
     void* OffScreenController::render()
     {
         retryPendingRenderSettings();
+        retryPendingGISettings();
+        retryPendingVolumetricFog();
         return offScreen->render();
     }
 
     void* OffScreenController::render(const std::function<void()>& preRenderCallback)
     {
         retryPendingRenderSettings();
+        retryPendingGISettings();
+        retryPendingVolumetricFog();
         return offScreen->render(preRenderCallback);
     }
 

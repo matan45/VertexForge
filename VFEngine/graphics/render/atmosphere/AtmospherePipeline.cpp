@@ -162,7 +162,8 @@ namespace render::atmosphere
     {
         if (!paramsBufferMapped) return;
 
-        glm::vec3 sunDir = hasSunOverride
+        // setSunDirection stops refreshing the override while day-night runs, so the cycle's angles win.
+        glm::vec3 sunDir = hasSunOverride && !settings.dayNightEnabled
             ? glm::normalize(-sunDirectionOverride)
             : sunDirectionFromAngles(settings.sunAzimuth, settings.sunElevation);
         glm::mat4 vp = cachedProjection * cachedView;

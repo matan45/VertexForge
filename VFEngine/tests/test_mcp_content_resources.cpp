@@ -272,6 +272,9 @@ TEST_SUITE("MCP content resources")
         // VK-1653: terrain is authored through the terrain_* tools, not component_add.
         CHECK(contains(withoutPlugins, "Terrain is not a component_add type"));
         CHECK(contains(withoutPlugins, "terrain_create"));
+        // VK-1654: the lighting environment is edited with the environment tools; weather is not saved.
+        CHECK(contains(withoutPlugins, "environment_set"));
+        CHECK(contains(withoutPlugins, "session-only"));
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

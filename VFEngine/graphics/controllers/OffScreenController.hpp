@@ -124,6 +124,13 @@ namespace controllers
         types::RenderSettings pendingRenderSettings;
         bool hasPendingRenderSettings = false;
 
+        // Same race for GI and volumetric fog: both need the GPU-driven renderer initialized.
+        // GI is held here and fog re-applies currentPostProcessSettings.volumetricFog, each
+        // retried once per frame from render() until it lands.
+        render::gi::GISettings pendingGISettings;
+        bool hasPendingGISettings = false;
+        bool hasPendingVolumetricFog = false;
+
     public:
         explicit OffScreenController();
         ~OffScreenController();
@@ -266,6 +273,11 @@ namespace controllers
         }
 
         void applyPostProcessSettings(const postprocess::PostProcessSettings& settings);
+        // Volumetric-fog part of applyPostProcessSettings; returns false until the GPU-driven
+        // renderer is initialized.
+        bool applyVolumetricFogInternal(const postprocess::VolumetricFogSettings& fog);
+        // Re-applies currentPostProcessSettings.volumetricFog until it lands. Called from render().
+        void retryPendingVolumetricFog();
         postprocess::PostProcessSettings getPostProcessSettings() const;
         void setPostProcessEnabled(bool enabled);
         bool isPostProcessEnabled() const;
@@ -310,11 +322,12 @@ namespace controllers
 
             // GI settings
         void applyGISettings(const render::gi::GISettings& settings);
+        // Applies nothing and returns false until the GPU-driven renderer is initialized.
+        bool applyGISettingsInternal(const render::gi::GISettings& settings);
+        // Applies pending GI settings once the renderer is ready. Called from render().
+        void retryPendingGISettings();
         render::gi::GISettings getGISettings() const;
         render::gi::GIDebugStats getGIDebugStats() const;
-        void setGIShowProbes(bool show);
-        void setGIShowCascadeBounds(bool show);
-        void setGIShowProbeValidity(bool show);
 
         // Atmosphere settings
         void applyAtmosphereSettings(const render::atmosphere::AtmosphereSettings& settings);

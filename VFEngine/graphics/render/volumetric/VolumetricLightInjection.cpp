@@ -232,7 +232,8 @@ namespace render::volumetric
         vk::DescriptorSet giSamplingDescSet,
         uint32_t frameIndex)
     {
-        if (!initialized || !computePipeline)
+        // The shader statically uses the shadow sets (sun light shafts), so never dispatch without them.
+        if (!initialized || !computePipeline || !shadowDataDescSet || !shadowTextureDescSet)
             return;
 
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
@@ -249,15 +250,12 @@ namespace render::volumetric
             static_cast<uint32_t>(coreSets.size()), coreSets.data(),
             0, nullptr);
 
-        // Bind shadow sets 4-5 only when available
-        if (shadowDataDescSet && shadowTextureDescSet)
-        {
-            std::array<vk::DescriptorSet, 2> shadowSets = {shadowDataDescSet, shadowTextureDescSet};
-            cmd.bindDescriptorSets(
-                vk::PipelineBindPoint::eCompute, pipelineLayout, 4,
-                static_cast<uint32_t>(shadowSets.size()), shadowSets.data(),
-                0, nullptr);
-        }
+        // Shadow sets 4-5 (checked non-null above)
+        std::array<vk::DescriptorSet, 2> shadowSets = {shadowDataDescSet, shadowTextureDescSet};
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eCompute, pipelineLayout, 4,
+            static_cast<uint32_t>(shadowSets.size()), shadowSets.data(),
+            0, nullptr);
 
         // Bind fog volume (set 6)
         cmd.bindDescriptorSets(

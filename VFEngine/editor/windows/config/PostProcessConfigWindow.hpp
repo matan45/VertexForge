@@ -31,5 +31,6 @@ namespace windows
         void draw();
         void show();
         void notifySceneLoaded();
+        void notifyRenderSettingsChanged();
     };
 }

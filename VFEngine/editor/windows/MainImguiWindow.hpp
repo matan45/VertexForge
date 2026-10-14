@@ -131,6 +131,7 @@ namespace windows
         events::SubscriptionToken openUILayerBuilderToken;
         events::SubscriptionToken openToonProfileEditorToken;
         events::SubscriptionToken settingsChangedToken;
+        events::SubscriptionToken renderSettingsChangedToken;
 
     public:
         explicit MainImguiWindow();

@@ -1,5 +1,6 @@
 #pragma once
 #include "../../interfaces/render/IGIService.hpp"
+#include "../../events/EventTypes.hpp"
 
 namespace events
 {
@@ -14,6 +15,7 @@ namespace services
     {
     private:
         IGIProvider* provider;
+        ::events::SubscriptionToken renderSettingsChangedToken;
 
     public:
         explicit GIServiceImpl(IGIProvider* provider);

@@ -18,6 +18,12 @@ namespace windows
         isDirty = false;
     }
 
+    void AtmosphereConfigWindow::notifyRenderSettingsChanged()
+    {
+        if (!isDirty)
+            settingsLoaded = false;
+    }
+
     void AtmosphereConfigWindow::loadSettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();

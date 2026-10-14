@@ -273,9 +273,7 @@ namespace windows
             auto applyRenderSettings = [&]
             {
                 markDirty();
-                events::scene::SetRenderSettingsCommand cmd;
-                cmd.settings = settings;
-                dispatcher.execute(cmd);
+                writeSceneSettings();
             };
 
             if (ImGui::Checkbox("Enable Terrain Rendering", &settings.terrain.enabled))

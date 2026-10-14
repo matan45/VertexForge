@@ -173,7 +173,8 @@ namespace render::shadow
         {
             barrier.srcAccessMask = vk::AccessFlagBits::eShaderRead;
             barrier.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            srcStage = vk::PipelineStageFlagBits::eFragmentShader;
+            // Readers: surface shading (fragment) and the volumetric fog's light shafts (compute).
+            srcStage = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader;
         }
 
         cmd.pipelineBarrier(srcStage, vk::PipelineStageFlagBits::eEarlyFragmentTests,
@@ -197,8 +198,9 @@ namespace render::shadow
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
+        // Read by surface shading (fragment) and the volumetric inject pass (compute, light shafts).
         cmd.pipelineBarrier(vk::PipelineStageFlagBits::eLateFragmentTests,
-                            vk::PipelineStageFlagBits::eFragmentShader,
+                            vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader,
                             {}, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 

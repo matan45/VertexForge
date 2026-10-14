@@ -208,9 +208,6 @@ namespace controllers
         void applyGISettings(const render::gi::GISettings& settings);
         render::gi::GISettings getGISettings() const;
         render::gi::GIDebugStats getGIDebugStats() const;
-        void setGIShowProbes(bool show);
-        void setGIShowCascadeBounds(bool show);
-        void setGIShowProbeValidity(bool show);
 
         // Light streaming settings
         void setLightStreamingConfig(const render::lighting::LightStreamingConfig& config);

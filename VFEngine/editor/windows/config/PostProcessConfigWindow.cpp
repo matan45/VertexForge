@@ -24,6 +24,14 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::notifyRenderSettingsChanged()
+    {
+        if (!isDirty)
+        {
+            settingsLoaded = false;
+        }
+    }
+
     void PostProcessConfigWindow::loadSettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -36,12 +44,19 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
+        // VK-1654: volumetric fog belongs to its own window and the MCP fog tools (weather drives
+        // the live copy), so each write keeps the fog block of the copy it replaces instead of the
+        // one this window loaded when it opened.
         events::postprocess::ApplyPostProcessSettingsCommand settingsCmd;
         settingsCmd.settings = settings;
+        settingsCmd.settings.volumetricFog =
+            dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{}).volumetricFog;
         dispatcher.execute(settingsCmd);
 
         auto renderSettings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
+        const auto sceneFog = renderSettings.postProcess.volumetricFog;
         renderSettings.postProcess = settings;
+        renderSettings.postProcess.volumetricFog = sceneFog;
         events::scene::SetRenderSettingsCommand sceneCmd;
         sceneCmd.settings = renderSettings;
         dispatcher.execute(sceneCmd);
@@ -549,6 +564,12 @@ namespace windows
         if (!visible)
         {
             return;
+        }
+
+        // VK-1654: notifyRenderSettingsChanged() only marks the copy stale; reload it here.
+        if (!settingsLoaded)
+        {
+            loadSettings();
         }
 
         ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);

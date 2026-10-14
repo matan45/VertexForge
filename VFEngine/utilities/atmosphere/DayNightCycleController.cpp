@@ -15,18 +15,10 @@ namespace render::atmosphere
         if (settings.timeOfDay < 0.0f)
             settings.timeOfDay += 24.0f;
 
-        float t = settings.timeOfDay;
-
-        // Sun path: elevation = 90*sin((t-6)/24 * 2*PI)
-        // 6:00=sunrise(0), 12:00=zenith(90), 18:00=sunset(0), 0:00=nadir(-90)
-        float sunElevation = 90.0f * std::sin((t - 6.0f) / 24.0f * glm::two_pi<float>());
-        float sunAzimuth = std::fmod(t / 24.0f * 360.0f + 90.0f, 360.0f);
-
-        settings.sunElevation = sunElevation;
-        settings.sunAzimuth = sunAzimuth;
-
-        // Moon: opposite to sun, with optional phase offset
-        settings.moonElevation = -sunElevation;
-        settings.moonAzimuth = std::fmod(sunAzimuth + 180.0f + settings.moonPhaseOffset * 360.0f, 360.0f);
+        const DayNightAngles angles = dayNightAngles(settings.timeOfDay, settings.moonPhaseOffset);
+        settings.sunElevation = angles.sunElevation;
+        settings.sunAzimuth = angles.sunAzimuth;
+        settings.moonElevation = angles.moonElevation;
+        settings.moonAzimuth = angles.moonAzimuth;
     }
 }

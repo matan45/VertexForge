@@ -15,6 +15,7 @@
 #include "../../events/project/ApplicationEvents.hpp"
 #include "../../events/scene/SceneManagementEvents.hpp"
 #include "../../events/scene/StreamingZoneEvents.hpp"
+#include "../../events/scene/SceneSettingsEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
@@ -135,6 +136,15 @@ namespace services
             [this](const events::scene::SetRenderSettingsCommand& cmd)
             {
                 return setRenderSettings(cmd.settings);
+            });
+
+        // VK-1654: a scene load or Play->Stop snapshot restore is queued for update(), or an
+        // incremental load is still stepping. Additive loads don't count: they keep the current
+        // scene and its render settings.
+        dispatcher.registerQueryHandler<events::scene::IsSceneLoadPendingQuery>(
+            [this](const events::scene::IsSceneLoadPendingQuery&)
+            {
+                return pendingLoadPath.has_value() || incrementalActive || pendingSnapshotRestore;
             });
 
         // VK-1365: per-scene plugin enable overrides
@@ -394,6 +404,12 @@ namespace services
         events::cloud::ApplyCloudSettingsCommand cloudCmd;
         cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
         dispatcher.execute(cloudCmd);
+
+        // VK-1654: settings this service does not apply itself (GI, Editor-only) follow the new scene.
+        events::scene::RenderSettingsChangedNotification settingsNotif;
+        settingsNotif.section = events::scene::RenderSettingsSection::All;
+        settingsNotif.sceneLoad = true;
+        dispatcher.publish(settingsNotif);
 
         if (entityStateService)
         {
@@ -745,6 +761,13 @@ namespace services
             events::cloud::ApplyCloudSettingsCommand cloudCmd;
             cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
             dispatcher.execute(cloudCmd);
+
+            // VK-1654: settings this service does not apply itself (GI, Editor-only) follow the
+            // loaded scene. Also covers the Play->Stop snapshot restore, which ends here too.
+            events::scene::RenderSettingsChangedNotification settingsNotif;
+            settingsNotif.section = events::scene::RenderSettingsSection::All;
+            settingsNotif.sceneLoad = true;
+            dispatcher.publish(settingsNotif);
 
             const auto& sceneInputMapping = sceneGraph->getInputMappingPath();
             if (sceneInputMapping.has_value() && !sceneInputMapping->empty())

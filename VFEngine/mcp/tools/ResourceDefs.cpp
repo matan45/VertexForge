@@ -209,7 +209,8 @@ namespace mcp::tools
             resource.description =
                 "Every component type the agent can edit: the built-in ones (component_add / component_get / "
                 "component_set / component_remove) with their fields, and the reflected plugin components "
-                "(component_*_generic) loaded in this editor.";
+                "(component_*_generic) loaded in this editor. Also how terrain and the lighting environment (sky, "
+                "IBL, GI, fog, weather) are edited instead.";
             resource.mimeType = "text/markdown";
             resource.affinity = ThreadAffinity::Main;
             resource.reader = []() -> ResourceContents
@@ -231,6 +232,43 @@ namespace mcp::tools
                         "terrain_generate_heightmap, terrain_sculpt, terrain_add_layer, terrain_paint_layer, "
                         "terrain_height_at, terrain_save, terrain_delete; terrain_get_info describes it). The generic "
                         "entity tools refuse terrain and terrain tile entities.\n\n";
+
+                // VK-1654: the lighting environment is render-settings data, not components.
+                text += "## Environment & lighting\n\n"
+                        "Tools: environment_get / environment_set (procedural sky, clouds, time of day, sun), ibl_set / "
+                        "ibl_bake (HDR or dynamic-sky image-based lighting, reflection probes), gi_get / gi_set / "
+                        "gi_debug (global illumination), fog_get / fog_set (volumetric distance and height fog), "
+                        "weather_get / weather_set. A typical pass: environment_set {atmosphere:{enabled:true}, "
+                        "timeOfDay:17.85} -> fog_set {enabled:true, heightFogDensity:0.08, anisotropy:0.8} -> ibl_set "
+                        "{source:'dynamicSky'} (or {source:'hdr', path, showAsSky:false} to keep the procedural sky) "
+                        "-> gi_set {preset:'High'} -> viewport_screenshot after each step.\n\n"
+                        "- Saved vs live: every setting exists twice, the scene's saved value and the live value the "
+                        "renderer uses. The *_set tools write both; the *_get tools report both. While weather is "
+                        "enabled it overrides some live values (fog density and colour; cloud coverage, density, type, "
+                        "wind, tint and ambient; the sky's sun irradiance, aerial and ambient intensity); the saved "
+                        "values apply again when weather is off (sun irradiance and aerial intensity after the next "
+                        "scene load).\n"
+                        "- Strict updates: unknown keys, wrong types and out-of-range values fail the whole call and "
+                        "change nothing; the *_get tools list every key with its valid range. A *_get object can be "
+                        "passed back as is: read-only keys are accepted while they keep their current value.\n"
+                        "- Sky and ambient: the visible sky is the procedural atmosphere while atmosphere.enabled, "
+                        "otherwise the HDR skybox (ibl_set source hdr). Ambient light and reflections come from the "
+                        "sky capture while the atmosphere is enabled with dynamicAmbient on (ibl_set source "
+                        "dynamicSky), otherwise from the HDR. The scene's directional light is the sun: environment_set "
+                        "rotates it with timeOfDay or the sun angles, and creates a 'Sun' light only when the atmosphere "
+                        "ends up enabled, createSunIfMissing is true (the default) and the scene has no directional "
+                        "light.\n"
+                        "- Fog: uniformDensity is homogeneous (distance) fog within maxDistance; height fog adds "
+                        "heightFogDensity near the ground (heightFogOffset, heightFogFalloff). Light shafts appear where "
+                        "geometry shadows the sun's light inside the fog (they need the fog enabled and a directional "
+                        "light that casts shadows): raise scatteringCoefficient for stronger shafts; anisotropy 0.6-0.9 "
+                        "makes them brightest when looking toward the sun. Fog renders only while enabled.\n"
+                        "- Persistence: scene_save saves the atmosphere, clouds, fog and GI (the scene's .vfSettings) "
+                        "and the IBL (on the scene root). Weather is session-only: it is not saved with the scene. "
+                        "gi_debug views are not saved either.\n"
+                        "- Undo: each environment_set, ibl_set, gi_set, fog_set and weather_set is one undo step. The "
+                        "*_set tools refuse in Play mode (play_stop first); the *_get tools, gi_debug and ibl_bake "
+                        "also work in Play mode.\n\n";
 
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "

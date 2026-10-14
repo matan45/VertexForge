@@ -433,7 +433,9 @@ namespace render::shadow
 
         cmd.pipelineBarrier(
             vk::PipelineStageFlagBits::eTransfer,
-            vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader,
+            // + compute: the volumetric inject pass reads the sun's clipmap views (light shafts).
+            vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eVertexShader |
+                vk::PipelineStageFlagBits::eComputeShader,
             {},
             0, nullptr,
             1, &barrier,

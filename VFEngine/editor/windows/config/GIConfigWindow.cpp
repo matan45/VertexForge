@@ -1,6 +1,7 @@
 #include "GIConfigWindow.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/render/GIEvents.hpp"
+#include "../../../services/events/scene/ComponentPhysicsLightEvents.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 
@@ -225,6 +226,17 @@ namespace windows
         cmd.settings = settings;
         dispatcher.execute(cmd);
 
+        // VK-1654: also sync to scene render settings — GI is re-applied from the scene on load.
+        // The debug views are editor state, not scene data.
+        auto renderSettings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
+        renderSettings.gi = settings;
+        renderSettings.gi.showProbes = false;
+        renderSettings.gi.showCascadeBounds = false;
+        renderSettings.gi.showProbeValidity = false;
+        events::scene::SetRenderSettingsCommand sceneCmd;
+        sceneCmd.settings = renderSettings;
+        dispatcher.execute(sceneCmd);
+
         isDirty = false;
     }
 
@@ -243,5 +255,11 @@ namespace windows
     void GIConfigWindow::notifySceneLoaded()
     {
         settingsLoaded = false;
+    }
+
+    void GIConfigWindow::notifyRenderSettingsChanged()
+    {
+        if (!isDirty)
+            settingsLoaded = false;
     }
 }

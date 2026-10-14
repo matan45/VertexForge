@@ -22,8 +22,9 @@ namespace mcp::tools
         constexpr const char* historyNote =
             " Agent entity, component and material_assign edits are undoable (one step per tool call), and so is "
             "each terrain_sculpt, terrain_paint_layer and applied terrain_generate_heightmap (one terrain stroke "
-            "each); asset, script, scene and play-mode operations, terrain_create / terrain_delete / terrain_save "
-            "and terrain layer changes are not. Undo of a delete re-creates entities with NEW ids: "
+            "each) and each environment_set, ibl_set, gi_set, fog_set and weather_set; asset, script, scene and "
+            "play-mode operations, terrain_create / terrain_delete / terrain_save, terrain layer changes, ibl_bake "
+            "and gi_debug are not. Undo of a delete re-creates entities with NEW ids: "
             "follow remappedEntities [{from, to}].";
 
         // VK-1653: a terrain undo rewrites tile heights in place, which would tear a .vfTerrain that a
