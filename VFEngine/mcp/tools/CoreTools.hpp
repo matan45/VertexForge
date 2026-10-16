@@ -39,6 +39,7 @@ namespace mcp::tools
     void registerExportTools(ToolRegistry& registry, const ToolContext& context);     // game_export, game_export_status (VK-1651)
     void registerTerrainTools(ToolRegistry& registry, const ToolContext& context);    // terrain_* (VK-1653)
     void registerEnvironmentTools(ToolRegistry& registry, const ToolContext& context); // environment_*, ibl_*, gi_*, fog_*, weather_* (VK-1654)
+    void registerRenderSettingsTools(ToolRegistry& registry, const ToolContext& context); // render_settings_*, postprocess_effect_* (VK-1655)
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);

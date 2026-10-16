@@ -99,6 +99,7 @@ namespace handlers {
 	class HeightmapGenerationHandler;
 	class PluginComponentHandler;
 	class PluginMcpToolHandler;
+	class PluginPostProcessEffectHandler;
 }
 
 namespace handlers {
@@ -185,6 +186,7 @@ namespace handlers {
 		std::unique_ptr<handlers::HeightmapGenerationHandler> heightmapGenerationHandler; // VK-1653: MCP heightmap jobs
 		std::unique_ptr<handlers::PluginComponentHandler> pluginComponentHandler;
 		std::unique_ptr<handlers::PluginMcpToolHandler> pluginMcpToolHandler;
+		std::unique_ptr<handlers::PluginPostProcessEffectHandler> pluginPostProcessEffectHandler; // VK-1655: MCP plugin effect list/toggle
 
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;

@@ -270,6 +270,33 @@ namespace mcp::tools
                         "*_set tools refuse in Play mode (play_stop first); the *_get tools, gi_debug and ibl_bake "
                         "also work in Play mode.\n\n";
 
+                // VK-1655: the scene's look (post-processing, shadows, anti-aliasing) is render-settings data too.
+                text += "## Post-processing & render settings\n\n"
+                        "Tools: render_settings_get / render_settings_set (tone mapping and exposure, auto exposure, "
+                        "bloom, color grading, SSAO, vignette, chromatic aberration, film grain, depth of field, edge "
+                        "detection, the DLSS upscaler, MSAA and the shadow quality), postprocess_effect_list / "
+                        "postprocess_effect_set (post-process effects registered by plugins). A typical pass: "
+                        "render_settings_set {postProcess:{enabled:true, toneMapping:{enabled:true, mode:'AgX', "
+                        "exposure:1.2}, bloom:{enabled:true, intensity:1.0}}} -> viewport_screenshot.\n\n"
+                        "- Master switch: no built-in effect renders unless postProcess.enabled is true, tone mapping "
+                        "included; exposure and the tone curve also need toneMapping.enabled. While autoExposure.enabled, "
+                        "change autoExposure.exposureCompensation instead of toneMapping.exposure.\n"
+                        "- Anti-aliasing: display.msaa (Off, X2, X4, X8) or the upscaler: postProcess.upscale "
+                        "{enabled:true, quality:'Native'} is DLAA (full resolution), the other qualities render fewer "
+                        "pixels. DLSS needs an NVIDIA RTX GPU, and MSAA is ignored while the upscaler runs. There is no "
+                        "FXAA.\n"
+                        "- Effect order: SSAO, depth of field and auto exposure work on the HDR scene; tone mapping; "
+                        "then color grading, bloom, edge detection, chromatic aberration, vignette and film grain. "
+                        "Plugin effects run before (stage beforeTonemap) or after (afterTonemap) the tone mapping.\n"
+                        "- Strict updates, saved vs live and render_settings_get objects passed back as is work as "
+                        "for the environment tools. Color grading LUTs are .cube files relative to the project; \"\" "
+                        "clears one. The volumetric fog belongs to fog_set.\n"
+                        "- Persistence: scene_save saves every render_settings_set value with the scene (its "
+                        ".vfSettings); in an exported game a player's graphics preset overrides the shadows and MSAA. "
+                        "Plugin effect toggles are per session, like the plugin's own: not saved with the scene.\n"
+                        "- Undo: each render_settings_set and postprocess_effect_set is one undo step; both refuse in "
+                        "Play mode.\n\n";
+
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "
                         "component_remove_generic. Field values use the scene-file JSON format.\n\n";

@@ -85,6 +85,7 @@ namespace render::postprocess
             dev.destroyDescriptorPool(descriptorPool);
             descriptorPool = nullptr;
         }
+        histogramDescriptorSets.clear();
 
         if (histogramDescriptorSetLayout)
         {
@@ -134,7 +135,6 @@ namespace render::postprocess
     void AutoExposureEffect::recreate(vk::Format colorFormat, vk::Extent2D extent)
     {
         currentExtent = extent;
-        lastSceneImageView = nullptr;
         cleanupPipelines();
 
         auto& dev = device.getLogicalDevice();
@@ -167,8 +167,11 @@ namespace render::postprocess
         previousTime = currentTime;
         firstFrame = false;
 
-        // Update histogram descriptor with the current scene image view
-        updateHistogramDescriptorSet(offscreenResources.colorImages[0].colorImageView);
+        // Histogram input: the set for the offscreen colour image this frame renders into (was always
+        // image 0, i.e. another frame's image whenever imageIndex != 0).
+        const uint32_t imageIndex = pipeline.getCurrentImageIndex();
+        if (imageIndex >= histogramDescriptorSets.size())
+            return;
 
         // Clear histogram buffer
         commandBuffer.fillBuffer(histogramBuffer, 0, 256 * sizeof(uint32_t), 0);
@@ -198,7 +201,7 @@ namespace render::postprocess
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, histogramPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, histogramPipelineLayout,
-                                          0, histogramDescriptorSet, nullptr);
+                                          0, histogramDescriptorSets[imageIndex], nullptr);
         commandBuffer.pushConstants(histogramPipelineLayout, vk::ShaderStageFlagBits::eCompute,
                                      0, sizeof(HistogramPushConstants), &histPC);
 
@@ -376,27 +379,41 @@ namespace render::postprocess
 
     void AutoExposureEffect::createDescriptorPool()
     {
+        // One histogram set (sampler + histogram SSBO) per offscreen colour image, plus the reduce set
+        // (histogram + exposure SSBOs).
+        const uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
+
         std::array<vk::DescriptorPoolSize, 2> poolSizes{};
         poolSizes[0].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[0].descriptorCount = 1;
+        poolSizes[0].descriptorCount = std::max(imageCount, 1u);
         poolSizes[1].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[1].descriptorCount = 4;
+        poolSizes[1].descriptorCount = imageCount + 2;
 
-        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(device.getLogicalDevice(), 2, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()), vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
+        descriptorPool = core::PipelineUtilities::createUpdateAfterBindPool(device.getLogicalDevice(), imageCount + 1, poolSizes.data(), static_cast<uint32_t>(poolSizes.size()), vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
     }
 
     void AutoExposureEffect::createDescriptorSets()
     {
         auto& dev = device.getLogicalDevice();
 
-        // Allocate histogram descriptor set
+        // Allocate + write one histogram descriptor set per offscreen colour image. Written only here:
+        // recreate() rebuilds the pool after the offscreen images are recreated, so the views stay current.
         {
-            vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.descriptorPool = descriptorPool;
-            allocInfo.descriptorSetCount = 1;
-            allocInfo.pSetLayouts = &histogramDescriptorSetLayout;
+            const uint32_t imageCount = static_cast<uint32_t>(offscreenResources.colorImages.size());
+            histogramDescriptorSets.clear();
+            if (imageCount > 0)
+            {
+                std::vector<vk::DescriptorSetLayout> layouts(imageCount, histogramDescriptorSetLayout);
 
-            histogramDescriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
+                vk::DescriptorSetAllocateInfo allocInfo{};
+                allocInfo.descriptorPool = descriptorPool;
+                allocInfo.descriptorSetCount = imageCount;
+                allocInfo.pSetLayouts = layouts.data();
+
+                histogramDescriptorSets = dev.allocateDescriptorSets(allocInfo);
+                for (uint32_t i = 0; i < imageCount; ++i)
+                    updateHistogramDescriptorSet(histogramDescriptorSets[i], offscreenResources.colorImages[i].colorImageView);
+            }
         }
 
         // Allocate reduce descriptor set
@@ -413,12 +430,8 @@ namespace render::postprocess
         updateReduceDescriptorSet();
     }
 
-    void AutoExposureEffect::updateHistogramDescriptorSet(vk::ImageView sceneImageView)
+    void AutoExposureEffect::updateHistogramDescriptorSet(vk::DescriptorSet set, vk::ImageView sceneImageView)
     {
-        if (sceneImageView == lastSceneImageView)
-            return;
-        lastSceneImageView = sceneImageView;
-
         auto& dev = device.getLogicalDevice();
 
         vk::DescriptorImageInfo imageInfo{};
@@ -432,13 +445,13 @@ namespace render::postprocess
         histBufInfo.range = VK_WHOLE_SIZE;
 
         std::array<vk::WriteDescriptorSet, 2> writes{};
-        writes[0].dstSet = histogramDescriptorSet;
+        writes[0].dstSet = set;
         writes[0].dstBinding = 0;
         writes[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         writes[0].descriptorCount = 1;
         writes[0].pImageInfo = &imageInfo;
 
-        writes[1].dstSet = histogramDescriptorSet;
+        writes[1].dstSet = set;
         writes[1].dstBinding = 1;
         writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
         writes[1].descriptorCount = 1;

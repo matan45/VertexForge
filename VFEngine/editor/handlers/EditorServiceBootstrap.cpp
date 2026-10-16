@@ -74,6 +74,7 @@
 #include "HeightmapGenerationHandler.hpp"
 #include "PluginComponentHandler.hpp"
 #include "PluginMcpToolHandler.hpp"
+#include "PluginPostProcessEffectHandler.hpp"
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
@@ -104,6 +105,7 @@ namespace handlers
         heightmapGenerationHandler = std::make_unique<handlers::HeightmapGenerationHandler>();
         pluginComponentHandler = std::make_unique<handlers::PluginComponentHandler>();
         pluginMcpToolHandler = std::make_unique<handlers::PluginMcpToolHandler>();
+        pluginPostProcessEffectHandler = std::make_unique<handlers::PluginPostProcessEffectHandler>();
         registerAllEventHandlers();
     }
 
@@ -390,6 +392,7 @@ namespace handlers
         heightmapGenerationHandler->registerEventHandlers();
         pluginComponentHandler->registerEventHandlers();
         pluginMcpToolHandler->registerEventHandlers();
+        pluginPostProcessEffectHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         customPipelineService->registerEventHandlers();
         postProcessEffectService->registerEventHandlers();

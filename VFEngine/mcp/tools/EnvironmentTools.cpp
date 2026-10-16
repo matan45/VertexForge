@@ -45,7 +45,7 @@
 // VK-1654 environment & lighting tools: sky/atmosphere + time of day + sun, image-based lighting,
 // global illumination, volumetric fog and the session weather. Every *_set tool refuses in Play mode
 // and while a scene load is pending, validates the WHOLE request before touching the engine, writes
-// each settings section through env::writeSection (scene copy + live copy + notification) and pushes
+// each settings section through env::writeSections (scene copy + live copy + notification) and pushes
 // exactly one undo batch - none when nothing changes. A failure part-way rolls the batch back.
 namespace mcp::tools
 {
@@ -110,22 +110,14 @@ namespace mcp::tools
         // Results
         // ------------------------------------------------------------------
 
-        // The summary is the first text block and the JSON follows as its own text block (MCP: a tool
-        // returning structuredContent should also return it serialised), so a client that shows only the
-        // content blocks still sees every field.
-        ToolResult reply(nlohmann::json structured, std::string summary)
+        // One section's undo entry, then its write: recorded first, a rollback also restores a write that
+        // failed half-way.
+        void writeRecorded(undo::UndoRecorder& recorder, env::SectionValue before, env::SectionValue after)
         {
-            std::string json = structured.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
-            ToolResult result = ToolResult::ok(std::move(structured), std::move(summary));
-            result.extraContent.push_back({{"type", "text"}, {"text", std::move(json)}});
-            return result;
-        }
-
-        nlohmann::json closedObject(nlohmann::json properties, std::vector<std::string> required = {})
-        {
-            nlohmann::json out = schema::object(std::move(properties), std::move(required));
-            out["additionalProperties"] = false;
-            return out;
+            const std::vector<env::SectionValue> written{std::move(after)};
+            recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(
+                std::vector<env::SectionValue>{std::move(before)}, written));
+            env::writeSections(written);
         }
 
         nlohmann::json rgbSchema(std::string description)
@@ -1007,13 +999,11 @@ namespace mcp::tools
                         // write that failed half-way.
                         if (!atmosphereDiff.empty())
                         {
-                            recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(before.atmosphere, atmosphere));
-                            env::writeSection(atmosphere);
+                            writeRecorded(recorder, before.atmosphere, atmosphere);
                         }
                         if (!cloudDiff.empty())
                         {
-                            recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(before.cloud, clouds));
-                            env::writeSection(clouds);
+                            writeRecorded(recorder, before.cloud, clouds);
                         }
                         outcome = applySun(plan, recorder);
                     }
@@ -1208,8 +1198,7 @@ namespace mcp::tools
                     }
                     if (!atmosphereDiff.empty())
                     {
-                        recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(settings.atmosphere, atmosphere));
-                        env::writeSection(atmosphere);
+                        writeRecorded(recorder, settings.atmosphere, atmosphere);
                     }
                 }
                 catch (const std::exception& e)
@@ -1286,8 +1275,7 @@ namespace mcp::tools
                 {
                     if (!atmosphereDiff.empty())
                     {
-                        recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(settings.atmosphere, atmosphere));
-                        env::writeSection(atmosphere);
+                        writeRecorded(recorder, settings.atmosphere, atmosphere);
                     }
                     outcome = applySun(plan, recorder);
                 }
@@ -1660,8 +1648,7 @@ namespace mcp::tools
                     undo::UndoRecorder recorder("MCP: Set GI");
                     try
                     {
-                        recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(before, staged));
-                        env::writeSection(staged);
+                        writeRecorded(recorder, before, staged);
                     }
                     catch (const std::exception& e)
                     {
@@ -1889,8 +1876,7 @@ namespace mcp::tools
                     undo::UndoRecorder recorder("MCP: Set fog");
                     try
                     {
-                        recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(before, staged));
-                        env::writeSection(staged);
+                        writeRecorded(recorder, before, staged);
                     }
                     catch (const std::exception& e)
                     {
@@ -2097,8 +2083,7 @@ namespace mcp::tools
                         auto& dispatcher = events::EventDispatcher::instance();
                         if (fogChange)
                         {
-                            recorder.add(std::make_unique<undo::RenderSettingsSectionUndo>(fogBefore, fog));
-                            env::writeSection(fog);
+                            writeRecorded(recorder, fogBefore, fog);
                         }
                         if (enabledChange || stateChange)
                         {

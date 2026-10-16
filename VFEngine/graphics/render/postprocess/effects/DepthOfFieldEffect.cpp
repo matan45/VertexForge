@@ -590,10 +590,17 @@ namespace render::postprocess
             smoothedFocalDistance = targetFocal;
         }
 
+        // VK-1655: the radius is in render pixels, which the upscaler stretches by display/render width;
+        // scale it so the blur keeps its on-screen size (ratio 1 without a render-extent override).
+        const uint32_t displayWidth = swapChain.getDisplayExtent().width;
+        const float renderToDisplay = displayWidth > 0
+            ? static_cast<float>(currentExtent.width) / static_cast<float>(displayWidth)
+            : 1.0f;
+
         DoFParams data{};
         data.focalDistance = smoothedFocalDistance;
         data.focalRange = currentFocalRange;
-        data.maxBlurRadius = currentMaxBlurRadius;
+        data.maxBlurRadius = currentMaxBlurRadius * renderToDisplay;
         data.nearPlane = camInfo.nearPlane;
         data.farPlane = camInfo.farPlane;
         data.sampleCount = currentSampleCount;

@@ -101,6 +101,8 @@ namespace
             return nlohmann::json::array({limit, limit, limit});
         case env::FieldKind::Enum:
             return std::string(bound == Bound::Min ? field.enumNames.front() : field.enumNames.back());
+        case env::FieldKind::String:
+            return std::string(); // no environment table has one; strings have no bounds
         }
         return nullptr;
     }

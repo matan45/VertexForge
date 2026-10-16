@@ -90,6 +90,9 @@ namespace render::postprocess
         std::optional<float> autoExposureOverride;
         // VK-1419: snapshot of the last-applied tone-mapping sub-settings (see getToneMappingSettings).
         ::postprocess::ToneMappingSettings lastToneMapping{};
+        // VK-1655: offscreen colour image index of the execute*() call in progress (set first thing in
+        // each), so effects can bind per-image resources (AutoExposureEffect's histogram input).
+        uint32_t currentImageIndex = 0;
         core::DeferredDeletionQueue* deletionQueue = nullptr;
 
         // --- Plugin effect registry (VK-1409) ---
@@ -155,6 +158,10 @@ namespace render::postprocess
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
         std::optional<float> getComputedExposure() const { return autoExposureOverride; }
+        // VK-1655: the exposure the tonemap applies this frame - 1 without an active tone-mapping effect,
+        // else the auto-exposure value when one was computed, else the tone-mapping setting.
+        float getTonemapExposure() const;
+        uint32_t getCurrentImageIndex() const { return currentImageIndex; }
 
         // VK-1419: the most recently applied tone-mapping sub-settings. Render textures build
         // their own ToneMappingEffect and feed it these so their look matches the main viewport.
@@ -175,6 +182,11 @@ namespace render::postprocess
 
         void cleanupPingPongTargets();
         void sortEffects();
+
+        // VK-1655: the extent an effect is built for - the display extent only for a post-upscale effect
+        // while the upscaler runs; otherwise the render extent, which is what execute() draws every
+        // effect at (below the display extent under VK-1531 dynamic resolution without the upscaler).
+        vk::Extent2D effectExtent(const PostProcessEffect& effect) const;
 
         // Apply queued plugin-effect ops on the render thread. Called first thing
         // in each execute*() so a freshly-registered effect is live this frame.

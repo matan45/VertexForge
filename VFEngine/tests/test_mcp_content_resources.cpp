@@ -275,6 +275,11 @@ TEST_SUITE("MCP content resources")
         // VK-1654: the lighting environment is edited with the environment tools; weather is not saved.
         CHECK(contains(withoutPlugins, "environment_set"));
         CHECK(contains(withoutPlugins, "session-only"));
+        // VK-1655: the look is edited with the render-settings tools; there is no FXAA.
+        CHECK(contains(withoutPlugins, "## Post-processing & render settings"));
+        CHECK(contains(withoutPlugins, "render_settings_set"));
+        CHECK(contains(withoutPlugins, "postprocess_effect_set"));
+        CHECK(contains(withoutPlugins, "There is no FXAA"));
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

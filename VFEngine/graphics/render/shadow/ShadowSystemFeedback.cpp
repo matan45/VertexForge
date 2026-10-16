@@ -5,6 +5,7 @@
 #include "../../core/ThreadCommandPoolManager.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include "types/ShadowPolicy.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
 
@@ -573,7 +574,7 @@ namespace render::shadow
         }
 
         const auto& shadowSettings = settings.shadows;
-        shadowsEnabled = shadowSettings.enabled;
+        shadowsEnabled = types::shadowsRendered(shadowSettings);
         globalDepthBias = shadowSettings.shadowBias;
         globalSlopeBias = shadowSettings.slopeBias;
         globalNormalBias = shadowSettings.normalBias;
@@ -583,7 +584,7 @@ namespace render::shadow
         clipmapBaseExtent = shadowSettings.clipmapBaseExtent;
         clipmapDepthRange = shadowSettings.clipmapDepthRange;
 
-        if (!shadowSettings.enabled || shadowSettings.quality == types::ShadowQuality::Off)
+        if (!shadowsEnabled)
             return;
         globalQuality = static_cast<ShadowQuality>(shadowSettings.quality);
 

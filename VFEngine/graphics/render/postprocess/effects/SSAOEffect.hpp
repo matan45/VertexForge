@@ -44,6 +44,10 @@ namespace render::postprocess
         vk::Image ssaoBlurredImage;
         core::VulkanAllocation ssaoBlurredAllocation;
         vk::ImageView ssaoBlurredImageView;
+        // VK-1655: the intermediates' current layouts (Undefined when created, ShaderReadOnly after a frame), so
+        // each pass moves its target to an attachment before rendering into it (like DoF's blurImageLayout).
+        vk::ImageLayout ssaoRawImageLayout = vk::ImageLayout::eUndefined;
+        vk::ImageLayout ssaoBlurredImageLayout = vk::ImageLayout::eUndefined;
 
         vk::ImageView depthOnlyImageView;
 

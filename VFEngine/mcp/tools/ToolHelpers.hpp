@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../protocol/ArgReader.hpp"
+#include "../protocol/ToolRegistry.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
@@ -10,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // Entity / transform helpers shared by the tool groups and by mcp/undo.
@@ -17,6 +19,25 @@
 // Main-affinity handler or a runOnMain task.
 namespace mcp::tools
 {
+    // VK-1654: the summary is the first text block and the JSON follows as its own text block (MCP: a
+    // tool returning structuredContent should also return it serialised), so a client that shows only
+    // the content blocks still sees every field. Any thread.
+    inline ToolResult reply(nlohmann::json structured, std::string summary)
+    {
+        std::string json = structured.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
+        ToolResult result = ToolResult::ok(std::move(structured), std::move(summary));
+        result.extraContent.push_back({{"type", "text"}, {"text", std::move(json)}});
+        return result;
+    }
+
+    // A JSON-Schema object that rejects unknown properties. Any thread.
+    inline nlohmann::json closedObject(nlohmann::json properties, std::vector<std::string> required = {})
+    {
+        nlohmann::json out = schema::object(std::move(properties), std::move(required));
+        out["additionalProperties"] = false;
+        return out;
+    }
+
     inline services::EntityHandle toHandle(uint32_t id)
     {
         services::EntityHandle handle;

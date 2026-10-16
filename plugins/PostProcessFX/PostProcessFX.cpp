@@ -145,6 +145,24 @@ public:
         grade.debugName = "PPFX_Grade";
         gradeFx = ctx->registerPostProcessEffect(grade);
 
+        // VK-1655: the engine toggled an effect (e.g. the MCP postprocess_effect_set tool).
+        // Keep the checkbox and prev* in step so onUpdate does not re-send the old state.
+        ctx->subscribeEvent("vf.postprocess.effectEnabled",
+            [this](const nlohmann::json& data)
+            {
+                const uint64_t id = data.value("id", uint64_t{0});
+                if (exposureFx.isValid() && id == exposureFx.id)
+                {
+                    settings->exposureEnabled = data.value("enabled", settings->exposureEnabled);
+                    prevExposureEnabled = settings->exposureEnabled;
+                }
+                else if (gradeFx.isValid() && id == gradeFx.id)
+                {
+                    settings->gradeEnabled = data.value("enabled", settings->gradeEnabled);
+                    prevGradeEnabled = settings->gradeEnabled;
+                }
+            });
+
         if (ctx->hasCapability(std::string(plugin::capability::editor)))
         {
             ImGui::SetCurrentContext(ctx->getImGuiContext());

@@ -6,7 +6,8 @@ namespace events::scene
 {
     // VK-1654: which part of the scene's render settings changed. The settings themselves live in
     // types::RenderSettings (Get/SetRenderSettings in ComponentPhysicsLightEvents.hpp); IBL is the
-    // scene root's IBLComponent. VK-1655 extends this list for the sections it owns.
+    // scene root's IBLComponent. VK-1655 adds PostProcess (every post-process effect except the
+    // volumetric fog), Shadows and Display (MSAA).
     enum class RenderSettingsSection : uint32_t
     {
         All,
@@ -14,7 +15,10 @@ namespace events::scene
         Cloud,
         VolumetricFog,
         GI,
-        IBL
+        IBL,
+        PostProcess,
+        Shadows,
+        Display
     };
 
     // Published after an out-of-window edit of the scene's render settings (MCP tools and their

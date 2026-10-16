@@ -5,6 +5,7 @@
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace core
 {
@@ -44,7 +45,9 @@ namespace render::postprocess
         vk::DescriptorSetLayout passthroughDescriptorSetLayout;
 
         vk::DescriptorPool descriptorPool;
-        vk::DescriptorSet histogramDescriptorSet;
+        // VK-1655: one histogram set per offscreen colour image (scene view + histogram buffer), written once
+        // in createDescriptorSets; preRecord binds the one for PostProcessPipeline::getCurrentImageIndex().
+        std::vector<vk::DescriptorSet> histogramDescriptorSets;
         vk::DescriptorSet reduceDescriptorSet;
 
         vk::Buffer histogramBuffer;
@@ -75,7 +78,6 @@ namespace render::postprocess
         bool firstFrame = true;
 
         vk::Extent2D currentExtent{};
-        vk::ImageView lastSceneImageView{};
 
     public:
         AutoExposureEffect(core::Device& device, core::SwapChain& swapChain,
@@ -109,7 +111,7 @@ namespace render::postprocess
         void createHistogramPipeline();
         void createReducePipeline();
         void createPassthroughPipeline(vk::Format colorFormat, vk::Extent2D extent);
-        void updateHistogramDescriptorSet(vk::ImageView sceneImageView);
+        void updateHistogramDescriptorSet(vk::DescriptorSet set, vk::ImageView sceneImageView);
         void updateReduceDescriptorSet();
         void cleanupBuffers();
         void cleanupPipelines();

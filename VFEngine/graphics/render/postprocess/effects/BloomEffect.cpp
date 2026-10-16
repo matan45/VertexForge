@@ -176,16 +176,12 @@ namespace render::postprocess
         };
 
         // === Phase 1: Downsample ===
-        vk::ImageLayout downsampleOldLayout = mipLayoutsInitialized
-            ? vk::ImageLayout::eShaderReadOnlyOptimal
-            : vk::ImageLayout::eUndefined;
-
         for (uint32_t i = 0; i < activeMips; ++i)
         {
             auto& mip = mipLevels[i];
             vk::Extent2D mipExtent{mip.width, mip.height};
 
-            transitionMip(bloomImage, i, downsampleOldLayout, vk::ImageLayout::eColorAttachmentOptimal);
+            transitionMip(bloomImage, i, mip.layout, vk::ImageLayout::eColorAttachmentOptimal);
 
             core::DynamicRenderingInfo dynInfo{};
             dynInfo.extent = mipExtent;
@@ -233,6 +229,7 @@ namespace render::postprocess
             core::endDynamicRendering(commandBuffer);
 
             transitionMip(bloomImage, i, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+            mip.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
         }
 
         // === Phase 2: Upsample (with additive blend) ===
@@ -283,8 +280,6 @@ namespace render::postprocess
 
             transitionMip(bloomImage, i, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
-
-        mipLayoutsInitialized = true;
     }
 
     void BloomEffect::record(const vk::CommandBuffer& commandBuffer,
@@ -364,7 +359,11 @@ namespace render::postprocess
 
         uint32_t maxMips = static_cast<uint32_t>(std::floor(std::log2(
             static_cast<float>(std::max(w, h))))) + 1;
-        mipCount = std::min(currentPasses, maxMips);
+        // VK-1655: allocate for the most passes the settings allow, not currentPasses: the chain is built in
+        // init(), before the first updateParameters, so passes above the default did nothing until a resize.
+        // preRecord renders min(currentPasses, mipCount) levels; each extra level is a quarter of the last.
+        constexpr uint32_t maxBloomPasses = 10; // the scene loader's clamp (SceneSerializePostProcess.cpp)
+        mipCount = std::min(maxBloomPasses, maxMips);
         mipCount = std::max(mipCount, 1u);
 
         core::ImageInfoRequest req(dev, device.getPhysicalDevice());
@@ -647,7 +646,6 @@ namespace render::postprocess
         }
 
         mipCount = 0;
-        mipLayoutsInitialized = false;
     }
 
     void BloomEffect::cleanupPipelines()

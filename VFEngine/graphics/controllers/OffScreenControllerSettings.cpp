@@ -241,15 +241,6 @@ namespace controllers
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
 
-        if (cameraController)
-        {
-            // Enable jitter when DLSS upscaling is active (DLSS requires temporal jitter)
-            bool needsJitter = settings.enabled && settings.upscale.enabled;
-            cameraController->setTAAEnabled(needsJitter);
-            auto extent = swapChain.getSwapchainExtent();
-            cameraController->setViewportExtent(extent.width, extent.height);
-        }
-
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
             pipeline->applySettings(settings);
@@ -333,6 +324,16 @@ namespace controllers
                              "adapter; Frame Generation will not be enabled.");
             }
             upscaleManager->applyReflexSettings(effectiveReflex);
+        }
+
+        // VK-1655: jitter follows the upscaler that actually runs (DLSS needs temporal jitter) rather than the
+        // requested setting, and is set after the block above so the viewport extent is the render extent it
+        // just applied.
+        if (cameraController)
+        {
+            cameraController->setTAAEnabled(upscaleManager && upscaleManager->isActive());
+            auto extent = swapChain.getSwapchainExtent();
+            cameraController->setViewportExtent(extent.width, extent.height);
         }
 
         // SSR

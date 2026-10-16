@@ -20,5 +20,6 @@ namespace mcp::tools
         registerExportTools(registry, context);
         registerTerrainTools(registry, context);
         registerEnvironmentTools(registry, context);
+        registerRenderSettingsTools(registry, context);
     }
 }

@@ -408,7 +408,8 @@ namespace plugin {
         auto handle = events::EventDispatcher::instance().execute(cmd);
 
         if (handle.isValid()) {
-            managedPostProcessEffects.push_back({handle, desc.startEnabled});
+            managedPostProcessEffects.push_back({handle, desc.startEnabled, desc.debugName,
+                                                 plugin::postProcessOrderToPriority(desc)});
             // If the plugin is currently soft-disabled, the effect must start inert.
             if (!isActive() && desc.startEnabled) {
                 events::postprocessfx::SetPostProcessEffectEnabledCommand off;

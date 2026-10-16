@@ -36,6 +36,7 @@
 #include "water/OceanFFT.hpp"
 #include "vegetation/WindConfig.hpp"
 #include "terrain/TerrainTile.hpp"
+#include <array>
 #include <unordered_set>
 
 namespace render
@@ -396,6 +397,44 @@ namespace render
         postProcessPipeline->execute(commandBuffer, imageIndex);
     }
 
+    void RenderPassHandler::generateReactiveMask(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
+    {
+        reactiveMaskReady = false;
+
+        auto* upscaleManager = device.getUpscaleManager();
+        if (!upscaleManager || !upscaleManager->isActive())
+            return;
+
+        if (!offscreenResources.upscaleResourcesCreated)
+            return;
+
+        // Generate the reactive/transparency mask from the opaque-only color
+        // snapshot taken before the VFX/WBOIT passes (scene color is in
+        // ShaderReadOnlyOptimal here, sampled directly). Runs ahead of the
+        // pre-upscale effects: the mask must diff the colour BEFORE they write into it.
+        if (preTransparencyCaptured && offscreenResources.reactiveMask.image)
+        {
+            if (!reactiveMaskPass)
+            {
+                reactiveMaskPass = std::make_unique<upscaling::ReactiveMaskPass>(device);
+                reactiveMaskPass->init();
+            }
+            if (reactiveMaskPass->isInitialized())
+            {
+                auto renderRes = upscaleManager->getResolutionManager().getRenderResolution();
+                reactiveMaskPass->dispatch(commandBuffer,
+                    offscreenResources.preTransparencyColor.imageView,
+                    offscreenResources.colorImages[imageIndex].colorImageView,
+                    offscreenResources.reactiveMask.imageView,
+                    offscreenResources.reactiveMask.image,
+                    renderRes.width, renderRes.height,
+                    taaFrameIndex);
+                reactiveMaskReady = true;
+            }
+        }
+        preTransparencyCaptured = false;
+    }
+
     void RenderPassHandler::executeUpscaleGraphManaged(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
         auto* upscaleManager = device.getUpscaleManager();
@@ -457,14 +496,11 @@ namespace render
         }
         upscaleFirstFrame = false;
 
-        // Write auto-exposure value to the 1x1 exposure texture for Streamline
-        float exposureValue = 1.0f;
-        if (postProcessPipeline)
-        {
-            auto exp = postProcessPipeline->getComputedExposure();
-            if (exp.has_value())
-                exposureValue = exp.value();
-        }
+        // Write the 1x1 exposure texture for Streamline. DLSS guide §3.9: it is "typically the same
+        // value provided to the tonemapper", so feed what the tonemap applies this frame. DLSS-SR
+        // ignores it while useAutoExposure=eTrue (UpscaleManager::applySettings), but Ray
+        // Reconstruction ignores that flag and always reads it.
+        float exposureValue = postProcessPipeline ? postProcessPipeline->getTonemapExposure() : 1.0f;
 
         if (offscreenResources.exposureImage.image)
         {
@@ -479,39 +515,29 @@ namespace render
             commandBuffer.clearColorImage(offscreenResources.exposureImage.image,
                 vk::ImageLayout::eTransferDstOptimal, clearValue, range);
 
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.exposureImage.image,
-                vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageAspectFlagBits::eColor);
+            // Streamline's evaluate reads the exposure in compute; the ImageUtilities TransferDst ->
+            // ShaderReadOnly barrier only reaches the fragment stage.
+            vk::ImageMemoryBarrier2 toRead{};
+            toRead.srcStageMask = vk::PipelineStageFlagBits2::eAllTransfer;
+            toRead.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            toRead.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eFragmentShader;
+            toRead.dstAccessMask = vk::AccessFlagBits2::eShaderRead;
+            toRead.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+            toRead.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toRead.image = offscreenResources.exposureImage.image;
+            toRead.subresourceRange = range;
+
+            vk::DependencyInfo dependency{};
+            dependency.imageMemoryBarrierCount = 1;
+            dependency.pImageMemoryBarriers = &toRead;
+            commandBuffer.pipelineBarrier2KHR(dependency);
         }
 
         vk::Image colorImage = offscreenResources.colorImages[imageIndex].colorImage;
 
-        // Generate the reactive/transparency mask from the opaque-only color
-        // snapshot taken before the VFX/WBOIT passes (scene color is in
-        // ShaderReadOnlyOptimal here, sampled directly)
-        bool reactiveMaskReady = false;
-        if (preTransparencyCaptured && offscreenResources.reactiveMask.image)
-        {
-            if (!reactiveMaskPass)
-            {
-                reactiveMaskPass = std::make_unique<upscaling::ReactiveMaskPass>(device);
-                reactiveMaskPass->init();
-            }
-            if (reactiveMaskPass->isInitialized())
-            {
-                reactiveMaskPass->dispatch(commandBuffer,
-                    offscreenResources.preTransparencyColor.imageView,
-                    offscreenResources.colorImages[imageIndex].colorImageView,
-                    offscreenResources.reactiveMask.imageView,
-                    offscreenResources.reactiveMask.image,
-                    renderRes.width, renderRes.height,
-                    taaFrameIndex);
-                reactiveMaskReady = true;
-            }
-        }
-        preTransparencyCaptured = false;
-
+        // The reactive mask was generated by generateReactiveMask in the PreUpscalePostProcess pass.
         render::upscaling::UpscaleInputs inputs{};
         inputs.colorInput = colorImage;
         inputs.colorView = offscreenResources.colorImages[imageIndex].colorImageView;
@@ -564,20 +590,42 @@ namespace render
             inputs.specularMotionVectorsView = offscreenResources.motionVectors.sampledView;
         }
 
+        // On success the output stays in eGeneral holding DLSS's result; executePostUpscale's
+        // General -> TransferSrc barrier orders its blit after the write.
         bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
-        if (evaluateOk)
-        {
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.upscaleOutput.image,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral,
-                vk::ImageAspectFlagBits::eColor);
-        }
         if (!evaluateOk)
         {
-            // Fallback blit (internal intermediate transitions on scene color)
-            core::ImageUtilities::transitionImageLayout(commandBuffer, colorImage,
-                vk::ImageLayout::eShaderReadOnlyOptimal, vk::ImageLayout::eTransferSrcOptimal,
-                vk::ImageAspectFlagBits::eColor);
+            // Fallback blit (internal intermediate transitions on scene color). The scene colour was sampled
+            // in compute (this pass's declaration, the upscaler) and the output's Undefined -> General
+            // transition above targets compute, so order the blit's transfer after both.
+            const vk::ImageSubresourceRange colorRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+            std::array<vk::ImageMemoryBarrier2, 2> toBlit{};
+            toBlit[0].srcStageMask = vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eFragmentShader;
+            toBlit[0].srcAccessMask = vk::AccessFlagBits2::eShaderRead;
+            toBlit[0].dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer;
+            toBlit[0].dstAccessMask = vk::AccessFlagBits2::eTransferRead;
+            toBlit[0].oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toBlit[0].newLayout = vk::ImageLayout::eTransferSrcOptimal;
+            toBlit[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toBlit[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toBlit[0].image = colorImage;
+            toBlit[0].subresourceRange = colorRange;
+
+            toBlit[1].srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+            toBlit[1].srcAccessMask = vk::AccessFlagBits2::eShaderWrite;
+            toBlit[1].dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer;
+            toBlit[1].dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            toBlit[1].oldLayout = vk::ImageLayout::eGeneral;
+            toBlit[1].newLayout = vk::ImageLayout::eGeneral;
+            toBlit[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toBlit[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toBlit[1].image = offscreenResources.upscaleOutput.image;
+            toBlit[1].subresourceRange = colorRange;
+
+            vk::DependencyInfo blitDependency{};
+            blitDependency.imageMemoryBarrierCount = static_cast<uint32_t>(toBlit.size());
+            blitDependency.pImageMemoryBarriers = toBlit.data();
+            commandBuffer.pipelineBarrier2KHR(blitDependency);
 
             vk::ImageBlit sceneBlit{};
             sceneBlit.srcSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;

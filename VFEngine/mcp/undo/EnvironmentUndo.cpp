@@ -2,33 +2,65 @@
 
 #include <stdexcept>
 #include <utility>
+#include <variant>
 
 namespace mcp::undo
 {
+    namespace
+    {
+        // Heap memory a section owns: only colour grading's LUT paths.
+        size_t sectionHeapBytes(const std::vector<tools::env::SectionValue>& sections)
+        {
+            size_t bytes = sections.capacity() * sizeof(tools::env::SectionValue);
+            for (const tools::env::SectionValue& section : sections)
+            {
+                if (const auto* grading = std::get_if<tools::env::ColorGradingSettings>(&section))
+                {
+                    bytes += grading->primaryLutPath.capacity() + grading->secondaryLutPath.capacity();
+                }
+            }
+            return bytes;
+        }
+    }
+
     // ------------------------------------------------------------------
     // RenderSettingsSectionUndo
     // ------------------------------------------------------------------
 
-    RenderSettingsSectionUndo::RenderSettingsSectionUndo(tools::env::SectionValue before, tools::env::SectionValue after)
+    RenderSettingsSectionUndo::RenderSettingsSectionUndo(std::vector<tools::env::SectionValue> before,
+                                                         std::vector<tools::env::SectionValue> after)
         : before(std::move(before)), after(std::move(after))
     {
-        if (this->before.index() != this->after.index())
+        if (this->before.empty() || this->before.size() != this->after.size())
         {
-            throw std::logic_error("RenderSettingsSectionUndo needs two values of the same section");
+            throw std::logic_error("RenderSettingsSectionUndo needs the same non-empty list of sections twice");
+        }
+        for (size_t i = 0; i < this->before.size(); ++i)
+        {
+            if (this->before[i].index() != this->after[i].index())
+            {
+                throw std::logic_error("RenderSettingsSectionUndo needs two values of the same section");
+            }
         }
     }
 
-    void RenderSettingsSectionUndo::execute() { tools::env::writeSection(after); }
-    void RenderSettingsSectionUndo::undo() { tools::env::writeSection(before); }
+    void RenderSettingsSectionUndo::execute() { tools::env::writeSections(after); }
+    void RenderSettingsSectionUndo::undo() { tools::env::writeSections(before); }
 
     std::string RenderSettingsSectionUndo::getDescription() const
     {
-        return "MCP: Set " + std::string(tools::env::sectionName(after));
+        std::string names;
+        for (const tools::env::SectionValue& section : after)
+        {
+            names += names.empty() ? "" : ", ";
+            names += tools::env::sectionName(section);
+        }
+        return "MCP: Set " + names;
     }
 
     size_t RenderSettingsSectionUndo::getMemoryFootprint() const
     {
-        return sizeof(*this); // the settings structs own no heap memory
+        return sizeof(*this) + sectionHeapBytes(before) + sectionHeapBytes(after);
     }
 
     // ------------------------------------------------------------------

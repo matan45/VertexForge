@@ -571,16 +571,52 @@ namespace render
 
             if (upscalingActive)
             {
-                auto builder = frameGraph->addPass("Upscale",
-                    [this](vk::CommandBuffer cmd, uint32_t idx) {
-                        executeUpscaleGraphManaged(cmd, idx);
-                        executePostUpscalePostProcess(cmd, idx);
-                    });
-                builder.read(sceneColorHandle, graph::ResourceUsage::ShaderRead);
-                builder.read(depthHandle, graph::ResourceUsage::DepthAttachmentRead);
-                sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ShaderRead);
-                builder.setSegment(graph::HookSegment::PostProcess);
-                builder.setSideEffect();
+                // VK-1655: render-resolution effects (SSAO, DoF, auto-exposure, ...) before the upscaler.
+                // The reactive mask is generated first because it must diff the colour BEFORE these effects
+                // write into it. Scene colour is sampled by the mask/auto-exposure compute shaders and the
+                // effects' fragment shaders, then rewritten by the ping-pong copy-back. Depth is declared
+                // AttachmentOptimal, the layout SSAO/DoF start their own read-only transitions from.
+                {
+                    auto builder = frameGraph->addPass("PreUpscalePostProcess",
+                        [this](vk::CommandBuffer cmd, uint32_t idx) {
+                            generateReactiveMask(cmd, idx);
+                            executePreUpscalePostProcess(cmd, idx);
+                        });
+                    builder.read(sceneColorHandle, graph::ResourceUsage::SampledReadAnyShader);
+                    sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                    depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+                    builder.setSegment(graph::HookSegment::PostProcess);
+                    builder.setSideEffect();
+                }
+
+                // The upscaler (and the motion-vector fallback) sample colour and read-only depth in compute.
+                // The colour write orders the post-upscale pass after this one.
+                {
+                    auto builder = frameGraph->addPass("Upscale",
+                        [this](vk::CommandBuffer cmd, uint32_t idx) {
+                            executeUpscaleGraphManaged(cmd, idx);
+                        });
+                    builder.read(sceneColorHandle, graph::ResourceUsage::SampledComputeRead);
+                    builder.read(depthHandle, graph::ResourceUsage::DepthSampledComputeRead);
+                    sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::SampledComputeRead);
+                    builder.setSegment(graph::HookSegment::PostProcess);
+                    builder.setSideEffect();
+                }
+
+                // Display-resolution effects (tonemap, grading, bloom, ...) on the upscaled image. Depth goes
+                // back from the upscaler's read-only layout to AttachmentOptimal for EdgeDetection's own
+                // read-only transition.
+                {
+                    auto builder = frameGraph->addPass("PostUpscalePostProcess",
+                        [this](vk::CommandBuffer cmd, uint32_t idx) {
+                            executePostUpscalePostProcess(cmd, idx);
+                        });
+                    builder.read(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                    sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                    depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
+                    builder.setSegment(graph::HookSegment::PostProcess);
+                    builder.setSideEffect();
+                }
             }
             else
             {
@@ -588,8 +624,12 @@ namespace render
                     [this](vk::CommandBuffer cmd, uint32_t idx) {
                         executePostProcess(cmd, idx);
                     });
-                builder.read(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                // The effects sample scene colour in fragment shaders, auto-exposure's histogram in compute.
+                builder.read(sceneColorHandle, graph::ResourceUsage::SampledReadAnyShader);
                 sceneColorHandle = builder.write(sceneColorHandle, graph::ResourceUsage::ShaderRead);
+                // SSAO/DoF/EdgeDetection transition depth from AttachmentOptimal themselves; without a
+                // DepthCopy the post-scene passes (SSGI, fog, atmosphere) leave it read-only.
+                depthHandle = builder.write(depthHandle, graph::ResourceUsage::DepthAttachmentWrite);
                 builder.setSegment(graph::HookSegment::PostProcess);
                 builder.setSideEffect();
             }
@@ -602,6 +642,8 @@ namespace render
                 [this](vk::CommandBuffer cmd, uint32_t idx) {
                     executeRenderHooks(plugin::RenderPassHookPoint::PostPostProcess, cmd, idx);
                 });
+            // Dependency only (no barrier): always schedule the hook after the last post-process pass.
+            builder.opaqueRead(sceneColorHandle, graph::ResourceUsage::ShaderRead);
             builder.setSegment(graph::HookSegment::PostProcess);
             builder.setSideEffect();
         }

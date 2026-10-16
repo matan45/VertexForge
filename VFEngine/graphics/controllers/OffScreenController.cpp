@@ -3,6 +3,7 @@
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../render/gpudriven/brush/HydraulicErosionPipeline.hpp"
 #include "../core/VulkanContext.hpp"
+#include "../core/SwapChain.hpp"
 #include "../core/AsyncComputeManager.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
 #include "../render/OffScreenViewPort.hpp"
@@ -328,6 +329,10 @@ namespace controllers
                                                const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos, float time)
     {
+        // VK-1655: keep the jitter in render pixels across resizes / render-extent changes, which do not
+        // re-apply the post-process settings (where the extent was otherwise only set).
+        auto extent = swapChain.getSwapchainExtent();
+        cameraController->setViewportExtent(extent.width, extent.height);
         cameraController->updateCamera(cameraId, view, projection, cameraPos, time);
     }
 

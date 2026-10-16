@@ -4,6 +4,7 @@
 #include "HeightmapGenerationHandler.hpp"
 #include "PluginComponentHandler.hpp"
 #include "PluginMcpToolHandler.hpp"
+#include "PluginPostProcessEffectHandler.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
@@ -196,6 +197,7 @@ namespace handlers
 
         pluginComponentHandler.reset();
         pluginMcpToolHandler.reset();
+        pluginPostProcessEffectHandler.reset();
         pluginManager.reset();
         exportHandler.reset();
         heightmapGenerationHandler.reset(); // waits for a running heightmap job

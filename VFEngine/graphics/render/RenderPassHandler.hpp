@@ -213,8 +213,11 @@ namespace render
         std::unique_ptr<upscaling::MotionVectorPass> motionVectorPass;
         std::unique_ptr<upscaling::ReactiveMaskPass> reactiveMaskPass;
         // Set when the opaque-only scene color was copied this frame (consumed
-        // by executeUpscalePass to generate the reactive mask)
+        // by generateReactiveMask to generate the reactive mask)
         mutable bool preTransparencyCaptured = false;
+        // Set by generateReactiveMask when it wrote this frame's reactive mask
+        // (read by executeUpscaleGraphManaged to tag it for the upscaler)
+        bool reactiveMaskReady = false;
         bool upscaleFirstFrame = true;
 
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
@@ -729,6 +732,9 @@ namespace render
         void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
         void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;
         void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        // VK-1655: builds the upscaler's reactive mask at the start of the PreUpscalePostProcess pass, before
+        // the pre-upscale effects overwrite the scene colour it diffs. Sets reactiveMaskReady.
+        void generateReactiveMask(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
         void executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;

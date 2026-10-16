@@ -50,6 +50,8 @@ namespace render::postprocess
 
         createR8Image(ssaoRawImage, ssaoRawAllocation, ssaoRawImageView);
         createR8Image(ssaoBlurredImage, ssaoBlurredAllocation, ssaoBlurredImageView);
+        ssaoRawImageLayout = vk::ImageLayout::eUndefined;
+        ssaoBlurredImageLayout = vk::ImageLayout::eUndefined;
     }
 
     void SSAOEffect::createDepthImageView()
@@ -468,6 +470,8 @@ namespace render::postprocess
 
         destroyImage(ssaoRawImageView, ssaoRawImage, ssaoRawAllocation);
         destroyImage(ssaoBlurredImageView, ssaoBlurredImage, ssaoBlurredAllocation);
+        ssaoRawImageLayout = vk::ImageLayout::eUndefined;
+        ssaoBlurredImageLayout = vk::ImageLayout::eUndefined;
     }
 
     void SSAOEffect::cleanupPipelines()

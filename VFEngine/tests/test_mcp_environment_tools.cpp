@@ -152,6 +152,9 @@ namespace
         case events::scene::RenderSettingsSection::VolumetricFog: return "VolumetricFog";
         case events::scene::RenderSettingsSection::GI: return "GI";
         case events::scene::RenderSettingsSection::IBL: return "IBL";
+        case events::scene::RenderSettingsSection::PostProcess: return "PostProcess";
+        case events::scene::RenderSettingsSection::Shadows: return "Shadows";
+        case events::scene::RenderSettingsSection::Display: return "Display";
         }
         return "?";
     }

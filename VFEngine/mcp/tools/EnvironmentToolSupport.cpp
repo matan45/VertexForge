@@ -1,9 +1,11 @@
 #include "EnvironmentToolSupport.hpp"
 #include "PathSandbox.hpp"
+#include "RenderSettingsToolSupport.hpp"
 #include "ToolHelpers.hpp"
 
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "events/project/ApplicationEvents.hpp"
 #include "events/render/AtmosphereEvents.hpp"
 #include "events/render/CloudEvents.hpp"
 #include "events/render/GIEvents.hpp"
@@ -15,16 +17,13 @@
 #include "events/weather/WeatherEvents.hpp"
 
 #include <algorithm>
-#include <cctype>
-#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <stdexcept>
-#include <system_error>
 #include <type_traits>
+#include <vector>
 
 namespace mcp::tools::env
 {
@@ -32,415 +31,6 @@ namespace mcp::tools::env
     {
         // Passed for the keys weather overrides live while it is enabled.
         constexpr bool weatherDriven = true;
-
-        // ------------------------------------------------------------------
-        // Text
-        // ------------------------------------------------------------------
-
-        // JSON spelling of the shortest round-trip float: 1e-4 stays "0.0001" rather than
-        // std::to_string's "0.000100".
-        std::string floatText(float value)
-        {
-            return floatJson(value).dump();
-        }
-
-        // Agent input echoed in an error; replace: it may hold invalid UTF-8.
-        std::string valueText(const nlohmann::json& value)
-        {
-            return value.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
-        }
-
-        std::string pathOf(std::string_view prefix, std::string_view key)
-        {
-            return prefix.empty() ? std::string(key) : std::string(prefix) + "." + std::string(key);
-        }
-
-        bool equalsIgnoreCase(std::string_view a, std::string_view b)
-        {
-            return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](char x, char y)
-            {
-                return std::tolower(static_cast<unsigned char>(x)) == std::tolower(static_cast<unsigned char>(y));
-            });
-        }
-
-        template <typename Range>
-        std::string joined(const Range& names)
-        {
-            std::string out;
-            for (const auto& name : names)
-            {
-                out += out.empty() ? "" : ", ";
-                out += name;
-            }
-            return out.empty() ? std::string("none") : out;
-        }
-
-        // The bounds as the floats a value is compared against (requireFloat narrows first), so
-        // moonAzimuth's max reads 359.99997 rather than its double expansion.
-        std::string rangeError(std::string_view path, double min, double max, const nlohmann::json& value)
-        {
-            return "'" + std::string(path) + "' must be between " + floatText(static_cast<float>(min)) + " and " +
-                   floatText(static_cast<float>(max)) + " (got " + valueText(value) + ")";
-        }
-
-        // ------------------------------------------------------------------
-        // Validation: every check throws ArgError naming `path`
-        // ------------------------------------------------------------------
-
-        int64_t checkedInteger(const nlohmann::json& value, double min, double max, std::string_view path)
-        {
-            double number = 0.0;
-            if (value.is_number_unsigned())
-            {
-                number = static_cast<double>(value.get<uint64_t>());
-            }
-            else if (value.is_number_integer())
-            {
-                number = static_cast<double>(value.get<int64_t>());
-            }
-            else if (value.is_number_float() && std::isfinite(value.get<double>()) &&
-                     value.get<double>() == std::trunc(value.get<double>()))
-            {
-                number = value.get<double>(); // models frequently send 3.0 for 3
-            }
-            else
-            {
-                throw ArgError("'" + std::string(path) + "' must be an integer (got " + valueText(value) + ")");
-            }
-            if (number < min || number > max)
-            {
-                throw ArgError("'" + std::string(path) + "' must be between " + std::to_string(static_cast<int64_t>(min)) +
-                               " and " + std::to_string(static_cast<int64_t>(max)) + " (got " + valueText(value) + ")");
-            }
-            return static_cast<int64_t>(number);
-        }
-
-        std::string_view checkedEnum(const nlohmann::json& value, std::span<const std::string_view> names,
-                                     std::string_view path)
-        {
-            if (value.is_string())
-            {
-                const std::string text = value.get<std::string>();
-                for (std::string_view name : names)
-                {
-                    if (equalsIgnoreCase(text, name))
-                    {
-                        return name;
-                    }
-                }
-            }
-            throw ArgError("'" + std::string(path) + "' must be one of " + joined(names) + " (got " + valueText(value) + ")");
-        }
-
-        // The value in the form FieldDesc::set takes (the form FieldDesc::get reports).
-        nlohmann::json canonicalValue(FieldKind kind, double min, double max, std::span<const std::string_view> names,
-                                      const nlohmann::json& value, std::string_view path)
-        {
-            switch (kind)
-            {
-            case FieldKind::Bool:
-                return requireBool(value, path);
-            case FieldKind::Float:
-                return static_cast<double>(requireFloat(value, min, max, path));
-            case FieldKind::Int:
-            case FieldKind::UInt:
-                return checkedInteger(value, min, max, path);
-            case FieldKind::Vec3:
-            {
-                const glm::vec3 vector = requireVec3(value, min, max, path);
-                return nlohmann::json::array({static_cast<double>(vector.x), static_cast<double>(vector.y),
-                                              static_cast<double>(vector.z)});
-            }
-            case FieldKind::Enum:
-                return std::string(checkedEnum(value, names, path));
-            }
-            throw std::logic_error("unknown field kind");
-        }
-
-        // ------------------------------------------------------------------
-        // Reporting
-        // ------------------------------------------------------------------
-
-        nlohmann::json namesJson(std::span<const std::string_view> names)
-        {
-            nlohmann::json out = nlohmann::json::array();
-            for (std::string_view name : names)
-            {
-                out.push_back(std::string(name));
-            }
-            return out;
-        }
-
-        nlohmann::json rangeEntry(FieldKind kind, double min, double max, std::span<const std::string_view> names)
-        {
-            switch (kind)
-            {
-            case FieldKind::Bool:
-                return {{"type", "boolean"}};
-            // Float bounds are reported as the floats values are compared against (see rangeError).
-            case FieldKind::Float:
-                return {{"type", "number"}, {"min", floatJson(static_cast<float>(min))},
-                        {"max", floatJson(static_cast<float>(max))}};
-            case FieldKind::Int:
-            case FieldKind::UInt:
-                return {{"type", "integer"}, {"min", static_cast<int64_t>(min)}, {"max", static_cast<int64_t>(max)}};
-            case FieldKind::Vec3:
-                return {{"type", "vec3"}, {"min", floatJson(static_cast<float>(min))},
-                        {"max", floatJson(static_cast<float>(max))}};
-            case FieldKind::Enum:
-                return {{"type", "enum"}, {"values", namesJson(names)}};
-            }
-            throw std::logic_error("unknown field kind");
-        }
-
-        nlohmann::json fieldSchema(FieldKind kind, double min, double max, std::span<const std::string_view> names,
-                                   std::string description)
-        {
-            switch (kind)
-            {
-            case FieldKind::Bool:
-                return schema::boolean(std::move(description));
-            case FieldKind::Float:
-                return schema::numberRange(std::move(description), min, max);
-            case FieldKind::Int:
-            case FieldKind::UInt:
-                return schema::integerRange(std::move(description), static_cast<int64_t>(min), static_cast<int64_t>(max));
-            case FieldKind::Vec3:
-            {
-                nlohmann::json out = schema::vec3(std::move(description));
-                out["items"] = {{"type", "number"}, {"minimum", min}, {"maximum", max}};
-                return out;
-            }
-            case FieldKind::Enum:
-            {
-                std::vector<std::string> values;
-                for (std::string_view name : names)
-                {
-                    values.emplace_back(name);
-                }
-                return schema::enumString(std::move(description), values);
-            }
-            }
-            throw std::logic_error("unknown field kind");
-        }
-
-        template <typename T>
-        const FieldDesc<T>* findField(const SectionTable<T>& table, std::string_view key)
-        {
-            for (const FieldDesc<T>& field : table.fields)
-            {
-                if (field.key == key)
-                {
-                    return &field;
-                }
-            }
-            return nullptr;
-        }
-
-        // The keys a patch may set.
-        template <typename T>
-        std::string settableKeys(const SectionTable<T>& table)
-        {
-            std::vector<std::string_view> keys;
-            for (const FieldDesc<T>& field : table.fields)
-            {
-                if (field.persisted && field.setHint.empty())
-                {
-                    keys.push_back(field.key);
-                }
-            }
-            return joined(keys);
-        }
-
-        // True when `value` names exactly what `staged` already holds for `field`, compared in the
-        // reported form: the value as given, or canonicalised and written to a probe copy (so 12 and
-        // 12.0, or "medium" and "Medium", match). An invalid value never matches.
-        template <typename T>
-        bool holdsValue(const FieldDesc<T>& field, const T& staged, const nlohmann::json& value, std::string_view path)
-        {
-            const nlohmann::json current = field.get(staged);
-            if (value == current)
-            {
-                return true;
-            }
-            T probe = staged;
-            try
-            {
-                field.set(probe, canonicalValue(field.kind, field.min, field.max, field.enumNames, value, path));
-            }
-            catch (const ArgError&)
-            {
-                return false;
-            }
-            return field.get(probe) == current;
-        }
-
-        // ------------------------------------------------------------------
-        // Field builders: captureless, so get / set decay to plain function pointers
-        // ------------------------------------------------------------------
-
-        template <typename E>
-        constexpr std::span<const std::string_view> enumNamesOf()
-        {
-            if constexpr (std::is_same_v<E, ::postprocess::VolumetricQuality>)
-            {
-                return fogQualityNames;
-            }
-            else
-            {
-                static_assert(std::is_same_v<E, ::render::gi::GIQuality>, "no canonical names for this enum");
-                return giQualityNames;
-            }
-        }
-
-        template <typename T, bool T::*Member>
-        FieldDesc<T> boolField(std::string_view key, std::string_view help)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Bool;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json { return value.*Member; };
-            field.set = [](T& value, const nlohmann::json& v) { value.*Member = v.get<bool>(); };
-            return field;
-        }
-
-        template <typename T, float T::*Member>
-        FieldDesc<T> floatField(std::string_view key, double min, double max, std::string_view help, bool weather = false)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Float;
-            field.min = min;
-            field.max = max;
-            field.weatherDriven = weather;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json { return floatJson(value.*Member); };
-            field.set = [](T& value, const nlohmann::json& v) { value.*Member = static_cast<float>(v.get<double>()); };
-            return field;
-        }
-
-        template <typename T, int T::*Member>
-        FieldDesc<T> intField(std::string_view key, double min, double max, std::string_view help)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Int;
-            field.min = min;
-            field.max = max;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json { return static_cast<int64_t>(value.*Member); };
-            field.set = [](T& value, const nlohmann::json& v) { value.*Member = static_cast<int>(v.get<int64_t>()); };
-            return field;
-        }
-
-        template <typename T, uint32_t T::*Member>
-        FieldDesc<T> uintField(std::string_view key, double min, double max, std::string_view help)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::UInt;
-            field.min = min;
-            field.max = max;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json { return static_cast<int64_t>(value.*Member); };
-            field.set = [](T& value, const nlohmann::json& v) { value.*Member = static_cast<uint32_t>(v.get<int64_t>()); };
-            return field;
-        }
-
-        template <typename T, glm::vec3 T::*Member>
-        FieldDesc<T> vec3Field(std::string_view key, double min, double max, std::string_view help, bool weather = false)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Vec3;
-            field.min = min;
-            field.max = max;
-            field.weatherDriven = weather;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json { return vec3Json(value.*Member); };
-            field.set = [](T& value, const nlohmann::json& v)
-            {
-                value.*Member = glm::vec3(static_cast<float>(v.at(0).get<double>()), static_cast<float>(v.at(1).get<double>()),
-                                          static_cast<float>(v.at(2).get<double>()));
-            };
-            return field;
-        }
-
-        // A float[3] member (VolumetricFogSettings::fogColor).
-        template <typename T, float (T::*Member)[3]>
-        FieldDesc<T> rgbArrayField(std::string_view key, double min, double max, std::string_view help, bool weather = false)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Vec3;
-            field.min = min;
-            field.max = max;
-            field.weatherDriven = weather;
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json
-            {
-                const float (&rgb)[3] = value.*Member;
-                return nlohmann::json::array({floatJson(rgb[0]), floatJson(rgb[1]), floatJson(rgb[2])});
-            };
-            field.set = [](T& value, const nlohmann::json& v)
-            {
-                float (&rgb)[3] = value.*Member;
-                for (std::size_t i = 0; i < 3; ++i)
-                {
-                    rgb[i] = static_cast<float>(v.at(i).get<double>());
-                }
-            };
-            return field;
-        }
-
-        template <typename T, typename E, E T::*Member>
-        FieldDesc<T> enumField(std::string_view key, std::string_view help)
-        {
-            FieldDesc<T> field;
-            field.key = key;
-            field.kind = FieldKind::Enum;
-            field.enumNames = enumNamesOf<E>();
-            field.help = help;
-            field.get = [](const T& value) -> nlohmann::json
-            {
-                const std::span<const std::string_view> names = enumNamesOf<E>();
-                const auto index = static_cast<std::size_t>(value.*Member);
-                return index < names.size() ? nlohmann::json(std::string(names[index])) : nlohmann::json(index);
-            };
-            field.set = [](T& value, const nlohmann::json& v)
-            {
-                const std::span<const std::string_view> names = enumNamesOf<E>();
-                const std::string name = v.get<std::string>();
-                for (std::size_t i = 0; i < names.size(); ++i)
-                {
-                    if (names[i] == name)
-                    {
-                        value.*Member = static_cast<E>(i);
-                        return;
-                    }
-                }
-                throw std::logic_error("'" + name + "' is not a canonical enum name");
-            };
-            return field;
-        }
-
-        // A key reported by *_get that a patch may not set; `hint` names what sets it instead.
-        template <typename T>
-        FieldDesc<T> readOnly(FieldDesc<T> field, std::string_view hint)
-        {
-            field.setHint = hint;
-            return field;
-        }
-
-        // Live-only state: never part of the section's JSON, refused in a patch with `hint`.
-        template <typename T>
-        FieldDesc<T> liveOnly(FieldDesc<T> field, std::string_view hint)
-        {
-            field.setHint = hint;
-            field.persisted = false;
-            return field;
-        }
 
         // ------------------------------------------------------------------
         // Cross-field checks
@@ -452,8 +42,8 @@ namespace mcp::tools::env
             {
                 return {};
             }
-            return "atmosphereRadius (" + floatText(value.atmosphereRadius) + ") must be greater than planetRadius (" +
-                   floatText(value.planetRadius) + ")";
+            return "atmosphereRadius (" + detail::floatText(value.atmosphereRadius) +
+                   ") must be greater than planetRadius (" + detail::floatText(value.planetRadius) + ")";
         }
 
         std::string checkClouds(const CloudSettings& value)
@@ -462,8 +52,8 @@ namespace mcp::tools::env
             {
                 return {};
             }
-            return "cloudMinAltitude (" + floatText(value.cloudMinAltitude) + ") must be below cloudMaxAltitude (" +
-                   floatText(value.cloudMaxAltitude) + ")";
+            return "cloudMinAltitude (" + detail::floatText(value.cloudMinAltitude) + ") must be below cloudMaxAltitude (" +
+                   detail::floatText(value.cloudMaxAltitude) + ")";
         }
 
         void publishChanged(events::scene::RenderSettingsSection section)
@@ -478,6 +68,116 @@ namespace mcp::tools::env
         {
             // Engine paths are narrow (ANSI) strings; report them as UTF-8.
             return pathToUtf8(std::filesystem::path(enginePath));
+        }
+
+        // ------------------------------------------------------------------
+        // Sections: where each is stored, and the notification that names it
+        // ------------------------------------------------------------------
+
+        // Sections pushed live through ApplyPostProcessSettingsCommand.
+        template <typename S>
+        constexpr bool isPostProcessSection = isPostProcessMember<S> || std::is_same_v<S, PostProcessMasterSettings>;
+
+        template <typename S>
+        constexpr events::scene::RenderSettingsSection sectionId()
+        {
+            using Section = events::scene::RenderSettingsSection;
+            if constexpr (std::is_same_v<S, AtmosphereSettings>)
+            {
+                return Section::Atmosphere;
+            }
+            else if constexpr (std::is_same_v<S, CloudSettings>)
+            {
+                return Section::Cloud;
+            }
+            else if constexpr (std::is_same_v<S, FogSettings>)
+            {
+                return Section::VolumetricFog;
+            }
+            else if constexpr (std::is_same_v<S, GISettings>)
+            {
+                return Section::GI;
+            }
+            else if constexpr (std::is_same_v<S, ShadowQualitySettings>)
+            {
+                return Section::Shadows;
+            }
+            else if constexpr (std::is_same_v<S, DisplayAntiAliasingSettings>)
+            {
+                return Section::Display;
+            }
+            else
+            {
+                static_assert(isPostProcessSection<S>, "every section has a notification");
+                return Section::PostProcess;
+            }
+        }
+
+        // The section into the scene's settings.
+        template <typename S>
+        void storeSection(types::RenderSettings& settings, const S& staged)
+        {
+            if constexpr (std::is_same_v<S, AtmosphereSettings>)
+            {
+                settings.atmosphere = staged;
+            }
+            else if constexpr (std::is_same_v<S, CloudSettings>)
+            {
+                settings.cloud = staged;
+            }
+            else if constexpr (std::is_same_v<S, GISettings>)
+            {
+                // The debug views are session state, not scene data.
+                GISettings authored = staged;
+                authored.showProbes = false;
+                authored.showCascadeBounds = false;
+                authored.showProbeValidity = false;
+                settings.gi = authored;
+            }
+            else if constexpr (std::is_same_v<S, PostProcessMasterSettings>)
+            {
+                settings.postProcess.enabled = staged.enabled;
+            }
+            else if constexpr (isPostProcessMember<S>)
+            {
+                settings.postProcess.*postProcessMember<S>() = staged;
+            }
+            else if constexpr (std::is_same_v<S, ShadowQualitySettings>)
+            {
+                storeShadowQuality(settings.shadows, staged);
+            }
+            else
+            {
+                static_assert(std::is_same_v<S, DisplayAntiAliasingSettings>, "every section is stored");
+                settings.display.msaa = staged.msaa;
+            }
+        }
+
+        // A post-process section into the live post-process settings.
+        template <typename S>
+        void storeLivePostProcess(PostProcessSettings& live, const S& staged)
+        {
+            if constexpr (std::is_same_v<S, PostProcessMasterSettings>)
+            {
+                live.enabled = staged.enabled;
+            }
+            else
+            {
+                live.*postProcessMember<S>() = staged;
+            }
+        }
+
+        template <typename S>
+        const S* findSection(std::span<const SectionValue> values)
+        {
+            for (const SectionValue& value : values)
+            {
+                if (const S* section = std::get_if<S>(&value))
+                {
+                    return section;
+                }
+            }
+            return nullptr;
         }
     }
 
@@ -686,296 +386,6 @@ namespace mcp::tools::env
     }
 
     // ------------------------------------------------------------------
-    // Generic ops
-    // ------------------------------------------------------------------
-
-    template <typename T>
-    nlohmann::json toJson(const SectionTable<T>& table, const T& value)
-    {
-        nlohmann::json out = nlohmann::json::object();
-        for (const FieldDesc<T>& field : table.fields)
-        {
-            if (field.persisted)
-            {
-                out[std::string(field.key)] = field.get(value);
-            }
-        }
-        return out;
-    }
-
-    template <typename T>
-    T strictPatch(const SectionTable<T>& table, const T& base, const nlohmann::json& patch, std::string_view prefix)
-    {
-        if (!patch.is_object())
-        {
-            throw ArgError(prefix.empty() ? std::string("the arguments must be an object")
-                                          : "'" + std::string(prefix) + "' must be an object (got " + valueText(patch) + ")");
-        }
-
-        T staged = base;
-        for (auto it = patch.begin(); it != patch.end(); ++it)
-        {
-            const FieldDesc<T>* field = findField(table, it.key());
-            if (field == nullptr)
-            {
-                throw ArgError(prefix.empty()
-                                   ? "unknown argument '" + it.key() + "'; valid arguments: " + settableKeys(table)
-                                   : "unknown " + std::string(prefix) + " key '" + it.key() + "'; valid keys: " +
-                                         settableKeys(table));
-            }
-            const std::string path = pathOf(prefix, field->key);
-            if (!field->setHint.empty())
-            {
-                // Echoing the current value back (e.g. a whole environment_get object) is a no-op. Live-only
-                // keys (the GI debug views) are never reported, so they are always refused with the hint.
-                if (field->persisted && holdsValue(*field, staged, it.value(), path))
-                {
-                    continue;
-                }
-                throw ArgError("'" + path + "' is read-only here: " + std::string(field->setHint));
-            }
-            field->set(staged, canonicalValue(field->kind, field->min, field->max, field->enumNames, it.value(), path));
-        }
-
-        if (table.crossCheck != nullptr)
-        {
-            const std::string error = table.crossCheck(staged);
-            if (!error.empty())
-            {
-                throw ArgError(prefix.empty() ? error : std::string(prefix) + ": " + error);
-            }
-        }
-        return staged;
-    }
-
-    template <typename T>
-    nlohmann::json rangesJson(const SectionTable<T>& table)
-    {
-        nlohmann::json out = nlohmann::json::object();
-        for (const FieldDesc<T>& field : table.fields)
-        {
-            if (!field.persisted)
-            {
-                continue;
-            }
-            nlohmann::json entry = rangeEntry(field.kind, field.min, field.max, field.enumNames);
-            if (field.weatherDriven)
-            {
-                entry["weatherDriven"] = true;
-            }
-            if (!field.setHint.empty())
-            {
-                entry["readOnly"] = std::string(field.setHint);
-            }
-            out[std::string(field.key)] = std::move(entry);
-        }
-        return out;
-    }
-
-    template <typename T>
-    nlohmann::json schemaJson(const SectionTable<T>& table, std::string description)
-    {
-        nlohmann::json properties = nlohmann::json::object();
-        for (const FieldDesc<T>& field : table.fields)
-        {
-            if (!field.persisted || !field.setHint.empty())
-            {
-                continue;
-            }
-            std::string help(field.help);
-            if (field.weatherDriven)
-            {
-                help += " Overridden live while weather is enabled.";
-            }
-            properties[std::string(field.key)] =
-                fieldSchema(field.kind, field.min, field.max, field.enumNames, std::move(help));
-        }
-        nlohmann::json out = schema::object(std::move(properties));
-        out["description"] = std::move(description);
-        out["additionalProperties"] = false;
-        return out;
-    }
-
-    template <typename T>
-    nlohmann::json diffJson(const SectionTable<T>& table, const T& from, const T& to)
-    {
-        nlohmann::json out = nlohmann::json::object();
-        for (const FieldDesc<T>& field : table.fields)
-        {
-            if (!field.persisted)
-            {
-                continue;
-            }
-            nlohmann::json after = field.get(to);
-            if (field.get(from) != after)
-            {
-                out[std::string(field.key)] = std::move(after);
-            }
-        }
-        return out;
-    }
-
-    template <typename T>
-    std::vector<std::string> weatherDrivenKeys(const SectionTable<T>& table)
-    {
-        std::vector<std::string> keys;
-        for (const FieldDesc<T>& field : table.fields)
-        {
-            if (field.weatherDriven)
-            {
-                keys.emplace_back(field.key);
-            }
-        }
-        return keys;
-    }
-
-    template nlohmann::json toJson(const SectionTable<AtmosphereSettings>&, const AtmosphereSettings&);
-    template nlohmann::json toJson(const SectionTable<CloudSettings>&, const CloudSettings&);
-    template nlohmann::json toJson(const SectionTable<FogSettings>&, const FogSettings&);
-    template nlohmann::json toJson(const SectionTable<GISettings>&, const GISettings&);
-
-    template AtmosphereSettings strictPatch(const SectionTable<AtmosphereSettings>&, const AtmosphereSettings&,
-                                            const nlohmann::json&, std::string_view);
-    template CloudSettings strictPatch(const SectionTable<CloudSettings>&, const CloudSettings&, const nlohmann::json&,
-                                       std::string_view);
-    template FogSettings strictPatch(const SectionTable<FogSettings>&, const FogSettings&, const nlohmann::json&,
-                                     std::string_view);
-    template GISettings strictPatch(const SectionTable<GISettings>&, const GISettings&, const nlohmann::json&,
-                                    std::string_view);
-
-    template nlohmann::json rangesJson(const SectionTable<AtmosphereSettings>&);
-    template nlohmann::json rangesJson(const SectionTable<CloudSettings>&);
-    template nlohmann::json rangesJson(const SectionTable<FogSettings>&);
-    template nlohmann::json rangesJson(const SectionTable<GISettings>&);
-
-    template nlohmann::json schemaJson(const SectionTable<AtmosphereSettings>&, std::string);
-    template nlohmann::json schemaJson(const SectionTable<CloudSettings>&, std::string);
-    template nlohmann::json schemaJson(const SectionTable<FogSettings>&, std::string);
-    template nlohmann::json schemaJson(const SectionTable<GISettings>&, std::string);
-
-    template nlohmann::json diffJson(const SectionTable<AtmosphereSettings>&, const AtmosphereSettings&,
-                                     const AtmosphereSettings&);
-    template nlohmann::json diffJson(const SectionTable<CloudSettings>&, const CloudSettings&, const CloudSettings&);
-    template nlohmann::json diffJson(const SectionTable<FogSettings>&, const FogSettings&, const FogSettings&);
-    template nlohmann::json diffJson(const SectionTable<GISettings>&, const GISettings&, const GISettings&);
-
-    template std::vector<std::string> weatherDrivenKeys(const SectionTable<AtmosphereSettings>&);
-    template std::vector<std::string> weatherDrivenKeys(const SectionTable<CloudSettings>&);
-    template std::vector<std::string> weatherDrivenKeys(const SectionTable<FogSettings>&);
-    template std::vector<std::string> weatherDrivenKeys(const SectionTable<GISettings>&);
-
-    // ------------------------------------------------------------------
-    // Values and arguments
-    // ------------------------------------------------------------------
-
-    nlohmann::json floatJson(float value)
-    {
-        if (!std::isfinite(value))
-        {
-            return nullptr;
-        }
-        std::array<char, 64> text{};
-        const std::to_chars_result written = std::to_chars(text.data(), text.data() + text.size(), value);
-        double shortest = static_cast<double>(value);
-        if (written.ec == std::errc{})
-        {
-            double parsed = 0.0;
-            const std::from_chars_result read = std::from_chars(text.data(), written.ptr, parsed);
-            if (read.ec == std::errc{})
-            {
-                shortest = parsed;
-            }
-        }
-        return shortest;
-    }
-
-    nlohmann::json vec3Json(const glm::vec3& value)
-    {
-        return nlohmann::json::array({floatJson(value.x), floatJson(value.y), floatJson(value.z)});
-    }
-
-    float requireFloat(const nlohmann::json& value, double min, double max, std::string_view path)
-    {
-        if (!value.is_number())
-        {
-            throw ArgError("'" + std::string(path) + "' must be a number (got " + valueText(value) + ")");
-        }
-        const double number = value.get<double>();
-        // Validated as a double first: 1e39 is a finite double but would not fit a float.
-        if (!std::isfinite(number) || std::fabs(number) > static_cast<double>(std::numeric_limits<float>::max()))
-        {
-            throw ArgError(rangeError(path, min, max, value));
-        }
-        const float narrowed = static_cast<float>(number);
-        if (narrowed < static_cast<float>(min) || narrowed > static_cast<float>(max))
-        {
-            throw ArgError(rangeError(path, min, max, value));
-        }
-        return narrowed;
-    }
-
-    glm::vec3 requireVec3(const nlohmann::json& value, double min, double max, std::string_view path)
-    {
-        if (!value.is_array() || value.size() != 3)
-        {
-            throw ArgError("'" + std::string(path) + "' must be an array of 3 numbers (got " + valueText(value) + ")");
-        }
-        glm::vec3 out(0.0f);
-        for (std::size_t i = 0; i < 3; ++i)
-        {
-            out[static_cast<glm::length_t>(i)] =
-                requireFloat(value[i], min, max, std::string(path) + "[" + std::to_string(i) + "]");
-        }
-        return out;
-    }
-
-    bool requireBool(const nlohmann::json& value, std::string_view path)
-    {
-        if (!value.is_boolean())
-        {
-            throw ArgError("'" + std::string(path) + "' must be a boolean (got " + valueText(value) + ")");
-        }
-        return value.get<bool>();
-    }
-
-    void rejectUnknownArgs(const nlohmann::json& args, std::initializer_list<std::string_view> allowed,
-                           std::string_view toolName)
-    {
-        if (args.is_null())
-        {
-            return;
-        }
-        if (!args.is_object())
-        {
-            throw ArgError("the arguments of " + std::string(toolName) + " must be an object");
-        }
-        for (auto it = args.begin(); it != args.end(); ++it)
-        {
-            if (std::find(allowed.begin(), allowed.end(), std::string_view(it.key())) == allowed.end())
-            {
-                throw ArgError("unknown argument '" + it.key() + "' for " + std::string(toolName) +
-                               "; valid arguments: " + joined(allowed));
-            }
-        }
-    }
-
-    void rejectUnknownKeys(const nlohmann::json& value, std::initializer_list<std::string_view> allowed,
-                           std::string_view path)
-    {
-        if (!value.is_object())
-        {
-            throw ArgError("'" + std::string(path) + "' must be an object (got " + valueText(value) + ")");
-        }
-        for (auto it = value.begin(); it != value.end(); ++it)
-        {
-            if (std::find(allowed.begin(), allowed.end(), std::string_view(it.key())) == allowed.end())
-            {
-                throw ArgError("unknown " + std::string(path) + " key '" + it.key() + "'; valid keys: " + joined(allowed));
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------
     // Sections
     // ------------------------------------------------------------------
 
@@ -996,96 +406,176 @@ namespace mcp::tools::env
             {
                 return fogTable().name;
             }
+            else if constexpr (std::is_same_v<S, GISettings>)
+            {
+                return giTable().name;
+            }
+            else if constexpr (std::is_same_v<S, PostProcessMasterSettings>)
+            {
+                return postProcessMasterTable().name;
+            }
+            else if constexpr (std::is_same_v<S, ToneMappingSettings>)
+            {
+                return toneMappingTable().name;
+            }
+            else if constexpr (std::is_same_v<S, AutoExposureSettings>)
+            {
+                return autoExposureTable().name;
+            }
+            else if constexpr (std::is_same_v<S, BloomSettings>)
+            {
+                return bloomTable().name;
+            }
+            else if constexpr (std::is_same_v<S, ColorGradingSettings>)
+            {
+                return colorGradingTable().name;
+            }
+            else if constexpr (std::is_same_v<S, SSAOSettings>)
+            {
+                return ssaoTable().name;
+            }
+            else if constexpr (std::is_same_v<S, VignetteSettings>)
+            {
+                return vignetteTable().name;
+            }
+            else if constexpr (std::is_same_v<S, ChromaticAberrationSettings>)
+            {
+                return chromaticAberrationTable().name;
+            }
+            else if constexpr (std::is_same_v<S, FilmGrainSettings>)
+            {
+                return filmGrainTable().name;
+            }
+            else if constexpr (std::is_same_v<S, DepthOfFieldSettings>)
+            {
+                return depthOfFieldTable().name;
+            }
+            else if constexpr (std::is_same_v<S, EdgeDetectionSettings>)
+            {
+                return edgeDetectionTable().name;
+            }
+            else if constexpr (std::is_same_v<S, UpscaleSettings>)
+            {
+                return upscaleTable().name;
+            }
+            else if constexpr (std::is_same_v<S, ShadowQualitySettings>)
+            {
+                return shadowTable().name;
+            }
             else
             {
-                static_assert(std::is_same_v<S, GISettings>);
-                return giTable().name;
+                static_assert(std::is_same_v<S, DisplayAntiAliasingSettings>);
+                return displayTable().name;
             }
         }, value);
     }
 
-    void writeSection(const SectionValue& value)
+    void writeSections(std::span<const SectionValue> values)
     {
+        for (std::size_t i = 0; i < values.size(); ++i)
+        {
+            for (std::size_t j = i + 1; j < values.size(); ++j)
+            {
+                if (values[i].index() == values[j].index())
+                {
+                    throw std::logic_error("writeSections: the " + std::string(sectionName(values[i])) +
+                                           " section is listed twice");
+                }
+            }
+        }
+        if (values.empty())
+        {
+            return;
+        }
+
         auto& dispatcher = events::EventDispatcher::instance();
 
         // The scene copy: re-read now, so an edit of another section since the caller read it survives.
-        types::RenderSettings settings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
-        events::scene::RenderSettingsSection section = events::scene::RenderSettingsSection::All;
-        std::visit([&settings, &section](const auto& staged)
-        {
-            using S = std::decay_t<decltype(staged)>;
-            if constexpr (std::is_same_v<S, AtmosphereSettings>)
-            {
-                settings.atmosphere = staged;
-                section = events::scene::RenderSettingsSection::Atmosphere;
-            }
-            else if constexpr (std::is_same_v<S, CloudSettings>)
-            {
-                settings.cloud = staged;
-                section = events::scene::RenderSettingsSection::Cloud;
-            }
-            else if constexpr (std::is_same_v<S, FogSettings>)
-            {
-                settings.postProcess.volumetricFog = staged;
-                section = events::scene::RenderSettingsSection::VolumetricFog;
-            }
-            else
-            {
-                static_assert(std::is_same_v<S, GISettings>);
-                // The debug views are session state, not scene data.
-                GISettings authored = staged;
-                authored.showProbes = false;
-                authored.showCascadeBounds = false;
-                authored.showProbeValidity = false;
-                settings.gi = authored;
-                section = events::scene::RenderSettingsSection::GI;
-            }
-        }, value);
-
         events::scene::SetRenderSettingsCommand store;
-        store.settings = std::move(settings);
+        store.settings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
+        for (const SectionValue& value : values)
+        {
+            std::visit([&store](const auto& staged) { storeSection(store.settings, staged); }, value);
+        }
         if (!dispatcher.execute(store))
         {
             throw std::runtime_error("Cannot store the render settings: no scene is open (scene_new or scene_load first)");
         }
 
-        // The live copy.
-        std::visit([&dispatcher](const auto& staged)
+        // The live copies, each pushed at most once.
+        if (const AtmosphereSettings* atmosphere = findSection<AtmosphereSettings>(values))
         {
-            using S = std::decay_t<decltype(staged)>;
-            if constexpr (std::is_same_v<S, AtmosphereSettings>)
+            events::atmosphere::ApplyAtmosphereSettingsNoSunCommand apply;
+            apply.settings = *atmosphere;
+            dispatcher.execute(apply);
+        }
+        if (const CloudSettings* clouds = findSection<CloudSettings>(values))
+        {
+            events::cloud::ApplyCloudSettingsCommand apply;
+            apply.settings = *clouds;
+            dispatcher.execute(apply);
+        }
+        const bool postProcess = std::any_of(values.begin(), values.end(), [](const SectionValue& value)
+        {
+            return std::visit([](const auto& section) { return isPostProcessSection<std::decay_t<decltype(section)>>; },
+                              value);
+        });
+        if (postProcess)
+        {
+            // Only the staged sections replace the live ones: weather's live fog, the runtime-driven effects
+            // (underwater, rain droplets) and everything the tools do not own keep their live values.
+            events::postprocess::ApplyPostProcessSettingsCommand apply;
+            apply.settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+            for (const SectionValue& value : values)
             {
-                events::atmosphere::ApplyAtmosphereSettingsNoSunCommand apply;
-                apply.settings = staged;
-                dispatcher.execute(apply);
+                std::visit([&apply](const auto& staged)
+                {
+                    using S = std::decay_t<decltype(staged)>;
+                    if constexpr (isPostProcessSection<S>)
+                    {
+                        storeLivePostProcess(apply.settings, staged);
+                    }
+                }, value);
             }
-            else if constexpr (std::is_same_v<S, CloudSettings>)
-            {
-                events::cloud::ApplyCloudSettingsCommand apply;
-                apply.settings = staged;
-                dispatcher.execute(apply);
-            }
-            else if constexpr (std::is_same_v<S, FogSettings>)
-            {
-                events::postprocess::ApplyPostProcessSettingsCommand apply;
-                apply.settings = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
-                apply.settings.volumetricFog = staged;
-                dispatcher.execute(apply);
-            }
-            else
-            {
-                static_assert(std::is_same_v<S, GISettings>);
-                const GISettings current = dispatcher.query(events::render::gi::GetGISettingsQuery{});
-                events::render::gi::ApplyGISettingsCommand apply;
-                apply.settings = staged;
-                apply.settings.showProbes = current.showProbes;
-                apply.settings.showCascadeBounds = current.showCascadeBounds;
-                apply.settings.showProbeValidity = current.showProbeValidity;
-                dispatcher.execute(apply);
-            }
-        }, value);
+            dispatcher.execute(apply);
+        }
+        if (const GISettings* gi = findSection<GISettings>(values))
+        {
+            const GISettings current = dispatcher.query(events::render::gi::GetGISettingsQuery{});
+            events::render::gi::ApplyGISettingsCommand apply;
+            apply.settings = *gi;
+            apply.settings.showProbes = current.showProbes;
+            apply.settings.showCascadeBounds = current.showCascadeBounds;
+            apply.settings.showProbeValidity = current.showProbeValidity;
+            dispatcher.execute(apply);
+        }
+        if (findSection<ShadowQualitySettings>(values) != nullptr)
+        {
+            // The whole stored bundle, like the Render window's Apply (shadows, culling, terrain, ...).
+            events::render::ApplyShadowSettingsCommand apply;
+            apply.settings = store.settings;
+            dispatcher.execute(apply);
+        }
+        if (findSection<DisplayAntiAliasingSettings>(values) != nullptr)
+        {
+            events::application::ApplyDisplaySettingsNotification display;
+            display.presentMode = store.settings.display.presentMode;
+            display.msaa = store.settings.display.msaa;
+            dispatcher.publish(display);
+        }
 
-        publishChanged(section);
+        // One notification per distinct section, in the order given.
+        std::vector<events::scene::RenderSettingsSection> published;
+        for (const SectionValue& value : values)
+        {
+            const events::scene::RenderSettingsSection section =
+                std::visit([](const auto& staged) { return sectionId<std::decay_t<decltype(staged)>>(); }, value);
+            if (std::find(published.begin(), published.end(), section) == published.end())
+            {
+                published.push_back(section);
+                publishChanged(section);
+            }
+        }
     }
 
     // ------------------------------------------------------------------

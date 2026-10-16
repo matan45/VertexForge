@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../protocol/ArgReader.hpp"
+#include "RenderSettingsSections.hpp"
+#include "SettingsTable.hpp"
 
 #include "data/DTOs.hpp"
 #include "data/EntityHandle.hpp"
@@ -10,19 +11,18 @@
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 #include <array>
-#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <variant>
-#include <vector>
 
 // VK-1654 helpers shared by the environment tools (EnvironmentTools.cpp) and their undo commands
 // (mcp/undo/EnvironmentUndo). Every environment setting exists twice: the scene's AUTHORED copy in
 // types::RenderSettings (saved to the .vfSettings by scene_save) and the LIVE copy the renderer uses.
-// writeSection keeps both in step; the tables below are the single source of every key, kind and
-// valid range the tools accept and report.
+// writeSections keeps both in step; the tables below (and the VK-1655 render-settings tables in
+// RenderSettingsToolSupport) are the single source of every key, kind and valid range the tools accept
+// and report. The table machinery itself lives in SettingsTable.hpp.
 //
 // Every function that dispatches runs on the main thread (inside a Main-affinity handler or an undo
 // command); the others say "Any thread". Deliberately free of ToolHelpers.hpp, like
@@ -34,48 +34,33 @@ namespace mcp::tools::env
     using FogSettings = ::postprocess::VolumetricFogSettings;
     using GISettings = ::render::gi::GISettings;
 
+    // VK-1655 post-process sections (RenderSettings::postProcess.<member>).
+    using ToneMappingSettings = ::postprocess::ToneMappingSettings;
+    using AutoExposureSettings = ::postprocess::AutoExposureSettings;
+    using BloomSettings = ::postprocess::BloomSettings;
+    using ColorGradingSettings = ::postprocess::ColorGradingSettings;
+    using SSAOSettings = ::postprocess::SSAOSettings;
+    using VignetteSettings = ::postprocess::VignetteSettings;
+    using ChromaticAberrationSettings = ::postprocess::ChromaticAberrationSettings;
+    using FilmGrainSettings = ::postprocess::FilmGrainSettings;
+    using DepthOfFieldSettings = ::postprocess::DepthOfFieldSettings;
+    using EdgeDetectionSettings = ::postprocess::EdgeDetectionSettings;
+    using UpscaleSettings = ::postprocess::UpscaleSettings;
+
     // Canonical enum spellings, indexed by the enumerator's value. Matched case-insensitively.
     inline constexpr std::array<std::string_view, 3> fogQualityNames{"Low", "Medium", "High"};
     inline constexpr std::array<std::string_view, 4> giQualityNames{"Off", "Medium", "High", "Ultra"};
 
-    // ------------------------------------------------------------------
-    // Field tables
-    // ------------------------------------------------------------------
-
-    enum class FieldKind
+    template <>
+    struct EnumNames<::postprocess::VolumetricQuality>
     {
-        Bool,
-        Float,
-        Int,
-        UInt,
-        Vec3,  // glm::vec3 or float[3]; min / max bound every component
-        Enum
+        static constexpr std::span<const std::string_view> names{fogQualityNames};
     };
 
-    template <typename T>
-    struct FieldDesc
+    template <>
+    struct EnumNames<::render::gi::GIQuality>
     {
-        std::string_view key;                         // the scene serializer's JSON key (= the member name)
-        FieldKind kind = FieldKind::Float;
-        double min = 0.0;                             // inclusive (Float / Int / UInt / Vec3)
-        double max = 0.0;
-        std::span<const std::string_view> enumNames;  // Enum: canonical names, index = enumerator value
-        bool weatherDriven = false;                   // weather overrides the live value while it is enabled
-        std::string_view setHint;                     // non-empty: read-only in a patch; says what to use instead
-        bool persisted = true;                        // false: live-only state (GI debug views), never reported
-        std::string_view help;                        // units / meaning, for the input schemas
-        // The value in the JSON form the tools report (floats as floatJson, enums by name) ...
-        nlohmann::json (*get)(const T&) = nullptr;
-        // ... and the writer for a value in that same form (strictPatch validates and canonicalises first).
-        void (*set)(T&, const nlohmann::json&) = nullptr;
-    };
-
-    template <typename T>
-    struct SectionTable
-    {
-        std::string_view name;                          // "atmosphere" | "clouds" | "volumetric fog" | "GI"
-        std::vector<FieldDesc<T>> fields;               // struct order
-        std::string (*crossCheck)(const T&) = nullptr;  // a staged value's cross-field error, or ""
+        static constexpr std::span<const std::string_view> names{giQualityNames};
     };
 
     // Any thread (function-local statics).
@@ -85,79 +70,31 @@ namespace mcp::tools::env
     const SectionTable<GISettings>& giTable();
 
     // ------------------------------------------------------------------
-    // Generic ops over a table (any thread). Explicitly instantiated for the four section types.
-    // ------------------------------------------------------------------
-
-    // Every persisted key -> its reported value.
-    template <typename T>
-    nlohmann::json toJson(const SectionTable<T>& table, const T& value);
-
-    // `base` with the keys of `patch` applied, all-or-nothing. `patch` must be an object; an unknown
-    // key, a wrong type, an out-of-range value or a read-only key (setHint) set to anything but its
-    // current value throws ArgError naming '<prefix>.<key>' (just '<key>' when `prefix` is empty, i.e.
-    // the patch is a tool's own arguments). A read-only key echoing its current value is skipped, so a
-    // whole *_get object can be passed back.
-    // Numbers are checked as JSON numbers (booleans are not numbers), must be finite and fit a float,
-    // and are narrowed to float BEFORE the inclusive [min, max] test against the float bounds, so a
-    // value a *_get reported is always accepted back. Ends with the table's crossCheck.
-    template <typename T>
-    T strictPatch(const SectionTable<T>& table, const T& base, const nlohmann::json& patch, std::string_view prefix);
-
-    // {key: {type, min, max | values, weatherDriven?, readOnly?}} for every persisted key.
-    template <typename T>
-    nlohmann::json rangesJson(const SectionTable<T>& table);
-
-    // A JSON-Schema object of the settable keys (additionalProperties: false).
-    template <typename T>
-    nlohmann::json schemaJson(const SectionTable<T>& table, std::string description);
-
-    // The persisted keys whose reported value differs between `from` and `to`, with `to`'s value.
-    template <typename T>
-    nlohmann::json diffJson(const SectionTable<T>& table, const T& from, const T& to);
-
-    // The keys weather drives live, in table order.
-    template <typename T>
-    std::vector<std::string> weatherDrivenKeys(const SectionTable<T>& table);
-
-    // ------------------------------------------------------------------
-    // Values and arguments (any thread)
-    // ------------------------------------------------------------------
-
-    // The shortest decimal that round-trips `value` (std::to_chars), as a JSON number: 0.05f reports
-    // as 0.05, and 0.05 narrows back to exactly 0.05f. Non-finite -> null.
-    nlohmann::json floatJson(float value);
-    nlohmann::json vec3Json(const glm::vec3& value);
-
-    // The checks strictPatch applies, for arguments outside a table. `path` names the value in errors.
-    float requireFloat(const nlohmann::json& value, double min, double max, std::string_view path);
-    glm::vec3 requireVec3(const nlohmann::json& value, double min, double max, std::string_view path);
-    bool requireBool(const nlohmann::json& value, std::string_view path);
-
-    // ArgError for any top-level argument not in `allowed` ("unknown argument 'x' for <tool>; valid
-    // arguments: ..."). Null arguments count as none.
-    void rejectUnknownArgs(const nlohmann::json& args, std::initializer_list<std::string_view> allowed,
-                           std::string_view toolName);
-
-    // ArgError for any key of the object `value` not in `allowed`; `path` names the object.
-    void rejectUnknownKeys(const nlohmann::json& value, std::initializer_list<std::string_view> allowed,
-                           std::string_view path);
-
-    // ------------------------------------------------------------------
     // Sections
     // ------------------------------------------------------------------
 
-    using SectionValue = std::variant<AtmosphereSettings, CloudSettings, FogSettings, GISettings>;
+    using SectionValue = std::variant<AtmosphereSettings, CloudSettings, FogSettings, GISettings,
+                                      PostProcessMasterSettings, ToneMappingSettings, AutoExposureSettings,
+                                      BloomSettings, ColorGradingSettings, SSAOSettings, VignetteSettings,
+                                      ChromaticAberrationSettings, FilmGrainSettings, DepthOfFieldSettings,
+                                      EdgeDetectionSettings, UpscaleSettings, ShadowQualitySettings,
+                                      DisplayAntiAliasingSettings>;
 
-    // The section's table name ("atmosphere", "clouds", "volumetric fog", "GI"). Any thread.
+    // The section's table name ("atmosphere", "clouds", "volumetric fog", "GI", "bloom", ...). Any thread.
     std::string_view sectionName(const SectionValue& value);
 
-    // Writes one section: a FRESH GetRenderSettingsQuery with only this section replaced (GI: the
-    // debug-view flags cleared - they are not scene data) -> SetRenderSettingsCommand (false throws
-    // "no scene is open") -> the live copy (atmosphere: ApplyAtmosphereSettingsNoSunCommand; clouds:
-    // ApplyCloudSettingsCommand; fog: the live GetPostProcessSettingsQuery with only volumetricFog
-    // replaced -> ApplyPostProcessSettingsCommand; GI: the live debug flags kept ->
-    // ApplyGISettingsCommand) -> RenderSettingsChangedNotification{section, sceneLoad = false}.
-    void writeSection(const SectionValue& value);
+    // Writes the sections (each at most once, else std::logic_error): ONE fresh GetRenderSettingsQuery
+    // with only these sections replaced (GI: the debug-view flags cleared - they are not scene data;
+    // the VK-1655 partial sections copy only their own fields) -> ONE SetRenderSettingsCommand (false
+    // throws "no scene is open") -> each live copy at most once, in this order: atmosphere
+    // (ApplyAtmosphereSettingsNoSunCommand); clouds (ApplyCloudSettingsCommand); post-process (the live
+    // GetPostProcessSettingsQuery with only the staged fog / post-process sections replaced ->
+    // ApplyPostProcessSettingsCommand, so weather's live fog and the runtime-driven effects survive); GI
+    // (the live debug flags kept -> ApplyGISettingsCommand); shadows (ApplyShadowSettingsCommand with the
+    // stored settings); MSAA (ApplyDisplaySettingsNotification with the stored present mode) -> one
+    // RenderSettingsChangedNotification{section, sceneLoad = false} per distinct section. One section
+    // dispatches exactly the VK-1654 single-section sequence.
+    void writeSections(std::span<const SectionValue> values);
 
     // ------------------------------------------------------------------
     // Engine state

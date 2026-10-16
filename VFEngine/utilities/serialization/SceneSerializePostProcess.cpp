@@ -15,6 +15,9 @@ namespace serialization
             case postprocess::ToneMappingMode::Reinhard: return "reinhard";
             case postprocess::ToneMappingMode::Uncharted2: return "uncharted2";
             case postprocess::ToneMappingMode::Linear: return "linear";
+            case postprocess::ToneMappingMode::GranTurismo: return "granturismo";
+            case postprocess::ToneMappingMode::AgX: return "agx";
+            case postprocess::ToneMappingMode::KhronosPBRNeutral: return "khronospbrneutral";
             default: return "aces";
             }
         }
@@ -25,6 +28,9 @@ namespace serialization
             if (str == "reinhard") return postprocess::ToneMappingMode::Reinhard;
             if (str == "uncharted2") return postprocess::ToneMappingMode::Uncharted2;
             if (str == "linear") return postprocess::ToneMappingMode::Linear;
+            if (str == "granturismo") return postprocess::ToneMappingMode::GranTurismo;
+            if (str == "agx") return postprocess::ToneMappingMode::AgX;
+            if (str == "khronospbrneutral") return postprocess::ToneMappingMode::KhronosPBRNeutral;
             return postprocess::ToneMappingMode::ACES;
         }
         json serializeToneMapping(const postprocess::ToneMappingSettings& s)
