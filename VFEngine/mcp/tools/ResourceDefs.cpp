@@ -209,8 +209,8 @@ namespace mcp::tools
             resource.description =
                 "Every component type the agent can edit: the built-in ones (component_add / component_get / "
                 "component_set / component_remove) with their fields, and the reflected plugin components "
-                "(component_*_generic) loaded in this editor. Also how terrain and the lighting environment (sky, "
-                "IBL, GI, fog, weather) are edited instead.";
+                "(component_*_generic) loaded in this editor. Also how terrain, the lighting environment (sky, "
+                "IBL, GI, fog, weather) and character animation (animators, clips, sockets, IK) are edited.";
             resource.mimeType = "text/markdown";
             resource.affinity = ThreadAffinity::Main;
             resource.reader = []() -> ResourceContents
@@ -296,6 +296,45 @@ namespace mcp::tools
                         "Plugin effect toggles are per session, like the plugin's own: not saved with the scene.\n"
                         "- Undo: each render_settings_set and postprocess_effect_set is one undo step; both refuse in "
                         "Play mode.\n\n";
+
+                // VK-1656: an animator is an asset (.vfAnimator) the Animator component points at.
+                text += "## Animation\n\n"
+                        "A skinned Mesh entity animates through an animator (.vfAnimator): parameters, states that play "
+                        "a clip (.vfAnim) or a 1D / 2D blend tree, and transitions whose conditions test the parameters. "
+                        "A typical pass: assets_import the model (an FBX / GLB with animations also writes one "
+                        "<model>_<take>.vfAnim per take) -> entity_create + component_add {type:\"Mesh\"} -> "
+                        "animation_list_clips {entity} -> component_add {type:\"Animator\", data:{defaultClip}} -> "
+                        "animation_set_state_machine {entity, parameters:[{name:\"speed\", type:\"Float\"}], states:"
+                        "[{name:\"Idle\", clip}, {name:\"Run\", clip}], transitions:[{from:\"Idle\", to:\"Run\", conditions:"
+                        "[{parameter:\"speed\", op:\">\", value:0.1}]}, {from:\"Run\", to:\"Idle\", conditions:"
+                        "[{parameter:\"speed\", op:\"<=\", value:0.1}]}]} -> a script sets \"speed\" -> play_start -> "
+                        "animation_get_runtime_state.\n\n"
+                        "- Animator component: component_add {type:\"Animator\", data:{defaultClip}} creates a one-state "
+                        "animator next to the mesh and assigns it; data:{animatorRef} assigns an existing one. Writable "
+                        "fields: animatorRef, retargetRef, applyRootMotion; the others are read-only facts from the file. "
+                        "component_remove clears the assignment (the file stays).\n"
+                        "- Clips: animation_list_clips lists the clips that fit an entity's skeleton, natively (bone "
+                        "names) or through its retargetRef (humanoid roles), with their coverage.\n"
+                        "- State machine: animation_get_state_machine reads it; animation_set_state_machine edits "
+                        "parameters, states, transitions and the default state by name (assignTo assigns the animator to "
+                        "more entities). Validation errors block the save; warnings are returned. Live animators reload "
+                        "after every save.\n"
+                        "- Preview and debugging: animation_preview plays a state or any clip on an entity in edit mode "
+                        "(then viewport_screenshot); animation_get_runtime_state reads the current state, parameter "
+                        "values and transition conditions, also in Play mode.\n"
+                        "- Scripts drive the animator with Animator::setFloat / setBool / setTrigger (vf://docs/mtype-api); "
+                        "the names and types must match the animator's parameters.\n"
+                        "- Sockets: animation_list_sockets, animation_attach_to_socket, animation_detach_from_socket and "
+                        "animation_set_socket_active attach entities (a weapon, a hat) to the sockets of a mesh.\n"
+                        "- IK: animation_ik_get, animation_ik_set and animation_ik_remove edit an entity's IK chains; "
+                        "animation_ik_set_target moves a chain's runtime target (world space, not saved). IK runs only on "
+                        "entities with an Animator.\n"
+                        "- Undo: component_add / component_set / component_remove of the Animator, "
+                        "animation_set_state_machine (the file's previous content, unless the file changed since), "
+                        "animation_ik_set, animation_ik_remove and the socket attach / detach / active changes are undo "
+                        "steps; creating a .vfAnimator, animation_preview and animation_ik_set_target are not. "
+                        "animation_set_state_machine, animation_preview, animation_ik_set, animation_ik_remove and "
+                        "creating a .vfAnimator refuse in Play mode and while a scene load is pending.\n\n";
 
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "

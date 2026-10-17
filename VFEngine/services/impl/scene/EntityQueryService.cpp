@@ -133,6 +133,7 @@ namespace services
             COLLECT_CASE(UIListView, UIListViewComponent);
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
             COLLECT_CASE(Decal, DecalComponent);
+            COLLECT_CASE(SocketAttachment, SocketAttachmentComponent);
         default:
             break;
         }

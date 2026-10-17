@@ -7,6 +7,7 @@
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
+#include "../../adapters/animation/AnimationAuthoringAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
 #include "../../adapters/render/UILayerPreviewAdapter.hpp"
@@ -61,6 +62,7 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         thumbnailRenderAdapter = std::make_unique<ThumbnailRenderAdapter>();
+        animationAuthoringAdapter = std::make_unique<AnimationAuthoringAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
         prefabRigPreviewAdapter = std::make_unique<PrefabRigPreviewAdapter>();
         uiLayerPreviewAdapter = std::make_unique<UILayerPreviewAdapter>();
@@ -107,6 +109,7 @@ namespace core
         physicsAdapter->init();
         navmeshAdapter->init();
         thumbnailRenderAdapter->init(); // registers Content Browser thumbnail render handlers
+        animationAuthoringAdapter->init(); // registers the MCP animation authoring handlers (VK-1656)
 
         // Wire VFX runtime provider to offscreen renderer
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());

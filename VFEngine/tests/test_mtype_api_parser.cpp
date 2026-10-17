@@ -61,6 +61,18 @@ namespace
         REQUIRE_MESSAGE(fs::exists(file), "missing " << file.string());
         return doc::parseApi(repo_scan::readFile(file));
     }
+
+    // A shipped game/examples script as the primer quotes it: LF line ends, no trailing newline.
+    std::string readExample(const fs::path& scripts, const char* name)
+    {
+        std::string text = repo_scan::readFile(scripts / "game" / "examples" / name);
+        text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+        while (!text.empty() && text.back() == '\n')
+        {
+            text.pop_back();
+        }
+        return text;
+    }
 }
 
 TEST_SUITE("mType API doc")
@@ -226,25 +238,21 @@ TEST_SUITE("mType API doc")
         auto scripts = scriptsRoot();
         REQUIRE_MESSAGE(scripts.has_value(), "repo root not found from Tests.exe location or CWD");
 
-        std::string example = repo_scan::readFile(*scripts / "game" / "examples" / "PlayerMovement.mt");
+        const std::string example = readExample(*scripts, "PlayerMovement.mt");
         REQUIRE_FALSE(example.empty());
-        example.erase(std::remove(example.begin(), example.end(), '\r'), example.end());
-        while (!example.empty() && example.back() == '\n')
-        {
-            example.pop_back();
-        }
         CHECK(contains(doc::primer(), example));
         CHECK(contains(doc::primer(), "public constructor() : super() {"));
 
         // Section 4 quotes game/examples/Projectile.mt verbatim as well.
-        std::string projectile = repo_scan::readFile(*scripts / "game" / "examples" / "Projectile.mt");
+        const std::string projectile = readExample(*scripts, "Projectile.mt");
         REQUIRE_FALSE(projectile.empty());
-        projectile.erase(std::remove(projectile.begin(), projectile.end(), '\r'), projectile.end());
-        while (!projectile.empty() && projectile.back() == '\n')
-        {
-            projectile.pop_back();
-        }
         CHECK(contains(doc::primer(), projectile));
+
+        // And section 8 game/examples/AnimatorLocomotion.mt (VK-1656).
+        const std::string locomotion = readExample(*scripts, "AnimatorLocomotion.mt");
+        REQUIRE_FALSE(locomotion.empty());
+        CHECK(contains(doc::primer(), locomotion));
+        CHECK(contains(doc::primer(), "## 8. Character animation"));
     }
 
     TEST_CASE("extractApi over the real engine scripts")
@@ -345,6 +353,9 @@ TEST_SUITE("mType API doc")
         CHECK(contains(full, "public function onUpdate(float deltaTime): void;"));
         CHECK(contains(full, "- `engine/Physics`: Physics: "));
         CHECK_FALSE(contains(full, "- `engine/oop/Behaviour`:"));  // core modules are not repeated
+        CHECK(contains(full, "## engine/Animator"));
+        CHECK(contains(full, "public static function setFloat(int entityId, string paramName, float value): void;"));
+        CHECK_FALSE(contains(full, "- `engine/Animator`:"));
         CHECK_FALSE(contains(full, "signatures unavailable"));
 
         const std::string physics = doc::buildModuleDoc(*scripts, "engine/Physics");

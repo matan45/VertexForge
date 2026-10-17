@@ -2,20 +2,15 @@
 #include "AnimationLayerStack.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
-#include "../../services/events/project/SceneEvents.hpp"
-#include "../../services/events/editor/EditorModeEvents.hpp"
-#include "../../services/events/physics/SocketEvents.hpp"
 #include "../../services/events/world/WorldSectorEvents.hpp"
-#include "../../services/data/EntityConversion.hpp"
 #include "asset/AssetRef.hpp"
 #include "resource/ResourceManager.hpp"
 
 namespace animation
 {
-    const RetargetContext* RuntimeAnimatorSystem::buildEntityRetargetContext(
+    std::unique_ptr<RetargetContext> RuntimeAnimatorSystem::makeRetargetContext(
         entt::entity entity, const resource::SkeletonData* targetSkeleton)
     {
-        retargetContexts.erase(entity);
         if (!targetSkeleton)
             return nullptr;
 
@@ -59,9 +54,7 @@ namespace animation
         if (ctx->empty())
             return nullptr;
 
-        const RetargetContext* raw = ctx.get();
-        retargetContexts[entity] = std::move(ctx);
-        return raw;
+        return ctx;
     }
 
     void RuntimeAnimatorSystem::initialize()
@@ -76,55 +69,10 @@ namespace animation
 
     void RuntimeAnimatorSystem::subscribeToEvents()
     {
+        // NOTE: this is Animation.dll's own EventDispatcher copy (it links the Services
+        // StaticLib), which the EXE never publishes on. EXE notifications reach this system
+        // through AnimatorSystemController's forwarders and the request API instead.
         auto& dispatcher = events::EventDispatcher::instance();
-
-        meshDataChangedToken = dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
-            [this](const events::scene::MeshDataChangedNotification& notification)
-            {
-                editPreviewDirty = true;
-                if (!notification.animatorPath.empty())
-                    return;
-
-                auto& registry = scene::EntityRegistry::getRegistry();
-                entt::entity entity = services::internal::fromHandle(notification.entity);
-                if (!registry.valid(entity))
-                    return;
-                if (hasAnimator(entity))
-                    destroyEntityAnimator(entity);
-            });
-
-        editorModeChangedToken = dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
-            [this](const events::editor::EditorModeChangedNotification&)
-            {
-                editPreviewDirty = true;
-                clearAnimatorInstances();
-                dataCache.clearSkeletons();
-                pendingCacheCleanup = true;
-
-                auto& reg = scene::EntityRegistry::getRegistry();
-                auto view = reg.view<components::SocketAttachmentComponent>();
-                for (auto entity : view)
-                {
-                    auto& att = reg.get<components::SocketAttachmentComponent>(entity);
-                    att.needsParentResolution = true;
-                    att.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
-                }
-            });
-
-        socketDataSavedToken = dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
-            [this](const events::socket::SocketDataSavedNotification& notification)
-            {
-                editPreviewDirty = true;
-                dataCache.invalidateSkeleton(notification.meshPath);
-                auto& registry = scene::EntityRegistry::getRegistry();
-                auto view = registry.view<components::SocketAttachmentComponent>();
-                for (auto entity : view)
-                {
-                    auto& att = registry.get<components::SocketAttachmentComponent>(entity);
-                    att.cachedSocketIndex = -1;
-                    att.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
-                }
-            });
 
         subscribeToWorldEvents();
 
@@ -365,7 +313,13 @@ namespace animation
             return;
         }
 
-        const RetargetContext* retarget = buildEntityRetargetContext(entity, skeleton);
+        // Stored before the stack that points at it (no animator exists for the entity here).
+        std::unique_ptr<RetargetContext> retargetContext = makeRetargetContext(entity, skeleton);
+        const RetargetContext* retarget = retargetContext.get();
+        if (retargetContext)
+            retargetContexts[entity] = std::move(retargetContext);
+        else
+            retargetContexts.erase(entity);
 
         auto layerStack = std::make_unique<AnimationLayerStack>();
         layerStack->initialize(*animatorData, skeleton, [this](const std::string& path) -> const resource::AnimationData*
@@ -376,6 +330,7 @@ namespace animation
         AnimationLayerStack* rawPtr = layerStack.get();
         animators[entity] = std::move(layerStack);
         setupEntityAnimatorComponent(entity, rawPtr, animatorPath);
+        recordAnimatorSources(entity, animatorPath);
         editPreviewDirty = true;
     }
 }

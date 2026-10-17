@@ -96,8 +96,9 @@ namespace mcp::tools
             tool.title = "List assets";
             tool.description =
                 "List assets registered in the project asset database (imported/engine assets: .vfMesh, "
-                ".vfImage, .vfMat, .vfScene, .vfPrefab, ...). Paths are relative to the project asset root and "
-                "are the form the other project-path tools (e.g. material_assign) accept. "
+                ".vfImage, .vfMat, .vfAnim (animation clips, type Animation), .vfAnimator, .vfScene, .vfPrefab, ...). "
+                "Paths are relative to the project asset root and are the form the other project-path tools (e.g. "
+                "material_assign) accept. For clips that fit a character's skeleton use animation_list_clips. "
                 "Returns {assets:[{path, type, guid}], total, truncated}.";
             tool.inputSchema = schema::object({
                 {"type", schema::enumString("Only this asset type. Omit for all.", assetTypeNames())},
@@ -173,6 +174,8 @@ namespace mcp::tools
                 "fonts, ...) into the project with default import settings, like the editor's Import dialog. "
                 "'files' are absolute paths anywhere on disk; 'targetDir' is a folder "
                 "relative to the project asset root (created if missing). Blocks until the import finishes. "
+                "A model with animations (FBX, GLB, DAE, ...) also writes one <model>_<take>.vfAnim clip per "
+                "animation take next to its meshes, each listed as its own result with assetType Animation. "
                 "Returns {results:[{source, output, assetType, success, error}], successCount, failureCount} "
                 "with project-relative output paths.";
             tool.inputSchema = schema::object({
@@ -269,7 +272,8 @@ namespace mcp::tools
                     services::ImportResult res;
                     res.sourcePath = fileResult.sourcePath;
                     res.outputPath = fileResult.outputPath;
-                    res.assetType = controllers::Import::assetTypeFor(fileResult.fileType);
+                    // The importer types each output itself: a model's extracted clips are Animation, not Mesh.
+                    res.assetType = fileResult.assetType;
                     res.success = fileResult.success;
                     res.errorMessage = fileResult.errorMessage;
                     completed.push_back(std::move(res));

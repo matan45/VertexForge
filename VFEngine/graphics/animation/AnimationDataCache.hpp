@@ -2,17 +2,16 @@
 
 #include "AnimationExport.hpp"
 #include "animator/AnimatorTypes.hpp"
+#include "asset/AssetGUID.hpp"
 #include "resource/Types.hpp"
-#include <entt/entt.hpp>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace animation
 {
-    class AnimationLayerStack;
-
 #pragma warning(push)
 #pragma warning(disable: 4251)
     class VF_ANIMATION_API AnimationDataCache
@@ -39,11 +38,16 @@ namespace animation
         // mesh, or the static SOK2 sockets for a non-skeletal mesh. nullptr if neither.
         const std::vector<animator::SocketDefinition>* loadSockets(const std::string& meshPath);
 
+        // Drops the skeleton and static sockets of a mesh. Layer stacks keep raw pointers to the
+        // skeleton: destroy every animator using it first.
         void invalidateSkeleton(const std::string& meshPath);
-        void clearSkeletons();
-        void clearAll();
 
-        void cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators);
+        // VK-1656: drops every cached animator whose key path resolves to `guid` (one asset can
+        // be cached under several spellings of its path). Returns the dropped data so the caller
+        // can keep it alive until no layer stack built from it remains (stacks hold raw pointers).
+        std::vector<std::shared_ptr<animator::AnimatorData>> invalidateAnimatorData(const asset::AssetGUID& guid);
+
+        void clearAll();
 
     private:
         // Reads the SOK2 block of a non-skeletal mesh into the static-socket cache.

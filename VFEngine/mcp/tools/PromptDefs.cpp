@@ -154,6 +154,27 @@ namespace mcp::tools
                 "'DirectionalLight'.\n";
         }
 
+        // Optional rigged-character step shared by both templates (VK-1656). The script side is
+        // section 8 of vf://docs/mtype-api; the tools named here are the core animation tools.
+        std::string animatedPlayer(const std::string& step, const std::string& script)
+        {
+            return
+                step + ". Optional animated player, only when the user has a rigged FBX character with idle and "
+                "run takes: assets_import it (the results list its .vfMesh files and one .vfAnim clip per take) "
+                "and use its skinned meshes for the Player instead of the capsule, the first on 'Player' and any "
+                "other on a child entity of it (entity_create with parent). On the first skinned mesh entity "
+                "component_add type 'Animator' with data {\"defaultClip\": <idle .vfAnim path>} "
+                "(animation_list_clips {\"entity\": <id>} lists the clips that fit its skeleton; component_get "
+                "shows the created animatorRef), on the others component_add 'Animator' with data "
+                "{\"animatorRef\": <that path>}. Then animation_set_state_machine on that animatorRef: a Float "
+                "parameter 'speed', states 'Idle' and 'Run', Idle -> Run when speed > 0.1, Run -> Idle when speed "
+                "<= 0.1. Check the run clip with animation_preview and viewport_screenshot. In " + script +
+                " set 'speed' every frame (the move speed while moving, 0.0 otherwise) on the Player and on each "
+                "child with an Animator, as section 8 of vf://docs/mtype-api shows (API: "
+                "vf://docs/mtype-api/engine/Animator). In Play mode animation_get_runtime_state "
+                "{\"entity\": <id>} should report Idle, then Run while moving.\n";
+        }
+
         std::string buildLoop(const std::string& game, const std::string& scenePath)
         {
             return
@@ -218,8 +239,9 @@ namespace mcp::tools
                     "12. script_write 'game/" + game + "/" + follow + ".mt': an @Script class " + follow +
                     " extends Behaviour for the camera. In onLateUpdate (no @Override: Behaviour does not declare "
                     "it) find the player with GameObject::find(\"Player\"), null-check it, and set the camera's "
-                    "local position to the player's world position plus [0, 3, -12].\n"
-                    "13. Build, attach, save and play-test:\n";
+                    "local position to the player's world position plus [0, 3, -12].\n";
+                text += animatedPlayer("13", controller);
+                text += "14. Build, attach, save and play-test:\n";
                 text += buildLoop(game, "scenes/" + game + ".vfScene");
                 return userMessage(std::move(text));
             };
@@ -272,8 +294,9 @@ namespace mcp::tools
                     "12. script_write 'game/" + game + "/" + follow + ".mt': an @Script class " + follow +
                     " extends Behaviour for the camera. In onLateUpdate (no @Override: Behaviour does not declare "
                     "it) find the player with GameObject::find(\"Player\"), null-check it, and set the camera's "
-                    "local position to the player's world position plus [0, " + formatNumber(height) + ", 0].\n"
-                    "13. Build, attach, save and play-test:\n";
+                    "local position to the player's world position plus [0, " + formatNumber(height) + ", 0].\n";
+                text += animatedPlayer("13", mover);
+                text += "14. Build, attach, save and play-test:\n";
                 text += buildLoop(game, "scenes/" + game + ".vfScene");
                 return userMessage(std::move(text));
             };

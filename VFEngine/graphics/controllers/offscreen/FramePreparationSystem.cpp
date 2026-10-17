@@ -176,7 +176,9 @@ namespace controllers::offscreen
             }
             else
             {
-                animatorSystem.updateEditModePreview();
+                // Raw delta: Animation.dll's Timer copy never ticks, and edit previews ignore
+                // the gameplay time scale.
+                animatorSystem.updateEditModePreview(ctx.deltaTime);
             }
             animatorSystem.updateSocketAttachments();
         }

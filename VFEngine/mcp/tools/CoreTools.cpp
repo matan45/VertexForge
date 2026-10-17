@@ -21,5 +21,8 @@ namespace mcp::tools
         registerTerrainTools(registry, context);
         registerEnvironmentTools(registry, context);
         registerRenderSettingsTools(registry, context);
+        registerAnimationTools(registry, context);
+        registerAnimationIkTools(registry, context);
+        registerAnimationSocketTools(registry, context);
     }
 }

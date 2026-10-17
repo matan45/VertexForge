@@ -30,6 +30,10 @@ namespace services
                                        const std::vector<std::string>& chainBoneNames,
                                        const std::vector<animator::ik::JointConstraint>& constraints,
                                        float weight, bool enabled) = 0;
+        // VK-1656: replaces every chain, in the given order; runtime targets and resolved
+        // bones reset. False when the entity has no IK component.
+        virtual bool setChains(EntityHandle entity,
+                               const std::vector<animator::ik::IKChainConfig>& chains) = 0;
 
         // Runtime target control
         virtual void setTarget(EntityHandle entity, const std::string& chainName,

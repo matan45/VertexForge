@@ -7,8 +7,10 @@
 #include "AnimationDataCache.hpp"
 #include "RetargetContext.hpp"
 #include "SocketAttachmentUpdater.hpp"
+#include "../../services/data/AnimationAuthoringData.hpp"
 #include "../../services/events/EventDispatcher.hpp"
 #include "../../services/events/animation/AnimationSnapshotEvents.hpp"
+#include "asset/AssetGUID.hpp"
 #include "math/Frustum.hpp"
 #include <entt/entt.hpp>
 #include <atomic>
@@ -17,6 +19,12 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
+
+namespace components
+{
+    struct MeshComponent;
+}
 
 namespace animation
 {
@@ -39,9 +47,43 @@ namespace animation
         // pointer inside each layer stack's evaluators, so must outlive them.
         std::unordered_map<entt::entity, std::unique_ptr<RetargetContext>> retargetContexts;
 
-        events::SubscriptionToken meshDataChangedToken;
-        events::SubscriptionToken editorModeChangedToken;
-        events::SubscriptionToken socketDataSavedToken;
+        // What each animator was built from (VK-1656). syncWithRegistry() rebuilds an animator
+        // whose MeshComponent now names other assets (animator A->B, mesh or retarget swap).
+        struct AnimatorSources
+        {
+            asset::AssetGUID animator;
+            asset::AssetGUID mesh;
+            asset::AssetGUID retarget;
+        };
+        std::unordered_map<entt::entity, AnimatorSources> animatorSources;
+
+        // Edit-mode preview of a state or clip on a stack separate from the entity's animator
+        // (VK-1656). Members are destroyed bottom-up: the stack holds raw pointers to `data`
+        // and `retarget`, and to the cached skeleton and clips.
+        struct EditPreviewSession
+        {
+            services::AnimationEditPreviewRequest request;
+            std::unique_ptr<animator::AnimatorData> data; // synthetic one-state graph
+            std::unique_ptr<RetargetContext> retarget;
+            std::unique_ptr<AnimationLayerStack> stack;
+            asset::AssetGUID animator; // State mode: the animator the state was copied from
+            asset::AssetGUID mesh;
+            float durationSeconds = 0.0f;
+        };
+        std::unordered_map<entt::entity, EditPreviewSession> editPreviews;
+
+        // Requests from any thread (VK-1656). Animation.dll's EventDispatcher is a private copy,
+        // so AnimatorSystemController forwards the EXE's notifications into this queue; it is
+        // applied on the main thread at the top of syncWithRegistry()/updateEditModePreview().
+        struct PendingRequests
+        {
+            std::vector<std::string> animatorPaths;
+            std::vector<std::string> meshPaths;
+            bool modeTransition = false;
+        };
+        PendingRequests pendingRequests;
+        std::mutex pendingRequestMutex;
+        std::atomic<bool> hasPendingRequests{false};
 
         std::unique_ptr<SocketAttachmentUpdater> socketUpdater;
 
@@ -63,9 +105,8 @@ namespace animation
         events::SubscriptionToken sectorUnloadedToken;
 
         bool initialized = false;
-        bool pendingCacheCleanup = false;
-        // Atomic: re-armed from sector load/unload notifications that may be published
-        // off the main thread, and read in updateEditModePreview() on the main thread.
+        // Atomic: re-armed by the request API above and by sector load/unload notifications,
+        // which may arrive off the main thread, and read in updateEditModePreview() on the main thread.
         std::atomic<bool> editPreviewDirty{true};
 
         // Pending animation state restores (keyed by entity UUID, consumed after animator init)
@@ -94,10 +135,28 @@ namespace animation
         void updateAll(float deltaTime);
         void updateSocketAttachments();
 
-        // Edit-mode (no Play) socket-attachment preview: sync animators and evaluate
-        // each to a static rest pose (+IK) so socket transforms resolve and skeletal
-        // meshes render in rest pose. Dirty-gated — cheap (one bool check) when idle. VK-1407.
-        void updateEditModePreview();
+        // Edit-mode (no Play) preview: sync animators and evaluate each to a static rest pose
+        // (+IK) so socket transforms resolve and skeletal meshes render in rest pose, or to its
+        // edit preview session's pose, advanced by deltaTime while playing (VK-1656). Dirty-gated
+        // (one bool check when idle) unless a preview session is active. VK-1407.
+        void updateEditModePreview(float deltaTime);
+
+        // Thread-safe requests (any thread), applied on the main thread at the next
+        // syncWithRegistry()/updateEditModePreview(). VK-1656.
+        void requestAnimatorReload(std::string path); // absolute .vfAnimator path that was saved
+        void requestMeshReload(std::string path);     // absolute .vfMesh path whose sockets/IK chains were saved
+        void requestModeTransition();                 // Play <-> Edit: ends every edit preview
+        void markEditPreviewDirty();
+
+        // Edit-mode preview (VK-1656). Main thread only, in edit mode (the MCP drain). Plays or
+        // poses a state of the entity's own animator (base layer), or any clip, on a stack
+        // separate from the animator; the animator itself is untouched. Replaces the entity's
+        // current preview.
+        services::AnimationEditPreviewResult startEditPreview(entt::entity entity,
+                                                              const services::AnimationEditPreviewRequest& request);
+        bool stopEditPreview(entt::entity entity); // true if one was stopped
+        bool stopAllEditPreviews();                // true if any was stopped
+        std::optional<services::AnimationEditPreviewStatus> getEditPreviewStatus(entt::entity entity) const;
 
         void initializeEntityAnimator(entt::entity entity, const std::string& animatorPath);
         void destroyEntityAnimator(entt::entity entity);
@@ -112,8 +171,6 @@ namespace animation
         void syncWithRegistry();
 
         void clearAll();
-        void clearAnimatorInstances();
-        void cleanupUnusedCaches();
 
         const resource::SkeletonData* loadSkeleton(const std::string& meshPath);
 
@@ -173,9 +230,23 @@ namespace animation
         void subscribeToWorldEvents();
         const resource::SkeletonData* resolveEntitySkeleton(entt::entity entity, std::string& outMeshPath);
         void setupEntityAnimatorComponent(entt::entity entity, AnimationLayerStack* layerStack, const std::string& animatorPath);
-        // Build (and own) the retarget context for an entity from its mesh's retargetRef.
-        // Returns nullptr (and stores nothing) when no/invalid retarget binding.
-        const RetargetContext* buildEntityRetargetContext(entt::entity entity, const resource::SkeletonData* targetSkeleton);
+        // Builds the retarget context for an entity from its mesh's retargetRef. nullptr when
+        // there is no (valid) retarget binding. Used for animators and edit preview sessions.
+        std::unique_ptr<RetargetContext> makeRetargetContext(entt::entity entity, const resource::SkeletonData* targetSkeleton);
+
+        void recordAnimatorSources(entt::entity entity, const std::string& animatorPath);
+        bool animatorSourcesMatch(entt::entity entity, const components::MeshComponent& meshComp) const;
+        // Destroys the entity's animator when its sources changed, then (re)initializes it.
+        void syncEntityAnimator(entt::entity entity, const components::MeshComponent& meshComp);
+
+        // Applies the queued requests (main thread). Animators are destroyed before the cache
+        // entries they point into are dropped; the next sync re-initializes them from disk.
+        void applyPendingRequests();
+        void reloadAnimator(const std::string& path);
+        void reloadMeshes(const std::vector<std::string>& meshPaths);
+
+        void pruneEditPreviews();
+        void releasePreviewPose(entt::entity entity);
 
         uint64_t computeInstanceGroupKey(const std::string& animatorPath, uint32_t stateId,
                                           uint8_t lodLevel, float normalizedTime) const;

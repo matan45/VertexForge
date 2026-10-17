@@ -10,6 +10,7 @@
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
+#include "../../adapters/animation/AnimationAuthoringAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
 #include "../../adapters/render/UILayerPreviewAdapter.hpp"
@@ -72,6 +73,7 @@ namespace core
         uiLayerPreviewAdapter.reset();
         animationPreviewAdapter.reset();
         thumbnailRenderAdapter.reset();
+        animationAuthoringAdapter.reset(); // unregisters its handlers
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();

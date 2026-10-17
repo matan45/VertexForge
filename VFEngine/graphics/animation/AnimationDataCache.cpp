@@ -1,13 +1,10 @@
 #include "AnimationDataCache.hpp"
-#include "AnimationLayerStack.hpp"
-#include "scene/EntityRegistry.hpp"
-#include "components/Components.hpp"
 #include "resource/ResourceManager.hpp"
 #include "resource/MeshStreamHandle.hpp"
+#include "asset/AssetDatabase.hpp"
 #include "asset/AssetRef.hpp"
 #include <mutex>
 #include <shared_mutex>
-#include <unordered_set>
 
 namespace animation
 {
@@ -195,11 +192,30 @@ namespace animation
         staticSocketCache.erase(meshPath);
     }
 
-    void AnimationDataCache::clearSkeletons()
+    std::vector<std::shared_ptr<animator::AnimatorData>> AnimationDataCache::invalidateAnimatorData(const asset::AssetGUID& guid)
     {
+        std::vector<std::shared_ptr<animator::AnimatorData>> dropped;
+        if (!guid.isValid())
+            return dropped;
+
+        // AssetDatabase::getGUID is a pure lookup. AssetRef::fromPath would auto-register a key
+        // the database no longer knows (writing a .vfmeta) while this lock is held.
+        auto& database = asset::AssetDatabase::instance();
         std::unique_lock writeLock(cacheMutex);
-        skeletonDataCache.clear();
-        staticSocketCache.clear();
+        for (auto it = animatorDataCache.begin(); it != animatorDataCache.end();)
+        {
+            const auto keyGuid = database.getGUID(database.resolveAssetPath(it->first));
+            if (keyGuid && *keyGuid == guid)
+            {
+                dropped.push_back(std::move(it->second));
+                it = animatorDataCache.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        return dropped;
     }
 
     void AnimationDataCache::clearAll()
@@ -209,134 +225,5 @@ namespace animation
         animationDataCache.clear();
         skeletonDataCache.clear();
         staticSocketCache.clear();
-    }
-
-    void AnimationDataCache::cleanupUnused(const std::unordered_map<entt::entity, std::unique_ptr<AnimationLayerStack>>& animators)
-    {
-        // Mutates all three caches; serialize against the parallel loaders. cleanupUnused runs on
-        // the main thread between frames today, so this lock is effectively uncontended.
-        std::unique_lock writeLock(cacheMutex);
-
-        std::unordered_set<std::string> usedAnimatorPaths;
-        std::unordered_set<std::string> usedMeshPaths;
-        std::unordered_set<std::string> usedAnimationPaths;
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        for (const auto& [entity, animator] : animators)
-        {
-            if (!animator)
-            {
-                continue;
-            }
-
-            if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
-            {
-                const auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                if (animComp.animatorRef.isValid())
-                {
-                    usedAnimatorPaths.insert(animComp.animatorRef.resolve());
-                }
-            }
-
-            if (registry.valid(entity) && registry.all_of<components::MeshComponent>(entity))
-            {
-                const auto& meshComp = registry.get<components::MeshComponent>(entity);
-                if (meshComp.meshRef.isValid())
-                {
-                    usedMeshPaths.insert(meshComp.meshRef.resolve());
-                }
-            }
-
-            const animator::AnimatorData* animData = animator->getAnimatorData();
-            if (animData)
-            {
-                for (const auto& state : animData->graph.states)
-                {
-                    if (state.animationRef.isValid())
-                    {
-                        usedAnimationPaths.insert(state.animationRef.resolve());
-                    }
-                }
-            }
-        }
-
-        // Static-socket parents (VK-1427) have no animator, so they never appear in the
-        // animator-derived usedMeshPaths above. Without seeding their mesh paths here,
-        // every cleanup would evict the very staticSocketCache entries it was added for,
-        // forcing a re-parse of the SOK2 block on the next socket query/attachment.
-        for (auto entity : registry.view<components::SocketAttachmentComponent>())
-        {
-            const auto& att = registry.get<components::SocketAttachmentComponent>(entity);
-            if (att.parentEntity != entt::null && registry.valid(att.parentEntity) &&
-                registry.all_of<components::MeshComponent>(att.parentEntity))
-            {
-                const auto& meshComp = registry.get<components::MeshComponent>(att.parentEntity);
-                if (meshComp.meshRef.isValid())
-                {
-                    usedMeshPaths.insert(meshComp.meshRef.resolve());
-                }
-            }
-        }
-
-        size_t removedAnimators = 0;
-        size_t removedAnimations = 0;
-        size_t removedSkeletons = 0;
-
-        for (auto it = animatorDataCache.begin(); it != animatorDataCache.end();)
-        {
-            if (usedAnimatorPaths.find(it->first) == usedAnimatorPaths.end())
-            {
-                it = animatorDataCache.erase(it);
-                ++removedAnimators;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        for (auto it = animationDataCache.begin(); it != animationDataCache.end();)
-        {
-            if (usedAnimationPaths.find(it->first) == usedAnimationPaths.end())
-            {
-                it = animationDataCache.erase(it);
-                ++removedAnimations;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        for (auto it = skeletonDataCache.begin(); it != skeletonDataCache.end();)
-        {
-            if (usedMeshPaths.find(it->first) == usedMeshPaths.end())
-            {
-                it = skeletonDataCache.erase(it);
-                ++removedSkeletons;
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        for (auto it = staticSocketCache.begin(); it != staticSocketCache.end();)
-        {
-            if (usedMeshPaths.find(it->first) == usedMeshPaths.end())
-            {
-                it = staticSocketCache.erase(it);
-            }
-            else
-            {
-                ++it;
-            }
-        }
-
-        if (removedAnimators > 0 || removedAnimations > 0 || removedSkeletons > 0)
-        {
-            vfLogInfo("Cleaned up {} animators, {} animations, {} skeletons",
-                      removedAnimators, removedAnimations, removedSkeletons);
-        }
     }
 }

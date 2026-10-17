@@ -113,6 +113,23 @@ namespace windows::animation
         ed::SetCurrentEditor(nullptr);
     }
 
+    void AnimatorNodeGraph::select(uint32_t stateId, uint32_t transitionId, bool navigate)
+    {
+        if (!nodeEditorContext)
+            return;
+
+        ed::SetCurrentEditor(nodeEditorContext);
+        ed::ClearSelection();
+        // A node or link never drawn yet is not found and stays unselected.
+        if (stateId != 0)
+            ed::SelectNode(stateIdToNodeId(stateId), true);
+        if (transitionId != 0)
+            ed::SelectLink(transitionIdToLinkId(transitionId), true);
+        if (navigate && ed::GetSelectedObjectCount() > 0)
+            ed::NavigateToSelection();
+        ed::SetCurrentEditor(nullptr);
+    }
+
     void AnimatorNodeGraph::drawSpecialNodes()
     {
         ed::NodeId entryNodeId = specialNodeId(ENTRY_NODE);

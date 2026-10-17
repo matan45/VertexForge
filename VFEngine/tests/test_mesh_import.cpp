@@ -2,6 +2,9 @@
 #include <controllers/Import.hpp>
 #include <registry/builtin/BuiltinImporters.hpp>
 #include <config/Config.hpp>
+#include <asset/AssetMetadataSerializer.hpp>
+#include <resource/AnimationResource.hpp>
+#include <resource/AssetTypes.hpp>
 #include <resource/MeshStreamHandle.hpp>
 
 #include <cstdint>
@@ -249,6 +252,51 @@ namespace
         config.customOptions["combineMeshes"] = combineMeshes;
         return controllers::Import::importFiles({importConfig::ImportFiles(src.string(), config)});
     }
+
+    controllers::ImportResult importAnimationOnly(const fs::path& dir, const fs::path& src)
+    {
+        import::builtin::ensureRegistered();
+        controllers::Import::setLocation(dir.string());
+        importConfig::ImportConfig config;
+        config.customOptions["animationOnly"] = true;
+        return controllers::Import::importFiles({importConfig::ImportFiles(src.string(), config)});
+    }
+
+    std::vector<const controllers::ImportFileResult*> resultsOfType(const controllers::ImportResult& result,
+                                                                    resource::AssetType type)
+    {
+        std::vector<const controllers::ImportFileResult*> matches;
+        for (const auto& fileResult : result.fileResults)
+        {
+            if (fileResult.assetType == type)
+                matches.push_back(&fileResult);
+        }
+        return matches;
+    }
+
+    // A clip extracted from `<stem>.<ext>` is <stem>_<take>.vfAnim, typed Animation in both
+    // the result and its .vfmeta sidecar, and readable by the clip-summary reader.
+    void checkClipResult(const controllers::ImportFileResult& clip, std::string_view sourceStem)
+    {
+        CAPTURE(clip.outputPath);
+        CHECK(clip.success);
+        CHECK(clip.assetType == resource::AssetType::Animation);
+        CHECK(fs::path(clip.outputPath).extension() == "." + FileExtension::animation);
+        REQUIRE(fs::exists(clip.outputPath));
+        CHECK(fs::path(clip.outputPath).stem().string().rfind(std::string(sourceStem) + "_", 0) == 0);
+
+        fs::path meta = clip.outputPath;
+        meta += "." + FileExtension::assetMeta;
+        const auto metadata = asset::AssetMetadataSerializer::load(meta);
+        REQUIRE(metadata.has_value());
+        CHECK(metadata->type == resource::AssetType::Animation);
+
+        const auto summary = resource::AnimationResource::readClipSummary(clip.outputPath);
+        REQUIRE(summary.success);
+        CHECK(summary.durationSeconds > 0.0f);
+        // The DAE fixtures animate the InstanceA node.
+        CHECK(std::ranges::find(summary.channelNames, std::string("InstanceA")) != summary.channelNames.end());
+    }
 }
 
 TEST_SUITE("MeshImport")
@@ -274,6 +322,7 @@ TEST_SUITE("MeshImport")
         {
             CAPTURE(r.outputPath);
             CHECK(r.success);
+            CHECK(r.assetType == resource::AssetType::Mesh);
             CHECK(fs::path(r.outputPath).extension() == "." + FileExtension::mesh);
             CHECK(fs::exists(r.outputPath));
             // Distinct, base-prefixed names: twomesh_<meshName>.vfMesh.
@@ -416,12 +465,22 @@ TEST_SUITE("MeshImport")
         // A scene-level animation with no skinning is a static combine (UE5 parity): the
         // node default poses bake, so the two instances merge into one section
         // (6 vertices) instead of falling back to split output (a single 3-vertex mesh).
+        // The animation itself is written as a clip and reported as its own Animation
+        // result (VK-1656), so find the mesh by type.
         CHECK(result.failureCount == 0);
-        REQUIRE(result.fileResults.size() == 1);
-        CHECK(readHeaderNumMeshes(result.fileResults[0].outputPath) == 1u);
+        REQUIRE(result.fileResults.size() == 2);
+        const auto meshes = resultsOfType(result, resource::AssetType::Mesh);
+        const auto clips = resultsOfType(result, resource::AssetType::Animation);
+        REQUIRE(meshes.size() == 1);
+        REQUIRE(clips.size() == 1);
+        checkClipResult(*clips[0], "animated_instances");
+
+        const std::string& meshPath = meshes[0]->outputPath;
+        CHECK(fs::path(meshPath).extension() == "." + FileExtension::mesh);
+        CHECK(readHeaderNumMeshes(meshPath) == 1u);
 
         resource::MeshStreamHandle stream;
-        REQUIRE(stream.openStream(result.fileResults[0].outputPath));
+        REQUIRE(stream.openStream(meshPath));
         REQUIRE(stream.getHeader().submeshes.size() == 1);
 
         std::vector<resource::Vertex> vertices;
@@ -429,6 +488,47 @@ TEST_SUITE("MeshImport")
         REQUIRE(stream.readLODLevel(0, 0, vertices, indices));
         CHECK(vertices.size() == 6);
         CHECK(indices.size() == 6);
+
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    }
+
+    TEST_CASE("animation-only import reports each written clip and no mesh")
+    {
+        fs::path dir = makeScratchDir("vf_animation_only_clips");
+        fs::path src = dir / "animated_instances.dae";
+        writeText(src, makeAnimatedInstancesDae());
+
+        auto result = importAnimationOnly(dir, src);
+
+        CHECK(result.failureCount == 0);
+        // Only the real <file>_<take>.vfAnim is reported, never a predicted <file>.vfAnim.
+        REQUIRE(result.fileResults.size() == 1);
+        checkClipResult(result.fileResults[0], "animated_instances");
+        CHECK_FALSE(fs::exists(dir / ("animated_instances." + FileExtension::animation)));
+
+        // The mesh pass is skipped entirely.
+        for (const auto& entry : fs::directory_iterator(dir))
+            CHECK(entry.path().extension() != "." + FileExtension::mesh);
+
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    }
+
+    TEST_CASE("animation-only import of a model without animations fails")
+    {
+        fs::path dir = makeScratchDir("vf_animation_only_none");
+        fs::path src = dir / "single.obj";
+        writeText(src, oneMeshObj);
+
+        auto result = importAnimationOnly(dir, src);
+
+        CHECK(result.successCount == 0);
+        CHECK(result.failureCount == 1);
+        REQUIRE(result.fileResults.size() == 1);
+        CHECK_FALSE(result.fileResults[0].success);
+        CHECK(result.fileResults[0].assetType == resource::AssetType::COUNT);
+        CHECK_FALSE(fs::exists(dir / ("single." + FileExtension::animation)));
 
         std::error_code ec;
         fs::remove_all(dir, ec);

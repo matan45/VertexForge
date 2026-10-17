@@ -37,7 +37,8 @@ namespace types
 {
     void Animation::loadFromFile(const importConfig::ImportFiles& file, std::string_view fileName,
                                  std::string_view location,
-                                 AnimationProgressCallback progressCallback) const
+                                 AnimationProgressCallback progressCallback,
+                                 std::vector<std::string>* outWrittenFiles) const
     {
         if (progressCallback) progressCallback(0.0f);
 
@@ -54,14 +55,15 @@ namespace types
 
         if (progressCallback) progressCallback(0.1f);
 
-        extractFromScene(scene, fileName, location, progressCallback);
+        extractFromScene(scene, fileName, location, progressCallback, outWrittenFiles);
 
         if (progressCallback) progressCallback(1.0f);
     }
 
     void Animation::extractFromScene(const aiScene* scene, std::string_view fileName,
                                      std::string_view location,
-                                     AnimationProgressCallback progressCallback) const
+                                     AnimationProgressCallback progressCallback,
+                                     std::vector<std::string>* outWrittenFiles) const
     {
         if (scene->mNumAnimations == 0)
         {
@@ -88,17 +90,24 @@ namespace types
 
             std::string outputName = std::string(fileName) + "_" + animName;
 
-            saveToFile(location, outputName, animData);
+            const std::string writtenPath = saveToFile(location, outputName, animData);
+            if (!writtenPath.empty())
+            {
+                // Two takes that sanitize to the same name share one file (the later one
+                // wins); report it once.
+                if (outWrittenFiles && std::ranges::find(*outWrittenFiles, writtenPath) == outWrittenFiles->end())
+                    outWrittenFiles->push_back(writtenPath);
+
+                vfLogDebug("Exported animation: {} (duration: {:.2f}s, {} channels)",
+                          animData.name, animData.duration / animData.ticksPerSecond,
+                          animData.channels.size());
+            }
 
             if (progressCallback)
             {
                 float progress = 0.25f + (static_cast<float>(i + 1) / numAnimations) * 0.7f;
                 progressCallback(progress);
             }
-
-            vfLogDebug("Exported animation: {} (duration: {:.2f}s, {} channels)",
-                      animData.name, animData.duration / animData.ticksPerSecond,
-                      animData.channels.size());
         }
 
         if (progressCallback) progressCallback(0.95f);
@@ -165,8 +174,8 @@ namespace types
         return animData;
     }
 
-    void Animation::saveToFile(std::string_view location, std::string_view baseName,
-                               const resource::AnimationData& animData) const
+    std::string Animation::saveToFile(std::string_view location, std::string_view baseName,
+                                      const resource::AnimationData& animData) const
     {
         std::filesystem::path outputPath = std::filesystem::path(location) /
                                            (std::string(baseName) + "." + FileExtension::animation);
@@ -175,7 +184,7 @@ namespace types
         if (!outFile)
         {
             vfLogError("Failed to open file for writing: {}", outputPath.string());
-            return;
+            return {};
         }
 
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(animData.headerFileType));
@@ -191,8 +200,16 @@ namespace types
         // Write empty event section (events added later via AnimationEventWriter)
         resource::endian::writeLE<uint32_t>(outFile, 0);
 
+        // close() flushes; a failed write or flush leaves the stream failed.
         outFile.close();
+        if (!outFile)
+        {
+            vfLogError("Failed to write animation file: {}", outputPath.string());
+            return {};
+        }
+
         vfLogDebug("Animation saved: {} channels", animData.channels.size());
+        return outputPath.string();
     }
 
     void Animation::writeString(std::ofstream& file, const std::string& str) const

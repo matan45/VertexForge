@@ -27,6 +27,9 @@ namespace controllers
         std::string fileName;
         std::string outputPath;
         std::string fileType;
+        // Type of the asset at outputPath (one source file can emit meshes, textures and
+        // animation clips). COUNT for failed results and formats without a .vfmeta type.
+        resource::AssetType assetType = resource::AssetType::COUNT;
         bool success = false;
         std::string errorMessage;
     };

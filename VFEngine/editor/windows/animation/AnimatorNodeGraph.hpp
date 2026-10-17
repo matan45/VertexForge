@@ -24,6 +24,12 @@ namespace windows::animation
 
         ax::NodeEditor::EditorContext* getContext() const { return nodeEditorContext; }
 
+        // Replaces the node editor's selection with one state and/or transition (0 = none) and,
+        // with `navigate`, scrolls it into view. The node editor's selection overrides the
+        // window's selected ids on the next draw (updateSelection), so programmatic selections
+        // go through here. Outside draw() only.
+        void select(uint32_t stateId, uint32_t transitionId, bool navigate);
+
     private:
         void drawSpecialNodes();
         void drawStateNode(const animator::AnimatorState& state, uint32_t defaultStateId);

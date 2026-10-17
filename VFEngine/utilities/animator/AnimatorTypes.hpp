@@ -125,7 +125,8 @@ namespace animator
                 if (transition.sourceStateId == stateId || transition.sourceStateId == 0)
                     result.push_back(&transition);
             }
-            std::sort(result.begin(), result.end(),
+            // Stable: equal-priority transitions are tried in the order they are listed.
+            std::stable_sort(result.begin(), result.end(),
                 [](const AnimatorTransition* a, const AnimatorTransition* b) {
                     return a->priority < b->priority;
                 });

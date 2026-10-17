@@ -129,11 +129,11 @@ namespace controllers
                 // the context default.
                 const resource::AssetType resolvedType =
                     (outputType != resource::AssetType::COUNT) ? outputType : assetType;
+                fileResult.assetType = resolvedType;
 
                 // Create or refresh the .vfmeta sidecar (importSource, timestamp,
-                // import options). Existence guard: config-dependent outputs (e.g.
-                // animation-only mesh import of a file without animations) may not
-                // be written.
+                // import options). Existence guard: the default output path is a
+                // prediction and may not have been written.
                 if (!outputPath.empty() && std::filesystem::exists(outputPath) &&
                     resolvedType != resource::AssetType::COUNT)
                 {

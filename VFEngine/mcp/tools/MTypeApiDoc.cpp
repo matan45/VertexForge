@@ -60,7 +60,7 @@ Game scripts import each other the same way: from `game/enemies/Grunt.mt`, `impo
 
 `scripts_build` compiles every `game/**/*.mt` file plus everything they import as ONE bundle, so every class name must be unique across that whole set.
 
-- Give game classes distinctive names (`WasdMover`, `EnemySpawner`), never the name of a lib class. Importing `lib/engine/oop/Behaviour.mt` alone pulls in `Behaviour`, `GameObject`, `Transform`, `Entity`, `Log`, `RigidBody`, `Collider`, `CameraComponent`, `AudioSource`, `NavAgent`, `MeshRenderer`, `UIElement`, `Vec3f` and `Quaternion`, among others.
+- Give game classes distinctive names (`WasdMover`, `EnemySpawner`), never the name of a lib class. Importing `lib/engine/oop/Behaviour.mt` alone pulls in `Behaviour`, `GameObject`, `Transform`, `Entity`, `Log`, `RigidBody`, `Collider`, `CameraComponent`, `AnimatorComponent`, `Animator`, `AudioSource`, `NavAgent`, `MeshRenderer`, `UIElement`, `Vec3f` and `Quaternion`, among others.
 - Check the names already taken: `resources/list` shows the project's game scripts as `vf://scripts/game/...`.
 )MTDOC";
 
@@ -212,6 +212,85 @@ public class PlayerMovement extends Behaviour {
 
         if (direction.lengthSquared() > 0.0) {
             this.transform().translate(direction.normalize().multiply(this.speed * deltaTime));
+        }
+    }
+}
+```
+)MTDOC";
+
+        constexpr const char* primerAnimation = R"MTDOC(
+## 8. Character animation
+
+A skinned mesh entity with an Animator plays its `.vfAnimator` state machine. A script drives it through the animator's PARAMETERS and the transitions do the switching: build them with `animation_set_state_machine`, read them back with `animation_get_state_machine`.
+
+- Static API (lib/engine/Animator.mt), keyed by the `int` entity id: `Animator::setFloat(entityId, name, value)`, `Animator::setInt(entityId, name, value)`, `Animator::setBool(entityId, name, value)`, `Animator::setTrigger(entityId, name)`, `Animator::hasAnimator(entityId)`, `Animator::getCurrentState(entityId)` (the base layer's state name, `""` without an animator), `Animator::isBlending(entityId)`, `Animator::getNormalizedTime(entityId)`, and `Animator::forceTransitionTo(entityId, stateName, blendSeconds)` to jump to a state by name. Full signatures: `vf://docs/mtype-api/engine/Animator`.
+- Object style: `this.gameObject().animator()` returns an `AnimatorComponent` (lib/engine/oop/AnimatorComponent.mt) with the same calls without the id: `this.gameObject().animator().setFloat("speed", speed);`, `currentState()`, `isBlending()`, `exists()`.
+- A parameter is found by its exact name, and the setter must match its type: `setFloat` for Float, `setInt` for Int, `setBool` for Bool, `setTrigger` for Trigger (`animation_get_state_machine` lists the names and types). Nothing reports a mismatch: a misspelled name stores a value no transition reads, and the wrong setter makes the conditions compare the wrong way or never pass.
+- Set the parameters in `onUpdate` every frame, not only when they change: any save of the `.vfAnimator` (`animation_set_state_machine`, the Animator Editor) re-creates its animators with the default parameter values, and every Play session starts from the defaults (Stop restores the scene).
+- An imported character is often several skinned mesh entities, each with its own animator: set the parameter on each of them. `Entity::getChildren(entityId)` returns the ids of the DIRECT children (`int[]`) and `Animator::hasAnimator(id)` tells which have an animator; setting a parameter on an entity without an animator does nothing.
+- Animation events are NOT delivered to scripts in this build: `Animator::pollEvent` always returns `""` and `IAnimationEventListener` callbacks never run. Time gameplay from the script instead, e.g. with `Animator::getCurrentState` and `Animator::getNormalizedTime`.
+
+Verified example: `scripts/game/examples/AnimatorLocomotion.mt` ships with the engine (quoted verbatim). Give your copy a NEW class name: `AnimatorLocomotion` already exists in projects that carry the examples. It expects a Float parameter `speed` and the states `Idle` (default) and `Run`, with Idle -> Run when `speed > 0.1` and Run -> Idle when `speed <= 0.1`. WASD moves the entity as in section 7, and `speed` is the move speed while a key is held, else `0.0`. The value can come from anything: elapsed time, `this.gameObject().navAgent().velocity().length()`, `this.gameObject().rigidBody().linearVelocity().length()`.
+
+```mtype
+// AnimatorLocomotion - Example of driving an Animator parameter from a script.
+//
+// Expects an animator with a Float parameter "speed" and two states: Idle
+// (the default state) and Run, with Idle -> Run when speed > 0.1 and
+// Run -> Idle when speed <= 0.1. WASD moves the entity like PlayerMovement;
+// "speed" is the move speed while a key is held, else 0.0.
+//
+// Attach it to the character's root entity. An imported character is often
+// several skinned mesh entities, each with its own animator, so the value is
+// set on this entity and on every direct child that has an animator. It is
+// set every frame: saving the .vfAnimator re-creates its animators with the
+// default parameter values.
+
+import * from "../../lib/engine/oop/Behaviour.mt";
+import * from "../../lib/engine/Animator.mt";
+import * from "../../lib/engine/Entity.mt";
+import * from "../../lib/engine/Input.mt";
+import * from "../../lib/engine/Key.mt";
+import * from "../../lib/math/Vec3f.mt";
+
+@Script
+public class AnimatorLocomotion extends Behaviour {
+    private float moveSpeed = 3.0;
+
+    public constructor() : super() {
+    }
+
+    @Override
+    public function onUpdate(float deltaTime): void {
+        Vec3f direction = Vec3f::zero();
+
+        if (Input::isKeyDown(Key::W)) {
+            direction = direction.add(this.transform().forward());
+        }
+        if (Input::isKeyDown(Key::S)) {
+            direction = direction.subtract(this.transform().forward());
+        }
+        if (Input::isKeyDown(Key::D)) {
+            direction = direction.add(this.transform().right());
+        }
+        if (Input::isKeyDown(Key::A)) {
+            direction = direction.subtract(this.transform().right());
+        }
+
+        float speed = 0.0;
+        if (direction.lengthSquared() > 0.0) {
+            this.transform().translate(direction.normalize().multiply(this.moveSpeed * deltaTime));
+            speed = this.moveSpeed;
+        }
+
+        int root = this.entityId();
+        Animator::setFloat(root, "speed", speed);
+        int[] children = Entity::getChildren(root);
+        for (int i = 0; i < children.length; i = i + 1) {
+            int child = children[i];
+            if (Animator::hasAnimator(child)) {
+                Animator::setFloat(child, "speed", speed);
+            }
         }
     }
 }
@@ -642,7 +721,7 @@ public class PlayerMovement extends Behaviour {
     const std::string& primer()
     {
         static const std::string text =
-            std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample;
+            std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample + primerAnimation;
         return text;
     }
 
@@ -656,6 +735,7 @@ public class PlayerMovement extends Behaviour {
             "engine/Key",
             "engine/Time",
             "engine/Log",
+            "engine/Animator",
             "math/Vec3f"
         };
         return modules;

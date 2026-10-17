@@ -264,9 +264,21 @@ namespace mcp::tools
     // All of these throw std::runtime_error for an unknown type name. get/patch
     // return nullopt when the entity lacks the component; patch throws ArgError for
     // an unknown or mistyped field and std::runtime_error when the engine rejects it.
+    // patch drops the type's read-only fields (VK-1656), so a full get() result replays.
     bool addBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
     bool removeBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
     std::optional<nlohmann::json> getBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
     std::optional<nlohmann::json> patchBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
                                                         const nlohmann::json& patch);
+
+    // VK-1656: for a type stored in fields of another built-in component (the Animator, in the Mesh), that
+    // component's name and the current values of those fields as a partial patch of it; nullopt for a
+    // component of its own or when the entity lacks the host. Read before and after adding the type, the
+    // two snapshots undo the add exactly (a BuiltinComponentPatchUndo of the host).
+    struct BuiltinHostFields
+    {
+        std::string type;
+        nlohmann::json fields;
+    };
+    std::optional<BuiltinHostFields> builtinHostFields(const std::string& type, const services::EntityHandle& entity);
 }

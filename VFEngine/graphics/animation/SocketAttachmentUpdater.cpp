@@ -76,6 +76,11 @@ namespace animation
         return nullptr;
     }
 
+    void SocketAttachmentUpdater::resetMissingSocketWarnings()
+    {
+        missingSocketWarned.clear();
+    }
+
     void SocketAttachmentUpdater::buildSocketTransformCache()
     {
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -121,8 +126,8 @@ namespace animation
             (attachment.parentEntityName.empty() && attachment.parentEntityUUID == 0))
             return;
 
-        // VK-1590: a re-arm (RuntimeAnimatorSystemInit sets the flag on EVERY play/edit
-        // transition) that races an unloaded parent must not destroy a working link.
+        // VK-1590: a re-arm of a live link that races an unloaded parent must not destroy
+        // the working link.
         //
         // Resolving into a local and committing at the end does NOT achieve that on its own -
         // nothing between here and the commit reads parentEntity, so deferring the write is
@@ -136,8 +141,8 @@ namespace animation
         // event-driven instead - the world-sector service writes the handle directly via
         // SectorRefFieldRegistry::applyReference when the target sector loads. NOTE that path
         // covers UUID-carrying attachments only (socketCollectAll skips parentEntityUUID == 0),
-        // so a name-only attachment whose parent is absent stays unresolved until the next
-        // play/edit toggle or scene reload.
+        // so a name-only attachment whose parent is absent stays unresolved until the scene is
+        // deserialized again (scene load, or the snapshot restore on Stop).
         const entt::entity previous = attachment.parentEntity;
         entt::entity found = entt::null;
 
@@ -273,36 +278,35 @@ namespace animation
             }
         }
 
-        const bool havePath = parentMeshPath != nullptr && !parentMeshPath->empty();
-
         int32_t socketIdx = attachment.cachedSocketIndex;
+        const bool lookedUp = socketIdx < 0 && (skeleton || staticSockets);
         if (socketIdx < 0 && skeleton)
         {
             socketIdx = skeleton->getSocketIndex(attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty() && havePath)
-            {
-                dataCache.invalidateSkeleton(*parentMeshPath);
-                skeleton = dataCache.loadSkeleton(*parentMeshPath);
-                if (skeleton)
-                {
-                    socketIdx = skeleton->getSocketIndex(attachment.socketName);
-                }
-            }
             attachment.cachedSocketIndex = socketIdx;
         }
         else if (socketIdx < 0 && staticSockets)
         {
             socketIdx = animator::indexOfSocket(*staticSockets, attachment.socketName);
-            if (socketIdx < 0 && !attachment.socketName.empty() && havePath)
-            {
-                dataCache.invalidateSkeleton(*parentMeshPath);
-                staticSockets = dataCache.loadSockets(*parentMeshPath);
-                if (staticSockets)
-                {
-                    socketIdx = animator::indexOfSocket(*staticSockets, attachment.socketName);
-                }
-            }
             attachment.cachedSocketIndex = socketIdx;
+        }
+
+        // A missing socket stays at -1 and is reported once per attachment. The cached skeleton is
+        // shared with live animators, so it is never reloaded from here: saving the mesh's sockets
+        // queues a mesh reload (RuntimeAnimatorSystem), which resets every attachment's lookup.
+        // skeleton/staticSockets are only set alongside parentMeshPath, so lookedUp implies it.
+        if (lookedUp)
+        {
+            if (socketIdx >= 0)
+            {
+                missingSocketWarned.erase(attachedEntity);
+            }
+            else if (missingSocketWarned.insert(attachedEntity).second)
+            {
+                vfLogWarning("[Socket] Socket '{}' not found on mesh '{}'; the attachment stays "
+                             "unresolved until the mesh's sockets are saved again.",
+                             attachment.socketName, *parentMeshPath);
+            }
         }
 
         // VK-1432: classify the parent once (independent of how the index was obtained — it may

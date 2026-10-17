@@ -40,6 +40,9 @@ namespace mcp::tools
     void registerTerrainTools(ToolRegistry& registry, const ToolContext& context);    // terrain_* (VK-1653)
     void registerEnvironmentTools(ToolRegistry& registry, const ToolContext& context); // environment_*, ibl_*, gi_*, fog_*, weather_* (VK-1654)
     void registerRenderSettingsTools(ToolRegistry& registry, const ToolContext& context); // render_settings_*, postprocess_effect_* (VK-1655)
+    void registerAnimationTools(ToolRegistry& registry, const ToolContext& context);  // animation_* clips, state machine, preview, runtime state (VK-1656)
+    void registerAnimationIkTools(ToolRegistry& registry, const ToolContext& context); // animation_ik_* (VK-1656)
+    void registerAnimationSocketTools(ToolRegistry& registry, const ToolContext& context); // animation_*socket* (VK-1656)
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);

@@ -3,10 +3,49 @@
 #include "EndianUtils.hpp"
 #include "VFSHelpers.hpp"
 
+#include <format>
+#include <fstream>
+#include <optional>
 #include <sstream>
+#include <utility>
 
 namespace resource
 {
+    namespace
+    {
+        // readString()'s 10000-byte cap, except that an over-long or cut-off string fails
+        // instead of yielding "" with the stream left mid-string.
+        std::optional<std::string> readSummaryString(std::istream& file)
+        {
+            const uint32_t length = endian::readLE<uint32_t>(file);
+            if (!file || length > 10000)
+                return std::nullopt;
+
+            std::string str(length, '\0');
+            if (length > 0)
+                file.read(str.data(), length);
+            if (!file)
+                return std::nullopt;
+            return str;
+        }
+
+        // Skips one key array: a uint32 count, then count * keyBytes bytes.
+        bool skipKeys(std::istream& file, std::streamoff keyBytes, std::streamoff fileSize)
+        {
+            const uint32_t count = endian::readLE<uint32_t>(file);
+            if (!file)
+                return false;
+
+            file.seekg(static_cast<std::streamoff>(count) * keyBytes, std::ios::cur);
+            if (!file)
+                return false;
+
+            // Seeking past the end of a file stream succeeds; only the next read would fail.
+            const auto position = static_cast<std::streamoff>(file.tellg());
+            return position >= 0 && position <= fileSize;
+        }
+    }
+
     AnimationData AnimationResource::loadAnimation(std::string_view path)
     {
         AnimationData data;
@@ -109,6 +148,98 @@ namespace resource
                   data.name, data.channels.size(), data.duration / data.ticksPerSecond);
 
         return data;
+    }
+
+    AnimationClipHeader AnimationResource::readClipSummary(std::string_view path)
+    {
+        AnimationClipHeader header;
+        const std::string truncated = "the file is truncated or corrupt";
+
+        std::ifstream file(std::string(path), std::ios::binary | std::ios::ate);
+        if (!file.is_open())
+        {
+            header.error = "the file could not be opened";
+            return header;
+        }
+
+        const auto fileSize = static_cast<std::streamoff>(file.tellg());
+        file.seekg(0, std::ios::beg);
+        if (fileSize <= 0 || !file)
+        {
+            header.error = "the file is empty";
+            return header;
+        }
+
+        const uint8_t fileType = endian::readLE<uint8_t>(file);
+        if (!file || static_cast<FileType>(fileType) != FileType::ANIMATION)
+        {
+            header.error = "not a .vfAnim file";
+            return header;
+        }
+
+        const uint32_t major = endian::readLE<uint32_t>(file);
+        const uint32_t minor = endian::readLE<uint32_t>(file);
+        const uint32_t patch = endian::readLE<uint32_t>(file);
+        if (!file)
+        {
+            header.error = truncated;
+            return header;
+        }
+        if (major != Version::major || minor != Version::minor || patch != Version::patch)
+        {
+            header.error = std::format("incompatible .vfAnim version {}.{}.{} (expected {}.{}.{}); re-import the source file",
+                                       major, minor, patch, Version::major, Version::minor, Version::patch);
+            return header;
+        }
+
+        std::optional<std::string> name = readSummaryString(file);
+        const float durationTicks = endian::readLE<float>(file);
+        const float storedTicksPerSecond = endian::readLE<float>(file);
+        const uint32_t numChannels = endian::readLE<uint32_t>(file);
+        if (!name || !file)
+        {
+            header.error = truncated;
+            return header;
+        }
+        if (numChannels > 1000)
+        {
+            header.error = std::format("invalid channel count {}", numChannels);
+            return header;
+        }
+
+        // Key layout (writer: import/types/Animation.cpp writeChannels): position and scale
+        // keys are time + vec3, rotation keys are time + quat.
+        constexpr auto vec3KeyBytes = static_cast<std::streamoff>(4 * sizeof(float));
+        constexpr auto quatKeyBytes = static_cast<std::streamoff>(5 * sizeof(float));
+
+        std::vector<std::string> channelNames;
+        channelNames.reserve(numChannels);
+        for (uint32_t c = 0; c < numChannels; ++c)
+        {
+            std::optional<std::string> boneName = readSummaryString(file);
+            if (!boneName ||
+                !skipKeys(file, vec3KeyBytes, fileSize) ||
+                !skipKeys(file, quatKeyBytes, fileSize) ||
+                !skipKeys(file, vec3KeyBytes, fileSize))
+            {
+                header.error = truncated;
+                return header;
+            }
+            channelNames.push_back(std::move(*boneName));
+        }
+
+        // Same acceptance as loadAnimation(): a missing event section or a count of 256+
+        // loads no events.
+        const uint32_t numEvents = endian::readLE<uint32_t>(file);
+        header.eventCount = (file && numEvents < 256) ? numEvents : 0;
+
+        header.name = std::move(*name);
+        header.durationTicks = durationTicks;
+        header.ticksPerSecond = storedTicksPerSecond > 0.0f ? storedTicksPerSecond : 24.0f;
+        header.durationSeconds = durationTicks / header.ticksPerSecond;
+        header.channelNames = std::move(channelNames);
+        header.success = true;
+        return header;
     }
 
     std::streampos AnimationResource::getEventDataOffset(std::string_view path)

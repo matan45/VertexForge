@@ -401,7 +401,7 @@ namespace windows
                         services::ImportResult res;
                         res.sourcePath = fileResult.sourcePath;
                         res.outputPath = fileResult.outputPath;
-                        res.assetType = controllers::Import::assetTypeFor(fileResult.fileType);
+                        res.assetType = fileResult.assetType;
                         res.success = fileResult.success;
                         res.errorMessage = fileResult.errorMessage;
                         completeNotif.results.push_back(res);

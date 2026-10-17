@@ -314,13 +314,18 @@ namespace core
 
         const auto& attachment = registry.get<components::SocketAttachmentComponent>(*resolved);
         events::socket::SocketAttachmentData data;
-        data.parentEntity = services::internal::toHandle(attachment.parentEntity);
         data.socketName = attachment.socketName;
         data.isActive = attachment.isActive;
 
-        if (attachment.parentEntity != entt::null &&
-            registry.valid(attachment.parentEntity) &&
-            registry.all_of<components::NameComponent>(attachment.parentEntity))
+        // An unresolved parent (entt::null, or an entity that no longer exists) must be an
+        // invalid handle: toHandle(entt::null) is 0xFFFFFFFF, which EntityHandle::isValid()
+        // accepts.
+        const bool parentResolved = attachment.parentEntity != entt::null &&
+                                    registry.valid(attachment.parentEntity);
+        data.parentEntity = parentResolved ? services::internal::toHandle(attachment.parentEntity)
+                                           : services::EntityHandle::invalid();
+
+        if (parentResolved && registry.all_of<components::NameComponent>(attachment.parentEntity))
         {
             data.parentEntityName = registry.get<components::NameComponent>(attachment.parentEntity).name;
         }

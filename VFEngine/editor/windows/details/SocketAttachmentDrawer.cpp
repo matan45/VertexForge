@@ -39,7 +39,9 @@ namespace windows::details
             ImGui::Indent(10.0f);
 
             auto data = *dataOpt;
-            bool isAttached = data.parentEntity.isValid() && !data.socketName.empty();
+            // A link whose parent is not resolved (not loaded yet, or deleted) is still a link: it keeps its
+            // socket name and Detach; only an empty component offers the parent picker.
+            bool isAttached = !data.socketName.empty();
 
             if (isAttached)
             {
@@ -90,7 +92,11 @@ namespace windows::details
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        if (!data.parentEntityName.empty())
+        if (!data.parentEntity.isValid())
+        {
+            ImGui::TextDisabled("Parent: (unresolved)");
+        }
+        else if (!data.parentEntityName.empty())
         {
             ImGui::Text("Parent: %s", data.parentEntityName.c_str());
         }

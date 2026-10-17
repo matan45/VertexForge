@@ -280,6 +280,18 @@ TEST_SUITE("MCP content resources")
         CHECK(contains(withoutPlugins, "render_settings_set"));
         CHECK(contains(withoutPlugins, "postprocess_effect_set"));
         CHECK(contains(withoutPlugins, "There is no FXAA"));
+        // VK-1656: the Animator binding is a built-in type; animators, clips, sockets and IK have their own tools.
+        CHECK(contains(withoutPlugins, "### Animator\n"));
+        CHECK(contains(withoutPlugins, "## Animation\n"));
+        for (const char* tool : {"animation_list_clips", "animation_get_state_machine", "animation_set_state_machine",
+                                 "animation_preview", "animation_get_runtime_state", "animation_list_sockets",
+                                 "animation_attach_to_socket", "animation_detach_from_socket",
+                                 "animation_set_socket_active", "animation_ik_get", "animation_ik_set",
+                                 "animation_ik_remove", "animation_ik_set_target"})
+        {
+            CAPTURE(tool);
+            CHECK(contains(withoutPlugins, tool));
+        }
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

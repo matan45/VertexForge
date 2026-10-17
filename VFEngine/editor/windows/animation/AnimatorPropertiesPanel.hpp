@@ -22,7 +22,9 @@ namespace windows::animation
                                             uint32_t selectedTransitionId,
                                             bool& isDirty);
 
-        void drawAddParameterPopup(animator::AnimatorData* animatorData,
+        // Adds to `graph`: the selected layer's own graph, never the top-level
+        // AnimatorData::graph a layered file does not save.
+        void drawAddParameterPopup(animator::AnimatorGraph* graph,
                                     bool& showAddParameterPopup,
                                     std::string& newParameterName,
                                     animator::AnimatorParameterType& newParameterType,

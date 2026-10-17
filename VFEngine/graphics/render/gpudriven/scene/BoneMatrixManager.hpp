@@ -20,6 +20,7 @@ namespace render::gpudriven {
         uint32_t boneMatrixOffset;
         uint32_t boneCount;
         bool dirty = false;
+        bool atBindPose = false; // identity palette written by resetToBindPose(); cleared by updateBoneMatrices()
     };
 
     struct BoneDefragResult {
@@ -82,6 +83,10 @@ namespace render::gpudriven {
         bool hasAllocation(entt::entity entity) const;
         uint32_t getBoneOffset(entt::entity entity) const;
         void updateBoneMatrices(entt::entity entity, const std::vector<glm::mat4>& matrices);
+        // Writes identity matrices over the entity's allocation once (identity skinning ==
+        // bind pose), for a mesh that keeps its allocation but no longer produces a pose.
+        // No-op without an allocation.
+        void resetToBindPose(entt::entity entity);
         void uploadToGPU(vk::CommandBuffer cmd);
 
         vk::DescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
@@ -99,6 +104,7 @@ namespace render::gpudriven {
         bool isDefragInProgress() const { return defragActive; }
 
     private:
+        void markDirty(entt::entity entity, AnimatedObjectBoneData& data);
         void createBuffers();
         void destroyBuffers();
         void initializeGPUBuffer();

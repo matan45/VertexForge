@@ -1,4 +1,5 @@
 #include "CoreTools.hpp"
+#include "ComponentBinding.hpp"
 #include "ToolHelpers.hpp"
 #include "../protocol/ArgReader.hpp"
 #include "../undo/McpUndo.hpp"
@@ -12,12 +13,10 @@
 #include <array>
 #include <cstdint>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -99,47 +98,6 @@ namespace mcp::tools
             throw ArgError(std::string("field '") + key + "' must be one of: " + allowed);
         }
 
-        // Assets are exchanged as paths: absolute, or relative to the project working
-        // directory. "guid:<hex>" is accepted too (and returned for assets whose
-        // file can no longer be resolved). "" clears the reference.
-        nlohmann::json assetToJson(const asset::AssetRef& ref)
-        {
-            if (!ref.isValid())
-            {
-                return "";
-            }
-            const std::string& path = ref.resolve();
-            return path.empty() ? "guid:" + ref.toHexString() : path;
-        }
-
-        asset::AssetRef assetFromJson(const nlohmann::json& value, const char* key)
-        {
-            if (value.is_null())
-            {
-                return asset::AssetRef::invalid();
-            }
-            if (!value.is_string())
-            {
-                throw ArgError(std::string("field '") + key + "' must be an asset path string");
-            }
-            const std::string text = value.get<std::string>();
-            if (text.empty())
-            {
-                return asset::AssetRef::invalid();
-            }
-
-            static constexpr std::string_view guidPrefix = "guid:";
-            asset::AssetRef ref = text.starts_with(guidPrefix)
-                ? asset::AssetRef::fromHexString(text.substr(guidPrefix.size()))
-                : asset::AssetRef::fromPath(text);
-            if (!ref.isValid())
-            {
-                throw ArgError(std::string("field '") + key + "': asset not found or not an engine asset: " + text +
-                               " (use assets_list to find imported assets)");
-            }
-            return ref;
-        }
-
         nlohmann::json assetListToJson(const std::vector<asset::AssetRef>& refs)
         {
             nlohmann::json out = nlohmann::json::array();
@@ -148,93 +106,6 @@ namespace mcp::tools
                 out.push_back(assetToJson(ref));
             }
             return out;
-        }
-
-        template <typename T>
-        void readField(const nlohmann::json& object, const char* key, T& out)
-        {
-            auto it = object.find(key);
-            if (it == object.end())
-            {
-                return;
-            }
-            const nlohmann::json& value = *it;
-
-            if constexpr (std::is_same_v<T, bool>)
-            {
-                if (!value.is_boolean())
-                {
-                    throw ArgError(std::string("field '") + key + "' must be a boolean");
-                }
-                out = value.get<bool>();
-            }
-            else if constexpr (std::is_same_v<T, float>)
-            {
-                if (!value.is_number())
-                {
-                    throw ArgError(std::string("field '") + key + "' must be a number");
-                }
-                out = value.get<float>();
-            }
-            else if constexpr (std::is_integral_v<T>)
-            {
-                int64_t number = 0;
-                if (value.is_number_integer())
-                {
-                    number = value.get<int64_t>();
-                }
-                else if (value.is_number_float() &&
-                         value.get<double>() == static_cast<double>(static_cast<int64_t>(value.get<double>())))
-                {
-                    number = static_cast<int64_t>(value.get<double>());
-                }
-                else
-                {
-                    throw ArgError(std::string("field '") + key + "' must be an integer");
-                }
-                if (number < static_cast<int64_t>(std::numeric_limits<T>::min()) ||
-                    number > static_cast<int64_t>(std::numeric_limits<T>::max()))
-                {
-                    throw ArgError(std::string("field '") + key + "' is out of range [" +
-                                   std::to_string(static_cast<int64_t>(std::numeric_limits<T>::min())) + ", " +
-                                   std::to_string(static_cast<int64_t>(std::numeric_limits<T>::max())) + "]");
-                }
-                out = static_cast<T>(number);
-            }
-            else if constexpr (std::is_same_v<T, glm::vec3>)
-            {
-                out = ArgReader::toVec3(value, key);
-            }
-            else if constexpr (std::is_same_v<T, std::string>)
-            {
-                if (!value.is_string())
-                {
-                    throw ArgError(std::string("field '") + key + "' must be a string");
-                }
-                out = value.get<std::string>();
-            }
-            else if constexpr (std::is_same_v<T, asset::AssetRef>)
-            {
-                out = assetFromJson(value, key);
-            }
-            else if constexpr (std::is_same_v<T, std::vector<asset::AssetRef>>)
-            {
-                if (!value.is_array())
-                {
-                    throw ArgError(std::string("field '") + key + "' must be an array of asset paths");
-                }
-                std::vector<asset::AssetRef> refs;
-                refs.reserve(value.size());
-                for (const nlohmann::json& item : value)
-                {
-                    refs.push_back(assetFromJson(item, key));
-                }
-                out = std::move(refs);
-            }
-            else
-            {
-                static_assert(!sizeof(T*), "unsupported component field type");
-            }
         }
 
         // ------------------------------------------------------------------
@@ -522,21 +393,8 @@ namespace mcp::tools
         }
 
         // ------------------------------------------------------------------
-        // Binding table
+        // Binding table (ComponentBinding: ComponentBinding.hpp)
         // ------------------------------------------------------------------
-
-        struct ComponentBinding
-        {
-            std::string name;
-            std::string fieldHelp;
-            std::function<bool(const services::EntityHandle&)> add;
-            std::function<bool(const services::EntityHandle&)> remove;
-            // nullopt = the entity has no such component.
-            std::function<std::optional<nlohmann::json>(const services::EntityHandle&)> get;
-            // Overlays `patch` onto the current data and writes it back. Returns the
-            // data read back afterwards, or nullopt when the component is missing.
-            std::function<std::optional<nlohmann::json>(const services::EntityHandle&, const nlohmann::json&)> patch;
-        };
 
         // Every curated component follows the same event shape:
         // Add<X>ComponentCommand / Remove<X>ComponentCommand {entity} -> bool,
@@ -632,8 +490,10 @@ namespace mcp::tools
                     "meshRef (asset path of an imported .vfMesh), animatorRef (.vfAnimator path or \"\"), "
                     "retargetRef (.vfretarget path or \"\"), showBoundingBox (bool), applyRootMotion (bool), "
                     "maxDrawDistance (float, 0 = category default), submeshIndex (int, -1 = all), renderLayer (0-31). "
-                    "Materials are assigned with material_assign, not here.",
+                    "Materials are assigned with material_assign, not here. For character animation use the "
+                    "Animator type (same animatorRef / retargetRef / applyRootMotion, validated).",
                     &SetMeshDataCommand::meshData, &meshToJson, &meshFromJson),
+                makeAnimatorBinding(),
                 makeBinding<AddCameraComponentCommand, RemoveCameraComponentCommand, GetCameraDataQuery, SetCameraDataCommand>(
                     "Camera",
                     "fieldOfView (degrees), nearPlane, farPlane, aspectRatio, isPerspective (bool), "
@@ -806,15 +666,36 @@ namespace mcp::tools
                 {
                     return ToolResult::error("Entity already has a " + binding.name + " component; use component_set");
                 }
+                // VK-1656: a binding kept in another component's fields is undone by restoring them.
+                const std::optional<BuiltinHostFields> hostBefore = builtinHostFields(binding.name, entity);
                 if (!binding.add(entity))
                 {
-                    return ToolResult::error("Add" + binding.name + "Component failed");
+                    std::string message = "Add" + binding.name + "Component failed";
+                    if (!binding.addRequirement.empty())
+                    {
+                        message += ": " + binding.addRequirement;
+                    }
+                    return ToolResult::error(message);
                 }
 
                 std::optional<nlohmann::json> fields;
                 try
                 {
-                    fields = data != nullptr ? binding.patch(entity, *data) : binding.get(entity);
+                    // VK-1656: prepareAdd consumes the creation-only keys before the read-only check.
+                    std::optional<nlohmann::json> patch;
+                    if (binding.prepareAdd)
+                    {
+                        patch = binding.prepareAdd(entity, data != nullptr ? *data : nlohmann::json::object());
+                    }
+                    else if (data != nullptr)
+                    {
+                        patch = *data;
+                    }
+                    if (patch.has_value())
+                    {
+                        rejectReadOnlyFields(binding, *patch);
+                    }
+                    fields = patch.has_value() ? binding.patch(entity, *patch) : binding.get(entity);
                 }
                 catch (...)
                 {
@@ -824,8 +705,18 @@ namespace mcp::tools
                 }
 
                 undo::UndoRecorder recorder("MCP: Add " + binding.name + " component");
-                recorder.add(std::make_unique<undo::BuiltinComponentPresenceUndo>(
-                    toId(entity), binding.name, fields.value_or(nlohmann::json::object()), true));
+                const std::optional<BuiltinHostFields> hostAfter =
+                    hostBefore.has_value() ? builtinHostFields(binding.name, entity) : std::nullopt;
+                if (hostBefore.has_value() && hostAfter.has_value())
+                {
+                    recorder.add(std::make_unique<undo::BuiltinComponentPatchUndo>(
+                        toId(entity), hostBefore->type, hostBefore->fields, hostAfter->fields));
+                }
+                else
+                {
+                    recorder.add(std::make_unique<undo::BuiltinComponentPresenceUndo>(
+                        toId(entity), binding.name, fields.value_or(nlohmann::json::object()), true));
+                }
                 recorder.push();
                 return ToolResult::ok({
                     {"entity", static_cast<uint32_t>(entity.id)},
@@ -841,9 +732,13 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "component_remove";
             tool.title = "Remove component";
-            tool.description = "Remove a component from an entity. Supported types: Mesh, Camera, DirectionalLight, "
-                               "PointLight, SpotLight, RigidBody, Collider, AudioSource3D, AudioSource2D. "
-                               "Undoable (undo restores the component with its field values).";
+            std::string supported;
+            for (const std::string& name : typeNames())
+            {
+                supported += supported.empty() ? name : ", " + name;
+            }
+            tool.description = "Remove a component from an entity. Supported types: " + supported +
+                               ". Undoable (undo restores the component with its field values).";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"type", typeSchema()}
@@ -927,6 +822,7 @@ namespace mcp::tools
                 services::EntityHandle entity = requireExistingEntity(reader);
                 const ComponentBinding& binding = requireBinding(reader);
                 const nlohmann::json& data = requireDataObject(reader);
+                rejectReadOnlyFields(binding, data);
 
                 std::optional<nlohmann::json> before = binding.get(entity);
                 if (!before.has_value())
@@ -981,7 +877,32 @@ namespace mcp::tools
     std::optional<nlohmann::json> patchBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
                                                         const nlohmann::json& patch)
     {
-        return bindingByName(type).patch(entity, patch);
+        // Undo replays the full field object get() reported; its read-only keys are not data to write.
+        const ComponentBinding& binding = bindingByName(type);
+        return binding.patch(entity, withoutReadOnlyFields(binding, patch));
+    }
+
+    std::optional<BuiltinHostFields> builtinHostFields(const std::string& type, const services::EntityHandle& entity)
+    {
+        const ComponentBinding& binding = bindingByName(type);
+        if (binding.hostType.empty())
+        {
+            return std::nullopt;
+        }
+        const std::optional<nlohmann::json> host = getBuiltinComponent(binding.hostType, entity);
+        if (!host.has_value())
+        {
+            return std::nullopt;
+        }
+        BuiltinHostFields out{binding.hostType, nlohmann::json::object()};
+        for (const std::string& field : binding.hostFields)
+        {
+            if (const auto it = host->find(field); it != host->end())
+            {
+                out.fields[field] = *it;
+            }
+        }
+        return out;
     }
 
     void registerComponentTools(ToolRegistry& registry, const ToolContext&)

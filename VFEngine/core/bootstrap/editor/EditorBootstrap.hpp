@@ -70,6 +70,7 @@ namespace core
     class MaterialPreviewAdapter;
     class MeshPreviewAdapter;
     class ThumbnailRenderAdapter;
+    class AnimationAuthoringAdapter;
     class AnimationPreviewAdapter;
     class PrefabRigPreviewAdapter;
     class UILayerPreviewAdapter;
@@ -118,6 +119,7 @@ namespace core
         std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
         std::unique_ptr<ThumbnailRenderAdapter> thumbnailRenderAdapter;
+        std::unique_ptr<AnimationAuthoringAdapter> animationAuthoringAdapter;
         std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
         std::unique_ptr<PrefabRigPreviewAdapter> prefabRigPreviewAdapter;
         std::unique_ptr<UILayerPreviewAdapter> uiLayerPreviewAdapter;

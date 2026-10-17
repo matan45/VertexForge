@@ -263,9 +263,11 @@ TEST_SUITE("McpGenericComponentTools")
         auto result = fixture.call("component_list_types", nlohmann::json::object());
         REQUIRE_FALSE(result.isError);
         const nlohmann::json& builtin = result.structured["builtin"];
-        REQUIRE(builtin.size() == 9);
+        REQUIRE(builtin.size() == 10);
         CHECK(builtin[0]["name"] == "Mesh");
         CHECK(builtin[0]["fieldHelp"].get<std::string>().find("meshRef") != std::string::npos);
+        CHECK(builtin[1]["name"] == "Animator"); // VK-1656: right after Mesh, whose fields it presents
+        CHECK(builtin[1]["fieldHelp"].get<std::string>().find("animation_set_state_machine") != std::string::npos);
         REQUIRE(result.structured["plugin"].size() == 1);
         CHECK(result.structured["plugin"][0]["name"] == "Health");
     }

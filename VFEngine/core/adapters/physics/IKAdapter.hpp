@@ -24,6 +24,8 @@ namespace core
                                const std::vector<std::string>& chainBoneNames,
                                const std::vector<animator::ik::JointConstraint>& constraints,
                                float weight, bool enabled) override;
+        bool setChains(services::EntityHandle entity,
+                       const std::vector<animator::ik::IKChainConfig>& chains) override;
 
         void setTarget(services::EntityHandle entity, const std::string& chainName,
                        const glm::vec3& position,

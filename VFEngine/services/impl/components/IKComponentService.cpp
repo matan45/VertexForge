@@ -47,6 +47,12 @@ namespace services
                                        chainBoneNames, constraints, weight, enabled);
     }
 
+    bool IKComponentService::setChains(EntityHandle entity,
+                                       const std::vector<animator::ik::IKChainConfig>& chains)
+    {
+        return ikProvider->setChains(entity, chains);
+    }
+
     void IKComponentService::setTarget(EntityHandle entity, const std::string& chainName,
                                         const glm::vec3& position,
                                         const std::optional<glm::quat>& rotation)
@@ -132,6 +138,11 @@ namespace services
                 updateChainConfig(cmd.entity, cmd.chainName, cmd.tipBoneName,
                                    cmd.chainBoneNames, cmd.constraints,
                                    cmd.weight, cmd.enabled);
+            });
+
+        dispatcher.registerCommandHandler<events::ik::SetIKChainsCommand>(
+            [this](const events::ik::SetIKChainsCommand& cmd) -> bool {
+                return setChains(cmd.entity, cmd.chains);
             });
 
         dispatcher.registerQueryHandler<events::ik::GetIKChainNamesQuery>(

@@ -9,6 +9,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <utility>
 
 namespace
 {
@@ -118,6 +119,35 @@ TEST_SUITE("MCP prompts")
                 CAPTURE(type);
                 CHECK(contains(text, type));
             }
+        }
+    }
+
+    TEST_CASE("both templates offer the optional animated player (VK-1656)")
+    {
+        PromptFixture fixture;
+
+        const std::pair<const char*, const char*> templates[] = {
+            {"create_platformer_template", "PlatformerPlayerController"},
+            {"create_top_down_template", "TopDownPlayerMover"}
+        };
+        for (const auto& entry : templates)
+        {
+            const char* name = entry.first;
+            const std::string script = entry.second;
+            CAPTURE(name);
+            const std::string text = fixture.text(name, nlohmann::json::object());
+            const std::set<std::string> tokens = snakeCaseTokens(text);
+            for (const char* tool : {"assets_import", "animation_list_clips", "animation_set_state_machine",
+                                     "animation_preview", "animation_get_runtime_state"})
+            {
+                CAPTURE(tool);
+                CHECK(tokens.count(tool) == 1);
+            }
+            CHECK(contains(text, "13. Optional animated player"));
+            CHECK(contains(text, "'Animator' with data {\"defaultClip\""));
+            CHECK(contains(text, "In " + script + " set 'speed' every frame"));
+            CHECK(contains(text, "vf://docs/mtype-api/engine/Animator"));
+            CHECK(contains(text, "14. Build, attach, save and play-test:"));
         }
     }
 

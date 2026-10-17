@@ -2,18 +2,74 @@
 #include "../animation/RuntimeAnimatorSystem.hpp"
 #include "../animation/AnimationLayerStack.hpp"
 #include "../animation/AnimatorStateMachine.hpp"
+#include "../../services/events/project/ResourceEvents.hpp"
+#include "../../services/events/scene/ComponentMediaEvents.hpp"
+#include "../../services/events/editor/EditorModeEvents.hpp"
+#include "../../services/events/physics/SocketEvents.hpp"
+#include "../../services/events/physics/IKEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
+#include <algorithm>
+#include <cctype>
+#include <string_view>
 
 namespace controllers
 {
+    namespace
+    {
+        bool isAnimatorAssetPath(const std::string& path)
+        {
+            constexpr std::string_view extension = ".vfanimator";
+            if (path.size() < extension.size())
+                return false;
+            const std::string_view tail = std::string_view(path).substr(path.size() - extension.size());
+            return std::equal(extension.begin(), extension.end(), tail.begin(), tail.end(),
+                [](char expected, char actual)
+                {
+                    return expected == static_cast<char>(std::tolower(static_cast<unsigned char>(actual)));
+                });
+        }
+    }
+
     void AnimatorSystemController::init()
     {
         animation::RuntimeAnimatorSystem::instance().initialize();
+
+        // Handlers only enqueue: publishers can be worker threads (MeshDataChanged from the
+        // Scripts task) or run after the frame graph (a fatal-script Stop). RuntimeAnimatorSystem
+        // applies the requests on the main thread in prepareMeshes.
+        auto& dispatcher = events::EventDispatcher::instance();
+        forwarders.emplace_back(dispatcher.subscribe<events::resource::AssetSavedNotification>(
+            [](const events::resource::AssetSavedNotification& notification)
+            {
+                if (isAnimatorAssetPath(notification.filePath))
+                    animation::RuntimeAnimatorSystem::instance().requestAnimatorReload(notification.filePath);
+            }));
+        forwarders.emplace_back(dispatcher.subscribe<events::socket::SocketDataSavedNotification>(
+            [](const events::socket::SocketDataSavedNotification& notification)
+            {
+                animation::RuntimeAnimatorSystem::instance().requestMeshReload(notification.meshPath);
+            }));
+        forwarders.emplace_back(dispatcher.subscribe<events::ik::IKChainDataSavedNotification>(
+            [](const events::ik::IKChainDataSavedNotification& notification)
+            {
+                animation::RuntimeAnimatorSystem::instance().requestMeshReload(notification.meshPath);
+            }));
+        forwarders.emplace_back(dispatcher.subscribe<events::scene::MeshDataChangedNotification>(
+            [](const events::scene::MeshDataChangedNotification&)
+            {
+                animation::RuntimeAnimatorSystem::instance().markEditPreviewDirty();
+            }));
+        forwarders.emplace_back(dispatcher.subscribe<events::editor::EditorModeChangedNotification>(
+            [](const events::editor::EditorModeChangedNotification&)
+            {
+                animation::RuntimeAnimatorSystem::instance().requestModeTransition();
+            }));
     }
 
     void AnimatorSystemController::cleanUp()
     {
+        forwarders.clear();
         animation::RuntimeAnimatorSystem::instance().shutdown();
     }
 
@@ -319,5 +375,26 @@ namespace controllers
         if (stack)
             return stack->getLayerName(layerIndex);
         return "";
+    }
+
+    services::AnimationEditPreviewResult AnimatorSystemController::startEditPreview(
+        entt::entity entity, const services::AnimationEditPreviewRequest& request)
+    {
+        return animation::RuntimeAnimatorSystem::instance().startEditPreview(entity, request);
+    }
+
+    bool AnimatorSystemController::stopEditPreview(entt::entity entity)
+    {
+        return animation::RuntimeAnimatorSystem::instance().stopEditPreview(entity);
+    }
+
+    bool AnimatorSystemController::stopAllEditPreviews()
+    {
+        return animation::RuntimeAnimatorSystem::instance().stopAllEditPreviews();
+    }
+
+    std::optional<services::AnimationEditPreviewStatus> AnimatorSystemController::getEditPreviewStatus(entt::entity entity) const
+    {
+        return animation::RuntimeAnimatorSystem::instance().getEditPreviewStatus(entity);
     }
 }

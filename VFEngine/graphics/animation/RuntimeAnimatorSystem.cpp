@@ -6,7 +6,10 @@
 #include "../../services/events/animation/AnimationEventEvents.hpp"
 #include "../../services/data/EntityConversion.hpp"
 #include "asset/AssetRef.hpp"
+#include "resource/ResourceManager.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <algorithm>
+#include <utility>
 
 namespace animation
 {
@@ -19,24 +22,6 @@ namespace animation
     void RuntimeAnimatorSystem::shutdown()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-
-        if (meshDataChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(meshDataChangedToken);
-            meshDataChangedToken = {};
-        }
-
-        if (editorModeChangedToken.isValid())
-        {
-            dispatcher.unsubscribe(editorModeChangedToken);
-            editorModeChangedToken = {};
-        }
-
-        if (socketDataSavedToken.isValid())
-        {
-            dispatcher.unsubscribe(socketDataSavedToken);
-            socketDataSavedToken = {};
-        }
 
         if (sectorLoadedToken.isValid())
         {
@@ -53,6 +38,11 @@ namespace animation
         {
             std::lock_guard<std::mutex> lock(pendingInitMutex);
             pendingInitQueue.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(pendingRequestMutex);
+            pendingRequests = PendingRequests{};
+            hasPendingRequests = false;
         }
         clearAll();
         socketUpdater.reset();
@@ -122,26 +112,6 @@ namespace animation
             applyRootMotion(entity, anim, registry);
             applyIKPostProcess(entity, anim, registry);
         }
-    }
-
-    void RuntimeAnimatorSystem::updateEditModePreview()
-    {
-        if (!editPreviewDirty)
-            return;
-
-        processPendingStreamingInits();
-        syncWithRegistry();
-
-        auto& registry = scene::EntityRegistry::getRegistry();
-        for (auto& [entity, anim] : animators)
-        {
-            if (!anim || !anim->isInitialized())
-                continue;
-            anim->evaluateRestPose();
-            applyIKPostProcess(entity, anim.get(), registry);
-        }
-
-        editPreviewDirty = false;
     }
 
     bool RuntimeAnimatorSystem::isEntityInFrustum(entt::entity entity, entt::registry& registry) const
@@ -274,12 +244,14 @@ namespace animation
     void RuntimeAnimatorSystem::destroyEntityAnimator(entt::entity entity)
     {
         editPreviewDirty = true;
+        editPreviews.erase(entity); // a preview session never outlives the entity's animator
         auto it = animators.find(entity);
         if (it != animators.end())
         {
             animators.erase(it);
         }
         retargetContexts.erase(entity); // free after the layer stack (its evaluators) is gone
+        animatorSources.erase(entity);
         entityLODStates.erase(entity);
 
         auto& registry = scene::EntityRegistry::getRegistry();
@@ -331,7 +303,13 @@ namespace animation
 
     void RuntimeAnimatorSystem::syncWithRegistry()
     {
+        applyPendingRequests();
+
         auto& registry = scene::EntityRegistry::getRegistry();
+
+        // AnimatorComponent only mirrors a live binding (setupEntityAnimatorComponent creates
+        // it), so it goes with the binding. Removed after the view loop.
+        std::vector<entt::entity> unbound;
 
         auto view = registry.view<components::MeshComponent>();
         for (auto entity : view)
@@ -340,16 +318,17 @@ namespace animation
 
             if (meshComp.animatorRef.isValid())
             {
-                if (!hasAnimator(entity))
-                {
-                    initializeEntityAnimator(entity, meshComp.animatorRef.resolve());
-                }
+                syncEntityAnimator(entity, meshComp);
             }
             else
             {
                 if (hasAnimator(entity))
                 {
                     destroyEntityAnimator(entity);
+                }
+                if (registry.all_of<components::AnimatorComponent>(entity))
+                {
+                    unbound.push_back(entity);
                 }
             }
         }
@@ -365,14 +344,199 @@ namespace animation
 
         for (auto entity : toRemove)
         {
+            editPreviews.erase(entity);
             animators.erase(entity);
             retargetContexts.erase(entity);
+            animatorSources.erase(entity);
+            if (registry.valid(entity))
+            {
+                unbound.push_back(entity);
+            }
         }
 
-        if (pendingCacheCleanup)
+        for (auto entity : unbound)
         {
-            pendingCacheCleanup = false;
-            cleanupUnusedCaches();
+            registry.remove<components::AnimatorComponent>(entity);
+        }
+    }
+
+    void RuntimeAnimatorSystem::syncEntityAnimator(entt::entity entity, const components::MeshComponent& meshComp)
+    {
+        if (hasAnimator(entity) && !animatorSourcesMatch(entity, meshComp))
+        {
+            destroyEntityAnimator(entity);
+        }
+        if (!hasAnimator(entity))
+        {
+            initializeEntityAnimator(entity, meshComp.animatorRef.resolve());
+        }
+    }
+
+    void RuntimeAnimatorSystem::recordAnimatorSources(entt::entity entity, const std::string& animatorPath)
+    {
+        AnimatorSources& sources = animatorSources[entity];
+        sources = AnimatorSources{};
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        const auto* meshComp = registry.try_get<components::MeshComponent>(entity);
+        if (!meshComp)
+            return;
+
+        // A path that is no longer the component's (a stale queued init) records no animator
+        // GUID, so the next sync rebuilds the animator from the component's current ref.
+        if (meshComp->animatorRef.resolve() == animatorPath)
+            sources.animator = meshComp->animatorRef.getGUID();
+        sources.mesh = meshComp->meshRef.getGUID();
+        sources.retarget = meshComp->retargetRef.getGUID();
+    }
+
+    bool RuntimeAnimatorSystem::animatorSourcesMatch(entt::entity entity, const components::MeshComponent& meshComp) const
+    {
+        auto it = animatorSources.find(entity);
+        return it != animatorSources.end() &&
+               it->second.animator == meshComp.animatorRef.getGUID() &&
+               it->second.mesh == meshComp.meshRef.getGUID() &&
+               it->second.retarget == meshComp.retargetRef.getGUID();
+    }
+
+    void RuntimeAnimatorSystem::requestAnimatorReload(std::string path)
+    {
+        {
+            std::lock_guard<std::mutex> lock(pendingRequestMutex);
+            pendingRequests.animatorPaths.push_back(std::move(path));
+            hasPendingRequests = true;
+        }
+        editPreviewDirty = true;
+    }
+
+    void RuntimeAnimatorSystem::requestMeshReload(std::string path)
+    {
+        {
+            std::lock_guard<std::mutex> lock(pendingRequestMutex);
+            pendingRequests.meshPaths.push_back(std::move(path));
+            hasPendingRequests = true;
+        }
+        editPreviewDirty = true;
+    }
+
+    void RuntimeAnimatorSystem::requestModeTransition()
+    {
+        {
+            std::lock_guard<std::mutex> lock(pendingRequestMutex);
+            pendingRequests.modeTransition = true;
+            hasPendingRequests = true;
+        }
+        editPreviewDirty = true;
+    }
+
+    void RuntimeAnimatorSystem::markEditPreviewDirty()
+    {
+        editPreviewDirty = true;
+    }
+
+    void RuntimeAnimatorSystem::applyPendingRequests()
+    {
+        if (!hasPendingRequests.exchange(false))
+            return;
+
+        PendingRequests requests;
+        {
+            std::lock_guard<std::mutex> lock(pendingRequestMutex);
+            std::swap(requests, pendingRequests);
+        }
+
+        // A mode change only ends the previews. Animators stay: scripts may already have set
+        // parameters this frame, and Stop re-creates the entities, which the sync picks up.
+        if (requests.modeTransition)
+        {
+            stopAllEditPreviews();
+            editPreviewDirty = true;
+        }
+
+        for (const auto& path : requests.animatorPaths)
+        {
+            reloadAnimator(path);
+        }
+
+        if (!requests.meshPaths.empty())
+        {
+            reloadMeshes(requests.meshPaths);
+        }
+    }
+
+    void RuntimeAnimatorSystem::reloadAnimator(const std::string& path)
+    {
+        const asset::AssetRef ref = asset::AssetRef::fromPath(path);
+        if (!ref.isValid())
+            return;
+
+        // Layer stacks hold raw pointers into the cached AnimatorData. `stale` keeps the dropped
+        // data alive until every stack built from the file is destroyed: those recorded with its
+        // GUID, and any whose data is a dropped entry (a path spelled differently at init).
+        const auto stale = dataCache.invalidateAnimatorData(ref.getGUID());
+
+        std::vector<entt::entity> affected;
+        for (const auto& [entity, stack] : animators)
+        {
+            const auto sourcesIt = animatorSources.find(entity);
+            const bool fromFile = sourcesIt != animatorSources.end() && sourcesIt->second.animator == ref.getGUID();
+            const animator::AnimatorData* data = stack ? stack->getAnimatorData() : nullptr;
+            const bool fromStaleData = data && std::any_of(stale.begin(), stale.end(),
+                [data](const std::shared_ptr<animator::AnimatorData>& dropped) { return dropped.get() == data; });
+            if (fromFile || fromStaleData)
+            {
+                affected.push_back(entity);
+            }
+        }
+
+        for (auto entity : affected)
+        {
+            destroyEntityAnimator(entity); // also ends the entity's edit preview
+        }
+
+        resource::ResourceManager::invalidateAnimatorCache(ref);
+    }
+
+    void RuntimeAnimatorSystem::reloadMeshes(const std::vector<std::string>& meshPaths)
+    {
+        // Layer stacks and preview sessions point at cached skeletons, and retarget contexts are
+        // built from them (incl. another mesh's skeleton as the retarget source), so every
+        // animator goes before any skeleton entry. The sync that follows re-reads the meshes.
+        stopAllEditPreviews();
+        std::vector<entt::entity> all;
+        all.reserve(animators.size());
+        for (const auto& [entity, stack] : animators)
+        {
+            all.push_back(entity);
+        }
+        for (auto entity : all)
+        {
+            destroyEntityAnimator(entity);
+        }
+
+        for (const auto& path : meshPaths)
+        {
+            dataCache.invalidateSkeleton(path);
+            // Cache keys are MeshComponent::meshRef.resolve() spellings; the publisher's may differ.
+            const std::string canonicalPath = asset::AssetRef::fromPath(path).resolve();
+            if (!canonicalPath.empty() && canonicalPath != path)
+            {
+                dataCache.invalidateSkeleton(canonicalPath);
+            }
+        }
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::SocketAttachmentComponent>();
+        for (auto entity : view)
+        {
+            auto& attachment = view.get<components::SocketAttachmentComponent>(entity);
+            attachment.cachedSocketIndex = -1;
+            attachment.parentKind = components::SocketAttachmentComponent::ParentKind::Unknown;
+        }
+
+        if (socketUpdater)
+        {
+            socketUpdater->resetMissingSocketWarnings();
         }
     }
 
@@ -389,34 +553,14 @@ namespace animation
             }
         }
 
+        // Preview sessions and layer stacks point into the data cache: both go first.
+        editPreviews.clear();
         animators.clear();
         retargetContexts.clear();
+        animatorSources.clear();
         entityLODStates.clear();
         pendingRestores.clear();
         dataCache.clearAll();
-    }
-
-    void RuntimeAnimatorSystem::clearAnimatorInstances()
-    {
-        auto& registry = scene::EntityRegistry::getRegistry();
-        for (const auto& [entity, animator] : animators)
-        {
-            if (registry.valid(entity) && registry.all_of<components::AnimatorComponent>(entity))
-            {
-                auto& animComp = registry.get<components::AnimatorComponent>(entity);
-                animComp.stateMachine = nullptr;
-                animComp.isInitialized = false;
-            }
-        }
-
-        animators.clear();
-        retargetContexts.clear();
-        entityLODStates.clear();
-    }
-
-    void RuntimeAnimatorSystem::cleanupUnusedCaches()
-    {
-        dataCache.cleanupUnused(animators);
     }
 
     const resource::SkeletonData* RuntimeAnimatorSystem::loadSkeleton(const std::string& meshPath)
