@@ -348,7 +348,7 @@ namespace mcp::undo
 
     void BuiltinComponentPatchUndo::apply(const nlohmann::json& fields) const
     {
-        if (!tools::patchBuiltinComponent(type, currentHandle(entity), fields).has_value())
+        if (!tools::restoreBuiltinComponent(type, currentHandle(entity), fields).has_value())
         {
             throw std::runtime_error("entity " + idText(entity) + " has no " + type + " component");
         }
@@ -387,7 +387,16 @@ namespace mcp::undo
         }
         if (fields.is_object() && !fields.empty())
         {
-            tools::patchBuiltinComponent(type, handle, fields);
+            try
+            {
+                tools::restoreBuiltinComponent(type, handle, fields);
+            }
+            catch (...)
+            {
+                // VK-1657: never leave a default-valued component behind; the step is skipped as a whole.
+                tools::removeBuiltinComponent(type, handle);
+                throw;
+            }
         }
     }
 

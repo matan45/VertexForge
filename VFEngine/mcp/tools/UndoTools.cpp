@@ -25,10 +25,11 @@ namespace mcp::tools
             "(one terrain stroke each), each environment_set, ibl_set, gi_set, fog_set and weather_set, each "
             "render_settings_set and postprocess_effect_set, each animation_set_state_machine (the animator file's "
             "previous content and the assignments; skipped when the file changed since), animation_ik_set and "
-            "animation_ik_remove, and each animation_attach_to_socket, animation_detach_from_socket and "
-            "animation_set_socket_active; asset, script, scene and play-mode operations, creating a .vfAnimator "
-            "(component_add or animation_set_state_machine create), animation_preview, animation_ik_set_target, "
-            "terrain_create / terrain_delete / terrain_save, terrain layer changes, ibl_bake and gi_debug are not. "
+            "animation_ik_remove, each animation_attach_to_socket, animation_detach_from_socket and "
+            "animation_set_socket_active, and each vfx_add_emitter and vfx_set_params; asset, script, scene and "
+            "play-mode operations, creating a .vfAnimator (component_add or animation_set_state_machine create), "
+            "animation_preview, animation_ik_set_target, terrain_create / terrain_delete / terrain_save, terrain layer "
+            "changes, ibl_bake, gi_debug, vfx_play, vfx_stop and assets_rescan are not. "
             "Undo of a delete re-creates entities with NEW ids: follow remappedEntities [{from, to}].";
 
         // VK-1653: a terrain undo rewrites tile heights in place, which would tear a .vfTerrain that a

@@ -51,6 +51,11 @@ namespace mcp::tools
         // held before the add. Empty for a component of its own.
         std::string hostType;
         std::vector<std::string> hostFields;
+        // VK-1657, undo only (restoreBuiltinComponent): writes back a full get() snapshot. A snapshot holds
+        // values the engine stored, which patch() may refuse as agent input (an effect outside the project,
+        // a value outside a tool's range set in a scene file); restore checks them against the engine's own
+        // rules instead. Empty = patch.
+        std::function<std::optional<nlohmann::json>(const services::EntityHandle&, const nlohmann::json&)> restore;
     };
 
     // ArgError when the object `data` sets one of the binding's read-only fields.
@@ -228,4 +233,8 @@ namespace mcp::tools
     // VK-1656 (AnimatorBinding.cpp): "Animator", a view over the Mesh component's animator fields.
     // Building it dispatches nothing.
     ComponentBinding makeAnimatorBinding();
+
+    // VK-1657 (VFXBinding.cpp): "VFX", an effect inside the project plus its per-entity parameters.
+    // Building it dispatches nothing.
+    ComponentBinding makeVFXBinding();
 }

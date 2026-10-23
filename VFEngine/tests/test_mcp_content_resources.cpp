@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include "dispatch/MainThreadQueue.hpp"
 #include "protocol/ArgReader.hpp"
@@ -288,6 +289,17 @@ TEST_SUITE("MCP content resources")
                                  "animation_attach_to_socket", "animation_detach_from_socket",
                                  "animation_set_socket_active", "animation_ik_get", "animation_ik_set",
                                  "animation_ik_remove", "animation_ik_set_target"})
+        {
+            CAPTURE(tool);
+            CHECK(contains(withoutPlugins, tool));
+        }
+        // VK-1657: the VFX binding is a built-in type; effects are listed, placed, tuned and previewed by the vfx tools.
+        CHECK(contains(withoutPlugins, "### VFX\n"));
+        CHECK(contains(withoutPlugins, "## Visual effects\n"));
+        CHECK(contains(withoutPlugins, "color is a TINT"));
+        CHECK(contains(withoutPlugins, "assets/vfx/library"));
+        for (const char* tool : {"vfx_list_assets", "vfx_add_emitter", "vfx_set_params", "vfx_play", "vfx_stop",
+                                 "assets_rescan", "IVFXEventListener", "IVFXComboCueListener"})
         {
             CAPTURE(tool);
             CHECK(contains(withoutPlugins, tool));

@@ -545,7 +545,8 @@ namespace mcp::tools
                     "AudioSource2D",
                     "audioRef (.vfAudio path), volume, pitch, loop (bool), busName (string), fadeInMs, "
                     "clipVariants ([paths]), playOrder (Single | Random | RoundRobin), pitchVariation, volumeVariation",
-                    &SetAudioSource2DDataCommand::audioData, &audioSource2DToJson, &audioSource2DFromJson)
+                    &SetAudioSource2DDataCommand::audioData, &audioSource2DToJson, &audioSource2DFromJson),
+                makeVFXBinding()
             };
             return table;
         }
@@ -880,6 +881,14 @@ namespace mcp::tools
         // Undo replays the full field object get() reported; its read-only keys are not data to write.
         const ComponentBinding& binding = bindingByName(type);
         return binding.patch(entity, withoutReadOnlyFields(binding, patch));
+    }
+
+    std::optional<nlohmann::json> restoreBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
+                                                          const nlohmann::json& snapshot)
+    {
+        const ComponentBinding& binding = bindingByName(type);
+        const nlohmann::json writable = withoutReadOnlyFields(binding, snapshot);
+        return binding.restore ? binding.restore(entity, writable) : binding.patch(entity, writable);
     }
 
     std::optional<BuiltinHostFields> builtinHostFields(const std::string& type, const services::EntityHandle& entity)

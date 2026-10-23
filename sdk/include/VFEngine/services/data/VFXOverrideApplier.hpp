@@ -4,6 +4,8 @@
 #include <vfx/VFXParameterRegistry.hpp>
 
 #include <glm/glm.hpp>
+#include <algorithm>
+#include <cmath>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -14,7 +16,7 @@ namespace services
     inline bool applyOverride(VFXEmitterOverrides& out, std::string_view name, const vfx::VFXPropertyValue& value)
     {
         const vfx::VFXExposedParameter* parameter = vfx::findExposedParameter(name);
-        if (!parameter || !vfx::valueMatchesType(value, parameter->type))
+        if (!parameter || !vfx::isValidOverrideValue(*parameter, value))
             return false;
 
         switch (parameter->target)
@@ -37,6 +39,9 @@ namespace services
         case vfx::VFXOverrideTarget::GravityDirection:      out.gravityDirection = std::get<glm::vec3>(value); break;
         case vfx::VFXOverrideTarget::ShapeDimensions:       out.shapeDimensions = std::get<glm::vec3>(value); break;
         case vfx::VFXOverrideTarget::StartColor:            out.startColor = std::get<glm::vec4>(value); break;
+        case vfx::VFXOverrideTarget::BlendMode:             out.blendMode = static_cast<int>(std::get<int32_t>(value)); break;
+        case vfx::VFXOverrideTarget::SortOrder:             out.sortOrder = static_cast<int>(std::get<int32_t>(value)); break;
+        case vfx::VFXOverrideTarget::ColorTint:             out.colorTint = std::get<glm::vec4>(value); break;
         default:                                            return false;
         }
 
@@ -69,6 +74,18 @@ namespace services
         case vfx::VFXOverrideTarget::ConeSpread:            out.coneSpread = value; break;
         case vfx::VFXOverrideTarget::RenderMode:            out.renderMode = static_cast<int>(value); break;
         case vfx::VFXOverrideTarget::CollisionEnabled:      out.collisionEnabled = (value != 0.0f); break;
+        case vfx::VFXOverrideTarget::BlendMode:
+            // Checked before the cast: a float outside int range would be UB.
+            if (!std::isfinite(value) || value < 0.0f || value >= static_cast<float>(vfx::kBlendModeCount))
+                return false;
+            out.blendMode = static_cast<int>(value);
+            break;
+        case vfx::VFXOverrideTarget::SortOrder:
+            if (!std::isfinite(value))
+                return false;
+            out.sortOrder = static_cast<int>(std::clamp(value, static_cast<float>(vfx::kMinSortOrder),
+                                                        static_cast<float>(vfx::kMaxSortOrder)));
+            break;
         default:                                            return false;
         }
 
@@ -88,6 +105,11 @@ namespace services
         case vfx::VFXOverrideTarget::GravityDirection: out.gravityDirection = glm::vec3(value); break;
         case vfx::VFXOverrideTarget::ShapeDimensions:  out.shapeDimensions = glm::vec3(value); break;
         case vfx::VFXOverrideTarget::StartColor:       out.startColor = value; break;
+        case vfx::VFXOverrideTarget::ColorTint:
+            if (!vfx::isValidOverrideValue(*parameter, vfx::VFXPropertyValue(value)))
+                return false;
+            out.colorTint = value;
+            break;
         default:                                       return false;
         }
 

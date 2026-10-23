@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include <vfx/VFXOverrideNames.hpp>
 #include <vfx/VFXParameterRegistry.hpp>
@@ -40,13 +41,13 @@ TEST_SUITE("VFXSequenceValidation")
 {
     TEST_CASE("override name table stays in sync with phase-one runtime contract")
     {
-        CHECK(vfx::overridenames::scalarOverrides.size() == 13);
-        CHECK(vfx::overridenames::vectorOverrides.size() == 5);
+        CHECK(vfx::overridenames::scalarOverrides.size() == 15);
+        CHECK(vfx::overridenames::vectorOverrides.size() == 6);
         CHECK(vfx::overridenames::isScalarOverride("spawnRate"));
         CHECK(vfx::overridenames::isScalarOverride("collisionEnabled"));
         CHECK(vfx::overridenames::isVectorOverride("emitDirection"));
         CHECK(vfx::overridenames::isVectorOverride("startColor"));
-        CHECK(vfx::kExposedParameters.size() == 18);
+        CHECK(vfx::kExposedParameters.size() == 21);
     }
 
     TEST_CASE("missing and optionally unresolved refs are reported")

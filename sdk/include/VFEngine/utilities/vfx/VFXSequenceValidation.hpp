@@ -149,6 +149,11 @@ namespace vfx::validation
                             "override '" + name + "' expects " + propertyTypeToString(parameter->type) +
                             " but stores " + propertyTypeToString(valueType(overrideValue.value)) + ".");
                 }
+                else if (!isValidOverrideValue(*parameter, overrideValue.value))
+                {
+                    addStep(report, Severity::Warning, stepIndex, step,
+                            "override '" + name + "' has an out-of-range or non-finite value and is ignored at runtime.");
+                }
             }
         }
     }

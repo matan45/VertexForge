@@ -1,5 +1,8 @@
 #include "CoreTools.hpp"
+#include "EnvironmentToolSupport.hpp"
 #include "PathSandbox.hpp"
+#include "SettingsTable.hpp"
+#include "ToolHelpers.hpp"
 #include "../protocol/ArgReader.hpp"
 
 #include "controllers/Import.hpp"
@@ -96,10 +99,12 @@ namespace mcp::tools
             tool.title = "List assets";
             tool.description =
                 "List assets registered in the project asset database (imported/engine assets: .vfMesh, "
-                ".vfImage, .vfMat, .vfAnim (animation clips, type Animation), .vfAnimator, .vfScene, .vfPrefab, ...). "
+                ".vfImage, .vfMat, .vfAnim (animation clips, type Animation), .vfAnimator, .vfVFX (effects, type VFX), "
+                ".vfVFXSequence (effect combos, type VFXSequence), .vfScene, .vfPrefab, ...). "
                 "Paths are relative to the project asset root and are the form the other project-path tools (e.g. "
-                "material_assign) accept. For clips that fit a character's skeleton use animation_list_clips. "
-                "Returns {assets:[{path, type, guid}], total, truncated}.";
+                "material_assign) accept. For clips that fit a character's skeleton use animation_list_clips; for "
+                "effects with their authored values vfx_list_assets. Files copied into the project outside the editor "
+                "are listed after assets_rescan. Returns {assets:[{path, type, guid}], total, truncated}.";
             tool.inputSchema = schema::object({
                 {"type", schema::enumString("Only this asset type. Omit for all.", assetTypeNames())},
                 {"contains", schema::string("Case-insensitive substring filter on the path")},
@@ -329,11 +334,56 @@ namespace mcp::tools
             };
             registry.add(std::move(tool));
         }
+
+        // VK-1657: the asset database only migrates an empty project when it loads, so files copied in
+        // afterwards (the engine's VFX library) stay unknown until their .vfmeta sidecars are written.
+        void registerAssetsRescan(ToolRegistry& registry)
+        {
+            ToolDef tool;
+            tool.name = "assets_rescan";
+            tool.title = "Rescan project assets";
+            tool.description =
+                "Register the project's asset files that have no .vfmeta sidecar yet, e.g. files copied into the "
+                "project outside the editor (the engine's assets/vfx/library copied to <project>/assets/vfx/library): "
+                "each gets a .vfmeta with a new GUID, so assets_list, vfx_list_assets and the asset fields find it. A "
+                "file copied together with its .vfmeta is left alone (the database loads it at the next project_open). "
+                "Not undoable (the .vfmeta files stay); refused in Play mode and while a scene load is pending. Returns "
+                "{scanned (asset files found), metaFilesCreated, failures}.";
+            tool.inputSchema = closedObject(nlohmann::json::object());
+            tool.timeout = std::chrono::milliseconds(120000);
+            tool.handler = [](const nlohmann::json& args) -> ToolResult
+            {
+                env::rejectUnknownArgs(args, {}, "assets_rescan");
+                if (const std::optional<std::string> blocked = env::editBlocker("rescan the assets"))
+                {
+                    return ToolResult::error(*blocked);
+                }
+                const events::assetdb::RegenerateMetadataResult result =
+                    events::EventDispatcher::instance().execute(events::assetdb::RegenerateMissingMetadataCommand{});
+
+                nlohmann::json out{
+                    {"scanned", result.assetsScanned},
+                    {"metaFilesCreated", result.metaFilesCreated},
+                    {"failures", result.failures}
+                };
+                std::string summary = "Scanned " + std::to_string(result.assetsScanned) + " asset file(s) and registered " +
+                                      std::to_string(result.metaFilesCreated) + " new one(s)";
+                summary += result.failures.empty() ? std::string(".")
+                                                   : "; " + std::to_string(result.failures.size()) + " failure(s).";
+                if (result.metaFilesCreated > 0)
+                {
+                    summary += " assets_list and vfx_list_assets list them now.";
+                }
+                return reply(std::move(out), summary);
+            };
+            registry.add(std::move(tool));
+        }
     }
 
     void registerAssetTools(ToolRegistry& registry, const ToolContext& context)
     {
         registerAssetsList(registry);
         registerAssetsImport(registry, context);
+        registerAssetsRescan(registry);
     }
 }

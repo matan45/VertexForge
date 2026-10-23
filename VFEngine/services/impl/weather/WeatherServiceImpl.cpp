@@ -327,9 +327,8 @@ namespace services
         if (rainController) rainController->update(deltaTime, isRain ? state : zeroState);
         if (snowController) snowController->update(deltaTime, isSnow ? state : zeroState);
 
-        if (vfxProvider && vfxProvider->isInitialized() &&
-            ((rainController && rainController->isActive()) || (snowController && snowController->isActive())))
-            vfxProvider->update(deltaTime);
+        // VK-1657: the VFX frame task (ordered after Weather) is the only VFX tick; ticking the
+        // provider here as well advanced every effect twice per frame while rain/snow was active.
 
         if (isSnow && state.precipIntensity > 0.01f)
             snowAccumulation = std::min(1.0f, snowAccumulation + deltaTime * state.precipIntensity * 0.05f);

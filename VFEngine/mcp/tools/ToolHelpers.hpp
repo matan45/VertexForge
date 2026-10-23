@@ -270,6 +270,10 @@ namespace mcp::tools
     std::optional<nlohmann::json> getBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
     std::optional<nlohmann::json> patchBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
                                                         const nlohmann::json& patch);
+    // VK-1657: patch for the undo commands, which replay get() snapshots: the binding's restore when it has
+    // one (it accepts every value the engine stores), else patch.
+    std::optional<nlohmann::json> restoreBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
+                                                          const nlohmann::json& snapshot);
 
     // VK-1656: for a type stored in fields of another built-in component (the Animator, in the Mesh), that
     // component's name and the current values of those fields as a partial patch of it; nullopt for a

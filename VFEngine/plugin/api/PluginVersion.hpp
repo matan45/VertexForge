@@ -46,6 +46,13 @@ namespace plugin {
     //      PluginMcpToolResult (VK-1652) — plugins contribute tools to the Editor's MCP
     //      server. The two virtuals are inserted after registerEditorWindow, so every
     //      later vtable slot shifts: every plugin must rebuild.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 22;
+    // v23: VK-1657 per-entity VFX parameters. components::VFXComponent and
+    //      services::VFXData gain `overrides` (vector of vfx::VFXParamOverride);
+    //      services::VFXEmitterOverrides appends blendMode / sortOrder / colorTint and
+    //      services::VFXRuntimeParams appends `persistent`. VFXRuntimeParams crosses the
+    //      boundary by reference in PluginContext::createVFXInstance and the other types
+    //      are SDK-exported and embedded by value, so a plugin built against v22 would lay
+    //      them out at the wrong size. IVFXRuntimeProvider also appends a virtual.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 23;
 
 }

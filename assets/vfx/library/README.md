@@ -3,6 +3,16 @@
 Ready-to-use `.vfVFX` effects for the RTS demo. Open any of them in the VFX Editor
 to tweak, or reference them from a `VFXComponent` / spawn from mType:
 
+## Using the library in a project
+
+Copy this folder into the project as `<project>/assets/vfx/library` (the combos below
+reference their effects by that path, and the paths in the examples are relative to
+the project folder). Then register the copied files: in the Content Browser click the
+button next to **Import** whose tooltip reads "Regenerate missing .vfmeta files", or call
+the MCP tool `assets_rescan`. `vfx_list_assets` then
+lists them, and `vfx_add_emitter` can place them (VK-1657).
+
+
 ```mt
 // One-shot at a world position (auto-destroys when finished)
 VFX::spawnAt("assets/vfx/library/explosion_fireball.vfVFX", hit.x, hit.y, hit.z);

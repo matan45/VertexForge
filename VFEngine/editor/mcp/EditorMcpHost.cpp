@@ -72,6 +72,12 @@ namespace editor
             "shadow quality; nothing built-in renders until postProcess.enabled is true) and postprocess_effect_list "
             "/ postprocess_effect_set for plugin effects. Same strict updates, one undo step per call; the plugin "
             "effect toggles are session-only.\n"
+            "Effects: vfx_list_assets (the project's .vfVFX effects and combos; empty: copy the engine's "
+            "assets/vfx/library into the project, then assets_rescan) -> vfx_add_emitter {entity, effect} -> "
+            "vfx_set_params (size, color = a tint over the authored colours, spawnRate, lifetime, blendMode, sortOrder; "
+            "saved per entity) -> vfx_play (edit-mode preview; wait about the particle lifetime) -> "
+            "viewport_screenshot. vfx_add_emitter and vfx_set_params are one undo step each and are refused in Play "
+            "mode, where components play by themselves (autoPlay) and scripts use VFX::spawnAt.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
             "playable game.";
     }

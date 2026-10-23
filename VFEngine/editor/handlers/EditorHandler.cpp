@@ -18,6 +18,8 @@
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXEditPreviewHandler.hpp"
+#include "impl/vfx/VFXAssetSummaryService.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
 #include "../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
@@ -218,6 +220,9 @@ namespace handlers
         oceanService.reset();
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        // VK-1657: before the runtime service whose vfxruntime handlers the preview dispatches to.
+        vfxEditPreviewHandler.reset();
+        vfxAssetSummaryService.reset();
         vfxRuntimeService.reset();
         controllerService.reset();
         ikComponentService.reset();

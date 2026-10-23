@@ -85,6 +85,8 @@ namespace services {
 	class VFXRuntimeServiceImpl;
 	class VFXSequencePlayModeHandler;
 	class VFXSequenceRuntimeServiceImpl;
+	class VFXEditPreviewHandler;
+	class VFXAssetSummaryService;
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
 	class EditorRenderServiceImpl;
@@ -151,6 +153,8 @@ namespace handlers {
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 		std::unique_ptr<services::VFXSequencePlayModeHandler> vfxSequencePlayModeHandler;
 		std::unique_ptr<services::VFXSequenceRuntimeServiceImpl> vfxSequenceRuntimeService;
+		std::unique_ptr<services::VFXEditPreviewHandler> vfxEditPreviewHandler;   // VK-1657: MCP vfx_play / vfx_stop
+		std::unique_ptr<services::VFXAssetSummaryService> vfxAssetSummaryService; // VK-1657: MCP effect / combo summaries
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
 		std::shared_ptr<services::IControllerService> controllerService;

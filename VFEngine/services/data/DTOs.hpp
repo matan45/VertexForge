@@ -11,6 +11,7 @@
 #include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
 #include <components/TextEffects.hpp>
+#include <vfx/VFXParameterRegistry.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -379,6 +380,8 @@ namespace services
         asset::AssetRef vfxRef; // .vfVFX asset
         bool autoPlay = true; // Auto-start when play mode begins
         bool loop = true; // Loop the VFX effect
+        // VK-1657: mirrors components::VFXComponent::overrides (per-entity user parameters).
+        std::vector<vfx::VFXParamOverride> overrides;
     };
 
     // Mirrors components::VFXSequenceTrigger (MediaComponents.hpp:240-245): one anim-event ->

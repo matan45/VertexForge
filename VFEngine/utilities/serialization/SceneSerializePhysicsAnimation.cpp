@@ -2,6 +2,8 @@
 #include "AssetRefSerializationHelper.hpp"
 #include "JsonConverters.hpp"
 #include "../components/Components.hpp"
+#include "../print/Log.hpp"
+#include "../vfx/VFXParamOverrideJson.hpp"
 
 namespace serialization
 {
@@ -272,6 +274,11 @@ namespace serialization
         writeAssetRef(j, "vfxRef", vfx.vfxRef);
         j["autoPlay"] = vfx.autoPlay;
         j["loop"] = vfx.loop;
+        // VK-1657: written only when set, so a component without overrides saves as before.
+        if (!vfx.overrides.empty())
+        {
+            j["overrides"] = ::vfx::paramOverridesToJson(vfx.overrides);
+        }
         return j;
     }
 
@@ -285,6 +292,16 @@ namespace serialization
         if (auto it = j.find("loop"); it != j.end() && it->is_boolean())
         {
             vfx.loop = it->get<bool>();
+        }
+        vfx.overrides.clear();
+        if (auto it = j.find("overrides"); it != j.end())
+        {
+            std::vector<std::string> rejected;
+            vfx.overrides = ::vfx::componentOverridesFromJson(*it, &rejected);
+            for (const std::string& name : rejected)
+            {
+                vfLogWarning("VFX component: dropped invalid parameter override '{}'", name);
+            }
         }
         // Reset runtime state
         vfx.runtimeInstanceId = 0;

@@ -1,6 +1,9 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include <data/VFXOverrideApplier.hpp>
+
+#include <limits>
 
 namespace
 {
@@ -46,6 +49,50 @@ TEST_SUITE("VFXOverrideApplier")
         CHECK(out.gravityDirection->z == doctest::Approx(3.0f));
         CHECK(out.shapeDimensions->z == doctest::Approx(3.0f));
         CHECK(out.startColor->w == doctest::Approx(0.4f));
+        CHECK(out.blendMode == 2);
+        CHECK(out.sortOrder == 2);
+        CHECK(out.colorTint->x == doctest::Approx(0.1f));
+        CHECK(out.colorTint->w == doctest::Approx(0.4f));
+    }
+
+    TEST_CASE("VK-1657 typed overrides reject out-of-range render state and tint")
+    {
+        services::VFXEmitterOverrides out;
+        CHECK_FALSE(services::applyOverride(out, "blendMode", int32_t{4}));
+        CHECK_FALSE(services::applyOverride(out, "sortOrder", int32_t{300}));
+        CHECK_FALSE(services::applyOverride(out, "colorTint", glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f)));
+        CHECK_FALSE(services::applyOverride(out, "spawnRate", std::numeric_limits<float>::quiet_NaN()));
+        CHECK_FALSE(out.blendMode.has_value());
+        CHECK_FALSE(out.sortOrder.has_value());
+        CHECK_FALSE(out.colorTint.has_value());
+        CHECK_FALSE(out.spawnRate.has_value());
+
+        CHECK(services::applyOverride(out, "blendMode", int32_t{3}));
+        CHECK(services::applyOverride(out, "sortOrder", int32_t{-256}));
+        CHECK(out.blendMode == 3);
+        CHECK(out.sortOrder == -256);
+    }
+
+    TEST_CASE("VK-1657 script scalar and vector paths for blend, sort and tint")
+    {
+        services::VFXEmitterOverrides out;
+        CHECK(services::applyScalarOverride(out, "blendMode", 1.0f));
+        CHECK(out.blendMode == 1);
+        CHECK_FALSE(services::applyScalarOverride(out, "blendMode", 7.0f));
+        CHECK_FALSE(services::applyScalarOverride(out, "blendMode", -1.0f));
+        CHECK_FALSE(services::applyScalarOverride(out, "blendMode", std::numeric_limits<float>::infinity()));
+        CHECK(out.blendMode == 1); // the rejected calls left it alone
+
+        CHECK(services::applyScalarOverride(out, "sortOrder", 999.0f));
+        CHECK(out.sortOrder == 256);
+        CHECK(services::applyScalarOverride(out, "sortOrder", -999.0f));
+        CHECK(out.sortOrder == -256);
+        CHECK_FALSE(services::applyScalarOverride(out, "sortOrder", std::numeric_limits<float>::quiet_NaN()));
+
+        CHECK(services::applyVectorOverride(out, "colorTint", glm::vec4(1.0f, 0.5f, 0.1f, 1.0f)));
+        CHECK(out.colorTint->y == doctest::Approx(0.5f));
+        CHECK_FALSE(services::applyVectorOverride(out, "colorTint", glm::vec4(1.0f, -0.5f, 0.1f, 1.0f)));
+        CHECK(out.colorTint->y == doctest::Approx(0.5f));
     }
 
     TEST_CASE("wrong typed values fail without mutation")

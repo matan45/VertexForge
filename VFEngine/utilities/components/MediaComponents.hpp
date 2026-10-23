@@ -8,6 +8,7 @@
 #include "../../services/data/ScriptTypes.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../animator/SocketTypes.hpp"
+#include "../vfx/VFXParameterRegistry.hpp"
 #include "../types/AudioEffectTypes.hpp"
 #include "../types/AudioVariationTypes.hpp"
 
@@ -306,6 +307,10 @@ namespace components
         bool loop = true;
         uint8_t priority = 2; // 0=Critical, 1=High, 2=Normal, 3=Low
         bool cameraRelative = false;
+        // VK-1657: per-entity user parameters (registry names, VFXParameterRegistry.hpp). Saved with
+        // the scene / prefab / sector and applied to every instance spawned from this component
+        // (edit-mode preview, Play, shipped game); the .vfVFX itself is never modified.
+        std::vector<vfx::VFXParamOverride> overrides;
 
         uint32_t runtimeInstanceId = 0;
         bool isPlaying = false;

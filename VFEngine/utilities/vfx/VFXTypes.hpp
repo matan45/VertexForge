@@ -321,8 +321,41 @@ namespace vfx
         inline constexpr bool KILLVOLUME_INVERT = false;
     }
 
-    const char* propertyTypeToString(VFXPropertyType type);
-    VFXPropertyType stringToPropertyType(const std::string& str);
+    // Inline (VK-1657): the header-only override codec (VFXParamOverrideJson.hpp) uses these
+    // from Serialization.dll, which does not link the VFX lib.
+    inline const char* propertyTypeToString(VFXPropertyType type)
+    {
+        switch (type)
+        {
+        case VFXPropertyType::Float:  return "Float";
+        case VFXPropertyType::Vec2:   return "Vec2";
+        case VFXPropertyType::Vec3:   return "Vec3";
+        case VFXPropertyType::Vec4:   return "Vec4";
+        case VFXPropertyType::Color:  return "Color";
+        case VFXPropertyType::Int:    return "Int";
+        case VFXPropertyType::Bool:   return "Bool";
+        case VFXPropertyType::String:   return "String";
+        case VFXPropertyType::Curve:    return "Curve";
+        case VFXPropertyType::Gradient: return "Gradient";
+        default: return "Float";
+        }
+    }
+
+    inline VFXPropertyType stringToPropertyType(const std::string& str)
+    {
+        if (str == "Float")  return VFXPropertyType::Float;
+        if (str == "Vec2")   return VFXPropertyType::Vec2;
+        if (str == "Vec3")   return VFXPropertyType::Vec3;
+        if (str == "Vec4")   return VFXPropertyType::Vec4;
+        if (str == "Color")  return VFXPropertyType::Color;
+        if (str == "Int")    return VFXPropertyType::Int;
+        if (str == "Bool")   return VFXPropertyType::Bool;
+        if (str == "String")   return VFXPropertyType::String;
+        if (str == "Curve")    return VFXPropertyType::Curve;
+        if (str == "Gradient") return VFXPropertyType::Gradient;
+        return VFXPropertyType::Float;
+    }
+
     const char* nodeTypeToString(VFXNodeType type);
     VFXNodeType stringToNodeType(const std::string& str);
 }

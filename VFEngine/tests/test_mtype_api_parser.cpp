@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include "test_repo_scan_helpers.hpp"
 
@@ -253,6 +254,12 @@ TEST_SUITE("mType API doc")
         REQUIRE_FALSE(locomotion.empty());
         CHECK(contains(doc::primer(), locomotion));
         CHECK(contains(doc::primer(), "## 8. Character animation"));
+
+        // And section 9 game/examples/HitEffect.mt (VK-1657).
+        const std::string hitEffect = readExample(*scripts, "HitEffect.mt");
+        REQUIRE_FALSE(hitEffect.empty());
+        CHECK(contains(doc::primer(), hitEffect));
+        CHECK(contains(doc::primer(), "## 9. Visual effects"));
     }
 
     TEST_CASE("extractApi over the real engine scripts")

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -30,8 +31,19 @@ namespace vfx
         WindDirection,
         GravityDirection,
         ShapeDimensions,
-        StartColor
+        StartColor,
+        // VK-1657: per-instance render state (re-pushed to the pipelines' per-slot config) and a
+        // colour multiplier applied over start colour + colour-over-lifetime, unlike startColor.
+        BlendMode,
+        SortOrder,
+        ColorTint
     };
+
+    // VK-1657 value ranges of the Int overrides (blendMode is a VFXBlendMode value; sortOrder
+    // matches the asset loader's clamp in VFXEmitterConfigLoader).
+    inline constexpr int32_t kBlendModeCount = 4;
+    inline constexpr int32_t kMinSortOrder = -256;
+    inline constexpr int32_t kMaxSortOrder = 256;
 
     struct VFXExposedParameter
     {
@@ -41,7 +53,7 @@ namespace vfx
         std::string_view label;
     };
 
-    inline constexpr std::array<VFXExposedParameter, 18> kExposedParameters{{
+    inline constexpr std::array<VFXExposedParameter, 21> kExposedParameters{{
         {"spawnRate", VFXPropertyType::Float, VFXOverrideTarget::SpawnRate, "Spawn Rate"},
         {"lifetime", VFXPropertyType::Float, VFXOverrideTarget::Lifetime, "Lifetime"},
         {"startSize", VFXPropertyType::Float, VFXOverrideTarget::StartSize, "Start Size"},
@@ -59,7 +71,10 @@ namespace vfx
         {"windDirection", VFXPropertyType::Vec3, VFXOverrideTarget::WindDirection, "Wind Direction"},
         {"gravityDirection", VFXPropertyType::Vec3, VFXOverrideTarget::GravityDirection, "Gravity Direction"},
         {"shapeDimensions", VFXPropertyType::Vec3, VFXOverrideTarget::ShapeDimensions, "Shape Dimensions"},
-        {"startColor", VFXPropertyType::Color, VFXOverrideTarget::StartColor, "Start Color"}
+        {"startColor", VFXPropertyType::Color, VFXOverrideTarget::StartColor, "Start Color"},
+        {"blendMode", VFXPropertyType::Int, VFXOverrideTarget::BlendMode, "Blend Mode"},
+        {"sortOrder", VFXPropertyType::Int, VFXOverrideTarget::SortOrder, "Sort Order"},
+        {"colorTint", VFXPropertyType::Color, VFXOverrideTarget::ColorTint, "Color Tint"}
     }};
 
     struct VFXParamOverride
@@ -112,6 +127,43 @@ namespace vfx
         case VFXPropertyType::Gradient: return std::holds_alternative<VFXGradient>(value);
         default:                        return false;
         }
+    }
+
+    // VK-1657: a value an override of `parameter` may store — the registry type, finite numbers,
+    // blendMode a VFXBlendMode value, sortOrder inside the loader clamp, colorTint non-negative.
+    inline bool isValidOverrideValue(const VFXExposedParameter& parameter, const VFXPropertyValue& value)
+    {
+        if (!valueMatchesType(value, parameter.type))
+            return false;
+
+        if (const auto* number = std::get_if<float>(&value))
+            return std::isfinite(*number);
+        if (const auto* vector = std::get_if<glm::vec3>(&value))
+            return std::isfinite(vector->x) && std::isfinite(vector->y) && std::isfinite(vector->z);
+        if (const auto* color = std::get_if<glm::vec4>(&value))
+        {
+            if (!std::isfinite(color->x) || !std::isfinite(color->y) ||
+                !std::isfinite(color->z) || !std::isfinite(color->w))
+                return false;
+            if (parameter.target == VFXOverrideTarget::ColorTint)
+                return color->x >= 0.0f && color->y >= 0.0f && color->z >= 0.0f && color->w >= 0.0f;
+            return true;
+        }
+        if (const auto* integer = std::get_if<int32_t>(&value))
+        {
+            if (parameter.target == VFXOverrideTarget::BlendMode)
+                return *integer >= 0 && *integer < kBlendModeCount;
+            if (parameter.target == VFXOverrideTarget::SortOrder)
+                return *integer >= kMinSortOrder && *integer <= kMaxSortOrder;
+            return true;
+        }
+        return true;
+    }
+
+    inline bool isValidOverride(const VFXParamOverride& overrideValue)
+    {
+        const VFXExposedParameter* parameter = findExposedParameter(overrideValue.name);
+        return parameter && isValidOverrideValue(*parameter, overrideValue.value);
     }
 
     inline VFXPropertyValue defaultValueFor(VFXPropertyType type)

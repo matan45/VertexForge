@@ -175,6 +175,20 @@ namespace mcp::tools
                 "{\"entity\": <id>} should report Idle, then Run while moving.\n";
         }
 
+        // Optional visual-effects line shared by both templates (VK-1657), before the build step so scene_save
+        // keeps the VFX components. The script side is section 9 of vf://docs/mtype-api.
+        std::string optionalEffects()
+        {
+            return
+                "Optional effects, only when the user asks for them (a torch fire, sparks on impact): vfx_list_assets "
+                "{\"contains\": \"fire\"} lists the project's effects (when it lists none, copy the engine's "
+                "assets/vfx/library folder into the project as assets/vfx/library, then call assets_rescan); "
+                "vfx_add_emitter {\"entity\": <id>, \"effect\": <path>} attaches one, vfx_set_params tunes its size and "
+                "color (a tint over the authored colours), vfx_play previews it in the editor and viewport_screenshot "
+                "shows it about one particle lifetime later. Section 9 of vf://docs/mtype-api shows a script that "
+                "spawns an effect when its entity collides.\n";
+        }
+
         std::string buildLoop(const std::string& game, const std::string& scenePath)
         {
             return
@@ -241,6 +255,7 @@ namespace mcp::tools
                     "it) find the player with GameObject::find(\"Player\"), null-check it, and set the camera's "
                     "local position to the player's world position plus [0, 3, -12].\n";
                 text += animatedPlayer("13", controller);
+                text += optionalEffects();
                 text += "14. Build, attach, save and play-test:\n";
                 text += buildLoop(game, "scenes/" + game + ".vfScene");
                 return userMessage(std::move(text));
@@ -296,6 +311,7 @@ namespace mcp::tools
                     "it) find the player with GameObject::find(\"Player\"), null-check it, and set the camera's "
                     "local position to the player's world position plus [0, " + formatNumber(height) + ", 0].\n";
                 text += animatedPlayer("13", mover);
+                text += optionalEffects();
                 text += "14. Build, attach, save and play-test:\n";
                 text += buildLoop(game, "scenes/" + game + ".vfScene");
                 return userMessage(std::move(text));

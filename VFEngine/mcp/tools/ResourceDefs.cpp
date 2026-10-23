@@ -210,7 +210,8 @@ namespace mcp::tools
                 "Every component type the agent can edit: the built-in ones (component_add / component_get / "
                 "component_set / component_remove) with their fields, and the reflected plugin components "
                 "(component_*_generic) loaded in this editor. Also how terrain, the lighting environment (sky, "
-                "IBL, GI, fog, weather) and character animation (animators, clips, sockets, IK) are edited.";
+                "IBL, GI, fog, weather), character animation (animators, clips, sockets, IK) and visual effects "
+                "(effects, per-entity parameters, the edit preview) are edited.";
             resource.mimeType = "text/markdown";
             resource.affinity = ThreadAffinity::Main;
             resource.reader = []() -> ResourceContents
@@ -335,6 +336,51 @@ namespace mcp::tools
                         "steps; creating a .vfAnimator, animation_preview and animation_ik_set_target are not. "
                         "animation_set_state_machine, animation_preview, animation_ik_set, animation_ik_remove and "
                         "creating a .vfAnimator refuse in Play mode and while a scene load is pending.\n\n";
+
+                // VK-1657: an effect is an asset (.vfVFX) the VFX component plays, tuned per entity.
+                text += "## Visual effects\n\n"
+                        "An effect is a .vfVFX file: ONE emitter and its node graph (spawn rate, lifetime, size, colour, "
+                        "blend mode, the over-lifetime modifiers, forces, events); there is no separate graph asset. A combo "
+                        "(.vfVFXSequence) times several effects, sounds and script cues on one timeline. A typical pass: "
+                        "assets_rescan (once, after copying effects in) -> vfx_list_assets {contains:\"fire\"} -> "
+                        "entity_create -> vfx_add_emitter {entity, effect} -> vfx_play {entity} -> wait about the particle "
+                        "lifetime -> viewport_screenshot -> vfx_set_params {entity, params:{size:1.6, color:[1, 0.6, 0.25]}} "
+                        "-> viewport_screenshot.\n\n"
+                        "- Project assets only: the tools list and attach effects inside the project, the files an exported "
+                        "game carries. The engine ships ready-made effects and combos in its assets/vfx/library folder: copy "
+                        "that folder into the project as assets/vfx/library (the combos reference that path), then call "
+                        "assets_rescan so the asset database registers the copied files.\n"
+                        "- VFX component: vfx_add_emitter adds one (component_add / component_get / component_set / "
+                        "component_remove {type:\"VFX\"} work too, fields above). It plays its effect at the entity's world "
+                        "transform: autoPlay starts it when Play mode starts, loop repeats it.\n"
+                        "- Per-entity parameters: spawnRate, lifetime, size, color, blendMode and sortOrder (vfx_set_params) "
+                        "and the other overridable emitter parameters in otherParams (component_set) are saved with the "
+                        "scene, prefab or world sector and apply in the edit preview, in Play mode and in exported games. The "
+                        ".vfVFX is never written: null (or vfx_set_params reset) returns a parameter to its authored value, "
+                        "and vfx_set_params reports each one's override, authored and effective value.\n"
+                        "- Colour: color is a TINT multiplied over every authored colour, [1, 1, 1, 1] = as authored. An "
+                        "effect with a colour-over-lifetime gradient (most library effects, fire_loop among them) replaces "
+                        "its particles' start colour every frame, so changing the start colour would not show; the tint "
+                        "recolours the start colour and the gradient alike. birthColor reports the colour particles are born "
+                        "with, authored and effective.\n"
+                        "- Blend modes: alpha (alpha-over), additive (glow: adds light), premultiplied (the fire-into-smoke "
+                        "gradient trick), multiply (darkens what is behind). sortOrder (-256 to 256) is the draw order among "
+                        "the effects of the same pass: higher draws later, on top.\n"
+                        "- Edit preview: vfx_play plays a component in edit mode with its parameters. It follows the entity's "
+                        "transform and every component change (a new value applies in place; removing a parameter, or "
+                        "changing the effect or loop, restarts it) and ends with vfx_stop, play_start, a scene load or clear, "
+                        "deleting the entity or removing the component. A new preview starts empty: particles need about "
+                        "their lifetime (vfx_play reports it) to fill in before viewport_screenshot shows the effect.\n"
+                        "- Play mode: every VFX component spawns its effect with its parameters when Play starts and plays it "
+                        "when autoPlay is on (otherwise a script calls VFX::play). Scripts (vf://docs/mtype-api, section 9) "
+                        "spawn effects with VFX::spawnAt / VFX::spawnAtLooping, change a spawned instance with VFX::setOverride "
+                        "/ VFX::setOverrideTint, and react through IVFXEventListener (particle events) and "
+                        "IVFXComboCueListener (combo cues); everything a script spawns is destroyed when Play stops.\n"
+                        "- Combos: vfx_list_assets lists them with their steps and cues, but they cannot be attached to an "
+                        "entity in this version; a script spawns one with VFX::spawnCombo.\n"
+                        "- Undo: each vfx_add_emitter and vfx_set_params is one undo step (none when nothing changes); vfx_play, "
+                        "vfx_stop and assets_rescan are not undoable. vfx_add_emitter, vfx_set_params and vfx_play refuse in "
+                        "Play mode and while a scene load is pending; vfx_list_assets and vfx_stop work in any mode.\n\n";
 
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "

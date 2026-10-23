@@ -49,6 +49,10 @@ namespace services
         // socket); the renderer keeps the finished slot dormant for reuse by a later
         // spawn of the same asset path. Default false => byte-identical.
         bool poolable = false;
+        // VK-1657 — the creator manages this instance's lifetime across editor mode changes, so
+        // the Play->Edit purge of everything else spawned during Play (scripts, plugins, combos)
+        // leaves it alone. Set by the weather precipitation and the edit-mode preview.
+        bool persistent = false;
     };
 
     struct VFXEmitterOverrides
@@ -71,6 +75,10 @@ namespace services
         std::optional<float> collisionLifetimeLoss;
         std::optional<glm::vec3> shapeDimensions; // box half-extents
         std::optional<float> coneSpread;          // emit direction cone angle in radians
+        // VK-1657
+        std::optional<int> blendMode;             // vfx::VFXBlendMode value (0..3)
+        std::optional<int> sortOrder;             // draw-order key, [-256, 256]
+        std::optional<glm::vec4> colorTint;       // multiplies start colour + colour-over-lifetime
     };
 
     struct VFXCameraParams

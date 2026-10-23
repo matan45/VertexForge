@@ -27,6 +27,9 @@ namespace vfx::overridenames
     inline constexpr std::string_view gravityDirection = "gravityDirection";
     inline constexpr std::string_view shapeDimensions = "shapeDimensions";
     inline constexpr std::string_view startColor = "startColor";
+    inline constexpr std::string_view blendMode = "blendMode";
+    inline constexpr std::string_view sortOrder = "sortOrder";
+    inline constexpr std::string_view colorTint = "colorTint";
 
     namespace detail
     {

@@ -261,6 +261,13 @@ namespace render::vfx
         // Default 0 leaves draw order unchanged. Host-only — not sent to the GPU config.
         int sortOrder = 0;
 
+        // VK-1657: per-instance colour multiplier (the "colorTint" override) over every authored colour:
+        // start colour, colour-over-lifetime incl. its LUT, and the proxy light. Never loaded from an
+        // asset; white leaves the emitter byte-identical. Host-only (no GPUEmitterConfig field): the GPU
+        // path folds it into the uploaded colours each frame (VFXColorTint.hpp), the CPU sim at spawn
+        // and gradient evaluation.
+        glm::vec4 colorTint{1.0f};
+
         VFXRenderMode renderMode = VFXRenderMode::Billboard;
         float softParticleDistance = 0.0f;
         float stretchMultiplier = 1.0f;

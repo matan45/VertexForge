@@ -11,6 +11,7 @@
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include "../../data/EditorMode.hpp"
 #include "../../data/EntityConversion.hpp"
+#include "../../data/VFXOverrideApplier.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
@@ -594,6 +595,16 @@ namespace services
             auto& vfxComp = registry.get<components::VFXComponent>(entity);
             vfxComp.runtimeInstanceId = instanceId;
 
+            // VK-1657: the component's per-entity overrides, applied before the first Play like a
+            // combo child (create -> apply -> play). Covers Play entry, sectors, prefabs and Runtime.
+            if (!vfxComp.overrides.empty())
+            {
+                events::vfxruntime::ApplyVFXInstanceOverridesCommand overridesCmd;
+                overridesCmd.instanceId = instanceId;
+                overridesCmd.overrides = toEmitterOverrides(vfxComp.overrides);
+                dispatcher.execute(overridesCmd);
+            }
+
             if (autoPlay)
             {
                 events::vfxruntime::PlayVFXInstanceCommand playCmd;
@@ -606,7 +617,7 @@ namespace services
         return instanceId;
     }
 
-    void VFXPlayModeHandler::update(float deltaTime)
+    void VFXPlayModeHandler::update(float /*deltaTime*/)
     {
         if (!vfxActive.load() || !vfxProvider)
         {
@@ -631,9 +642,7 @@ namespace services
         processPendingStreamCreates();
         processPendingPrefabCreates();
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
-        events::vfxruntime::UpdateVFXRuntimeCommand cmd;
-        cmd.deltaTime = deltaTime;
-        dispatcher.execute(cmd);
+        // VK-1657: no UpdateVFXRuntimeCommand here. The frame's VFX task dispatches it once, after
+        // the combo handler too, so instances created this frame simulate this frame.
     }
 }

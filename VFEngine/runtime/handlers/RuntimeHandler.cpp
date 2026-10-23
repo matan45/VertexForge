@@ -600,12 +600,19 @@ namespace {
             }
         });
 
+        // VK-1657: the only VFX tick of the frame (Weather no longer ticks the provider itself),
+        // dispatched after both handlers so instances they create this frame simulate this frame.
         frameTaskGraph->addTask("VFX", [this]() {
             if (engineTime::Timer::isGameTimeActive() && vfxPlayModeHandler) {
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
                 vfxPlayModeHandler->update(dt);
                 if (vfxSequencePlayModeHandler) {
                     vfxSequencePlayModeHandler->update(dt);
+                }
+                if (vfxRuntimeService) {
+                    services::events::vfxruntime::UpdateVFXRuntimeCommand cmd;
+                    cmd.deltaTime = dt;
+                    events::EventDispatcher::instance().execute(cmd);
                 }
             }
         });
@@ -700,6 +707,11 @@ namespace {
         frameTaskGraph->addDependency("PhysicsSync", "PhysicsKick");
         frameTaskGraph->addDependency("Scripts", "PhysicsSync");
         frameTaskGraph->addDependency("VFX", "Scripts");
+        // VK-1657: Weather drives the precipitation instance the VFX tick advances; WorldSector
+        // (main-pinned) and Plugins write EnTT / spawn effects the VFX task reads.
+        frameTaskGraph->addDependency("VFX", "Weather");
+        frameTaskGraph->addDependency("VFX", "WorldSector");
+        frameTaskGraph->addDependency("VFX", "Plugins");
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");

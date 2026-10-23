@@ -20,6 +20,8 @@
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXEditPreviewHandler.hpp"
+#include "impl/vfx/VFXAssetSummaryService.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
 #include "impl/scene/OceanService.hpp"
@@ -232,6 +234,11 @@ namespace handlers
 
     void EditorHandler::createVFXServices()
     {
+        // VK-1657: authored .vfVFX / .vfVFXSequence summaries for the MCP VFX tools; reads files
+        // only, so it does not need the VFX runtime.
+        vfxAssetSummaryService = std::make_unique<services::VFXAssetSummaryService>();
+        vfxAssetSummaryService->registerEventHandlers();
+
         if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
         {
             vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
@@ -245,6 +252,12 @@ namespace handlers
             vfxSequenceRuntimeService->registerEventHandlers();
             vfxSequencePlayModeHandler = std::make_unique<services::VFXSequencePlayModeHandler>();
             vfxSequencePlayModeHandler->subscribeToEvents();
+
+            // VK-1657: edit-mode preview of entities' VFX components (vfxeditpreview events),
+            // ticked by the editor VFX task through the same per-instance command API.
+            vfxEditPreviewHandler = std::make_unique<services::VFXEditPreviewHandler>();
+            vfxEditPreviewHandler->registerEventHandlers();
+            vfxEditPreviewHandler->subscribeToEvents();
         }
     }
 

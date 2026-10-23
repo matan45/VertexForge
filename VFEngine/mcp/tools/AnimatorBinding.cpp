@@ -1,5 +1,6 @@
 #include "ComponentBinding.hpp"
 #include "AnimationToolSupport.hpp"
+#include "AssetFieldSupport.hpp"
 #include "EnvironmentToolSupport.hpp"
 #include "PathSandbox.hpp"
 #include "SettingsTable.hpp"
@@ -52,80 +53,6 @@ namespace mcp::tools
             return std::to_string(toId(entity));
         }
 
-        // A file the agent names: absolute, or relative to the project asset root.
-        fs::path agentFile(const std::string& text)
-        {
-            fs::path path = pathFromUtf8(text);
-            if (path.is_relative())
-            {
-                if (const std::optional<fs::path> root = tryTerrainProjectRoot())
-                {
-                    path = *root / path;
-                }
-            }
-            return path.lexically_normal();
-        }
-
-        bool hasExtension(const fs::path& path, std::string_view extension)
-        {
-            return path.has_filename() && detail::componentEquals(path.extension(), pathFromUtf8(extension));
-        }
-
-        // An asset field: "" (or null) clears, "guid:<hex>" names a registered asset, anything else is the path
-        // of an existing file with `extension`, absolute or project-relative. The file is checked before
-        // AssetRef::fromPath, which would register a missing path.
-        asset::AssetRef assetFieldFromJson(const nlohmann::json& value, const char* key, std::string_view extension)
-        {
-            const std::string type(extension);
-            if (value.is_null())
-            {
-                return asset::AssetRef::invalid();
-            }
-            if (!value.is_string())
-            {
-                throw ArgError(std::string("field '") + key + "' must be a " + type + " path string");
-            }
-            const std::string text = value.get<std::string>();
-            if (text.empty())
-            {
-                return asset::AssetRef::invalid();
-            }
-
-            static constexpr std::string_view guidPrefix = "guid:";
-            if (text.starts_with(guidPrefix))
-            {
-                asset::AssetRef ref = asset::AssetRef::fromHexString(text.substr(guidPrefix.size()));
-                if (!ref.isValid())
-                {
-                    throw ArgError(std::string("field '") + key + "': '" + text + "' is not a valid asset GUID");
-                }
-                // A GUID whose file cannot be found stays assignable, as component_get reports it.
-                const std::string& path = ref.resolve();
-                if (!path.empty() && !hasExtension(fs::path(path), extension))
-                {
-                    throw ArgError(std::string("field '") + key + "': '" + text + "' is not a " + type + " asset");
-                }
-                return ref;
-            }
-
-            const fs::path file = agentFile(text);
-            if (!hasExtension(file, extension))
-            {
-                throw ArgError(std::string("field '") + key + "' must be a " + type + " file (got '" + text + "')");
-            }
-            std::error_code ec;
-            if (!fs::is_regular_file(file, ec))
-            {
-                throw ArgError(std::string("field '") + key + "': '" + text + "' does not exist");
-            }
-            asset::AssetRef ref = asset::AssetRef::fromPath(file.string());
-            if (!ref.isValid())
-            {
-                throw ArgError(std::string("field '") + key + "': '" + text + "' is not an engine asset");
-            }
-            return ref;
-        }
-
         // Unknown and read-only keys are refused before anything is read or written.
         void checkFields(const nlohmann::json& patch)
         {
@@ -148,21 +75,9 @@ namespace mcp::tools
             }
         }
 
-        // Asset fields are reported as UTF-8 paths, the encoding agentFile reads back (engine paths are narrow
-        // strings in the process code page), so a replayed get() result (undo) names the same file.
-        nlohmann::json assetJson(const asset::AssetRef& ref)
-        {
-            if (!ref.isValid())
-            {
-                return "";
-            }
-            const std::string& path = ref.resolve();
-            return path.empty() ? "guid:" + ref.toHexString() : genericPathToUtf8(fs::path(path));
-        }
-
         nlohmann::json skeletonJson(const services::MeshData& mesh)
         {
-            nlohmann::json out{{"mesh", assetJson(mesh.meshRef)}, {"bones", nullptr}, {"root", nullptr}};
+            nlohmann::json out{{"mesh", assetFieldJson(mesh.meshRef)}, {"bones", nullptr}, {"root", nullptr}};
             const std::string path = mesh.meshRef.isValid() ? mesh.meshRef.resolve() : std::string();
             if (path.empty())
             {
@@ -222,7 +137,7 @@ namespace mcp::tools
             if (const animator::AnimatorState* state = base.findStateById(base.defaultStateId))
             {
                 out["defaultState"] = state->name;
-                out["defaultClip"] = state->animationRef.isValid() ? assetJson(state->animationRef) : nlohmann::json(nullptr);
+                out["defaultClip"] = state->animationRef.isValid() ? assetFieldJson(state->animationRef) : nlohmann::json(nullptr);
                 out["playbackSpeed"] = env::floatJson(state->playbackSpeed);
                 out["loop"] = state->loop;
             }
@@ -237,8 +152,8 @@ namespace mcp::tools
             }
             // The key set stays the same whatever can be read.
             nlohmann::json out{
-                {"animatorRef", assetJson(mesh->animatorRef)},
-                {"retargetRef", assetJson(mesh->retargetRef)},
+                {"animatorRef", assetFieldJson(mesh->animatorRef)},
+                {"retargetRef", assetFieldJson(mesh->retargetRef)},
                 {"applyRootMotion", mesh->applyRootMotion},
                 {"skeleton", skeletonJson(*mesh)},
                 {"defaultState", nullptr},
@@ -329,7 +244,7 @@ namespace mcp::tools
                 return true;
             }
             std::error_code ec;
-            return fs::exists(agentFile(text), ec);
+            return fs::exists(agentAssetPath(text), ec);
         }
 
         // component_add: consumes the creation seeds and, unless data.animatorRef names an existing animator,

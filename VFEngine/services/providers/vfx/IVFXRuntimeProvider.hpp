@@ -182,5 +182,12 @@ namespace services
             uint8_t priority = 2;
         };
         virtual std::vector<InstanceDebugInfo> getInstanceDebugInfo() const { return {}; }
+
+        // VK-1657 — destroy every instance not created with VFXRuntimeParams::persistent (the
+        // effects scripts, plugins and combos spawned during Play) and return their ids. Run from
+        // the editor's first edit-mode VFX tick after Play->Edit, never from the mode notification
+        // itself (a fatal-script Stop publishes it while the render thread is busy). Non-pure so
+        // existing test providers stay source-compatible; the runtime adapter overrides it.
+        virtual std::vector<VFXInstanceId> destroyTransientInstances() { return {}; }
     };
 }

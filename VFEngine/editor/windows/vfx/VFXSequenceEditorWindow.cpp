@@ -17,6 +17,7 @@
 #include <vfx/VFXComboTimeline.hpp>
 #include <vfx/VFXAsset.hpp>
 #include <vfx/VFXBoundsUtil.hpp>
+#include <vfx/VFXBlendMode.hpp>
 #include <vfx/VFXParameterRegistry.hpp>
 #include <asset/AssetRef.hpp>
 #include <resource/MeshStreamHandle.hpp>
@@ -192,11 +193,29 @@ namespace windows
             {
                 auto* stored = std::get_if<int32_t>(&overrideValue.value);
                 if (!stored) return false;
+                // VK-1657: blendMode is a VFXBlendMode picked by name (an out-of-range stored value
+                // shows an empty preview until one is picked); sortOrder stays inside the loader clamp.
+                if (parameter && parameter->target == vfx::VFXOverrideTarget::BlendMode)
+                {
+                    const char* blendNames[vfx::kBlendModeCount] = {};
+                    for (int32_t mode = 0; mode < vfx::kBlendModeCount; ++mode)
+                        blendNames[mode] = vfx::blendModeToString(static_cast<vfx::VFXBlendMode>(mode));
+                    int blendIdx = (*stored >= 0 && *stored < vfx::kBlendModeCount) ? static_cast<int>(*stored) : -1;
+                    if (ImGui::Combo("##oval", &blendIdx, blendNames, IM_ARRAYSIZE(blendNames)))
+                    {
+                        *stored = static_cast<int32_t>(blendIdx);
+                        return true;
+                    }
+                    return false;
+                }
                 int value = static_cast<int>(*stored);
                 if (ImGui::InputInt("##oval", &value))
                 {
+                    if (parameter && parameter->target == vfx::VFXOverrideTarget::SortOrder)
+                        value = std::clamp(value, static_cast<int>(vfx::kMinSortOrder), static_cast<int>(vfx::kMaxSortOrder));
+                    const bool changed = static_cast<int32_t>(value) != *stored; // a step past the clamp is no edit
                     *stored = static_cast<int32_t>(value);
-                    return true;
+                    return changed;
                 }
                 return false;
             }
@@ -218,7 +237,17 @@ namespace windows
             case vfx::VFXPropertyType::Color:
             {
                 glm::vec4* value = std::get_if<glm::vec4>(&overrideValue.value);
-                return value && ImGui::ColorEdit4("##oval", &value->x);
+                if (!value) return false;
+                // VK-1657: colorTint is a multiplier, so it may exceed 1 (HDR) but never go negative.
+                if (parameter && parameter->target == vfx::VFXOverrideTarget::ColorTint)
+                {
+                    const glm::vec4 previous = *value;
+                    if (!ImGui::ColorEdit4("##oval", &value->x, ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float))
+                        return false;
+                    *value = glm::max(*value, glm::vec4(0.0f));
+                    return *value != previous;
+                }
+                return ImGui::ColorEdit4("##oval", &value->x);
             }
             case vfx::VFXPropertyType::String:
             {
@@ -593,7 +622,9 @@ namespace windows
                     if (ImGui::Selectable(itemLabel.c_str(), selected))
                     {
                         overrideValue.name = std::string(candidate.name);
-                        if (!vfx::valueMatchesType(overrideValue.value, candidate.type))
+                        // VK-1657: also reset a same-typed value the new parameter rejects
+                        // (e.g. a renderMode of 5 switched to blendMode).
+                        if (!vfx::isValidOverrideValue(candidate, overrideValue.value))
                             overrideValue.value = vfx::defaultValueFor(candidate.type);
                         isDirty = true;
                         previewDirty = true;
@@ -1390,6 +1421,7 @@ namespace windows
             services::VFXSequencePreviewStep ps;
             ps.params = editor::vfxeditor::buildVFXPreviewParams(*vfxData);
 
+            // VK-1657: ps.params was just rebuilt from the asset, so the in-place colorTint multiply runs once.
             services::applyToPreviewParams(ps.params, services::toEmitterOverrides(step.overrides));
 
             ps.localTransform = vfx::VFXComboTimeline::composeStepLocal(step);

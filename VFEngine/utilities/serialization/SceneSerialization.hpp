@@ -138,6 +138,10 @@ namespace serialization
         static void deserializeMaterial(const json& j, components::MaterialComponent& material);
         static void resolveRenderTextureSourceNames();
 
+        // VFX component incl. its per-entity overrides (VK-1657). Public for tests.
+        static json serializeVFX(const components::VFXComponent& vfx);
+        static void deserializeVFX(const json& j, components::VFXComponent& vfx);
+
     private:
         static json serializeRootEntity(scene::Entity& root, std::string_view sourceFilename = {});
         // Shared serializer for serializeEntity (serial children) and serializeRootEntity
@@ -257,9 +261,6 @@ namespace serialization
 
         static json serializeDestructible(const components::DestructibleComponent& destructible);
         static void deserializeDestructible(const json& j, components::DestructibleComponent& destructible);
-
-        static json serializeVFX(const components::VFXComponent& vfx);
-        static void deserializeVFX(const json& j, components::VFXComponent& vfx);
 
         static json serializeVFXSequence(const components::VFXSequenceComponent& seq);
         static void deserializeVFXSequence(const json& j, components::VFXSequenceComponent& seq);

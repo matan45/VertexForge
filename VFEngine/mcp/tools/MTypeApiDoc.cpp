@@ -297,6 +297,58 @@ public class AnimatorLocomotion extends Behaviour {
 ```
 )MTDOC";
 
+        constexpr const char* primerEffects = R"MTDOC(
+## 9. Visual effects
+
+An effect is a `.vfVFX` file: one emitter and its node graph. `vfx_list_assets` lists the project's effects; the engine ships ready-made ones in its assets/vfx/library folder, which a project uses as a copy at `assets/vfx/library`. Scripts drive effects through the static class in lib/engine/VFX.mt (full signatures: `vf://docs/mtype-api/engine/VFX`):
+
+- `VFX::spawnAt(path, x, y, z)` plays a one-shot effect at a world position and returns its instance id (`int`); the instance destroys itself once it has finished. `path` is relative to the project folder (absolute paths work too), e.g. `"assets/vfx/library/sparks.vfVFX"`. It returns `0` when the file does not exist or the effect is disabled at the current quality tier, so check for `0`.
+- `VFX::spawnAtLooping(path, x, y, z)` plays an effect that keeps running: keep the id and end it with `VFX::destroyInstance(id)`, or with `VFX::stopInstance(id)`, which lets the live particles finish. `VFX::setInstancePosition(id, x, y, z)` moves it and `VFX::attachToSocket(id, entityId, socketName)` makes it follow a socket.
+- Everything a script spawns, instances and combos alike, is destroyed when Play stops.
+- Change a spawned instance with `VFX::setOverride(id, name, value)` for a number (`"startSize"`, `"spawnRate"`, `"lifetime"`, `"startSpeed"`, `"blendMode"` 0 alpha / 1 additive / 2 premultiplied / 3 multiply, `"sortOrder"` -256 to 256 where higher draws later, ...), `VFX::setOverrideVec3(id, name, x, y, z)` for a direction or `"shapeDimensions"`, and `VFX::setOverrideTint(id, r, g, b, a)` to multiply every authored colour (1, 1, 1, 1 = as authored; above 1 brightens). They return `false` for an unknown name (and for a blendMode outside 0-3 or a negative tint). `VFX::setOverrideColor(id, r, g, b, a)` sets only the START colour, which a colour-over-lifetime gradient (most library effects have one) overwrites every frame: prefer `VFX::setOverrideTint`.
+- An entity's VFX component (added with `vfx_add_emitter`) starts by itself when Play starts if its autoPlay is on; `VFX::play(entityId)` starts it and `VFX::stop(entityId)` stops it. Both act on the instance the component gets when Play starts.
+- `ICollisionListener` (lib/engine/ICollisionListener.mt) passes only the other entity's id to `onCollisionEnter(int otherEntityId)`, no contact point: spawn the effect at `this.transform().worldPosition()`, as the example below does.
+- `IVFXEventListener` (lib/engine/IVFXEventListener.mt) declares `onVFXParticleEvent(int eventType, Vec3f position, Vec3f velocity, int entityId)`, eventType 0 = spawn, 1 = death, 2 = collision, 3 = lifetime threshold. Every script that implements it receives the events of every effect, so filter on `eventType` and on `entityId` (the entity whose VFX component owns the effect, `0` for an instance from `VFX::spawnAt`). It fires only for the event types an effect enables with "notify" or a sub-effect, and the engine's library effects enable none.
+- `IVFXComboCueListener` (lib/engine/IVFXComboCueListener.mt) declares `onComboCue(int comboId, string cueName, ComboCuePayload payload)`: it runs when a combo (a `.vfVFXSequence`, spawned with `VFX::spawnCombo(path, x, y, z)`) reaches one of its cues, or when a script calls `VFX::triggerComboCue(comboId, cueName)`. Check the payload's `hasPosition`, `hasColor` and `hasScalar` flags before reading `position()`, `colorR` / `colorG` / `colorB` / `colorA` or `scalar`.
+
+Verified example: `scripts/game/examples/HitEffect.mt` ships with the engine (quoted verbatim). Give your copy a NEW class name: `HitEffect` already exists in projects that carry the examples. Attach it to an entity with a RigidBody and a Collider: when that entity starts touching another solid entity, it spawns sparks at its own position. The effect path assumes the engine's library is copied into the project as `assets/vfx/library`.
+
+```mtype
+// HitEffect - Example of spawning a VFX one-shot on collision (VK-1657).
+//
+// Collision callbacks carry only the other entity's id, not the contact
+// point, so the effect plays at this entity's world position. The path is
+// relative to the project folder: copy the engine's assets/vfx/library into
+// the project as assets/vfx/library (vfx_list_assets lists what is there).
+
+import * from "../../lib/engine/oop/Behaviour.mt";
+import * from "../../lib/engine/ICollisionListener.mt";
+import * from "../../lib/engine/VFX.mt";
+import * from "../../lib/math/Vec3f.mt";
+
+@Script
+public class HitEffect extends Behaviour implements ICollisionListener {
+    private string effectPath = "assets/vfx/library/sparks.vfVFX";
+
+    public constructor() : super() {
+    }
+
+    @Override
+    public function onCollisionEnter(int otherEntityId): void {
+        Vec3f at = this.transform().worldPosition();
+        int instanceId = VFX::spawnAt(this.effectPath, at.x, at.y, at.z);
+        if (instanceId == 0) {
+            this.logWarn("no effect spawned from " + this.effectPath);
+        }
+    }
+
+    @Override
+    public function onCollisionExit(int otherEntityId): void {
+    }
+}
+```
+)MTDOC";
+
         bool isIdentChar(char c)
         {
             return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
@@ -720,8 +772,8 @@ public class AnimatorLocomotion extends Behaviour {
 
     const std::string& primer()
     {
-        static const std::string text =
-            std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample + primerAnimation;
+        static const std::string text = std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample +
+                                        primerAnimation + primerEffects;
         return text;
     }
 
@@ -736,6 +788,7 @@ public class AnimatorLocomotion extends Behaviour {
             "engine/Time",
             "engine/Log",
             "engine/Animator",
+            "engine/VFX",
             "math/Vec3f"
         };
         return modules;
