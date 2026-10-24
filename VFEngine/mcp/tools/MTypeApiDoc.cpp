@@ -349,6 +349,70 @@ public class HitEffect extends Behaviour implements ICollisionListener {
 ```
 )MTDOC";
 
+        constexpr const char* primerWater = R"MTDOC(
+## 10. Water
+
+A scene has at most one ocean, the entity created as `"Ocean"` (`Entity::findByName("Ocean")`, which returns `-1` when there is no ocean or it was renamed), plus any number of lakes and pools (water bodies). The static class in lib/engine/Ocean.mt reads and drives them (full signatures: `vf://docs/mtype-api/engine/Ocean`):
+
+- Queries that cover ANY water: `Ocean::isInOcean(position)` (a `Vec3f`), `Ocean::getOceanHeightAt(x, z)` (the surface height: a lake or pool's level inside its rectangle, else the ocean's surface with its waves; `0.0` where there is no water, so check `isInOcean` when y = 0 is a real answer), `Ocean::getWaterDepthAt(x, z)` (`0.0` where there is no water, very large over open sea), `Ocean::isCameraUnderwater()` (the primary camera) and `Ocean::isEntityInWater(entityId)` (a dynamic rigid body, updated by the physics step in Play mode).
+- A HIDDEN ocean (`ocean_enable {enabled:false}`, or "Ocean surface visible" off in the editor's Ocean window) keeps its settings but has no surface: the queries above answer only for lakes and pools, nothing floats in the sea and the waves stop (lakes with waves go flat too).
+- Calls that take the ocean entity id: `Ocean::getBaseHeight(id)` (its level), `Ocean::getDensity(id)`, `Ocean::getDrag(id)`, `Ocean::getBuoyancyStrength(id)`, `Ocean::setPhysicsSettings(id, density, drag, buoyancyStrength)` (drag and buoyancyStrength tune floating in every water, lakes and pools included; density is unused), `Ocean::setWeatherDriven(id, enabled)` and `Ocean::setVisualSettings(id, ...)` (colours shared by every lake and pool). Without an id: `Ocean::setSeaState(beaufort, transitionSeconds)` (0 = calm .. 12 = hurricane), `Ocean::getSeaState()` and `Ocean::addImpulse(x, z, radius, strength)` (a ripple on any water; dropped while the ripple simulation is off, see `Ocean::setRippleSimEnabled(true)`).
+- `IWaterListener` (lib/engine/IWaterListener.mt) declares `onWaterEnter(float verticalSpeed)`, `onWaterExit()`, `onEntityWaterEnter(int entityId, float x, float y, float z, float verticalSpeed)` and `onEntityWaterExit(int entityId)`; implement all four. The first two run for the script's own entity, the other two for EVERY entity. Only dynamic rigid bodies are tracked, in Play mode, in water whose physics is on. `verticalSpeed` is the vertical velocity at impact in m/s, NEGATIVE while falling in; x, y, z is the entity's position, not the water surface.
+- A project created from an old template may carry an old lib/engine/Ocean.mt and no lib/engine/IWaterListener.mt (the core API below then lacks functions or says it is not found): copy the engine's assets/scripts/lib into the project's scripts/lib.
+
+Example: `scripts/game/examples/WaterSplash.mt` ships with the engine (quoted verbatim). Give your copy a NEW class name: `WaterSplash` already exists in projects that carry the examples. Attach it to an entity with a dynamic RigidBody and a Collider: when the entity drops into water faster than 1 m/s, a splash plays on the surface above it. The effect path assumes the engine's library is copied into the project as `assets/vfx/library`.
+
+```mtype
+// WaterSplash - Example of reacting to water through IWaterListener (VK-1658).
+//
+// Attach it to an entity with a dynamic RigidBody and a Collider. When the
+// entity drops into water (a lake, a pool or the visible ocean) faster than
+// 1 m/s, a splash plays on the surface above it. verticalSpeed is the vertical
+// velocity at impact: negative while falling. The path is relative to the
+// project folder: copy the engine's assets/vfx/library into the project as
+// assets/vfx/library (vfx_list_assets lists what is there).
+
+import * from "../../lib/engine/oop/Behaviour.mt";
+import * from "../../lib/engine/IWaterListener.mt";
+import * from "../../lib/engine/Ocean.mt";
+import * from "../../lib/engine/VFX.mt";
+import * from "../../lib/math/Vec3f.mt";
+
+@Script
+public class WaterSplash extends Behaviour implements IWaterListener {
+    private string effectPath = "assets/vfx/library/rain_splash.vfVFX";
+
+    public constructor() : super() {
+    }
+
+    @Override
+    public function onWaterEnter(float verticalSpeed): void {
+        if (verticalSpeed < -1.0) {
+            Vec3f at = this.transform().worldPosition();
+            float surface = Ocean::getOceanHeightAt(at.x, at.z);
+            int instanceId = VFX::spawnAt(this.effectPath, at.x, surface, at.z);
+            if (instanceId == 0) {
+                this.logWarn("no splash spawned from " + this.effectPath);
+            }
+        }
+    }
+
+    @Override
+    public function onWaterExit(): void {
+    }
+
+    @Override
+    public function onEntityWaterEnter(int entityId, float x, float y, float z,
+                                       float verticalSpeed): void {
+    }
+
+    @Override
+    public function onEntityWaterExit(int entityId): void {
+    }
+}
+```
+)MTDOC";
+
         bool isIdentChar(char c)
         {
             return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
@@ -773,7 +837,7 @@ public class HitEffect extends Behaviour implements ICollisionListener {
     const std::string& primer()
     {
         static const std::string text = std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample +
-                                        primerAnimation + primerEffects;
+                                        primerAnimation + primerEffects + primerWater;
         return text;
     }
 
@@ -789,6 +853,8 @@ public class HitEffect extends Behaviour implements ICollisionListener {
             "engine/Log",
             "engine/Animator",
             "engine/VFX",
+            "engine/Ocean",
+            "engine/IWaterListener",
             "math/Vec3f"
         };
         return modules;

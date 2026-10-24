@@ -164,6 +164,21 @@ namespace render
                                             worldMode, tileGrid, shoreField,
                                             waterBodies, oceanRenderProvider->hasActiveOcean());
         }
+        else
+        {
+            // VK-1658: no water left (the ocean was hidden, the last body went inactive) - drop the
+            // tiles updateWater built last time. The main view stops drawing water on hasWaterToRender,
+            // but render-texture and probe views draw whatever tiles are left, so a hidden ocean would
+            // otherwise stay frozen in them.
+            if (gpuDrivenRenderer)
+                gpuDrivenRenderer->clearWaterData();
+
+            // A hidden ocean still follows the world's sectors (OceanService queues their tiles while an
+            // ocean entity exists), so keep draining that queue: it would otherwise grow with every
+            // sector activation and replay all at once when the ocean shows again.
+            if (oceanRenderProvider)
+                oceanRenderProvider->processWaterTileStreaming();
+        }
 
         if (oceanRenderProvider && gpuDrivenRenderer)
         {

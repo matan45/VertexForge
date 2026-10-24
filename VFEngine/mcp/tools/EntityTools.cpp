@@ -31,6 +31,24 @@ namespace mcp::tools
         constexpr const char* parentTerrainHint =
             "Create the entity elsewhere (e.g. at the scene root) and stand it on the ground with terrain_height_at.";
 
+        // VK-1658 rejectOcean hints and the water notes (warnings, not refusals).
+        constexpr const char* deleteOceanHint =
+            "Hide it with ocean_enable {enabled:false} (keeps its settings), or delete it with "
+            "ocean_enable {enabled:false, remove:true} (undoable).";
+        constexpr const char* duplicateOceanHint =
+            "A scene has a single ocean; tune it with ocean_set_params (water_create_body adds lakes and pools).";
+        constexpr const char* transformOceanHint =
+            "The ocean ignores its transform; set its level with ocean_set_params {level}.";
+        constexpr const char* deactivateOceanHint = "Hide the ocean with ocean_enable {enabled:false} (it keeps its settings).";
+        constexpr const char* activateOceanHint =
+            "The ocean ignores the entity active flag; show it with ocean_enable {enabled:true}.";
+        constexpr const char* activeOceanNote = "The ocean ignores the entity active flag; use ocean_enable.";
+        constexpr const char* activeWaterBodyNote =
+            "Water bodies ignore the entity active flag; use water_set_body {active:false}.";
+        constexpr const char* parentWaterBodyNote =
+            "Water bodies are placed by their LOCAL position; the parent's transform is ignored (keep them at the "
+            "scene root).";
+
         std::string lowercase(std::string text)
         {
             std::transform(text.begin(), text.end(), text.begin(),
@@ -190,7 +208,9 @@ namespace mcp::tools
             tool.description =
                 "Delete an entity together with all of its children. Their ids become invalid. Undoable: undo "
                 "re-creates the subtree with NEW ids (undo/redo report them in remappedEntities) and fresh UUIDs. "
-                "Refused for terrains and their tiles (or a subtree containing one): use terrain_delete.";
+                "Refused for terrains and their tiles (or a subtree containing one): use terrain_delete. Refused for "
+                "the ocean (or a subtree containing it): ocean_enable {enabled:false} hides it, {enabled:false, "
+                "remove:true} deletes it. Water bodies (lakes, pools) are deleted here like any entity.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.destructive = true;
             tool.handler = [](const nlohmann::json& args) -> ToolResult
@@ -199,6 +219,7 @@ namespace mcp::tools
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "delete");
                 rejectTerrainSubtree(entity, "delete", deleteTerrainHint);
+                rejectOceanSubtree(entity, "delete", deleteOceanHint);
 
                 // Snapshot before the delete; it is only pushed if the delete succeeds.
                 undo::UndoRecorder recorder("MCP: Delete entity (" + entity.name + ")");
@@ -222,7 +243,8 @@ namespace mcp::tools
             tool.name = "entity_duplicate";
             tool.title = "Duplicate entity";
             tool.description = "Duplicate an entity and its whole subtree (components included) under the same parent. Undoable. "
-                                "Refused for terrains and their tiles (or a subtree containing one). "
+                                "Refused for terrains and their tiles (or a subtree containing one), and for the ocean "
+                                "(or a subtree containing it): a scene has one ocean. "
                                 "Returns the new root id.";
             tool.inputSchema = schema::object({{"entity", schema::entity()}}, {"entity"});
             tool.handler = [](const nlohmann::json& args) -> ToolResult
@@ -231,6 +253,7 @@ namespace mcp::tools
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectRoot(entity, "duplicate");
                 rejectTerrainSubtree(entity, "duplicate", duplicateTerrainHint);
+                rejectOceanSubtree(entity, "duplicate", duplicateOceanHint);
 
                 events::scene::DuplicateEntityCommand command;
                 command.entity = entity.handle;
@@ -257,7 +280,8 @@ namespace mcp::tools
                 "Move an entity (with its subtree) under a new parent, appended as the last child. Omit 'parent' "
                 "(or pass null) to move it to the scene root. The LOCAL transform values are kept as-is, so the "
                 "world placement changes if the new parent is transformed. Terrains and terrain tiles can be neither "
-                "moved nor used as the parent. Undoable (undo restores the old sibling position).";
+                "moved nor used as the parent. Water bodies are placed by their LOCAL position, so keep them at the "
+                "scene root (the reply warns otherwise). Undoable (undo restores the old sibling position).";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"parent", schema::entity("New parent entity id. Omit or null for the scene root.")}
@@ -301,7 +325,13 @@ namespace mcp::tools
                 recorder.add(std::make_unique<undo::ReparentUndo>(toId(entity.handle), entity.name, toId(oldParent),
                                                                   oldIndex, toId(parent)));
                 recorder.push();
-                return ToolResult::ok({{"id", entityId(entity.handle)}, {"parent", entityId(parent)}});
+
+                nlohmann::json out{{"id", entityId(entity.handle)}, {"parent", entityId(parent)}};
+                if (parent != sceneRoot() && subtreeHasWaterBody(entity))
+                {
+                    out["warnings"] = nlohmann::json::array({parentWaterBodyNote});
+                }
+                return ToolResult::ok(std::move(out));
             };
             registry.add(std::move(tool));
         }
@@ -344,7 +374,10 @@ namespace mcp::tools
             ToolDef tool;
             tool.name = "entity_set_active";
             tool.title = "Activate / deactivate entity";
-            tool.description = "Enable or disable an entity. A disabled entity (and its subtree) is not rendered or simulated. Undoable.";
+            tool.description =
+                "Enable or disable an entity. A disabled entity (and its subtree) is not rendered or simulated, except "
+                "water: the ocean is refused (ocean_enable hides it) and water bodies ignore the flag (use "
+                "water_set_body {active:false}; the reply warns). Undoable.";
             tool.inputSchema = schema::object({
                 {"entity", schema::entity()},
                 {"active", schema::boolean("true = enabled")}
@@ -357,6 +390,19 @@ namespace mcp::tools
                 events::scene::SetEntityActiveCommand command;
                 command.entity = entity.handle;
                 command.isActive = reader.requireBool("active");
+                rejectOcean(entity, command.isActive ? "activate" : "deactivate",
+                            command.isActive ? activateOceanHint : deactivateOceanHint);
+
+                nlohmann::json warnings = nlohmann::json::array();
+                if (findInSubtree(entity, isOceanEntity).has_value())
+                {
+                    warnings.push_back(activeOceanNote);
+                }
+                if (subtreeHasWaterBody(entity))
+                {
+                    warnings.push_back(activeWaterBodyNote);
+                }
+
                 events::EventDispatcher::instance().execute(command);
 
                 undo::UndoRecorder recorder(std::string("MCP: ") + (command.isActive ? "Activate" : "Deactivate") +
@@ -364,7 +410,13 @@ namespace mcp::tools
                 recorder.add(std::make_unique<undo::ActiveUndo>(toId(entity.handle), entity.name, entity.isActive,
                                                                 command.isActive));
                 recorder.push();
-                return ToolResult::ok({{"id", entityId(entity.handle)}, {"active", command.isActive}});
+
+                nlohmann::json out{{"id", entityId(entity.handle)}, {"active", command.isActive}};
+                if (!warnings.empty())
+                {
+                    out["warnings"] = std::move(warnings);
+                }
+                return ToolResult::ok(std::move(out));
             };
             registry.add(std::move(tool));
         }
@@ -399,8 +451,9 @@ namespace mcp::tools
             tool.title = "Set entity transform";
             tool.description =
                 "Partially update an entity's LOCAL transform: only the provided fields change. "
-                "rotationEuler is in degrees. Refused for terrains and terrain tiles. Undoable. Returns the resulting "
-                "local transform.";
+                "rotationEuler is in degrees. Refused for terrains, terrain tiles and the ocean (it ignores its "
+                "transform: ocean_set_params {level}). A water body uses only its position (water_set_body sets "
+                "its centre and level). Undoable. Returns the resulting local transform.";
             nlohmann::json properties = transformProperties();
             properties["entity"] = schema::entity();
             tool.inputSchema = schema::object(std::move(properties), {"entity"});
@@ -409,6 +462,7 @@ namespace mcp::tools
                 ArgReader reader(args);
                 services::EntityData entity = requireEntity(reader, "entity");
                 rejectTerrain(entity, "transform", transformTerrainHint);
+                rejectOcean(entity, "transform", transformOceanHint);
                 if (!hasTransformArgs(reader))
                 {
                     throw ArgError("provide at least one of 'position', 'rotationEuler', 'scale'");

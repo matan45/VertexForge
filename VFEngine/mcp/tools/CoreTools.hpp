@@ -44,6 +44,7 @@ namespace mcp::tools
     void registerAnimationIkTools(ToolRegistry& registry, const ToolContext& context); // animation_ik_* (VK-1656)
     void registerAnimationSocketTools(ToolRegistry& registry, const ToolContext& context); // animation_*socket* (VK-1656)
     void registerVFXTools(ToolRegistry& registry, const ToolContext& context);        // vfx_* (VK-1657)
+    void registerWaterTools(ToolRegistry& registry, const ToolContext& context);      // water_*, ocean_* (VK-1658)
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);

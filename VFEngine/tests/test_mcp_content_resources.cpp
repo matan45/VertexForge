@@ -304,6 +304,16 @@ TEST_SUITE("MCP content resources")
             CAPTURE(tool);
             CHECK(contains(withoutPlugins, tool));
         }
+        // VK-1658: water (the ocean, lakes and pools, the shared look) is edited with the water tools.
+        CHECK(contains(withoutPlugins, "## Water\n"));
+        CHECK(contains(withoutPlugins, "HIDES the ocean"));
+        CHECK(contains(withoutPlugins, "entity_set_active does not hide water"));
+        for (const char* tool : {"water_get", "water_create_body", "water_set_body", "water_set_params", "ocean_enable",
+                                 "ocean_set_params", "IWaterListener"})
+        {
+            CAPTURE(tool);
+            CHECK(contains(withoutPlugins, tool));
+        }
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

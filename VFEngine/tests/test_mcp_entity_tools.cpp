@@ -9,6 +9,7 @@
 #include "events/editor/UndoRedoEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 
 #include <map>
 #include <memory>
@@ -16,6 +17,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -90,6 +92,75 @@ namespace
             add(60, "Level", rootId, {50}, {});
             add(50, "Terrain", 60, {51}, {services::ComponentTypeId::Terrain});
             add(51, "Tile_0_0", 50, {}, {services::ComponentTypeId::TerrainTile});
+        }
+
+        // VK-1658: root -> 80 "Coast" -> {70 "Ocean", 72 "Lake"}, root -> 73 "Pool". Ocean and water
+        // body membership is answered by registerWaterHandlers() only.
+        std::set<uint64_t> oceans;
+        std::set<uint64_t> waterBodies;
+        int setActiveCount = 0;
+        std::vector<std::pair<uint64_t, uint64_t>> reparents;  // (entity, new parent)
+        int deleteCount = 0;
+
+        void addWater()
+        {
+            auto add = [this](uint64_t id, const char* name, uint64_t parent, std::vector<uint64_t> children)
+            {
+                detailed[id] = entityData(id, name, parent, std::move(children));
+                alive.insert(id);
+            };
+            add(80, "Coast", rootId, {70, 72});
+            add(70, "Ocean", 80, {});
+            add(72, "Lake", 80, {});
+            add(73, "Pool", rootId, {});
+            oceans = {70};
+            waterBodies = {72, 73};
+        }
+
+        // Only the VK-1658 cases register these; every other case runs without an ocean service, which
+        // the entity tools must treat as "no water".
+        void registerWaterHandlers()
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            dispatcher.registerQueryHandler<events::ocean::HasOceanComponentQuery>(
+                [this](const events::ocean::HasOceanComponentQuery& query)
+                {
+                    return oceans.contains(query.entity.id);
+                });
+
+            dispatcher.registerQueryHandler<events::ocean::HasWaterBodyComponentQuery>(
+                [this](const events::ocean::HasWaterBodyComponentQuery& query)
+                {
+                    return waterBodies.contains(query.entity.id);
+                });
+        }
+
+        // The hierarchy edits the success paths of entity_set_active / entity_set_parent / entity_delete need.
+        void registerHierarchyEditHandlers()
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+
+            dispatcher.registerCommandHandler<events::scene::SetEntityActiveCommand>(
+                [this](const events::scene::SetEntityActiveCommand&)
+                {
+                    ++setActiveCount;
+                });
+
+            dispatcher.registerCommandHandler<events::scene::ReparentEntityCommand>(
+                [this](const events::scene::ReparentEntityCommand& command)
+                {
+                    reparents.emplace_back(command.entity.id, command.newParent.id);
+                    return true;
+                });
+
+            dispatcher.registerCommandHandler<events::scene::DeleteEntityCommand>(
+                [this](const events::scene::DeleteEntityCommand& command)
+                {
+                    ++deleteCount;
+                    alive.erase(command.entity.id);
+                    return true;
+                });
         }
 
         void registerHandlers()
@@ -379,6 +450,170 @@ TEST_SUITE("McpEntityTools")
 
         // rejectRoot still runs first.
         CHECK(contains(error("entity_delete", {{"entity", FakeScene::rootId}}), "scene root"));
+    }
+
+    TEST_CASE("the ocean is refused by the generic entity tools (VK-1658)")
+    {
+        ToolFixture fixture;
+        fixture.scene.addWater();
+        fixture.scene.registerWaterHandlers();
+        fixture.scene.registerHierarchyEditHandlers();
+
+        auto error = [&fixture](const char* tool, const nlohmann::json& args)
+        {
+            try
+            {
+                fixture.call(tool, args);
+            }
+            catch (const std::runtime_error& e)
+            {
+                return std::string(e.what());
+            }
+            return std::string();
+        };
+
+        const std::string deleted = error("entity_delete", {{"entity", 70}});
+        CHECK(contains(deleted, "Cannot delete entity 70 ('Ocean'): it is the ocean."));
+        CHECK(contains(deleted, "ocean_enable {enabled:false, remove:true}"));
+        CHECK(contains(error("entity_delete", {{"entity", 80}}), "it contains ocean entity 70 ('Ocean')"));
+        CHECK(contains(error("entity_duplicate", {{"entity", 70}}), "it is the ocean"));
+        CHECK(contains(error("entity_duplicate", {{"entity", 80}}), "it contains ocean entity 70"));
+        CHECK(contains(error("entity_set_transform", {{"entity", 70}, {"position", {0.0, 5.0, 0.0}}}),
+                       "ocean_set_params {level}"));
+        const std::string deactivated = error("entity_set_active", {{"entity", 70}, {"active", false}});
+        CHECK(contains(deactivated, "Cannot deactivate entity 70"));
+        CHECK(contains(deactivated, "ocean_enable {enabled:false}"));
+        const std::string activated = error("entity_set_active", {{"entity", 70}, {"active", true}});
+        CHECK(contains(activated, "Cannot activate entity 70"));
+        CHECK(contains(activated, "ocean_enable {enabled:true}"));
+        CHECK(fixture.scene.deleteCount == 0);
+        CHECK(fixture.scene.setActiveCount == 0);
+        CHECK(fixture.scene.setTransformCount == 0);
+        CHECK(fixture.scene.undoStack.empty());
+
+        // A water body is an ordinary entity for these tools.
+        auto moved = fixture.call("entity_set_transform", {{"entity", 73}, {"position", {1.0, 2.0, 3.0}}});
+        REQUIRE_FALSE(moved.isError);
+        CHECK(fixture.scene.setTransformCount == 1);
+        auto removed = fixture.call("entity_delete", {{"entity", 73}});
+        REQUIRE_FALSE(removed.isError);
+        CHECK(fixture.scene.deleteCount == 1);
+        CHECK(fixture.scene.undoStack.size() == 2);
+    }
+
+    TEST_CASE("entity_set_active and entity_set_parent warn about water (VK-1658)")
+    {
+        ToolFixture fixture;
+        fixture.scene.addWater();
+        fixture.scene.registerWaterHandlers();
+        fixture.scene.registerHierarchyEditHandlers();
+
+        SUBCASE("deactivating a water body warns and still applies")
+        {
+            auto result = fixture.call("entity_set_active", {{"entity", 73}, {"active", false}});
+            REQUIRE_FALSE(result.isError);
+            CHECK(fixture.scene.setActiveCount == 1);
+            CHECK(fixture.scene.undoStack.size() == 1);
+            REQUIRE(result.structured.contains("warnings"));
+            REQUIRE(result.structured["warnings"].size() == 1);
+            CHECK(contains(result.structured["warnings"][0].get<std::string>(), "water_set_body {active:false}"));
+        }
+
+        SUBCASE("a group holding the ocean and a lake gets both notes")
+        {
+            auto result = fixture.call("entity_set_active", {{"entity", 80}, {"active", false}});
+            REQUIRE_FALSE(result.isError);
+            CHECK(fixture.scene.setActiveCount == 1);
+            REQUIRE(result.structured["warnings"].size() == 2);
+            CHECK(contains(result.structured["warnings"][0].get<std::string>(), "ocean_enable"));
+            CHECK(contains(result.structured["warnings"][1].get<std::string>(), "water_set_body"));
+        }
+
+        SUBCASE("an entity without water gets no warnings")
+        {
+            auto result = fixture.call("entity_set_active", {{"entity", 1}, {"active", false}});
+            REQUIRE_FALSE(result.isError);
+            CHECK_FALSE(result.structured.contains("warnings"));
+        }
+
+        SUBCASE("moving a water body under another entity warns; the scene root does not")
+        {
+            auto nested = fixture.call("entity_set_parent", {{"entity", 73}, {"parent", 1}});
+            REQUIRE_FALSE(nested.isError);
+            REQUIRE(fixture.scene.reparents.size() == 1);
+            CHECK(fixture.scene.reparents[0].first == 73);
+            CHECK(fixture.scene.reparents[0].second == 1);
+            REQUIRE(nested.structured.contains("warnings"));
+            CHECK(contains(nested.structured["warnings"][0].get<std::string>(), "LOCAL position"));
+
+            auto toRoot = fixture.call("entity_set_parent", {{"entity", 73}});
+            REQUIRE_FALSE(toRoot.isError);
+            CHECK_FALSE(toRoot.structured.contains("warnings"));
+
+            // A group with a lake inside warns too; one without water does not.
+            auto group = fixture.call("entity_set_parent", {{"entity", 80}, {"parent", 1}});
+            REQUIRE_FALSE(group.isError);
+            CHECK(group.structured.contains("warnings"));
+
+            auto plain = fixture.call("entity_set_parent", {{"entity", 1}, {"parent", 2}});
+            REQUIRE_FALSE(plain.isError);
+            CHECK_FALSE(plain.structured.contains("warnings"));
+        }
+    }
+
+    TEST_CASE("a subtree holding both a terrain and the ocean is refused for the terrain first (VK-1658)")
+    {
+        ToolFixture fixture;
+        fixture.scene.addTerrain();
+        fixture.scene.addWater();
+        // root -> 90 "World" -> {60 "Level" -> 50 "Terrain", 80 "Coast" -> 70 "Ocean"}
+        fixture.scene.detailed[90] = entityData(90, "World", FakeScene::rootId, {60, 80});
+        fixture.scene.alive.insert(90);
+        fixture.scene.registerWaterHandlers();
+        fixture.scene.registerHierarchyEditHandlers();
+
+        for (const char* tool : {"entity_delete", "entity_duplicate"})
+        {
+            CAPTURE(tool);
+            std::string message;
+            try
+            {
+                fixture.call(tool, {{"entity", 90}});
+            }
+            catch (const std::runtime_error& e)
+            {
+                message = e.what();
+            }
+            CHECK(contains(message, "it contains terrain entity 50"));
+        }
+        CHECK(fixture.scene.deleteCount == 0);
+        CHECK(fixture.scene.undoStack.empty());
+    }
+
+    TEST_CASE("without an ocean service the entity tools behave as before (VK-1658)")
+    {
+        // No HasOceanComponent / HasWaterBodyComponent handler: the water checks read "no water".
+        ToolFixture fixture;
+        fixture.scene.addWater();
+        fixture.scene.registerHierarchyEditHandlers();
+
+        auto active = fixture.call("entity_set_active", {{"entity", 70}, {"active", false}});
+        REQUIRE_FALSE(active.isError);
+        CHECK(fixture.scene.setActiveCount == 1);
+        CHECK_FALSE(active.structured.contains("warnings"));
+
+        auto moved = fixture.call("entity_set_parent", {{"entity", 73}, {"parent", 1}});
+        REQUIRE_FALSE(moved.isError);
+        CHECK_FALSE(moved.structured.contains("warnings"));
+
+        auto transformed = fixture.call("entity_set_transform", {{"entity", 70}, {"position", {0.0, 1.0, 0.0}}});
+        REQUIRE_FALSE(transformed.isError);
+        CHECK(fixture.scene.setTransformCount == 1);
+
+        auto deleted = fixture.call("entity_delete", {{"entity", 80}});
+        REQUIRE_FALSE(deleted.isError);
+        CHECK(fixture.scene.deleteCount == 1);
+        CHECK(fixture.scene.undoStack.size() == 4);
     }
 
     TEST_CASE("scene_get_hierarchy nests children and maps component names")

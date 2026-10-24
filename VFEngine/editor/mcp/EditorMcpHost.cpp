@@ -78,6 +78,14 @@ namespace editor
             "saved per entity) -> vfx_play (edit-mode preview; wait about the particle lifetime) -> "
             "viewport_screenshot. vfx_add_emitter and vfx_set_params are one undo step each and are refused in Play "
             "mode, where components play by themselves (autoPlay) and scripts use VFX::spawnAt.\n"
+            "Water: water_get (the ocean, the look all water shares and every lake / pool; its params, look and "
+            "bodies pass back unchanged) -> ocean_enable {enabled:true, levelAboveTerrain} (an infinite sea at one "
+            "level; enabled:false hides it but keeps its settings for the lakes, remove:true deletes it) -> "
+            "water_create_body {center:[x, z], halfExtents, level or levelAboveTerrain + terrainReference "
+            "lowest|center|rim} (axis-aligned rectangles only; no rivers, use a long narrow lake) -> ocean_set_params "
+            "(level, seaState 0-12 or windSpeed, windDirection, choppiness, bands, physics), water_set_params "
+            "(colour, opacity, foam, reflections, ...; shoreline and caustics are ocean-only) and water_set_body -> "
+            "viewport_screenshot. Each edit is one undo step, is saved by scene_save and is refused in Play mode.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
             "playable game.";
     }

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -260,6 +261,12 @@ TEST_SUITE("mType API doc")
         REQUIRE_FALSE(hitEffect.empty());
         CHECK(contains(doc::primer(), hitEffect));
         CHECK(contains(doc::primer(), "## 9. Visual effects"));
+
+        // And section 10 game/examples/WaterSplash.mt (VK-1658).
+        const std::string waterSplash = readExample(*scripts, "WaterSplash.mt");
+        REQUIRE_FALSE(waterSplash.empty());
+        CHECK(contains(doc::primer(), waterSplash));
+        CHECK(contains(doc::primer(), "## 10. Water"));
     }
 
     TEST_CASE("extractApi over the real engine scripts")
@@ -363,6 +370,13 @@ TEST_SUITE("mType API doc")
         CHECK(contains(full, "## engine/Animator"));
         CHECK(contains(full, "public static function setFloat(int entityId, string paramName, float value): void;"));
         CHECK_FALSE(contains(full, "- `engine/Animator`:"));
+        // VK-1658: the water API is core too.
+        CHECK(contains(full, "## engine/Ocean\n"));
+        CHECK(contains(full, "public static function getOceanHeightAt(float x, float z): float;"));
+        CHECK_FALSE(contains(full, "- `engine/Ocean`:"));
+        CHECK(contains(full, "## engine/IWaterListener\n"));
+        CHECK(contains(full, "function onWaterEnter(float verticalSpeed): void;"));
+        CHECK_FALSE(contains(full, "- `engine/IWaterListener`:"));
         CHECK_FALSE(contains(full, "signatures unavailable"));
 
         const std::string physics = doc::buildModuleDoc(*scripts, "engine/Physics");
@@ -385,6 +399,31 @@ TEST_SUITE("mType API doc")
         CHECK(text.rfind(doc::primer(), 0) == 0);
         CHECK(contains(text, "signatures unavailable: project has no scripts/lib"));
         CHECK_THROWS_AS(doc::buildModuleDoc(root, "engine/Physics"), mcp::ResourceNotFound);
+
+        fs::remove_all(root);
+    }
+
+    TEST_CASE("buildMTypeApiDoc marks a core module a stale scripts/lib lacks")
+    {
+        // VK-1658: a project made from an old template carries an old Ocean.mt and no IWaterListener.mt.
+        const fs::path root = fs::temp_directory_path() / "VertexForge_MTypeDoc_StaleLib";
+        fs::remove_all(root);
+        fs::create_directories(root / "lib" / "engine");
+        {
+            std::ofstream out(root / "lib" / "engine" / "Ocean.mt");
+            REQUIRE(out.is_open());
+            out << "public class Ocean {\n"
+                   "    public static function getSeaState(): float {\n"
+                   "        return 0.0;\n"
+                   "    }\n"
+                   "}\n";
+        }
+
+        const std::string text = doc::buildMTypeApiDoc(root);
+        CHECK(contains(text, "## engine/Ocean\n"));
+        CHECK(contains(text, "public static function getSeaState(): float;"));
+        CHECK(contains(text, "## engine/IWaterListener\n\n`import * from \"../lib/engine/IWaterListener.mt\";`\n\n"
+                             "_Not found in this project's scripts/lib._"));
 
         fs::remove_all(root);
     }

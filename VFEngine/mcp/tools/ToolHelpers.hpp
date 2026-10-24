@@ -5,7 +5,9 @@
 
 #include "events/EventDispatcher.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
 
+#include <concepts>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
@@ -124,11 +126,11 @@ namespace mcp::tools
                                  " ('" + entity.name + "'): it is " + what + ". " + hint);
     }
 
-    // rejectTerrain over `entity` and every entity below it.
-    inline void rejectTerrainSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    // The first live entity below `entity` (not `entity` itself) that satisfies `predicate`, or nullopt.
+    // Each id is visited once, so a corrupt hierarchy with a cycle still terminates.
+    template <std::predicate<const services::EntityData&> Predicate>
+    std::optional<services::EntityData> findInSubtree(const services::EntityData& entity, Predicate predicate)
     {
-        rejectTerrain(entity, action, hint);
-
         std::vector<services::EntityHandle> pending = entity.children;
         std::unordered_set<uint64_t> seen{entity.handle.id};
         while (!pending.empty())
@@ -139,19 +141,102 @@ namespace mcp::tools
             {
                 continue;
             }
-            const std::optional<services::EntityData> child = findEntity(handle);
+            std::optional<services::EntityData> child = findEntity(handle);
             if (!child.has_value())
             {
                 continue;
             }
-            if (isTerrainEntity(*child))
+            if (predicate(*child))
             {
-                throw std::runtime_error(std::string("Cannot ") + action + " entity " +
-                                         std::to_string(toId(entity.handle)) + " ('" + entity.name +
-                                         "'): it contains terrain entity " + std::to_string(toId(child->handle)) +
-                                         " ('" + child->name + "'). " + hint);
+                return child;
             }
             pending.insert(pending.end(), child->children.begin(), child->children.end());
+        }
+        return std::nullopt;
+    }
+
+    // `predicate` holds for `entity` itself or for any entity below it.
+    template <std::predicate<const services::EntityData&> Predicate>
+    bool subtreeContains(const services::EntityData& entity, Predicate predicate)
+    {
+        return predicate(entity) || findInSubtree(entity, predicate).has_value();
+    }
+
+    // rejectTerrain over `entity` and every entity below it.
+    inline void rejectTerrainSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        rejectTerrain(entity, action, hint);
+
+        if (const std::optional<services::EntityData> terrain = findInSubtree(entity, isTerrainEntity))
+        {
+            throw std::runtime_error(std::string("Cannot ") + action + " entity " +
+                                     std::to_string(toId(entity.handle)) + " ('" + entity.name +
+                                     "'): it contains terrain entity " + std::to_string(toId(terrain->handle)) +
+                                     " ('" + terrain->name + "'). " + hint);
+        }
+    }
+
+    // VK-1658. The ocean is the singleton OceanService tracks by entity id: a prefab snapshot carries no
+    // ocean, so an entity_delete undo would bring back a plain entity, and a duplicate would be a second
+    // ocean nothing tracks. The ocean_* tools own it. Water bodies are ordinary entities, but they are
+    // placed by their LOCAL transform and ignore the entity active flag (OceanService::collectWaterBodies).
+    // Both checks read false when no ocean service is registered (tool tests without water handlers).
+    inline bool isOceanEntity(const services::EntityData& entity)
+    {
+        events::ocean::HasOceanComponentQuery query;
+        query.entity = entity.handle;
+        try
+        {
+            return events::EventDispatcher::instance().query(query);
+        }
+        catch (const std::runtime_error&)
+        {
+            return false;
+        }
+    }
+
+    inline bool isWaterBodyEntity(const services::EntityData& entity)
+    {
+        events::ocean::HasWaterBodyComponentQuery query;
+        query.entity = entity.handle;
+        try
+        {
+            return events::EventDispatcher::instance().query(query);
+        }
+        catch (const std::runtime_error&)
+        {
+            return false;
+        }
+    }
+
+    // `entity` or an entity below it is a water body.
+    inline bool subtreeHasWaterBody(const services::EntityData& entity)
+    {
+        return subtreeContains(entity, isWaterBodyEntity);
+    }
+
+    // Throws when `entity` is the ocean; `hint` says what to do instead.
+    inline void rejectOcean(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        if (!isOceanEntity(entity))
+        {
+            return;
+        }
+        throw std::runtime_error(std::string("Cannot ") + action + " entity " + std::to_string(toId(entity.handle)) +
+                                 " ('" + entity.name + "'): it is the ocean. " + hint);
+    }
+
+    // rejectOcean over `entity` and every entity below it.
+    inline void rejectOceanSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        rejectOcean(entity, action, hint);
+
+        if (const std::optional<services::EntityData> ocean = findInSubtree(entity, isOceanEntity))
+        {
+            throw std::runtime_error(std::string("Cannot ") + action + " entity " +
+                                     std::to_string(toId(entity.handle)) + " ('" + entity.name +
+                                     "'): it contains ocean entity " + std::to_string(toId(ocean->handle)) +
+                                     " ('" + ocean->name + "'). " + hint);
         }
     }
 

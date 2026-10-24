@@ -313,6 +313,10 @@ namespace handlers
         frameTaskGraph->addDependency("AudioEmitters", "Transforms");
         frameTaskGraph->addDependency("LateScripts", "Transforms");
         frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
+        // VK-1658: the Ocean task (a worker) writes the OceanComponent and oceanConfig (sea-state
+        // transitions, weather). It must finish before ImGuiDraw, where the Ocean window and Ctrl+Z
+        // write the same state, and so before Render wakes the render thread, which reads it.
+        frameTaskGraph->addDependency("ImGuiDraw", "Ocean");
         frameTaskGraph->addDependency("Render", "ImGuiDraw");
 
         if (frameTaskGraph->compile()) {

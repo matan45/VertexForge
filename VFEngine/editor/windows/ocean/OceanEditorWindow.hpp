@@ -34,6 +34,9 @@ namespace windows
         int seaStatePresetIndex = 1;
         float seaStateTransitionSeconds = 10.0f;
 
+        // VK-1658: OceanComponent::isActive, i.e. the sea surface is drawn. Applied when toggled.
+        bool surfaceVisible = true;
+
         nfd::FileDialog fileDialog;
 
     public:
@@ -52,7 +55,10 @@ namespace windows
         void applyOceanConfig();
         void applyVisualSettings();
         void applyPhysicsSettings();
+        void applySurfaceVisible();         // VK-1658
         void refreshOceanState();
+        void syncWithEngine();              // VK-1658
+        void pullOceanState(bool keepEdits);  // VK-1658
         void saveOcean();
         void loadOcean();
     };

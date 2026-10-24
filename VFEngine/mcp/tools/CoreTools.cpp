@@ -25,5 +25,6 @@ namespace mcp::tools
         registerAnimationIkTools(registry, context);
         registerAnimationSocketTools(registry, context);
         registerVFXTools(registry, context);
+        registerWaterTools(registry, context);
     }
 }

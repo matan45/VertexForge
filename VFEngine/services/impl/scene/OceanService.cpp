@@ -87,6 +87,7 @@ namespace services
         dispatcher.unregisterCommandHandler<events::ocean::UpdateOceanCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanSeaStateCommand>();
         dispatcher.unregisterCommandHandler<events::ocean::SetOceanWeatherDrivenCommand>();
+        dispatcher.unregisterCommandHandler<events::ocean::SetOceanStateCommand>();   // VK-1658
 
         // VK-1606
         dispatcher.unregisterCommandHandler<events::ocean::AddWaterImpulseCommand>();
@@ -104,6 +105,7 @@ namespace services
         dispatcher.unregisterQueryHandler<events::ocean::IsPositionInOceanQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::IsEntityInWaterQuery>();
         dispatcher.unregisterQueryHandler<events::ocean::GetOceanSeaStateQuery>();
+        dispatcher.unregisterQueryHandler<events::ocean::GetOceanStateQuery>();   // VK-1658
 
         // VK-1606
         dispatcher.unregisterQueryHandler<events::ocean::IsWaterRippleEnabledQuery>();
@@ -215,63 +217,7 @@ namespace services
                 if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
                     return;
 
-                auto& comp = registry.get<components::OceanComponent>(ent);
-                comp.shallowColor = cmd.settings.shallowColor;
-                comp.deepColor = cmd.settings.deepColor;
-                comp.maxVisibleDepth = cmd.settings.maxVisibleDepth;
-                comp.fresnelPower = cmd.settings.fresnelPower;
-                comp.refractionStrength = cmd.settings.refractionStrength;
-                comp.refractionChromatic = cmd.settings.refractionChromatic;
-                comp.refractionDepthScale = cmd.settings.refractionDepthScale;
-                comp.causticStrength = cmd.settings.causticStrength;
-                comp.causticDepthFalloff = cmd.settings.causticDepthFalloff;
-                comp.shoreFoamRange = cmd.settings.shoreFoamRange;
-                comp.shoreFoamIntensity = cmd.settings.shoreFoamIntensity;
-                comp.shoreBreakingStrength = cmd.settings.shoreBreakingStrength;
-                comp.shoreWetRange = cmd.settings.shoreWetRange;
-                // VK-1604
-                comp.ssrEnabled = cmd.settings.ssrEnabled;
-                comp.ssrIntensity = cmd.settings.ssrIntensity;
-                comp.ssrMaxDistance = cmd.settings.ssrMaxDistance;
-                comp.ssrThickness = cmd.settings.ssrThickness;
-                comp.ssrMaxSteps = cmd.settings.ssrMaxSteps;
-                comp.ssrDebugView = cmd.settings.ssrDebugView;
-                comp.beerLambertEnabled = cmd.settings.beerLambertEnabled;
-                comp.absorptionCoeff = cmd.settings.absorptionCoeff;
-                comp.scatteringColor = cmd.settings.scatteringColor;
-                comp.scatterCoeff = cmd.settings.scatterCoeff;
-                comp.absorptionMaxDistance = cmd.settings.absorptionMaxDistance;
-                comp.hexTilingEnabled = cmd.settings.hexTilingEnabled;
-                comp.hexBandMask = cmd.settings.hexBandMask;
-                comp.hexCellScale = cmd.settings.hexCellScale;
-                comp.hexBlendContrast = cmd.settings.hexBlendContrast;
-                // VK-1605
-                comp.shoalingEnabled = cmd.settings.shoalingEnabled;
-                comp.shoalingStrength = cmd.settings.shoalingStrength;
-                comp.shoalingMinDepth = cmd.settings.shoalingMinDepth;
-                comp.shoalingWavelengthScale = cmd.settings.shoalingWavelengthScale;
-                comp.shoalingGamma = cmd.settings.shoalingGamma;
-                comp.shoreEdgeFadeStart = cmd.settings.shoreEdgeFadeStart;
-                comp.shoreWavesEnabled = cmd.settings.shoreWavesEnabled;
-                comp.shoreWaveAmplitude = cmd.settings.shoreWaveAmplitude;
-                comp.shoreWaveLength = cmd.settings.shoreWaveLength;
-                comp.shoreWaveSpeed = cmd.settings.shoreWaveSpeed;
-                comp.shoreWaveBreakDepth = cmd.settings.shoreWaveBreakDepth;
-                comp.shoreWaveBreakRange = cmd.settings.shoreWaveBreakRange;
-                comp.shoreWaveCrestFoam = cmd.settings.shoreWaveCrestFoam;
-                comp.shoreWaveCrestFoamThreshold = cmd.settings.shoreWaveCrestFoamThreshold;
-                comp.shoreWaveLean = cmd.settings.shoreWaveLean;
-                // VK-1606
-                comp.rippleSimEnabled = cmd.settings.rippleSimEnabled;
-                comp.ripplePatchSize = cmd.settings.ripplePatchSize;
-                comp.rippleWaveSpeed = cmd.settings.rippleWaveSpeed;
-                comp.rippleDamping = cmd.settings.rippleDamping;
-                comp.rippleHeightScale = cmd.settings.rippleHeightScale;
-                comp.rippleNormalScale = cmd.settings.rippleNormalScale;
-                comp.rippleFoamGain = cmd.settings.rippleFoamGain;
-                comp.rippleFoamScale = cmd.settings.rippleFoamScale;
-                comp.rippleFoamDecay = cmd.settings.rippleFoamDecay;
-                comp.rippleEdgeFadeStart = cmd.settings.rippleEdgeFadeStart;
+                applyVisualSettings(registry.get<components::OceanComponent>(ent), cmd.settings);
             });
 
         dispatcher.registerCommandHandler<events::ocean::SetOceanPhysicsSettingsCommand>(
@@ -341,6 +287,13 @@ namespace services
                 lastAppliedWindDirection = -10000.0f;
             });
 
+        // VK-1658
+        dispatcher.registerCommandHandler<events::ocean::SetOceanStateCommand>(
+            [this](const events::ocean::SetOceanStateCommand& cmd)
+            {
+                return setOceanState(cmd.entity, cmd.state);
+            });
+
         // VK-1606
         dispatcher.registerCommandHandler<events::ocean::AddWaterImpulseCommand>(
             [this](const events::ocean::AddWaterImpulseCommand& cmd)
@@ -379,6 +332,13 @@ namespace services
             [this](const events::ocean::HasOceanComponentQuery& query)
             {
                 return hasOceanComponent(query.entity);
+            });
+
+        // VK-1658
+        dispatcher.registerQueryHandler<events::ocean::GetOceanStateQuery>(
+            [this](const events::ocean::GetOceanStateQuery& query)
+            {
+                return getOceanState(query.entity);
             });
 
         dispatcher.registerQueryHandler<events::ocean::GetOceanHeightAtQuery>(
@@ -432,7 +392,14 @@ namespace services
             [this](const events::ocean::SetOceanFFTConfigCommand& cmd)
             {
                 oceanConfig = cmd.config;
+                // VK-1658: the FFT runs exactly while the ocean surface is visible. The flag in the
+                // command is only ever an echo of IsOceanFFTEnabled / GetOceanFFTConfig, so it must not
+                // be able to restart the FFT of a hidden ocean (or start one with no ocean at all).
+                oceanConfig.enabled = hasActiveOcean();
                 oceanConfigVersion++;
+                // Explicit band edits: a manual sea-state transition would lerp them away on the next tick
+                // (the same rule setOceanState applies).
+                seaStateTransitionActive = false;
 
                 // Sync to component
                 if (oceanEntity.isValid())
@@ -480,6 +447,15 @@ namespace services
 
     EntityHandle OceanService::createOcean(const OceanCreationData& config)
     {
+        // VK-1658: one ocean per scene. Every query goes through oceanEntity, so a second
+        // OceanComponent would be invisible to all of them, and the next scene load would adopt
+        // whichever of the two the registry happens to list first.
+        if (trackedOceanComponent())
+        {
+            vfLogWarning("OceanService: the scene already has an ocean; delete it before creating another");
+            return {};
+        }
+
         scene::Entity parentEntity("Ocean");
         sceneGraph->addChild(sceneGraph->GetRoot(), parentEntity);
 
@@ -511,7 +487,15 @@ namespace services
 
         // Set ocean config
         oceanConfig = config.oceanConfig;
+        // VK-1658: a new ocean is visible (isActive above), and the FFT runs exactly while it is.
+        oceanConfig.enabled = true;
         oceanConfigVersion++;
+
+        // VK-1658: a new ocean starts from its own bands. A manual sea-state transition left running by a
+        // deleted ocean would otherwise resume on this one and lerp its bands toward the old target.
+        seaStateTransitionActive = false;
+        lastAppliedBeaufort = -1.0f;
+        lastAppliedWindDirection = -10000.0f;
 
         events::ocean::OceanCreatedNotification notification;
         notification.oceanEntity = oceanEntity;
@@ -685,7 +669,8 @@ namespace services
         if (bodyIndex >= 0)
             return worldPos.y <= bodies[static_cast<size_t>(bodyIndex)].surfaceHeight;
 
-        if (!oceanEntity.isValid())
+        // VK-1658: a hidden ocean has no surface - outside the bodies there is no water at all.
+        if (!hasActiveOcean())
             return false;
 
         return worldPos.y <= getOceanSurfaceHeightAt(worldXZ);
@@ -1008,7 +993,8 @@ namespace services
             return body.surfaceHeight;
         }
 
-        if (!oceanEntity.isValid())
+        // VK-1658: a hidden ocean has no surface.
+        if (!hasActiveOcean())
             return std::nullopt;
 
         return getOceanSurfaceHeightAt(worldXZ);
@@ -1016,16 +1002,12 @@ namespace services
 
     float OceanService::getOceanSurfaceHeightAt(const glm::vec2& worldXZ) const
     {
-        if (!oceanEntity.isValid())
+        // VK-1658: no surface for a hidden ocean either - 0 is this function's "no ocean" answer.
+        const components::OceanComponent* comp = trackedOceanComponent();
+        if (!comp || !comp->isActive)
             return 0.0f;
 
-        auto& registry = scene::EntityRegistry::getRegistry();
-        entt::entity ent = internal::fromHandle(oceanEntity);
-        if (!registry.valid(ent) || !registry.all_of<components::OceanComponent>(ent))
-            return 0.0f;
-
-        const auto& comp = registry.get<components::OceanComponent>(ent);
-        float baseHeight = comp.waterHeight;
+        float baseHeight = comp->waterHeight;
 
         if (oceanConfig.enabled && oceanHeightSampler)
             baseHeight += oceanHeightSampler(worldXZ);
@@ -1335,6 +1317,238 @@ namespace services
         return settings;
     }
 
+    void OceanService::applyVisualSettings(components::OceanComponent& comp, const OceanVisualSettings& settings)
+    {
+        comp.shallowColor = settings.shallowColor;
+        comp.deepColor = settings.deepColor;
+        comp.maxVisibleDepth = settings.maxVisibleDepth;
+        comp.fresnelPower = settings.fresnelPower;
+        comp.refractionStrength = settings.refractionStrength;
+        comp.refractionChromatic = settings.refractionChromatic;
+        comp.refractionDepthScale = settings.refractionDepthScale;
+        comp.causticStrength = settings.causticStrength;
+        comp.causticDepthFalloff = settings.causticDepthFalloff;
+        comp.shoreFoamRange = settings.shoreFoamRange;
+        comp.shoreFoamIntensity = settings.shoreFoamIntensity;
+        comp.shoreBreakingStrength = settings.shoreBreakingStrength;
+        comp.shoreWetRange = settings.shoreWetRange;
+        // VK-1604
+        comp.ssrEnabled = settings.ssrEnabled;
+        comp.ssrIntensity = settings.ssrIntensity;
+        comp.ssrMaxDistance = settings.ssrMaxDistance;
+        comp.ssrThickness = settings.ssrThickness;
+        comp.ssrMaxSteps = settings.ssrMaxSteps;
+        comp.ssrDebugView = settings.ssrDebugView;
+        comp.beerLambertEnabled = settings.beerLambertEnabled;
+        comp.absorptionCoeff = settings.absorptionCoeff;
+        comp.scatteringColor = settings.scatteringColor;
+        comp.scatterCoeff = settings.scatterCoeff;
+        comp.absorptionMaxDistance = settings.absorptionMaxDistance;
+        comp.hexTilingEnabled = settings.hexTilingEnabled;
+        comp.hexBandMask = settings.hexBandMask;
+        comp.hexCellScale = settings.hexCellScale;
+        comp.hexBlendContrast = settings.hexBlendContrast;
+        // VK-1605
+        comp.shoalingEnabled = settings.shoalingEnabled;
+        comp.shoalingStrength = settings.shoalingStrength;
+        comp.shoalingMinDepth = settings.shoalingMinDepth;
+        comp.shoalingWavelengthScale = settings.shoalingWavelengthScale;
+        comp.shoalingGamma = settings.shoalingGamma;
+        comp.shoreEdgeFadeStart = settings.shoreEdgeFadeStart;
+        comp.shoreWavesEnabled = settings.shoreWavesEnabled;
+        comp.shoreWaveAmplitude = settings.shoreWaveAmplitude;
+        comp.shoreWaveLength = settings.shoreWaveLength;
+        comp.shoreWaveSpeed = settings.shoreWaveSpeed;
+        comp.shoreWaveBreakDepth = settings.shoreWaveBreakDepth;
+        comp.shoreWaveBreakRange = settings.shoreWaveBreakRange;
+        comp.shoreWaveCrestFoam = settings.shoreWaveCrestFoam;
+        comp.shoreWaveCrestFoamThreshold = settings.shoreWaveCrestFoamThreshold;
+        comp.shoreWaveLean = settings.shoreWaveLean;
+        // VK-1606
+        comp.rippleSimEnabled = settings.rippleSimEnabled;
+        comp.ripplePatchSize = settings.ripplePatchSize;
+        comp.rippleWaveSpeed = settings.rippleWaveSpeed;
+        comp.rippleDamping = settings.rippleDamping;
+        comp.rippleHeightScale = settings.rippleHeightScale;
+        comp.rippleNormalScale = settings.rippleNormalScale;
+        comp.rippleFoamGain = settings.rippleFoamGain;
+        comp.rippleFoamScale = settings.rippleFoamScale;
+        comp.rippleFoamDecay = settings.rippleFoamDecay;
+        comp.rippleEdgeFadeStart = settings.rippleEdgeFadeStart;
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // VK-1658: the whole ocean as one value
+    // ------------------------------------------------------------------------------------------
+
+    OceanStateData OceanService::stateFromComponent(const components::OceanComponent& comp)
+    {
+        OceanStateData state;
+        state.waterHeight = comp.waterHeight;
+        state.isActive = comp.isActive;
+        state.visual = visualSettingsFromComponent(comp);
+
+        state.physics.density = comp.density;
+        state.physics.drag = comp.drag;
+        state.physics.buoyancyStrength = comp.buoyancyStrength;
+        state.physics.physicsEnabled = comp.physicsEnabled;
+
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+        {
+            state.bands[i].resolution = comp.oceanBands[i].resolution;
+            state.bands[i].patchSize = comp.oceanBands[i].patchSize;
+            state.bands[i].windSpeed = comp.oceanBands[i].windSpeed;
+            state.bands[i].windDirection = comp.oceanBands[i].windDirection;
+            state.bands[i].amplitude = comp.oceanBands[i].amplitude;
+            state.bands[i].choppiness = comp.oceanBands[i].choppiness;
+            state.bands[i].foamThreshold = comp.oceanBands[i].foamThreshold;
+            state.bands[i].displacementScale = comp.oceanBands[i].displacementScale;
+            state.bands[i].enabled = comp.oceanBands[i].enabled;
+            state.bands[i].foamPersistence = comp.oceanBands[i].foamPersistence;
+            state.bands[i].foamDecay = comp.oceanBands[i].foamDecay;
+        }
+        state.gravity = comp.oceanGravity;
+
+        state.weatherDriven = comp.weatherDriven;
+        state.weatherResponse = comp.weatherResponse;
+        state.currentBeaufort = comp.currentBeaufort;
+        return state;
+    }
+
+    void OceanService::applyState(components::OceanComponent& comp, const OceanStateData& state)
+    {
+        comp.waterHeight = state.waterHeight;
+        comp.isActive = state.isActive;
+        applyVisualSettings(comp, state.visual);
+
+        comp.density = state.physics.density;
+        comp.drag = state.physics.drag;
+        comp.buoyancyStrength = state.physics.buoyancyStrength;
+        comp.physicsEnabled = state.physics.physicsEnabled;
+
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+        {
+            comp.oceanBands[i].resolution = state.bands[i].resolution;
+            comp.oceanBands[i].patchSize = state.bands[i].patchSize;
+            comp.oceanBands[i].windSpeed = state.bands[i].windSpeed;
+            comp.oceanBands[i].windDirection = state.bands[i].windDirection;
+            comp.oceanBands[i].amplitude = state.bands[i].amplitude;
+            comp.oceanBands[i].choppiness = state.bands[i].choppiness;
+            comp.oceanBands[i].foamThreshold = state.bands[i].foamThreshold;
+            comp.oceanBands[i].displacementScale = state.bands[i].displacementScale;
+            comp.oceanBands[i].enabled = state.bands[i].enabled;
+            comp.oceanBands[i].foamPersistence = state.bands[i].foamPersistence;
+            comp.oceanBands[i].foamDecay = state.bands[i].foamDecay;
+        }
+        comp.oceanGravity = state.gravity;
+
+        comp.weatherDriven = state.weatherDriven;
+        comp.weatherResponse = state.weatherResponse;
+        comp.currentBeaufort = state.currentBeaufort;
+    }
+
+    components::OceanComponent* OceanService::trackedOceanComponent()
+    {
+        if (!oceanEntity.isValid())
+            return nullptr;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent))
+            return nullptr;
+
+        return registry.try_get<components::OceanComponent>(ent);
+    }
+
+    const components::OceanComponent* OceanService::trackedOceanComponent() const
+    {
+        if (!oceanEntity.isValid())
+            return nullptr;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        entt::entity ent = internal::fromHandle(oceanEntity);
+        if (!registry.valid(ent))
+            return nullptr;
+
+        return registry.try_get<components::OceanComponent>(ent);
+    }
+
+    bool OceanService::hasActiveOcean() const
+    {
+        const components::OceanComponent* comp = trackedOceanComponent();
+        return comp != nullptr && comp->isActive;
+    }
+
+    std::optional<OceanStateData> OceanService::getOceanState(EntityHandle entity) const
+    {
+        const components::OceanComponent* comp = trackedOceanComponent();
+        if (!comp || (entity.isValid() && entity.id != oceanEntity.id))
+            return std::nullopt;
+
+        return stateFromComponent(*comp);
+    }
+
+    bool OceanService::setOceanState(EntityHandle entity, const OceanStateData& state)
+    {
+        components::OceanComponent* comp = trackedOceanComponent();
+        if (!comp || (entity.isValid() && entity.id != oceanEntity.id))
+            return false;
+
+        const OceanStateData previous = stateFromComponent(*comp);
+        applyState(*comp, state);
+
+        // The FFT config mirrors the component's bands, and the FFT runs exactly while the surface is
+        // visible. Bump the version only on a real change: every bump re-sends the bands to the GPU.
+        OceanFFTConfigData config = oceanConfig;
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+            config.bands[i] = state.bands[i];
+        config.gravity = state.gravity;
+        config.enabled = state.isActive;
+
+        const bool configChanged = config != oceanConfig;
+        if (configChanged)
+        {
+            oceanConfig = config;
+            oceanConfigVersion++;
+        }
+
+        // A manual sea-state transition re-writes the bands every tick, so new bands would be lerped
+        // away on the next frame - cancel it. An edit that leaves the bands alone (a look change)
+        // lets it finish.
+        bool bandsChanged = previous.currentBeaufort != state.currentBeaufort;
+        for (uint32_t i = 0; i < services::MAX_OCEAN_BANDS; ++i)
+            bandsChanged = bandsChanged || previous.bands[i] != state.bands[i];
+        if (bandsChanged)
+            seaStateTransitionActive = false;
+
+        // Weather-driven: re-apply the live weather on the next tick rather than waiting for it to change.
+        if (state.weatherDriven)
+        {
+            lastAppliedBeaufort = -1.0f;
+            lastAppliedWindDirection = -10000.0f;
+        }
+
+        // Hiding the last water stops the render-side driver of the shore bake (it runs under
+        // hasWaterToRender), so a bake in flight would stay pinned to its terrain snapshot - drop it, as
+        // deleteOcean does.
+        if (previous.isActive && !state.isActive && !hasWaterToRender())
+            abandonShoreFieldBake();
+
+        // The shore field is a terrain snapshot, and sculpting publishes nothing (see
+        // registerEventHandlers), so an ocean edit is also when terrain shaped since the last bake is
+        // picked up. A level change alone would already rebake (updateShoreDepthField).
+        shoreFieldRebakeRequested = true;
+
+        if (configChanged)
+        {
+            events::ocean::OceanFFTConfigChangedNotification notification;
+            notification.config = oceanConfig;
+            events::EventDispatcher::instance().publish(notification);
+        }
+
+        return true;
+    }
+
     float OceanService::getBaseWaterHeight() const
     {
         if (!oceanEntity.isValid())
@@ -1589,8 +1803,10 @@ namespace services
                 oceanComp = &registry.get<components::OceanComponent>(ent);
         }
 
-        // Ocean water only participates when its own physics switch is on; bodies carry their own.
-        const bool oceanPhysicsActive = oceanComp != nullptr && oceanComp->physicsEnabled;
+        // Ocean water only participates when its own physics switch is on and (VK-1658) its surface is
+        // visible; bodies carry their own switch. A hidden ocean still supplies the drag / buoyancy
+        // tuning below, which applies to every water body.
+        const bool oceanPhysicsActive = oceanComp != nullptr && oceanComp->physicsEnabled && oceanComp->isActive;
         const auto& comp = oceanComp ? *oceanComp : defaultOceanTuning;
 
         // Hoisted out of the per-body, per-sample-point loops below: one registry walk per physics
@@ -2057,6 +2273,10 @@ namespace services
             oceanEntity = {};
             oceanConfig = OceanFFTConfigData{};
             oceanConfigVersion++;
+
+            // VK-1658: the same reason as deleteOcean - a bake in flight would otherwise pin the
+            // terrain snapshot. Deleting the ocean entity through the hierarchy lands here.
+            abandonShoreFieldBake();
 
             events::ocean::OceanDeletedNotification notification;
             notification.oceanEntity = entity;
