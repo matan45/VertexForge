@@ -3,7 +3,7 @@
 // List events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUIListViewListener;
+//   import * from "../lib/engine/IUIListViewListener.mt";
 //
 //   @Script
 //   public class UnitRosterController implements IUIListViewListener {

@@ -33,7 +33,12 @@ namespace mcp::tools::env
         UInt,
         Vec3,  // glm::vec3 or float[3]; min / max bound every component
         Enum,
-        String
+        String,
+        // VK-1659 (the UI tools):
+        Vec2,       // glm::vec2; min / max bound every component
+        Vec4,       // glm::vec4; min / max bound every component
+        Color,      // glm::vec4 RGBA: [r, g, b] (alpha 1), [r, g, b, a] or "#RRGGBB" / "#RRGGBBAA"; reported as [r, g, b, a]
+        StringList  // array of strings; min / max = the item count
     };
 
     template <typename T>
@@ -41,7 +46,7 @@ namespace mcp::tools::env
     {
         std::string_view key;                         // the scene serializer's JSON key (= the member name)
         FieldKind kind = FieldKind::Float;
-        double min = 0.0;                             // inclusive (Float / Int / UInt / Vec3)
+        double min = 0.0;                             // inclusive (Float / Int / UInt / Vec / Color; StringList: item count)
         double max = 0.0;
         std::span<const std::string_view> enumNames;  // Enum: canonical names, index = enumerator value
         bool weatherDriven = false;                   // weather overrides the live value while it is enabled
@@ -80,10 +85,20 @@ namespace mcp::tools::env
     // as 0.05, and 0.05 narrows back to exactly 0.05f. Non-finite -> null.
     nlohmann::json floatJson(float value);
     nlohmann::json vec3Json(const glm::vec3& value);
+    nlohmann::json vec2Json(const glm::vec2& value);
+    nlohmann::json vec4Json(const glm::vec4& value);
 
     // The checks strictPatch applies, for arguments outside a table. `path` names the value in errors.
     float requireFloat(const nlohmann::json& value, double min, double max, std::string_view path);
     glm::vec3 requireVec3(const nlohmann::json& value, double min, double max, std::string_view path);
+    glm::vec2 requireVec2(const nlohmann::json& value, double min, double max, std::string_view path);
+    glm::vec4 requireVec4(const nlohmann::json& value, double min, double max, std::string_view path);
+    // [r, g, b] (alpha 1), [r, g, b, a] or "#RRGGBB" / "#RRGGBBAA" (hex digits in either case); every component,
+    // the implied alpha included, must lie in [min, max].
+    glm::vec4 requireColor(const nlohmann::json& value, double min, double max, std::string_view path);
+    // An array of minCount..maxCount strings.
+    std::vector<std::string> requireStringList(const nlohmann::json& value, double minCount, double maxCount,
+                                               std::string_view path);
     bool requireBool(const nlohmann::json& value, std::string_view path);
     std::string requireString(const nlohmann::json& value, std::string_view path);
 
@@ -274,6 +289,60 @@ namespace mcp::tools::env
         return field;
     }
 
+    template <typename T, glm::vec2 T::*Member>
+    FieldDesc<T> vec2Field(std::string_view key, double min, double max, std::string_view help)
+    {
+        FieldDesc<T> field;
+        field.key = key;
+        field.kind = FieldKind::Vec2;
+        field.min = min;
+        field.max = max;
+        field.help = help;
+        field.get = [](const T& value) -> nlohmann::json { return vec2Json(value.*Member); };
+        field.set = [](T& value, const nlohmann::json& v)
+        {
+            value.*Member = glm::vec2(static_cast<float>(v.at(0).get<double>()), static_cast<float>(v.at(1).get<double>()));
+        };
+        return field;
+    }
+
+    template <typename T, glm::vec4 T::*Member>
+    FieldDesc<T> vec4Field(std::string_view key, double min, double max, std::string_view help)
+    {
+        FieldDesc<T> field;
+        field.key = key;
+        field.kind = FieldKind::Vec4;
+        field.min = min;
+        field.max = max;
+        field.help = help;
+        field.get = [](const T& value) -> nlohmann::json { return vec4Json(value.*Member); };
+        field.set = [](T& value, const nlohmann::json& v)
+        {
+            value.*Member = glm::vec4(static_cast<float>(v.at(0).get<double>()), static_cast<float>(v.at(1).get<double>()),
+                                      static_cast<float>(v.at(2).get<double>()), static_cast<float>(v.at(3).get<double>()));
+        };
+        return field;
+    }
+
+    // An RGBA colour member, every component 0-1 (canonical form [r, g, b, a]; see FieldKind::Color).
+    template <typename T, glm::vec4 T::*Member>
+    FieldDesc<T> colorField(std::string_view key, std::string_view help)
+    {
+        FieldDesc<T> field;
+        field.key = key;
+        field.kind = FieldKind::Color;
+        field.min = 0.0;
+        field.max = 1.0;
+        field.help = help;
+        field.get = [](const T& value) -> nlohmann::json { return vec4Json(value.*Member); };
+        field.set = [](T& value, const nlohmann::json& v)
+        {
+            value.*Member = glm::vec4(static_cast<float>(v.at(0).get<double>()), static_cast<float>(v.at(1).get<double>()),
+                                      static_cast<float>(v.at(2).get<double>()), static_cast<float>(v.at(3).get<double>()));
+        };
+        return field;
+    }
+
     // A float[3] member (VolumetricFogSettings::fogColor).
     template <typename T, float (T::*Member)[3]>
     FieldDesc<T> rgbArrayField(std::string_view key, double min, double max, std::string_view help, bool weather = false)
@@ -440,6 +509,33 @@ namespace mcp::tools::env
             }
         }
         return staged;
+    }
+
+    // VK-1659: `patch` without the keys whose value `base` already holds (detail::holdsValue: compared in the
+    // reported form, so 12 and 12.0 or "medium" and "Medium" match), read-only keys included. Run before
+    // strictPatch, it lets a value a *_get reported pass back even when it lies outside the key's range (a scene
+    // or a script wrote it). Unknown keys, live-only keys and changed values stay, so strictPatch still reports
+    // and validates them. A `patch` that is not an object is returned as is.
+    template <typename T>
+    nlohmann::json dropUnchanged(const SectionTable<T>& table, const T& base, const nlohmann::json& patch,
+                                 std::string_view prefix)
+    {
+        if (!patch.is_object())
+        {
+            return patch;
+        }
+        nlohmann::json out = nlohmann::json::object();
+        for (auto it = patch.begin(); it != patch.end(); ++it)
+        {
+            const FieldDesc<T>* field = detail::findField(table, it.key());
+            if (field != nullptr && field->persisted &&
+                detail::holdsValue(*field, base, it.value(), detail::pathOf(prefix, field->key)))
+            {
+                continue;
+            }
+            out[it.key()] = it.value();
+        }
+        return out;
     }
 
     // {key: {type, min, max | values, weatherDriven?, readOnly?, extension?}} for every persisted key.

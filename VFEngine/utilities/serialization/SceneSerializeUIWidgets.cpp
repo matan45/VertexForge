@@ -68,10 +68,9 @@ namespace serialization {
     json SceneSerialization::serializeUILabel(const components::UILabelComponent& label)
     {
         json j;
-        if (!label.text.empty())
-        {
-            j["text"] = label.text;
-        }
+        // VK-1659: written even when empty. A missing "text" reads back as "Label" (the component default, kept
+        // for scenes saved before), so skipping an empty text turned "" into "Label" on every reload.
+        j["text"] = label.text;
         if (label.fontRef.isValid())
         {
             writeAssetRef(j, "fontRef", label.fontRef);

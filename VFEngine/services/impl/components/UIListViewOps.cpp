@@ -9,6 +9,9 @@
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
 #include <algorithm>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace services {
 
@@ -22,6 +25,32 @@ namespace services {
         void pruneInvalid(entt::registry& registry, std::vector<entt::entity>& entities)
         {
             std::erase_if(entities, [&registry](entt::entity e) { return !registry.valid(e); });
+        }
+
+        // VK-1659: instantiating an item builds the list views inside it right away (ScenePersistenceService::
+        // loadPrefab runs ReconcileUIListViewsCommand on the new item), so a template holding — directly or
+        // through other templates — a list of a template already being instantiated on this thread would build
+        // itself forever. These are the templates of the lists instantiating items on this thread, outermost
+        // first: a list whose template is among them, or that would nest deeper than maxNestedItemTemplates,
+        // instantiates no items.
+        thread_local std::vector<std::string> templatesBeingInstantiated;
+        constexpr size_t maxNestedItemTemplates = 4;
+
+        struct TemplateInstantiationScope
+        {
+            explicit TemplateInstantiationScope(std::string templatePath)
+            {
+                templatesBeingInstantiated.push_back(std::move(templatePath));
+            }
+            ~TemplateInstantiationScope() { templatesBeingInstantiated.pop_back(); }
+            TemplateInstantiationScope(const TemplateInstantiationScope&) = delete;
+            TemplateInstantiationScope& operator=(const TemplateInstantiationScope&) = delete;
+        };
+
+        std::string listName(const entt::registry& registry, entt::entity entity)
+        {
+            const auto* name = registry.try_get<components::NameComponent>(entity);
+            return name ? name->name : std::string();
         }
     }
 
@@ -143,6 +172,10 @@ namespace services {
 
         // Grow: pool first, then instantiate the template
         auto& dispatcher = events::EventDispatcher::instance();
+        const bool templateNestsItself = std::find(templatesBeingInstantiated.begin(),
+            templatesBeingInstantiated.end(), templatePath) != templatesBeingInstantiated.end();
+        const bool nestedTooDeep = templatesBeingInstantiated.size() >= maxNestedItemTemplates;
+        TemplateInstantiationScope instantiating(templatePath);
         while (comp->itemInstances.size() < target)
         {
             entt::entity item = entt::null;
@@ -151,6 +184,19 @@ namespace services {
                 item = comp->pool.back();
                 comp->pool.pop_back();
                 setEntityActive(registry, item, true);
+            }
+            else if (templateNestsItself)
+            {
+                vfLogWarning("UIListView '{}': its item template '{}' is already being instantiated by a list "
+                             "that contains this one; its items were not built",
+                             listName(registry, listEntity), templatePath);
+                break;
+            }
+            else if (nestedTooDeep)
+            {
+                vfLogWarning("UIListView '{}': list views nested more than {} item templates deep build no items",
+                             listName(registry, listEntity), maxNestedItemTemplates);
+                break;
             }
             else
             {

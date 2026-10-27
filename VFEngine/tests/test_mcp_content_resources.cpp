@@ -314,6 +314,17 @@ TEST_SUITE("MCP content resources")
             CAPTURE(tool);
             CHECK(contains(withoutPlugins, tool));
         }
+        // VK-1659: game UI (canvases and widgets) is edited with the ui tools; anchors are canvas-relative.
+        CHECK(contains(withoutPlugins, "## UI\n"));
+        CHECK(contains(withoutPlugins, "anchored to the WHOLE canvas"));
+        CHECK(contains(withoutPlugins, "labels always draw over images"));
+        for (const char* tool : {"ui_create_canvas", "ui_add_widget", "ui_set", "ui_get", "ui_list_widget_types",
+                                 "ui_save_prefab", "ui_instantiate_prefab", "ui_click", "moveDescendants",
+                                 "IUIButtonListener"})
+        {
+            CAPTURE(tool);
+            CHECK(contains(withoutPlugins, tool));
+        }
 
         events::EventDispatcher::instance().registerQueryHandler<events::scene::GetPluginComponentTypesQuery>(
             [](const events::scene::GetPluginComponentTypesQuery&)

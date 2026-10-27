@@ -2,6 +2,7 @@
 #include "components/Components.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
+#include "UIRectLayout.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <entt/entt.hpp>
@@ -12,14 +13,10 @@
 
 // Pure UI layout math shared between the graphics UI systems (rendering,
 // runtime interaction) and the services layer (editor viewport picking).
-// Depends only on utilities (components, scene) + glm + entt.
+// Depends only on utilities (components, scene) + glm + entt. The registry-free
+// rect math (PixelRect, resolveRect, placement) lives in UIRectLayout.hpp.
 namespace utilities::ui
 {
-    struct PixelRect
-    {
-        float x, y, w, h;
-    };
-
     struct ScrollContainerInfo
     {
         glm::vec2 scrollOffset{0.0f, 0.0f};
@@ -30,21 +27,7 @@ namespace utilities::ui
         const components::UIRectComponent& rectComp,
         float parentW, float parentH, float scale)
     {
-        float anchorLeftPx  = rectComp.anchorMin.x * parentW;
-        float anchorRightPx = rectComp.anchorMax.x * parentW;
-        float anchorTopPx   = (1.0f - rectComp.anchorMax.y) * parentH;
-        float anchorBotPx   = (1.0f - rectComp.anchorMin.y) * parentH;
-
-        float w = (anchorRightPx - anchorLeftPx) + rectComp.sizeDelta.x * scale;
-        float h = (anchorBotPx - anchorTopPx) + rectComp.sizeDelta.y * scale;
-
-        float cx = (anchorLeftPx + anchorRightPx) * 0.5f + rectComp.anchoredPosition.x * scale;
-        float cy = (anchorTopPx + anchorBotPx) * 0.5f - rectComp.anchoredPosition.y * scale;
-
-        float posX = cx - rectComp.pivot.x * w;
-        float posY = cy - rectComp.pivot.y * h;
-
-        return {posX, posY, w, h};
+        return resolveRect(toRectLayout(rectComp), parentW, parentH, scale);
     }
 
     inline const components::UICanvasComponent* findCanvasForEntity(
@@ -205,36 +188,41 @@ namespace utilities::ui
         return inside;
     }
 
-    // --- World-space UI (edit-mode rendering): model matrix mapping the unit
-    // quad [-0.5, 0.5]^2 to the element's world-space rect on its canvas ---
+    // --- World-space UI (edit-mode rendering) ---
+
+    // The element's rect on its edit-mode canvas quad: canvas reference pixels, origin at the canvas'
+    // bottom-left, y up. VK-1659: resolved with the Play-mode math at the reference resolution, so every
+    // pivot lands where Play draws it (the old edit-mode math centred every element on its anchored point).
+    inline CanvasRectYUp computeCanvasRectYUp(
+        const components::UICanvasComponent& canvas,
+        const components::UIRectComponent& rectComp)
+    {
+        return canvasRectYUp(toRectLayout(rectComp), canvas.referenceWidth, canvas.referenceHeight);
+    }
+
+    // Model matrix mapping the unit quad [-0.5, 0.5]^2 to the element's world-space rect on its canvas.
+    // zOffset lifts the quad off the canvas plane (debug outlines draw at 0.002).
     inline glm::mat4 computeCanvasImageModelMatrix(
         const components::UICanvasComponent& canvas,
         const glm::mat4& worldMatrix,
-        const components::UIRectComponent& rectComp)
+        const components::UIRectComponent& rectComp,
+        float zOffset = 0.001f)
     {
         float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
         float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
 
-        float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
-        float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
-        float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
-        float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
+        const CanvasRectYUp rect = computeCanvasRectYUp(canvas, rectComp);
 
-        float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-        float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-        float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-        float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-
-        float localCX = cx / canvas.referenceWidth - 0.5f;
-        float localCY = cy / canvas.referenceHeight - 0.5f;
-        float normW = w / canvas.referenceWidth;
-        float normH = h / canvas.referenceHeight;
+        float localCX = (rect.left + rect.w * 0.5f) / canvas.referenceWidth - 0.5f;
+        float localCY = (rect.bottom + rect.h * 0.5f) / canvas.referenceHeight - 0.5f;
+        float normW = rect.w / canvas.referenceWidth;
+        float normH = rect.h / canvas.referenceHeight;
 
         glm::mat4 canvasScaled = worldMatrix
             * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
 
         return canvasScaled
-            * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.001f))
+            * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, zOffset))
             * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
     }
 

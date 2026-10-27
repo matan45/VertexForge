@@ -10,10 +10,10 @@
 //
 // Editing rule (from the plan): the handles edit a UIRectData's anchoredPosition / sizeDelta
 // (and, for re-anchor, anchorMin/Max) by INVERTING resolvePixelRect — never SetUIRectPixels
-// (that is lossy: it zeroes sizeDelta + anchoredPosition). resolvePixelRect lives in
-// utilities/ui/UIRectMath.hpp; this header mirrors only the inverse so the editor stays free
-// of utilities/scene/entt. The forward math kept here for the inverse to be self-consistent
-// is byte-identical to UIRectMath::resolvePixelRect with parentW=refW, parentH=refH, scale=1.
+// (that is lossy: it zeroes sizeDelta + anchoredPosition). VK-1659: the forward resolve and its
+// inverse are the engine's own (utilities/ui/UIRectLayout.hpp resolveRect / solveRectKeepingAnchors,
+// which UIRectMath::resolvePixelRect delegates to) with parentW=refW, parentH=refH, scale=1; that
+// header is glm-only, so the editor stays free of utilities/scene/entt.
 
 #include "data/DTOs.hpp" // services::UIRectData, services::UIResolvedRectData
 #include <glm/glm.hpp>
@@ -126,7 +126,7 @@ namespace windows::uilayer
                                                glm::vec2 newAnchorMin, glm::vec2 newAnchorMax,
                                                float canvasW, float canvasH);
 
-    // Forward resolve (mirror of UIRectMath::resolvePixelRect, scale=1) — exposed so
+    // Forward resolve (UIRectLayout resolveRect, scale=1) — exposed so
     // the editor can resolve a rect locally without crossing into utilities/scene,
     // and so the inverse functions above are self-consistent in tests.
     RefRect resolveRefRect(const services::UIRectData& data, float canvasW, float canvasH);

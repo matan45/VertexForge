@@ -267,6 +267,13 @@ TEST_SUITE("mType API doc")
         REQUIRE_FALSE(waterSplash.empty());
         CHECK(contains(doc::primer(), waterSplash));
         CHECK(contains(doc::primer(), "## 10. Water"));
+
+        // And section 11 game/examples/HudController.mt (VK-1659).
+        const std::string hudController = readExample(*scripts, "HudController.mt");
+        REQUIRE_FALSE(hudController.empty());
+        CHECK(contains(doc::primer(), hudController));
+        CHECK(contains(doc::primer(), "## 11. UI"));
+        CHECK(contains(doc::primer(), "Never write `import engine::IUIButtonListener;`"));
     }
 
     TEST_CASE("extractApi over the real engine scripts")
@@ -377,6 +384,14 @@ TEST_SUITE("mType API doc")
         CHECK(contains(full, "## engine/IWaterListener\n"));
         CHECK(contains(full, "function onWaterEnter(float verticalSpeed): void;"));
         CHECK_FALSE(contains(full, "- `engine/IWaterListener`:"));
+        // VK-1659: the UI listener interfaces are core too.
+        CHECK(contains(full, "## engine/IUIButtonListener\n"));
+        CHECK(contains(full, "function onButtonClicked(int buttonEntityId, string entityName): void;"));
+        CHECK_FALSE(contains(full, "- `engine/IUIButtonListener`:"));
+        CHECK(contains(full, "## engine/IUICheckboxListener\n"));
+        CHECK(contains(full, "function onCheckboxToggled(int entityId, string entityName, bool newState, "
+                             "bool previousState): void;"));
+        CHECK_FALSE(contains(full, "- `engine/IUICheckboxListener`:"));
         CHECK_FALSE(contains(full, "signatures unavailable"));
 
         const std::string physics = doc::buildModuleDoc(*scripts, "engine/Physics");

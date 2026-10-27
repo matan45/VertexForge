@@ -3,7 +3,7 @@
 // Unlike collision callbacks, drag/drop events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUIDragDropListener;
+//   import * from "../lib/engine/IUIDragDropListener.mt";
 //
 //   @Script
 //   public class InventoryManager implements IUIDragDropListener {

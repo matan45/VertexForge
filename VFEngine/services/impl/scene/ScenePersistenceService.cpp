@@ -27,11 +27,13 @@
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include "../../events/ui/UIAuthoringEvents.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <functional>
 #include <fstream>
 #include <filesystem>
+#include <stdexcept>
 
 namespace services
 {
@@ -41,6 +43,33 @@ namespace services
     {
         nlohmann::json json;
     };
+
+    namespace
+    {
+        // VK-1659: UIListView item instances are engine-managed and never serialized, so an entity tree
+        // instantiated from a prefab or from JSON arrives with empty lists. Rebuild them from their templates
+        // right away (a scene load does the same on SceneLoadedNotification). Without a UI service (some
+        // tests) there is no handler and the lists stay empty, as before. Any other failure only leaves items
+        // unbuilt: the tree itself is complete, so the caller still gets its root.
+        void reconcileUIListViews(EntityHandle root)
+        {
+            events::ui::ReconcileUIListViewsCommand command;
+            command.root = root;
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("UIListView: the items of the lists under an instantiated entity were not all built: {}",
+                                 error.what());
+                }
+            }
+        }
+    }
 
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                                      EntityStateService* entityStateService)
@@ -862,6 +891,7 @@ namespace services
                 .sourcePrefabPath = filePath;
 
             acquireAndNotifyResources(*result);
+            reconcileUIListViews(handle);
 
             events::scene::PrefabInstantiatedNotification notification;
             notification.filePath = filePath;
@@ -970,7 +1000,9 @@ namespace services
 
         acquireAndNotifyResources(instantiated);
 
-        return internal::toHandle(instantiated.getHandle());
+        const EntityHandle handle = internal::toHandle(instantiated.getHandle());
+        reconcileUIListViews(handle);
+        return handle;
     }
 
     bool ScenePersistenceService::loadSceneAdditive(const std::string& scenePath, const std::string& sceneName)

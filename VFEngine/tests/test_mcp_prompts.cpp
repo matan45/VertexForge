@@ -60,10 +60,10 @@ namespace
 
 TEST_SUITE("MCP prompts")
 {
-    TEST_CASE("both templates are registered with their optional arguments")
+    TEST_CASE("the three templates are registered with their optional arguments")
     {
         PromptFixture fixture;
-        REQUIRE(fixture.prompts.all().size() == 2);
+        REQUIRE(fixture.prompts.all().size() == 3);
 
         const mcp::PromptDef* platformer = fixture.prompts.find("create_platformer_template");
         REQUIRE(platformer != nullptr);
@@ -81,9 +81,49 @@ TEST_SUITE("MCP prompts")
         REQUIRE(topDown->arguments.size() == 2);
         CHECK(topDown->arguments[1].name == "cameraHeight");
 
+        // VK-1659
+        const mcp::PromptDef* hud = fixture.prompts.find("create_hud");
+        REQUIRE(hud != nullptr);
+        REQUIRE(hud->arguments.size() == 1);
+        CHECK(hud->arguments[0].name == "name");
+        CHECK_FALSE(hud->arguments[0].required);
+
         const nlohmann::json list = fixture.prompts.listJson();
-        REQUIRE(list.size() == 2);
+        REQUIRE(list.size() == 3);
         CHECK(list[0]["name"] == "create_platformer_template");
+    }
+
+    TEST_CASE("create_hud walks the HUD acceptance with registered tools only (VK-1659)")
+    {
+        PromptFixture fixture;
+
+        const std::string text = fixture.text("create_hud", nlohmann::json::object());
+        const std::set<std::string> tokens = snakeCaseTokens(text);
+        REQUIRE_FALSE(tokens.empty());
+        for (const std::string& token : tokens)
+        {
+            CAPTURE(token);
+            CHECK(fixture.tools.find(token) != nullptr);
+        }
+        for (const char* tool : {"editor_get_info", "ui_list_widget_types", "ui_create_canvas", "ui_add_widget",
+                                 "ui_get", "ui_set", "ui_click", "script_write", "scripts_build", "script_attach",
+                                 "scene_save", "play_start", "viewport_screenshot", "logs_read", "play_stop"})
+        {
+            CAPTURE(tool);
+            CHECK(tokens.count(tool) == 1);
+        }
+        CHECK(fixture.tools.find("undo") != nullptr);
+        CHECK(contains(text, "then undo"));
+        CHECK(contains(text, "section 11 (UI) of vf://docs/mtype-api"));
+        CHECK(contains(text, "game/Game/GameHudController.mt"));
+        CHECK(contains(text, "\"placement\": {\"preset\": \"topLeft\", \"size\": [320, 28], \"margin\": 24}"));
+        CHECK(contains(text, "HealthBar (24, 24, 320, 28), ScoreLabel (1596, 20, 300, 48) and PauseButton "
+                             "(880, 20, 160, 56)"));
+
+        const std::string named = fixture.text("create_hud", {{"name", "space run"}});
+        CHECK(contains(named, "game/SpaceRun/SpaceRunHudController.mt"));
+        CHECK(contains(named, "renamed to SpaceRunHudController"));
+        CHECK_THROWS_AS(fixture.prompts.find("create_hud")->build({{"name", 5}}), mcp::ArgError);
     }
 
     TEST_CASE("every tool named by a prompt exists in the core tool registry")

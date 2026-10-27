@@ -3,7 +3,7 @@
 // Unlike collision callbacks, tabs events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUITabsListener;
+//   import * from "../lib/engine/IUITabsListener.mt";
 //
 //   @Script
 //   public class TabController implements IUITabsListener {

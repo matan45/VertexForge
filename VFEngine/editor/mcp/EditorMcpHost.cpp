@@ -86,8 +86,17 @@ namespace editor
             "(level, seaState 0-12 or windSpeed, windDirection, choppiness, bands, physics), water_set_params "
             "(colour, opacity, foam, reflections, ...; shoreline and caustics are ocean-only) and water_set_body -> "
             "viewport_screenshot. Each edit is one undo step, is saved by scene_save and is refused in Play mode.\n"
+            "UI: ui_create_canvas {name} -> ui_add_widget {type (ProgressBar, Label, Button, Checkbox, Slider, Image, "
+            "...), parent (the canvas or a widget), name, text, placement:{preset (topLeft, top, topRight, ..., "
+            "stretch), size, margin}} -> ui_set / ui_get (sections per type: ui_list_widget_types) -> a script (UI "
+            "section of vf://docs/mtype-api; widgets are found by unique name) -> script_attach -> play_start -> "
+            "viewport_screenshot {settleFrames:5} (Edit mode shows only a flat preview of the canvas) -> ui_click "
+            "(Play only: presses a button or toggles a checkbox like a mouse click) -> play_stop. Every element is "
+            "anchored to the whole canvas: placement handles that, and ui_set moves a widget's children with it. "
+            "ui_create_canvas, ui_add_widget, ui_set and ui_instantiate_prefab are one undo step each, are saved by "
+            "scene_save and are refused in Play mode.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
-            "playable game.";
+            "playable game; create_hud builds a HUD wired to a script.";
     }
 
     void EditorMcpHost::init(const McpLaunchOptions& launchOptions)

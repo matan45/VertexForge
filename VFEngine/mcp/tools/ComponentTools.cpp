@@ -586,8 +586,12 @@ namespace mcp::tools
                 allowed += allowed.empty() ? "" : ", ";
                 allowed += binding.name;
             }
+            // VK-1659: UI components are not component_* types (their Add* auto-adds siblings); the ui_* tools own them.
+            const std::string uiHint = type.rfind("UI", 0) == 0
+                ? "; edit UI with the ui_* tools (ui_get, ui_set, ui_add_widget)"
+                : std::string();
             throw ArgError("unknown component type '" + type + "'; supported: " + allowed +
-                           " (use entity_instantiate_json for anything else)");
+                           " (use entity_instantiate_json for anything else)" + uiHint);
         }
 
         std::vector<std::string> typeNames()

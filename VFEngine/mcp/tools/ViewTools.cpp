@@ -36,7 +36,10 @@ namespace mcp::tools
             tool.description =
                 "Capture the editor viewport as a PNG image (the final rendered scene, after tonemapping "
                 "and upscaling). ImGui overlays are NOT captured: transform gizmos, entity icons/billboard "
-                "icons and other editor widgets drawn over the viewport do not appear. The capture waits "
+                "icons and other editor widgets drawn over the viewport do not appear. Game UI is: in Play mode "
+                "the image includes every UI canvas (the HUD) laid out for the editor window's size; in Edit mode a "
+                "canvas shows only as a flat world-space preview quad (its textured images and its labels). The "
+                "capture waits "
                 "'settleFrames' more rendered frames so edits made just before the call are visible. "
                 "Fails if the viewport is not rendering (panel hidden, window minimized or a scene is "
                 "loading). Returns the image plus {width, height, sourceWidth, sourceHeight}.";

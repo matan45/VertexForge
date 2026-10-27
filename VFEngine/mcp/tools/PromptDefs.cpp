@@ -318,11 +318,79 @@ namespace mcp::tools
             };
             registry.add(std::move(prompt));
         }
+
+        // VK-1659: the HUD the UI tools were built for, wired to the primer's HudController example (section 11 of
+        // vf://docs/mtype-api). The placements are the ones the UI docs work through.
+        void registerHudTemplate(PromptRegistry& registry)
+        {
+            PromptDef prompt;
+            prompt.name = "create_hud";
+            prompt.title = "Create a HUD";
+            prompt.description =
+                "Walk the agent through building an in-game HUD in the open scene: a canvas with a health bar "
+                "top-left, a score label top-right and a pause button, a script that updates them and pauses the "
+                "game, then a play-test with a simulated click, an undo check and a save.";
+            prompt.arguments = {
+                {"name", "Game name, used for the script class and folder. Default 'Game'.", false}
+            };
+            prompt.build = [](const nlohmann::json& args) -> nlohmann::json
+            {
+                const std::string game = identifierName(args, "Game");
+                const std::string hud = game + "HudController";
+                const std::string scriptPath = "game/" + game + "/" + hud + ".mt";
+
+                std::string text =
+                    "Build an in-game HUD for '" + game + "' in the open VertexForge editor: a health bar top-left, a "
+                    "score label top-right and a pause button, wired to a script. Use only the vertexforge MCP tools "
+                    "named below. Work step by step and check every tool result before moving on.\n\n"
+                    "1. Read the UI section of vf://docs/components and section 11 (UI) of vf://docs/mtype-api before "
+                    "writing anything: every widget is anchored to the whole canvas, scripts find widgets by their unique "
+                    "names, a button click reaches every listener script, and Edit mode shows the canvas only as a flat "
+                    "preview.\n"
+                    "2. editor_get_info: confirm a project is open. If it reports Play mode, call play_stop. Build in the "
+                    "open scene (the game the HUD belongs to). If a UI tool refuses because the scene is a World-mode "
+                    "scene, tell the user and stop.\n"
+                    "3. ui_list_widget_types: note the ProgressBar, Label and Button sections and the placement presets.\n"
+                    "4. ui_create_canvas {\"name\": \"HUD\"}: a canvas authored for 1920 x 1080 that scales with the "
+                    "screen.\n"
+                    "5. ui_add_widget {\"type\": \"ProgressBar\", \"parent\": <canvas id>, \"name\": \"HealthBar\", "
+                    "\"placement\": {\"preset\": \"topLeft\", \"size\": [320, 28], \"margin\": 24}}.\n"
+                    "6. ui_add_widget {\"type\": \"Label\", \"parent\": <canvas id>, \"name\": \"ScoreLabel\", \"text\": "
+                    "\"Score: 0\", \"placement\": {\"preset\": \"topRight\", \"size\": [300, 48], \"margin\": [24, 20]}, "
+                    "\"label\": {\"horizontalAlignment\": \"right\"}}.\n"
+                    "7. ui_add_widget {\"type\": \"Button\", \"parent\": <canvas id>, \"name\": \"PauseButton\", \"text\": "
+                    "\"Pause\", \"placement\": {\"preset\": \"top\", \"size\": [160, 56], \"margin\": [0, 20]}}.\n"
+                    "8. ui_get {\"entity\": <canvas id>, \"recursive\": true}: at the 1920 x 1080 reference size the "
+                    "resolved rects are HealthBar (24, 24, 320, 28), ScoreLabel (1596, 20, 300, 48) and PauseButton "
+                    "(880, 20, 160, 56). Fix any difference with ui_set.\n"
+                    "9. Undo check, while still in Edit mode: ui_set {\"entity\": <ScoreLabel id>, \"label\": {\"color\": "
+                    "[1, 0.8, 0.25, 1]}}, then undo, and confirm with ui_get that the label colour is white again.\n"
+                    "10. script_write '" + scriptPath + "': the HudController example of section 11 of vf://docs/mtype-api "
+                    "with the class renamed to " + hud + ". game/" + game + "/ is as deep as game/examples/, so the "
+                    "imports stay as they are.\n"
+                    "11. scripts_build. If success is false, fix every '<file>: <diagnostic>' error with script_write and "
+                    "run scripts_build again until it succeeds.\n"
+                    "12. script_attach {\"entity\": <canvas id>, \"path\": \"" + scriptPath + "\"}, then scene_save "
+                    "(pass a path such as 'scenes/" + game + ".vfScene' when the scene was never saved).\n"
+                    "13. play_start, then viewport_screenshot {\"settleFrames\": 5}: the bar top-left, the score top-right, "
+                    "the button top-centre. ui_get the HealthBar twice, a moment apart: its progressBar value falls while "
+                    "the game runs.\n"
+                    "14. ui_click {\"entity\": <PauseButton id>}, then logs_read (minLevel 'info') for 'pause toggled', "
+                    "ui_get the PauseButton (its label text is now 'Resume') and viewport_screenshot. ui_click it again to "
+                    "resume, then play_stop.\n"
+                    "15. Finish with a short summary: the script and anything left to tune. play_stop reloads the edit "
+                    "scene, so the entity ids change: before editing the HUD again, wait until ui_get works, then find the "
+                    "new ids with ui_get {} and ui_get {\"entity\": <canvas id>, \"recursive\": true}.\n";
+                return userMessage(std::move(text));
+            };
+            registry.add(std::move(prompt));
+        }
     }
 
     void registerCorePrompts(PromptRegistry& registry)
     {
         registerPlatformerTemplate(registry);
         registerTopDownTemplate(registry);
+        registerHudTemplate(registry);
     }
 }

@@ -413,6 +413,112 @@ public class WaterSplash extends Behaviour implements IWaterListener {
 ```
 )MTDOC";
 
+        constexpr const char* primerUi = R"MTDOC(
+## 11. UI
+
+A HUD or menu is a canvas entity (`ui_create_canvas`) with widget entities under it (`ui_add_widget`: ProgressBar, Label, Button, Checkbox, Slider, Dropdown, TextInput, Image, ListView, LayoutGroup, Rect). In Play mode and in an exported game the canvas draws over the scene. Scripts drive it through the static class in lib/engine/UI.mt (full signatures: `vf://docs/mtype-api/engine/UI`):
+
+- A widget is its `int` entity id. Find it by NAME: `Entity::findByName("ScoreLabel")` returns the first entity with that name and `-1` when there is none, so give every widget a script uses a unique name. Object style: `GameObject::find("ScoreLabel")` returns a `GameObject?`, and its `uiElement()` wraps the common calls (`setLabelText`, `setProgressValue`, `setChecked`, `setSliderValue`, ...).
+- Common calls, each taking the widget id first: `UI::setLabelText(id, text)` / `UI::getLabelText(id)`, `UI::setLabelColor(id, r, g, b, a)`, `UI::setProgressBarValue(id, value)` (clamped to the bar's range) and `UI::setProgressBarMinMax(id, min, max)` (a new bar's range is 0 to 1), `UI::setSliderValue(id, value)` / `UI::getSliderValue(id)`, `UI::isCheckboxChecked(id)` / `UI::setCheckboxChecked(id, checked)`, `UI::setButtonInteractable(id, interactable)`, `UI::setImageColor(id, r, g, b, a)`, `UI::getDropdownSelectedIndex(id)`, `UI::getTextInputText(id)`. `Entity::setActive(id, active)` shows or hides a widget with everything under it. Text needs strings: `"Score: " + parsePrimitive(score)`.
+- Events arrive through listener interfaces. `IUIButtonListener` (lib/engine/IUIButtonListener.mt) declares `onButtonClicked`, `onButtonPressed`, `onButtonReleased`, `onButtonHoverEnter` and `onButtonHoverExit`, each `(int buttonEntityId, string entityName): void`; implement all five, each with `@Override`. Every event is BROADCAST to every script that implements the interface, whatever entity it is attached to, so compare `entityName` (or the id). `IUICheckboxListener` declares `onCheckboxToggled(int entityId, string entityName, bool newState, bool previousState)`, `onCheckboxHoverEnter` and `onCheckboxHoverExit`; `IUISliderListener`, `IUIDropdownListener` and `IUITextInputListener` work the same way.
+- Import a listener like any module: `import * from "../lib/engine/IUIButtonListener.mt";` from a file directly in scripts/game/. Never write `import engine::IUIButtonListener;`: after `import` only `*`, `{` or `lib` may follow.
+- Pause with `Time::freeze()`: gameplay time stops, so `onUpdate` and everything else driven by gameplay time stops, but the UI keeps taking clicks and the listener callbacks still run, so the same button can call `Time::unfreeze()`. Starting and stopping Play resets the freeze.
+- Attach the HUD script to any entity, for example the canvas. Scripts start on the first Play frame; `ui_click` presses a button (or toggles a checkbox) the way a mouse click does, so it reaches them once Play has run a frame.
+- In Edit mode the editor shows a canvas only as a flat preview in the scene: check the HUD with `play_start` and `viewport_screenshot` (settleFrames 5, since fonts load in the background).
+
+Example: `scripts/game/examples/HudController.mt` ships with the engine (quoted verbatim). Give your copy a NEW class name: `HudController` already exists in projects that carry the examples. It expects a ProgressBar `HealthBar`, a Label `ScoreLabel` and a Button `PauseButton` (the HUD in the UI section of vf://docs/components), attached to any entity.
+
+```mtype
+// HudController - Example of a HUD driven by a script (VK-1659).
+//
+// Expects three widgets on a canvas, found by NAME when the script starts
+// (Entity::findByName returns the first entity with that name, -1 if none):
+// a ProgressBar "HealthBar", a Label "ScoreLabel" and a Button "PauseButton".
+// Health drains and refills; the score grows by 10 every second. The Pause
+// button freezes gameplay time: onUpdate stops, but button callbacks still
+// run, so the same button resumes. Button events reach EVERY script that
+// implements IUIButtonListener, so compare the button's entity name.
+
+import * from "../../lib/engine/oop/Behaviour.mt";
+import * from "../../lib/engine/Entity.mt";
+import * from "../../lib/engine/UI.mt";
+import * from "../../lib/engine/Time.mt";
+import * from "../../lib/engine/IUIButtonListener.mt";
+
+@Script
+public class HudController extends Behaviour implements IUIButtonListener {
+    private int healthBar = -1;
+    private int scoreLabel = -1;
+    private float health = 100.0;
+    private int score = 0;
+    private float scoreTimer = 0.0;
+
+    public constructor() : super() {
+    }
+
+    @Override
+    public function onStart(): void {
+        this.healthBar = Entity::findByName("HealthBar");
+        this.scoreLabel = Entity::findByName("ScoreLabel");
+        if (this.healthBar < 0 || this.scoreLabel < 0) {
+            this.logWarn("name the widgets HealthBar and ScoreLabel");
+            return;
+        }
+        UI::setProgressBarMinMax(this.healthBar, 0.0, 100.0);
+    }
+
+    @Override
+    public function onUpdate(float deltaTime): void {
+        this.health = this.health - 5.0 * deltaTime;
+        if (this.health < 0.0) {
+            this.health = 100.0;
+        }
+        this.scoreTimer = this.scoreTimer + deltaTime;
+        if (this.scoreTimer >= 1.0) {
+            this.scoreTimer = this.scoreTimer - 1.0;
+            this.score = this.score + 10;
+        }
+        if (this.healthBar >= 0) {
+            UI::setProgressBarValue(this.healthBar, this.health);
+        }
+        if (this.scoreLabel >= 0) {
+            UI::setLabelText(this.scoreLabel, "Score: " + parsePrimitive(this.score));
+        }
+    }
+
+    @Override
+    public function onButtonClicked(int buttonEntityId, string entityName): void {
+        if (entityName == "PauseButton") {
+            if (Time::isFrozen()) {
+                Time::unfreeze();
+                UI::setLabelText(buttonEntityId, "Pause");
+            } else {
+                Time::freeze();
+                UI::setLabelText(buttonEntityId, "Resume");
+            }
+            this.log("pause toggled");
+        }
+    }
+
+    @Override
+    public function onButtonPressed(int buttonEntityId, string entityName): void {
+    }
+
+    @Override
+    public function onButtonReleased(int buttonEntityId, string entityName): void {
+    }
+
+    @Override
+    public function onButtonHoverEnter(int buttonEntityId, string entityName): void {
+    }
+
+    @Override
+    public function onButtonHoverExit(int buttonEntityId, string entityName): void {
+    }
+}
+```
+)MTDOC";
+
         bool isIdentChar(char c)
         {
             return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
@@ -837,7 +943,7 @@ public class WaterSplash extends Behaviour implements IWaterListener {
     const std::string& primer()
     {
         static const std::string text = std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample +
-                                        primerAnimation + primerEffects + primerWater;
+                                        primerAnimation + primerEffects + primerWater + primerUi;
         return text;
     }
 
@@ -855,6 +961,8 @@ public class WaterSplash extends Behaviour implements IWaterListener {
             "engine/VFX",
             "engine/Ocean",
             "engine/IWaterListener",
+            "engine/IUIButtonListener",
+            "engine/IUICheckboxListener",
             "math/Vec3f"
         };
         return modules;

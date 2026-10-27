@@ -6,6 +6,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "data/EntityConversion.hpp"
 #include "components/Components.hpp"
+#include "ui/UIRectLayout.hpp"
 #include <imgui.h>
 #include <string>
 
@@ -15,28 +16,66 @@ namespace windows::details
     {
         using Dispatcher = events::EventDispatcher;
 
-        // Adds a UIRect to `e` and sets it to the given anchors/size (one helper for the many
-        // little children the tab/pane composition creates).
-        void seedRect(services::EntityHandle e, glm::vec2 anchorMin, glm::vec2 anchorMax,
-                      glm::vec2 pivot, glm::vec2 sizeDelta, glm::vec2 anchoredPosition)
+        // VK-1659: UI anchors are fractions of the whole canvas, never of the parent, so every part
+        // of the composition is placed inside its parent's CURRENT rect (placeInside gives it the
+        // parent's anchor terms, so it stays put inside the parent at any resolution).
+
+        // The edges of `e`'s UIRect (the whole canvas when it has none).
+        utilities::ui::AffineRect rectEdgesOf(services::EntityHandle e)
+        {
+            events::ui::GetUIRectDataQuery query;
+            query.entity = e;
+            auto rect = Dispatcher::instance().query(query);
+            return rect.has_value() ? utilities::ui::affineRectOf(utilities::ui::toRectLayout(*rect))
+                                    : utilities::ui::fullViewportRect();
+        }
+
+        utilities::ui::Placement makePlacement(utilities::ui::HAlign hAlign, utilities::ui::VAlign vAlign,
+                                               glm::vec2 size, glm::vec4 margin = glm::vec4(0.0f))
+        {
+            utilities::ui::Placement placement;
+            placement.h = hAlign;
+            placement.v = vAlign;
+            placement.size = size;
+            placement.margin = margin; // left, right, top, bottom
+            return placement;
+        }
+
+        // Adds a UIRect to `e` and places it inside `parentEdges` (one helper for the many little
+        // children the tab/pane composition creates).
+        void seedPlacedRect(services::EntityHandle e, const utilities::ui::AffineRect& parentEdges,
+                            const utilities::ui::Placement& placement)
         {
             events::ui::AddUIRectComponentCommand add;
             add.entity = e;
             Dispatcher::instance().execute(add);
 
             services::UIRectData rect;
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = pivot;
-            rect.sizeDelta = sizeDelta;
-            rect.anchoredPosition = anchoredPosition;
+            utilities::ui::applyRectLayout(rect, utilities::ui::placeInside(parentEdges, placement));
             events::ui::SetUIRectDataCommand set;
             set.entity = e;
             set.rectData = rect;
             Dispatcher::instance().execute(set);
         }
 
-        // Creates a centered UILabel child filling the parent.
+        // Adds a centered UILabel to `e` itself.
+        void addCenteredLabelOn(services::EntityHandle e, const std::string& text)
+        {
+            events::ui::AddUILabelComponentCommand add;
+            add.entity = e;
+            Dispatcher::instance().execute(add);
+
+            services::UILabelData label;
+            label.text = text;
+            label.horizontalAlignment = 1; // Center
+            label.verticalAlignment = 1;   // Middle
+            events::ui::SetUILabelDataCommand set;
+            set.entity = e;
+            set.labelData = label;
+            Dispatcher::instance().execute(set);
+        }
+
+        // Creates a centered UILabel child filling the parent's rect.
         void addCenteredLabel(services::EntityHandle parent, const std::string& text)
         {
             events::scene::CreateEntityCommand create;
@@ -46,20 +85,10 @@ namespace windows::details
             if (!lbl.isValid())
                 return;
 
-            seedRect(lbl, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
-
-            events::ui::AddUILabelComponentCommand add;
-            add.entity = lbl;
-            Dispatcher::instance().execute(add);
-
-            services::UILabelData label;
-            label.text = text;
-            label.horizontalAlignment = 1; // Center
-            label.verticalAlignment = 1;   // Middle
-            events::ui::SetUILabelDataCommand set;
-            set.entity = lbl;
-            set.labelData = label;
-            Dispatcher::instance().execute(set);
+            seedPlacedRect(lbl, rectEdgesOf(parent),
+                           makePlacement(utilities::ui::HAlign::Stretch, utilities::ui::VAlign::Stretch,
+                                         glm::vec2(0.0f)));
+            addCenteredLabelOn(lbl, text);
         }
 
         // Reads the tabs root's active index (0 when absent).
@@ -130,6 +159,7 @@ namespace windows::details
             return services::EntityHandle::invalid();
 
         TabsStructure structure = inspectStructure(tabsRoot);
+        const utilities::ui::AffineRect rootEdges = rectEdgesOf(tabsRoot);
 
         // Ensure the tab bar exists (first child carrying a UILayoutGroup, laid out horizontally).
         services::EntityHandle tabBar = structure.tabBar;
@@ -142,8 +172,10 @@ namespace windows::details
             if (!tabBar.isValid())
                 return services::EntityHandle::invalid();
 
-            // Stretch across the top edge, fixed height.
-            seedRect(tabBar, {0.0f, 1.0f}, {1.0f, 1.0f}, {0.5f, 1.0f}, {0.0f, 36.0f}, {0.0f, 0.0f});
+            // Stretch across the root's top edge, fixed height.
+            seedPlacedRect(tabBar, rootEdges,
+                           makePlacement(utilities::ui::HAlign::Stretch, utilities::ui::VAlign::Top,
+                                         glm::vec2(0.0f, 36.0f)));
 
             events::ui::AddUILayoutGroupComponentCommand addLayout;
             addLayout.entity = tabBar;
@@ -161,7 +193,9 @@ namespace windows::details
         const int newIndex = static_cast<int>(structure.tabButtons.size());
         const std::string label = "Tab " + std::to_string(newIndex + 1);
 
-        // Tab button: an image with a centered label, sized for the horizontal layout group.
+        // Tab button: an image with a centered label, sized for the horizontal layout group. Placed
+        // where that layout (spacing 4, no padding, start-aligned) puts it, and its label lives ON the
+        // button: a layout group moves only its direct children, so a label child would be left behind.
         {
             events::scene::CreateEntityCommand create;
             create.name = label;
@@ -169,11 +203,21 @@ namespace windows::details
             services::EntityHandle button = Dispatcher::instance().execute(create);
             if (button.isValid())
             {
-                seedRect(button, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {90.0f, 30.0f}, {0.0f, 0.0f});
+                seedPlacedRect(button, rectEdgesOf(tabBar),
+                               makePlacement(utilities::ui::HAlign::Left, utilities::ui::VAlign::Top,
+                                             glm::vec2(90.0f, 30.0f),
+                                             glm::vec4(94.0f * static_cast<float>(newIndex), 0.0f, 0.0f, 0.0f)));
                 events::ui::AddUIImageComponentCommand addImage;
                 addImage.entity = button;
                 Dispatcher::instance().execute(addImage);
-                addCenteredLabel(button, label);
+                // A dark tab face, so the (white) label on it reads.
+                services::UIImageData image;
+                image.colorTint = glm::vec4(0.25f, 0.25f, 0.30f, 1.0f);
+                events::ui::SetUIImageDataCommand setImage;
+                setImage.entity = button;
+                setImage.imageData = image;
+                Dispatcher::instance().execute(setImage);
+                addCenteredLabelOn(button, label);
             }
         }
 
@@ -184,8 +228,10 @@ namespace windows::details
         services::EntityHandle pane = Dispatcher::instance().execute(createPane);
         if (pane.isValid())
         {
-            // Full width, height minus the tab bar, shifted down to sit beneath it.
-            seedRect(pane, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, -36.0f}, {0.0f, -18.0f});
+            // The root's full width, its height minus the tab bar, beneath it.
+            seedPlacedRect(pane, rootEdges,
+                           makePlacement(utilities::ui::HAlign::Stretch, utilities::ui::VAlign::Stretch,
+                                         glm::vec2(0.0f), glm::vec4(0.0f, 0.0f, 36.0f, 0.0f)));
 
             events::ui::AddUIImageComponentCommand addImage;
             addImage.entity = pane;

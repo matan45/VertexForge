@@ -116,6 +116,25 @@ namespace mcp::tools::env
                 return std::string(checkedEnum(value, names, path));
             case FieldKind::String:
                 return requireString(value, path);
+            case FieldKind::Vec2:
+            {
+                const glm::vec2 vector = requireVec2(value, min, max, path);
+                return nlohmann::json::array({static_cast<double>(vector.x), static_cast<double>(vector.y)});
+            }
+            case FieldKind::Vec4:
+            {
+                const glm::vec4 vector = requireVec4(value, min, max, path);
+                return nlohmann::json::array({static_cast<double>(vector.x), static_cast<double>(vector.y),
+                                              static_cast<double>(vector.z), static_cast<double>(vector.w)});
+            }
+            case FieldKind::Color:
+            {
+                const glm::vec4 color = requireColor(value, min, max, path);
+                return nlohmann::json::array({static_cast<double>(color.r), static_cast<double>(color.g),
+                                              static_cast<double>(color.b), static_cast<double>(color.a)});
+            }
+            case FieldKind::StringList:
+                return requireStringList(value, min, max, path);
             }
             throw std::logic_error("unknown field kind");
         }
@@ -154,6 +173,18 @@ namespace mcp::tools::env
                 return {{"type", "enum"}, {"values", namesJson(names)}};
             case FieldKind::String:
                 return {{"type", "string"}};
+            case FieldKind::Vec2:
+                return {{"type", "vec2"}, {"min", floatJson(static_cast<float>(min))},
+                        {"max", floatJson(static_cast<float>(max))}};
+            case FieldKind::Vec4:
+                return {{"type", "vec4"}, {"min", floatJson(static_cast<float>(min))},
+                        {"max", floatJson(static_cast<float>(max))}};
+            case FieldKind::Color:
+                return {{"type", "color"}, {"min", floatJson(static_cast<float>(min))},
+                        {"max", floatJson(static_cast<float>(max))}};
+            case FieldKind::StringList:
+                return {{"type", "stringList"}, {"minItems", static_cast<int64_t>(min)},
+                        {"maxItems", static_cast<int64_t>(max)}};
             }
             throw std::logic_error("unknown field kind");
         }
@@ -187,6 +218,40 @@ namespace mcp::tools::env
             }
             case FieldKind::String:
                 return schema::string(std::move(description));
+            case FieldKind::Vec2:
+            case FieldKind::Vec4:
+            {
+                const int64_t count = kind == FieldKind::Vec2 ? 2 : 4;
+                return {
+                    {"type", "array"},
+                    {"items", {{"type", "number"}, {"minimum", min}, {"maximum", max}}},
+                    {"minItems", count},
+                    {"maxItems", count},
+                    {"description", std::move(description)}
+                };
+            }
+            case FieldKind::Color:
+            {
+                nlohmann::json components = {
+                    {"type", "array"},
+                    {"items", {{"type", "number"}, {"minimum", min}, {"maximum", max}}},
+                    {"minItems", 3},
+                    {"maxItems", 4}
+                };
+                nlohmann::json hex = {{"type", "string"}, {"pattern", "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"}};
+                nlohmann::json out = nlohmann::json::object();
+                out["anyOf"] = nlohmann::json::array({std::move(components), std::move(hex)});
+                out["description"] = std::move(description);
+                return out;
+            }
+            case FieldKind::StringList:
+                return {
+                    {"type", "array"},
+                    {"items", {{"type", "string"}}},
+                    {"minItems", static_cast<int64_t>(min)},
+                    {"maxItems", static_cast<int64_t>(max)},
+                    {"description", std::move(description)}
+                };
             }
             throw std::logic_error("unknown field kind");
         }
@@ -222,6 +287,16 @@ namespace mcp::tools::env
         return nlohmann::json::array({floatJson(value.x), floatJson(value.y), floatJson(value.z)});
     }
 
+    nlohmann::json vec2Json(const glm::vec2& value)
+    {
+        return nlohmann::json::array({floatJson(value.x), floatJson(value.y)});
+    }
+
+    nlohmann::json vec4Json(const glm::vec4& value)
+    {
+        return nlohmann::json::array({floatJson(value.x), floatJson(value.y), floatJson(value.z), floatJson(value.w)});
+    }
+
     float requireFloat(const nlohmann::json& value, double min, double max, std::string_view path)
     {
         if (!value.is_number())
@@ -254,6 +329,118 @@ namespace mcp::tools::env
         {
             out[static_cast<glm::length_t>(i)] =
                 requireFloat(value[i], min, max, std::string(path) + "[" + std::to_string(i) + "]");
+        }
+        return out;
+    }
+
+    glm::vec2 requireVec2(const nlohmann::json& value, double min, double max, std::string_view path)
+    {
+        if (!value.is_array() || value.size() != 2)
+        {
+            throw ArgError("'" + std::string(path) + "' must be an array of 2 numbers (got " + detail::valueText(value) +
+                           ")");
+        }
+        glm::vec2 out(0.0f);
+        for (std::size_t i = 0; i < 2; ++i)
+        {
+            out[static_cast<glm::length_t>(i)] =
+                requireFloat(value[i], min, max, std::string(path) + "[" + std::to_string(i) + "]");
+        }
+        return out;
+    }
+
+    glm::vec4 requireVec4(const nlohmann::json& value, double min, double max, std::string_view path)
+    {
+        if (!value.is_array() || value.size() != 4)
+        {
+            throw ArgError("'" + std::string(path) + "' must be an array of 4 numbers (got " + detail::valueText(value) +
+                           ")");
+        }
+        glm::vec4 out(0.0f);
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            out[static_cast<glm::length_t>(i)] =
+                requireFloat(value[i], min, max, std::string(path) + "[" + std::to_string(i) + "]");
+        }
+        return out;
+    }
+
+    glm::vec4 requireColor(const nlohmann::json& value, double min, double max, std::string_view path)
+    {
+        const auto shapeError = [&]()
+        {
+            return ArgError("'" + std::string(path) +
+                            "' must be [r, g, b], [r, g, b, a] (0-1 each) or \"#RRGGBB\" / \"#RRGGBBAA\" (got " +
+                            detail::valueText(value) + ")");
+        };
+
+        glm::vec4 out(1.0f);
+        if (value.is_string())
+        {
+            const std::string text = value.get<std::string>();
+            const bool hexShape = (text.size() == 7 || text.size() == 9) && text.front() == '#' &&
+                                  std::all_of(text.begin() + 1, text.end(), [](char c)
+                                  {
+                                      return std::isxdigit(static_cast<unsigned char>(c)) != 0;
+                                  });
+            if (!hexShape)
+            {
+                throw shapeError();
+            }
+            const std::size_t channels = (text.size() - 1) / 2;
+            for (std::size_t i = 0; i < channels; ++i)
+            {
+                unsigned int byte = 0;
+                const char* first = text.data() + 1 + 2 * i;
+                std::from_chars(first, first + 2, byte, 16); // two validated hex digits
+                out[static_cast<glm::length_t>(i)] = static_cast<float>(byte) / 255.0f;
+            }
+        }
+        else if (value.is_array() && (value.size() == 3 || value.size() == 4))
+        {
+            for (std::size_t i = 0; i < value.size(); ++i)
+            {
+                out[static_cast<glm::length_t>(i)] =
+                    requireFloat(value[i], min, max, std::string(path) + "[" + std::to_string(i) + "]");
+            }
+        }
+        else
+        {
+            throw shapeError();
+        }
+
+        // A hex component, or the implied alpha of [r, g, b], must fit the range too.
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+            const float component = out[static_cast<glm::length_t>(i)];
+            if (component < static_cast<float>(min) || component > static_cast<float>(max))
+            {
+                throw ArgError(detail::rangeError(std::string(path) + "[" + std::to_string(i) + "]", min, max,
+                                                  floatJson(component)));
+            }
+        }
+        return out;
+    }
+
+    std::vector<std::string> requireStringList(const nlohmann::json& value, double minCount, double maxCount,
+                                               std::string_view path)
+    {
+        if (!value.is_array())
+        {
+            throw ArgError("'" + std::string(path) + "' must be an array of strings (got " + detail::valueText(value) + ")");
+        }
+        const double count = static_cast<double>(value.size());
+        if (count < minCount || count > maxCount)
+        {
+            throw ArgError("'" + std::string(path) + "' must have " + std::to_string(static_cast<int64_t>(minCount)) +
+                           " to " + std::to_string(static_cast<int64_t>(maxCount)) + " items (got " +
+                           std::to_string(value.size()) + ")");
+        }
+        std::vector<std::string> out;
+        out.reserve(value.size());
+        for (std::size_t i = 0; i < value.size(); ++i)
+        {
+            out.push_back(requireString(value[i], std::string(path) + "[" + std::to_string(i) + "]"));
         }
         return out;
     }

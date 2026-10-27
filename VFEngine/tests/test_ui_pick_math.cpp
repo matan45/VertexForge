@@ -6,6 +6,7 @@
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
+#include <cmath>
 #include <limits>
 
 // Editor viewport UI picking: in edit mode UI elements render as world-space
@@ -191,5 +192,171 @@ TEST_SUITE("UIPickMath")
         registry.destroy(child.getHandle());
         registry.destroy(canvasEntity.getHandle());
         registry.destroy(orphan.getHandle());
+    }
+
+    // VK-1659: the edit-mode world quad used to centre every element on its anchored point, ignoring the
+    // pivot, so Edit and Play only agreed at pivot (0.5, 0.5). It now derives from the Play resolver.
+    TEST_CASE("edit-mode quad sits where Play draws the element, for any pivot")
+    {
+        auto canvas = makeCanvas(); // 1920 x 1080, 100 px per world unit, identity transform
+        const float ppu = canvas.pixelsPerUnit;
+        const float halfW = canvas.referenceWidth * 0.5f;
+        const float halfH = canvas.referenceHeight * 0.5f;
+
+        // World units back to reference px (top-left origin, y down).
+        auto toRefX = [&](float worldX) { return worldX * ppu + halfW; };
+        auto toRefY = [&](float worldY) { return halfH - worldY * ppu; };
+
+        struct AnchorCase
+        {
+            glm::vec2 anchorMin;
+            glm::vec2 anchorMax;
+            glm::vec2 sizeDelta;
+        };
+        const AnchorCase anchorCases[] = {
+            {{0.0f, 1.0f}, {0.0f, 1.0f}, {320.0f, 28.0f}},
+            {{0.5f, 0.5f}, {0.5f, 0.5f}, {200.0f, 100.0f}},
+            {{1.0f, 0.0f}, {1.0f, 0.0f}, {150.0f, 60.0f}},
+            {{0.0f, 0.0f}, {1.0f, 1.0f}, {-40.0f, -60.0f}},
+            {{0.2f, 0.1f}, {0.6f, 0.4f}, {30.0f, -10.0f}},
+        };
+        const float pivots[] = {0.0f, 0.5f, 1.0f};
+
+        for (const AnchorCase& anchors : anchorCases)
+        {
+            for (float pivotX : pivots)
+            {
+                for (float pivotY : pivots)
+                {
+                    components::UIRectComponent rect;
+                    rect.anchorMin = anchors.anchorMin;
+                    rect.anchorMax = anchors.anchorMax;
+                    rect.pivot = {pivotX, pivotY};
+                    rect.sizeDelta = anchors.sizeDelta;
+                    rect.anchoredPosition = {37.0f, -21.0f};
+
+                    const utilities::ui::PixelRect play = utilities::ui::resolvePixelRect(
+                        rect, canvas.referenceWidth, canvas.referenceHeight, 1.0f);
+
+                    glm::vec3 corners[4];
+                    utilities::ui::computeWorldQuadCorners(
+                        utilities::ui::computeCanvasImageModelMatrix(canvas, glm::mat4(1.0f), rect), corners);
+
+                    CAPTURE(pivotX);
+                    CAPTURE(pivotY);
+                    // TL
+                    CHECK(std::fabs(toRefX(corners[0].x) - play.x) < 1e-3f);
+                    CHECK(std::fabs(toRefY(corners[0].y) - play.y) < 1e-3f);
+                    // BR
+                    CHECK(std::fabs(toRefX(corners[2].x) - (play.x + play.w)) < 1e-3f);
+                    CHECK(std::fabs(toRefY(corners[2].y) - (play.y + play.h)) < 1e-3f);
+
+                    // The y-up canvas rect is the same rect seen from the canvas' bottom-left corner.
+                    const utilities::ui::CanvasRectYUp up = utilities::ui::computeCanvasRectYUp(canvas, rect);
+                    CHECK(up.left == play.x);
+                    CHECK(up.bottom == canvas.referenceHeight - (play.y + play.h));
+                }
+            }
+        }
+    }
+
+    TEST_CASE("edit-mode quad is unchanged for the default centre pivot")
+    {
+        auto canvas = makeCanvas();
+
+        // The pre-VK-1659 body of computeCanvasImageModelMatrix (it ignored the pivot).
+        auto oldModel = [](const components::UICanvasComponent& c, const components::UIRectComponent& rectComp)
+        {
+            float canvasW = c.referenceWidth / c.pixelsPerUnit;
+            float canvasH = c.referenceHeight / c.pixelsPerUnit;
+
+            float anchorLeft = rectComp.anchorMin.x * c.referenceWidth;
+            float anchorRight = rectComp.anchorMax.x * c.referenceWidth;
+            float anchorBottom = rectComp.anchorMin.y * c.referenceHeight;
+            float anchorTop = rectComp.anchorMax.y * c.referenceHeight;
+
+            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
+            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
+            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
+            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
+
+            glm::mat4 canvasScaled = glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
+            return canvasScaled
+                * glm::translate(glm::mat4(1.0f), glm::vec3(cx / c.referenceWidth - 0.5f,
+                                                            cy / c.referenceHeight - 0.5f, 0.001f))
+                * glm::scale(glm::mat4(1.0f), glm::vec3(w / c.referenceWidth, h / c.referenceHeight, 1.0f));
+        };
+
+        const glm::vec2 anchorSets[][2] = {
+            {{0.0f, 0.0f}, {1.0f, 1.0f}},
+            {{0.5f, 0.5f}, {0.5f, 0.5f}},
+            {{0.0f, 1.0f}, {0.0f, 1.0f}},
+            {{0.25f, 0.1f}, {0.75f, 0.3f}},
+        };
+        for (const auto& anchors : anchorSets)
+        {
+            components::UIRectComponent rect; // pivot (0.5, 0.5)
+            rect.anchorMin = anchors[0];
+            rect.anchorMax = anchors[1];
+            rect.sizeDelta = {240.0f, 90.0f};
+            rect.anchoredPosition = {-55.0f, 33.0f};
+
+            glm::vec3 now[4];
+            glm::vec3 before[4];
+            utilities::ui::computeWorldQuadCorners(
+                utilities::ui::computeCanvasImageModelMatrix(canvas, glm::mat4(1.0f), rect), now);
+            utilities::ui::computeWorldQuadCorners(oldModel(canvas, rect), before);
+            for (int i = 0; i < 4; ++i)
+            {
+                CHECK(now[i].x == doctest::Approx(before[i].x).epsilon(1e-5));
+                CHECK(now[i].y == doctest::Approx(before[i].y).epsilon(1e-5));
+                CHECK(now[i].z == doctest::Approx(before[i].z).epsilon(1e-5));
+            }
+        }
+    }
+
+    TEST_CASE("a top-left pivot no longer shifts the edit-mode quad by half its size")
+    {
+        auto canvas = makeCanvas();
+        components::UIRectComponent rect;
+        rect.anchorMin = {0.0f, 1.0f};
+        rect.anchorMax = {0.0f, 1.0f};
+        rect.pivot = {0.0f, 0.0f}; // pivot.y is measured from the TOP edge
+        rect.sizeDelta = {320.0f, 28.0f};
+        rect.anchoredPosition = {24.0f, -24.0f}; // Play: the rect (24, 24, 320, 28) at the top-left
+
+        glm::vec3 corners[4];
+        utilities::ui::computeWorldQuadCorners(
+            utilities::ui::computeCanvasImageModelMatrix(canvas, glm::mat4(1.0f), rect), corners);
+
+        // TL at reference px (24, 24): world ((24 - 960) / 100, (540 - 24) / 100)
+        CHECK(corners[0].x == doctest::Approx(-9.36f));
+        CHECK(corners[0].y == doctest::Approx(5.16f));
+        // BR at reference px (344, 52)
+        CHECK(corners[2].x == doctest::Approx(-6.16f));
+        CHECK(corners[2].y == doctest::Approx(4.88f));
+    }
+
+    TEST_CASE("debug outlines lift the same quad to their own z offset")
+    {
+        auto canvas = makeCanvas();
+        components::UIRectComponent rect;
+        rect.anchorMin = {0.5f, 0.5f};
+        rect.anchorMax = {0.5f, 0.5f};
+        rect.pivot = {1.0f, 0.0f};
+        rect.sizeDelta = {200.0f, 100.0f};
+
+        glm::vec3 image[4];
+        glm::vec3 outline[4];
+        utilities::ui::computeWorldQuadCorners(
+            utilities::ui::computeCanvasImageModelMatrix(canvas, glm::mat4(1.0f), rect), image);
+        utilities::ui::computeWorldQuadCorners(
+            utilities::ui::computeCanvasImageModelMatrix(canvas, glm::mat4(1.0f), rect, 0.002f), outline);
+        for (int i = 0; i < 4; ++i)
+        {
+            CHECK(outline[i].x == doctest::Approx(image[i].x));
+            CHECK(outline[i].y == doctest::Approx(image[i].y));
+            CHECK(outline[i].z == doctest::Approx(0.002f));
+        }
     }
 }

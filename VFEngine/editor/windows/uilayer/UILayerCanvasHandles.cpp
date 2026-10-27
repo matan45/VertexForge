@@ -1,4 +1,5 @@
 #include "UILayerCanvasHandles.hpp"
+#include "ui/UIRectLayout.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -121,53 +122,23 @@ namespace windows::uilayer
 
     RefRect resolveRefRect(const services::UIRectData& d, float canvasW, float canvasH)
     {
-        // Mirror of UIRectMath::resolvePixelRect with parentW=canvasW, parentH=canvasH,
-        // scale=1.0 (ScaleWithScreenSize canvas at its reference resolution).
-        float anchorLeftPx = d.anchorMin.x * canvasW;
-        float anchorRightPx = d.anchorMax.x * canvasW;
-        float anchorTopPx = (1.0f - d.anchorMax.y) * canvasH;
-        float anchorBotPx = (1.0f - d.anchorMin.y) * canvasH;
-
-        float w = (anchorRightPx - anchorLeftPx) + d.sizeDelta.x;
-        float h = (anchorBotPx - anchorTopPx) + d.sizeDelta.y;
-
-        float cx = (anchorLeftPx + anchorRightPx) * 0.5f + d.anchoredPosition.x;
-        float cy = (anchorTopPx + anchorBotPx) * 0.5f - d.anchoredPosition.y;
-
-        float posX = cx - d.pivot.x * w;
-        float posY = cy - d.pivot.y * h;
-
-        return RefRect{posX, posY, w, h};
+        // VK-1659: the engine resolver itself (UIRectLayout.hpp, which UIRectMath::resolvePixelRect
+        // delegates to) with parentW=canvasW, parentH=canvasH, scale=1.0 (ScaleWithScreenSize canvas at
+        // its reference resolution). glm-only, so the editor still needs no utilities/scene/entt.
+        const utilities::ui::PixelRect p =
+            utilities::ui::resolveRect(utilities::ui::toRectLayout(d), canvasW, canvasH, 1.0f);
+        return RefRect{p.x, p.y, p.w, p.h};
     }
 
     services::UIRectData solveRectData(const services::UIRectData& current,
                                        const RefRect& target, float canvasW, float canvasH)
     {
-        // Invert resolveRefRect, holding anchors + pivot fixed. Solve sizeDelta then
-        // anchoredPosition (with the y-flip).
+        // Invert resolveRefRect, holding anchors + pivot fixed: sizeDelta then anchoredPosition (with
+        // the y-flip). VK-1659: the shared inverse (UIRectLayout.hpp); blocksRaycast is kept.
         services::UIRectData out = current;
-
-        float anchorLeftPx = current.anchorMin.x * canvasW;
-        float anchorRightPx = current.anchorMax.x * canvasW;
-        float anchorTopPx = (1.0f - current.anchorMax.y) * canvasH;
-        float anchorBotPx = (1.0f - current.anchorMin.y) * canvasH;
-
-        float anchorW = anchorRightPx - anchorLeftPx;
-        float anchorH = anchorBotPx - anchorTopPx;
-
-        // w = anchorW + sizeDelta.x  ->  sizeDelta.x = w - anchorW
-        out.sizeDelta.x = target.w - anchorW;
-        out.sizeDelta.y = target.h - anchorH;
-
-        // posX = cx - pivot.x*w  ->  cx = posX + pivot.x*w
-        float cx = target.x + current.pivot.x * target.w;
-        float cy = target.y + current.pivot.y * target.h;
-
-        // cx = anchorMid + anchoredPosition.x  ->  anchoredPosition.x = cx - anchorMid
-        out.anchoredPosition.x = cx - (anchorLeftPx + anchorRightPx) * 0.5f;
-        // cy = anchorMid - anchoredPosition.y  ->  anchoredPosition.y = anchorMid - cy
-        out.anchoredPosition.y = (anchorTopPx + anchorBotPx) * 0.5f - cy;
-
+        utilities::ui::applyRectLayout(out, utilities::ui::solveRectKeepingAnchors(
+            utilities::ui::toRectLayout(current),
+            utilities::ui::PixelRect{target.x, target.y, target.w, target.h}, canvasW, canvasH));
         return out;
     }
 
