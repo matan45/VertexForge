@@ -467,12 +467,19 @@ TEST_CASE("mcp ui ranges: every settable value at each end of its range survives
     {
         INFO(c.name << " = " << c.value.dump());
 
-        // ui_get after the reload reports what it reported before the save.
+        // ui_get after the reload reports what it reported before the save, except a progress bar's displayValue:
+        // runtime state that is never saved. The loader starts it at the value (SceneSerializeUIWidgets), while a
+        // bar written in Edit mode keeps the displayValue it had (only the Play overlay moves it).
         const auto entity = reloaded.find(c.name);
         REQUIRE(entity != reloaded.end());
         const std::optional<uitool::SectionData> after = uitool::readSection(handleOf(entity->second), c.section);
         REQUIRE(after.has_value());
-        CHECK(uitool::sectionJson(*after) == c.report);
+        json expected = c.report;
+        if (c.section == Section::ProgressBar)
+        {
+            expected["displayValue"] = expected.at("value");
+        }
+        CHECK(uitool::sectionJson(*after) == expected);
 
         // A value that differs from the default is a key of the saved component ...
         const auto components = savedComponents.find(c.name);
