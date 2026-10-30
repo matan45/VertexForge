@@ -107,6 +107,7 @@ namespace windows
 
         bool hasSocketAttachment = socketAttachmentDrawer.draw(handle);
         bool hasNavmeshAgent = navmeshAgentDrawer.draw(handle);
+        bool hasNavRoute = navRouteDrawer.draw(handle);   // VK-1660
         bool hasOffMeshLink = offMeshLinkDrawer.draw(handle);
         bool hasNavmeshObstacle = navmeshObstacleDrawer.draw(handle);
         bool hasNavmeshModifierVolume = navmeshModifierVolumeDrawer.draw(handle);
@@ -171,7 +172,7 @@ namespace windows
                                 hasVolumetricNavVolume, hasVolumetricAgent,
                                 hasDestructible, hasBuoyancy, hasWaterWakeEmitter, hasWaterBody,
                                 hasUIStyle, hasUITooltip, hasUIWindow,
-                                hasUIListView});
+                                hasUIListView, hasNavRoute});
     }
 
     void EntityDetailsPanel::drawEntityName(services::EntityHandle handle, const std::string& currentName)

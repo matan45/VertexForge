@@ -54,6 +54,16 @@ namespace services {
         virtual void stepDebug() = 0;
         // Replace the debug target's breakpoint set (node ids that auto-pause when they become Running).
         virtual void setBreakpoints(EntityHandle entity, const std::vector<uint32_t>& nodeIds) = 0;
+
+        // === On-demand state (VK-1660) ===
+        // One entity's live runtime, built when asked (MCP bt_debug_state) without touching the editor
+        // debugger's single debug target. Call between ticks (main thread, e.g. the MCP drain).
+        // The default reports "not attached".
+        virtual behaviortree::BTRuntimeState getRuntimeState(EntityHandle entity) const
+        {
+            (void)entity;
+            return {};
+        }
     };
 
 }

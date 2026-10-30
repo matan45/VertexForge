@@ -103,11 +103,11 @@ namespace behaviortree::catalog
         std::function<bool(std::string_view treePath)> treeExists;
         // Unset = EQS query names are not checked.
         std::function<bool(std::string_view queryName)> eqsQueryExists;
-        // When non-empty, per-node checks (parameters and child counts) run only for these node ids:
-        // the nodes a call created or changed, plus the parents whose child lists it changed. Untouched
-        // nodes of an editor-made tree are left to validateBehaviorTree, so they never block an edit.
-        // Blackboard-key checks always run.
-        std::unordered_set<uint32_t> onlyNodes;
+        // Unset = per-node checks (parameters and child counts) run for every node. Set = only for these
+        // node ids: the nodes a call created or changed, plus the parents whose child lists it changed
+        // (an empty set = none, e.g. a blackboard-only edit). Untouched nodes of an editor-made tree are
+        // left to validateBehaviorTree, so they never block an edit. Blackboard-key checks always run.
+        std::optional<std::unordered_set<uint32_t>> onlyNodes;
     };
 
     // Strict checks on top of validation::validateBehaviorTree (which stays permissive for editor
@@ -115,7 +115,7 @@ namespace behaviortree::catalog
     // Checks:
     //  - each node's type has a spec; its child count is within [minChildren, maxChildren]
     //  - no property outside the spec's params (paramsFor with the node's serviceType)
-    //  - required params present; ScriptTask has a non-empty scriptPath
+    //  - required params present; ScriptTask has a non-empty scriptPath and scriptClassName
     //  - stored alternative matches the kind (Float -> float, Int -> int32, ...); Float/Int ranges
     //  - Enum values are canonical members of enumValues
     //  - KeyRef names a declared key of an allowed type ("" only when allowEmptyKey)

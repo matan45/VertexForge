@@ -661,6 +661,17 @@ TEST_SUITE("AIBehaviorTreeCatalog")
             CHECK(hasError(catalog::validateStrict(data, context), "does not match the class 'Attack'"));
         }
 
+        SUBCASE("ScriptTask needs its class name")
+        {
+            auto data = makeBaseTree();
+            auto& script = replaceNode3(data, bt::BTNodeType::ScriptTask);
+            script.scriptPath = "game/ai/Attack.mt";
+            CHECK(hasError(catalog::validateStrict(data, context), "missing scriptClassName: it must be 'Attack'"));
+
+            catalog::StrictContext unchecked;
+            CHECK(hasError(catalog::validateStrict(data, unchecked), "missing scriptClassName"));
+        }
+
         SUBCASE("ScriptTask script must be a ScriptTask")
         {
             auto data = makeBaseTree();
@@ -771,21 +782,31 @@ TEST_SUITE("AIBehaviorTreeCatalog")
         data.graph.nodes.push_back(makeNode(4, bt::BTNodeType::Wait));
         link(data.graph, 3, 4); // structural finding on node 3 (task with a child)
 
+        data.graph.blackboardKeys.push_back(key("", Type::Float, 0.0f)); // graph-level finding
+
         catalog::StrictContext context = fakeContext();
 
-        context.onlyNodes = {2};
+        context.onlyNodes = std::unordered_set<uint32_t>{2};
         auto diagnostics = catalog::validateStrict(data, context);
         CHECK(!hasError(diagnostics, "unknown parameter 'speed'"));
         CHECK(!hasError(diagnostics, "cannot have children (has 1)")); // node 3 is untouched
+        CHECK(hasError(diagnostics, "Blackboard key with an empty name")); // key checks always run
 
-        context.onlyNodes = {3};
+        context.onlyNodes = std::unordered_set<uint32_t>{3};
         diagnostics = catalog::validateStrict(data, context);
         CHECK(hasError(diagnostics, "unknown parameter 'speed'"));
         CHECK(hasError(diagnostics, "cannot have children (has 1)"));
 
-        context.onlyNodes.clear();
+        context.onlyNodes = std::unordered_set<uint32_t>{}; // no node is touched
+        diagnostics = catalog::validateStrict(data, context);
+        CHECK(!hasError(diagnostics, "unknown parameter 'speed'"));
+        CHECK(!hasError(diagnostics, "cannot have children (has 1)"));
+        CHECK(hasError(diagnostics, "Blackboard key with an empty name"));
+
+        context.onlyNodes.reset(); // every node
         diagnostics = catalog::validateStrict(data, context);
         CHECK(hasError(diagnostics, "unknown parameter 'speed'"));
+        CHECK(hasError(diagnostics, "cannot have children (has 1)"));
     }
 
     TEST_CASE("validateStrict skips checks whose context callback is unset")

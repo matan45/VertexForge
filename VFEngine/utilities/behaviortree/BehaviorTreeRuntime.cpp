@@ -716,9 +716,12 @@ namespace behaviortree
         case BTNodeType::MoveTo:
         {
             if (!executor) return BTNodeStatus::Failure;
-            std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
-            float arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", 0.5f);
-            return executor->executeMoveTo(ownerEntity, targetKey, arrivalDistance, blackboard, state.isFirstTick);
+            MoveToRequest request;
+            request.targetKey = getNodeProperty<std::string>(node, "targetKey", request.targetKey);
+            request.arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", request.arrivalDistance);
+            request.repathDistance = getNodeProperty<float>(node, "repathDistance", request.repathDistance);
+            request.stopOnArrival = getNodeProperty<bool>(node, "stopOnArrival", request.stopOnArrival);
+            return executor->executeMoveTo(ownerEntity, request, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::PlayAnimation:

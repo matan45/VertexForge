@@ -2,6 +2,7 @@
 #include <behaviortree/BehaviorTreeTypes.hpp>
 #include <behaviortree/BehaviorTreeRuntime.hpp>
 #include <behaviortree/BehaviorTreeValidation.hpp>
+#include <behaviortree/BehaviorTreeNodeCatalog.hpp>
 #include <behaviortree/Blackboard.hpp>
 #include <algorithm>
 #include <memory>
@@ -9,7 +10,7 @@
 #include <vector>
 
 // ============================================================
-// VK-1660: FollowRoute node type + TargetDistance service plumbing
+// VK-1660: FollowRoute node type, MoveTo request and TargetDistance service plumbing
 // (the route stepping itself is covered by test_bt_route_follower.cpp)
 // ============================================================
 
@@ -20,7 +21,7 @@ namespace
     // Implements the pure executor hooks; FollowRoute is overridden only by RouteRecorder below.
     struct BaseTestExecutor : bt::IBTTaskExecutor
     {
-        bt::BTNodeStatus executeMoveTo(services::EntityHandle, const std::string&, float,
+        bt::BTNodeStatus executeMoveTo(services::EntityHandle, const bt::MoveToRequest&,
                                        bt::Blackboard&, bool) override
         {
             return bt::BTNodeStatus::Running;
@@ -69,6 +70,20 @@ namespace
         }
     };
 
+    struct MoveRecorder : BaseTestExecutor
+    {
+        int calls = 0;
+        bt::MoveToRequest lastRequest;
+
+        bt::BTNodeStatus executeMoveTo(services::EntityHandle, const bt::MoveToRequest& request,
+                                       bt::Blackboard&, bool) override
+        {
+            ++calls;
+            lastRequest = request;
+            return bt::BTNodeStatus::Running;
+        }
+    };
+
     bt::BTNode makeNode(uint32_t id, bt::BTNodeType type)
     {
         bt::BTNode node;
@@ -107,6 +122,31 @@ namespace
         routeKey.defaultValue = services::EntityHandle::invalid();
         data.graph.blackboardKeys.push_back(routeKey);
         return data;
+    }
+
+    // Root -> MoveTo(id 2) with the given properties.
+    bt::BehaviorTreeData makeMoveTree(std::unordered_map<std::string, bt::BlackboardValue> properties)
+    {
+        bt::BehaviorTreeData data;
+        data.name = "MoveTree";
+        data.graph.nodes.push_back(makeNode(1, bt::BTNodeType::Root));
+        auto move = makeNode(2, bt::BTNodeType::MoveTo);
+        move.properties = std::move(properties);
+        data.graph.nodes.push_back(move);
+        data.graph.rootNodeId = 1;
+        link(data.graph, 1, 2, 0);
+        data.graph.nextNodeId = 3;
+        return data;
+    }
+
+    template <typename T>
+    T catalogDefault(bt::BTNodeType type, const std::string& param)
+    {
+        const auto properties = bt::catalog::defaultProperties(type);
+        const auto it = properties.find(param);
+        REQUIRE(it != properties.end());
+        REQUIRE(std::holds_alternative<T>(it->second));
+        return std::get<T>(it->second);
     }
 
     bool hasWarningContaining(const bt::validation::ValidationReport& report, const std::string& text)
@@ -187,6 +227,57 @@ TEST_SUITE("BTFollowRouteTask")
         CHECK(executor.lastRequest.dwell == doctest::Approx(defaults.dwell));
         CHECK(executor.lastRequest.startAtNearest == defaults.startAtNearest);
         CHECK(executor.lastRequest.legTimeout == doctest::Approx(defaults.legTimeout));
+    }
+
+    TEST_CASE("tickTask hands every MoveTo property to the executor")
+    {
+        bt::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<bt::BehaviorTreeData>(makeMoveTree({
+            {"targetKey", std::string("enemy")},
+            {"arrivalDistance", 1.5f},
+            {"repathDistance", 0.0f},
+            {"stopOnArrival", false},
+        })), services::EntityHandle{});
+        MoveRecorder executor;
+        CHECK(runtime.tick(0.1f, &executor) == bt::BTNodeStatus::Running);
+
+        REQUIRE(executor.calls == 1);
+        CHECK(executor.lastRequest.targetKey == "enemy");
+        CHECK(executor.lastRequest.arrivalDistance == doctest::Approx(1.5f));
+        CHECK(executor.lastRequest.repathDistance == doctest::Approx(0.0f));
+        CHECK(executor.lastRequest.stopOnArrival == false);
+    }
+
+    TEST_CASE("missing MoveTo properties take the request defaults")
+    {
+        bt::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<bt::BehaviorTreeData>(makeMoveTree({})), services::EntityHandle{});
+        MoveRecorder executor;
+        runtime.tick(0.1f, &executor);
+
+        const bt::MoveToRequest defaults;
+        REQUIRE(executor.calls == 1);
+        CHECK(executor.lastRequest.targetKey == defaults.targetKey);
+        CHECK(executor.lastRequest.arrivalDistance == doctest::Approx(defaults.arrivalDistance));
+        CHECK(executor.lastRequest.repathDistance == doctest::Approx(defaults.repathDistance));
+        CHECK(executor.lastRequest.stopOnArrival == defaults.stopOnArrival);
+    }
+
+    TEST_CASE("the catalogue seeds MoveTo and FollowRoute with the request defaults")
+    {
+        const bt::MoveToRequest move;
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::MoveTo, "targetKey") == move.targetKey);
+        CHECK(catalogDefault<float>(bt::BTNodeType::MoveTo, "arrivalDistance") == doctest::Approx(move.arrivalDistance));
+        CHECK(catalogDefault<float>(bt::BTNodeType::MoveTo, "repathDistance") == doctest::Approx(move.repathDistance));
+        CHECK(catalogDefault<bool>(bt::BTNodeType::MoveTo, "stopOnArrival") == move.stopOnArrival);
+
+        const bt::FollowRouteRequest route;
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::FollowRoute, "routeKey") == route.routeKey);
+        CHECK(bt::stringToRouteMode(catalogDefault<std::string>(bt::BTNodeType::FollowRoute, "mode")) == route.mode);
+        CHECK(catalogDefault<float>(bt::BTNodeType::FollowRoute, "arrivalDistance") == doctest::Approx(route.arrivalDistance));
+        CHECK(catalogDefault<float>(bt::BTNodeType::FollowRoute, "dwell") == doctest::Approx(route.dwell));
+        CHECK(catalogDefault<bool>(bt::BTNodeType::FollowRoute, "startAtNearest") == route.startAtNearest);
+        CHECK(catalogDefault<float>(bt::BTNodeType::FollowRoute, "legTimeout") == doctest::Approx(route.legTimeout));
     }
 
     TEST_CASE("an executor without route support fails the task")

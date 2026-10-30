@@ -27,6 +27,7 @@ namespace editor::graph
         BTGraphChangedCallback onGraphChanged;
         uint32_t selectedNodeId = 0;
         bool needsPositionInit = false;
+        bool keepViewOnPositionInit = false; // VK-1660: a reload re-applies positions without re-framing
         ImVec2 newNodePosition;
 
         // Live per-node statuses while debugging a running tree (owned by the window, null when idle)
@@ -49,6 +50,9 @@ namespace editor::graph
         void cleanUp();
 
         void setGraph(behaviortree::BTGraph* graph);
+        // VK-1660: swaps in a reloaded copy of the same tree (e.g. saved by an MCP tool). Node positions
+        // are re-applied, but the view is kept, and so is the selection while its node still exists.
+        void reloadGraph(behaviortree::BTGraph* graph);
         void draw();
 
         void setOnGraphChanged(BTGraphChangedCallback callback);

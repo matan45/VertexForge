@@ -43,6 +43,15 @@ namespace behaviortree
         bool result = false;
     };
 
+    // MoveTo parameters (VK-1660), read from the node's properties by tickTask.
+    struct MoveToRequest
+    {
+        std::string targetKey = "target"; // Vec3, Entity, or Int (entity id, -1 = none) key
+        float arrivalDistance = 0.5f;     // succeeds within this distance of the target (m)
+        float repathDistance = 1.0f;      // re-issue the destination once the target moved this far (0 = never)
+        bool stopOnArrival = true;        // stop the agent when the task succeeds
+    };
+
     // FollowRoute parameters (VK-1660), read from the node's properties by tickTask.
     struct FollowRouteRequest
     {
@@ -60,8 +69,7 @@ namespace behaviortree
         virtual ~IBTTaskExecutor() = default;
 
         virtual BTNodeStatus executeMoveTo(services::EntityHandle entity,
-                                           const std::string& targetKey,
-                                           float arrivalDistance,
+                                           const MoveToRequest& request,
                                            Blackboard& blackboard,
                                            bool isFirstTick) = 0;
 

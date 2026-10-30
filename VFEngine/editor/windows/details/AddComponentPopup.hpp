@@ -66,6 +66,7 @@ namespace windows::details {
         bool hasUITooltip = false;
         bool hasUIWindow = false;
         bool hasUIListView = false;
+        bool hasNavRoute = false;           // VK-1660
     };
 
     class AddComponentPopup {

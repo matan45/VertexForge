@@ -491,6 +491,16 @@ namespace behaviortree
         return resolveExistingBehaviorTreePath(path).has_value();
     }
 
+    std::string BehaviorTreeAsset::canonicalPath(std::string_view path)
+    {
+        if (path.empty())
+            return {};
+        std::string resolved = asset::AssetDatabase::instance().resolveAssetPath(std::string(path));
+        if (resolved.empty())
+            resolved = std::string(path);
+        return std::filesystem::path(resolved).lexically_normal().generic_string();
+    }
+
     std::string BehaviorTreeAsset::serialize(const BehaviorTreeData& data)
     {
         return buildBehaviorTreeJson(data).dump(4);

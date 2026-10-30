@@ -252,7 +252,7 @@ namespace {
 struct AbortRecorder : behaviortree::IBTTaskExecutor {
     std::vector<std::pair<uint32_t, behaviortree::BTNodeType>> aborts;
 
-    behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle, const std::string&, float,
+    behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle, const behaviortree::MoveToRequest&,
                                              behaviortree::Blackboard&, bool) override {
         return behaviortree::BTNodeStatus::Running;
     }

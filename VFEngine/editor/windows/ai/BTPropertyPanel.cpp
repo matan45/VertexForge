@@ -1,7 +1,11 @@
 #include "BTPropertyPanel.hpp"
 #include "BTValueWidgets.hpp"
+#include "../../../utilities/behaviortree/BehaviorTreeNodeCatalog.hpp"
 #include <imgui.h>
+#include <algorithm>
 #include <array>
+#include <string_view>
+#include <unordered_map>
 
 using namespace behaviortree;
 
@@ -12,6 +16,119 @@ namespace editor::windows
         BlackboardValueType resolveSelectedKeyType(const BTGraph* graph, const std::string& key)
         {
             return bt::resolveKeyType(graph, key);
+        }
+
+        // ---- Catalogue-driven parameter widgets (VK-1660) ----
+        // Seeds, ranges, enum values and allowed key types come from behaviortree::catalog, the same
+        // description the MCP tools validate against.
+
+        // The catalogue's spec of one of a node type's parameters; for a Service, of the given
+        // variant. nullptr when there is none.
+        const catalog::ParamSpec* findParamSpec(BTNodeType type, std::string_view name,
+                                                std::string_view serviceType = {})
+        {
+            const catalog::NodeSpec* spec = catalog::find(type);
+            if (!spec) return nullptr;
+            for (const auto& param : spec->params)
+            {
+                if (param.name == name && (param.serviceVariant.empty() || param.serviceVariant == serviceType))
+                    return &param;
+            }
+            return nullptr;
+        }
+
+        // A key parameter as a blackboard-key picker limited to the key types the catalogue allows.
+        bool drawKeyParam(BTNode& node, const BTGraph* graph, const catalog::ParamSpec* spec, const char* label)
+        {
+            if (!spec) return false;
+            const std::string seed = std::holds_alternative<std::string>(spec->defaultValue)
+                                         ? std::get<std::string>(spec->defaultValue)
+                                         : std::string();
+            const auto& allowed = spec->keyTypes;
+            return bt::drawKeyDropdown(node, graph, label, spec->name.c_str(), seed,
+                                       [&allowed](BlackboardValueType type)
+                                       {
+                                           return std::find(allowed.begin(), allowed.end(), type) != allowed.end();
+                                       });
+        }
+
+        // A Float parameter as a drag field over the catalogue's range, starting at its seed.
+        bool drawFloatParam(BTNode& node, const catalog::ParamSpec* spec, const char* label, float speed)
+        {
+            if (!spec) return false;
+            float value = std::holds_alternative<float>(spec->defaultValue) ? std::get<float>(spec->defaultValue) : 0.0f;
+            auto it = node.properties.find(spec->name);
+            if (it != node.properties.end() && std::holds_alternative<float>(it->second))
+                value = std::get<float>(it->second);
+
+            if (ImGui::DragFloat(label, &value, speed, spec->minValue, spec->maxValue))
+            {
+                node.properties[spec->name] = value;
+                return true;
+            }
+            return false;
+        }
+
+        bool drawBoolParam(BTNode& node, const catalog::ParamSpec* spec, const char* label)
+        {
+            if (!spec) return false;
+            bool value = std::holds_alternative<bool>(spec->defaultValue) && std::get<bool>(spec->defaultValue);
+            auto it = node.properties.find(spec->name);
+            if (it != node.properties.end() && std::holds_alternative<bool>(it->second))
+                value = std::get<bool>(it->second);
+
+            if (ImGui::Checkbox(label, &value))
+            {
+                node.properties[spec->name] = value;
+                return true;
+            }
+            return false;
+        }
+
+        // An Enum parameter as a combo of the catalogue's canonical values.
+        bool drawEnumParam(BTNode& node, const catalog::ParamSpec* spec, const char* label)
+        {
+            if (!spec) return false;
+            std::string current = std::holds_alternative<std::string>(spec->defaultValue)
+                                      ? std::get<std::string>(spec->defaultValue)
+                                      : std::string();
+            auto it = node.properties.find(spec->name);
+            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+                current = std::get<std::string>(it->second);
+
+            bool changed = false;
+            if (ImGui::BeginCombo(label, current.c_str()))
+            {
+                for (const auto& option : spec->enumValues)
+                {
+                    if (ImGui::Selectable(option.c_str(), option == current) && option != current)
+                    {
+                        node.properties[spec->name] = option;
+                        changed = true;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            return changed;
+        }
+
+        // Switching a Service's type keeps its common parameters (interval, deviation, run on
+        // activation) and starts every parameter of the new variant at its catalogue seed. The old
+        // variant's parameters are dropped: the runtime and the strict checks only know the new one's.
+        void applyServiceType(BTNode& node, const std::string& serviceType)
+        {
+            std::unordered_map<std::string, BlackboardValue> properties =
+                catalog::defaultProperties(BTNodeType::Service, serviceType);
+            if (const catalog::NodeSpec* spec = catalog::find(BTNodeType::Service))
+            {
+                for (const auto& param : spec->params)
+                {
+                    if (!param.serviceVariant.empty() || param.name == "serviceType") continue;
+                    auto it = node.properties.find(param.name);
+                    if (it != node.properties.end()) properties[param.name] = it->second;
+                }
+            }
+            node.properties = std::move(properties);
         }
 
         bool drawTypedNodeValue(BTNode& node,
@@ -70,6 +187,7 @@ namespace editor::windows
         case BTNodeType::Wait: drawWaitProperties(*node); break;
         case BTNodeType::Log: drawLogProperties(*node); break;
         case BTNodeType::MoveTo: drawMoveToProperties(*node, graph); break;
+        case BTNodeType::FollowRoute: drawFollowRouteProperties(*node, graph); break;
         case BTNodeType::PlayAnimation: drawPlayAnimationProperties(*node); break;
         case BTNodeType::Parallel: drawParallelProperties(*node); break;
         case BTNodeType::Repeater: drawRepeaterProperties(*node); break;
@@ -140,21 +258,48 @@ namespace editor::windows
 
     void BTPropertyPanel::drawMoveToProperties(BTNode& node, const BTGraph* graph)
     {
-        // Target key dropdown from blackboard keys (Vec3), free-text fallback when none exist.
-        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
-        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isVec3))
+        // Target key dropdown (Vec3, Entity or Int entity-id keys), free-text fallback when none exist.
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::MoveTo, "targetKey"), "Target Key"))
             notifyChanged();
 
-        float arrivalDist = 0.5f;
-        auto distIt = node.properties.find("arrivalDistance");
-        if (distIt != node.properties.end() && std::holds_alternative<float>(distIt->second))
-            arrivalDist = std::get<float>(distIt->second);
-
-        if (ImGui::DragFloat("Arrival Distance", &arrivalDist, 0.1f, 0.0f, 100.0f))
-        {
-            node.properties["arrivalDistance"] = arrivalDist;
+        if (drawFloatParam(node, findParamSpec(BTNodeType::MoveTo, "arrivalDistance"), "Arrival Distance", 0.1f))
             notifyChanged();
-        }
+
+        if (drawFloatParam(node, findParamSpec(BTNodeType::MoveTo, "repathDistance"), "Repath Distance", 0.1f))
+            notifyChanged();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Re-issue the destination once a followed target has moved farther than this (0 = never)");
+
+        if (drawBoolParam(node, findParamSpec(BTNodeType::MoveTo, "stopOnArrival"), "Stop On Arrival"))
+            notifyChanged();
+        ImGui::TextDisabled("An Entity (or Int entity-id) target is followed as it moves");
+    }
+
+    void BTPropertyPanel::drawFollowRouteProperties(BTNode& node, const BTGraph* graph)
+    {
+        // Route key: an Entity (or Int entity-id) key holding the route entity, whose ordered children
+        // are the markers.
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::FollowRoute, "routeKey"), "Route Key"))
+            notifyChanged();
+
+        if (drawEnumParam(node, findParamSpec(BTNodeType::FollowRoute, "mode"), "Mode"))
+            notifyChanged();
+
+        if (drawFloatParam(node, findParamSpec(BTNodeType::FollowRoute, "arrivalDistance"), "Arrival Distance", 0.1f))
+            notifyChanged();
+
+        if (drawFloatParam(node, findParamSpec(BTNodeType::FollowRoute, "dwell"), "Dwell (s)", 0.1f))
+            notifyChanged();
+
+        if (drawBoolParam(node, findParamSpec(BTNodeType::FollowRoute, "startAtNearest"), "Start At Nearest"))
+            notifyChanged();
+
+        if (drawFloatParam(node, findParamSpec(BTNodeType::FollowRoute, "legTimeout"), "Leg Timeout (s)", 0.5f))
+            notifyChanged();
+        ImGui::TextDisabled("0 = no timeout");
+
+        ImGui::TextDisabled("Walks the route entity's child markers in order");
+        ImGui::TextDisabled("Loop / PingPong run until aborted; Once succeeds at the end");
     }
 
     void BTPropertyPanel::drawPlayAnimationProperties(BTNode& node)
@@ -603,10 +748,8 @@ namespace editor::windows
 
     void BTPropertyPanel::drawLineOfSightProperties(BTNode& node, const BTGraph* graph)
     {
-        // Target key (Entity or Vec3 from blackboard), free-text fallback when none exist.
-        const auto isEntityOrVec3 = [](BlackboardValueType t)
-        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
-        if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+        // Target key (Entity, Vec3 or Int entity-id from blackboard), free-text fallback when none exist.
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::LineOfSight, "targetKey"), "Target Key"))
             notifyChanged();
 
         // Max distance
@@ -674,28 +817,28 @@ namespace editor::windows
 
         ImGui::Separator();
 
-        // Service type
+        // Service type (the catalogue's variants). Switching re-seeds the variant's parameters.
         std::string typeStr = "EQSRefresh";
         auto typeIt = node.properties.find("serviceType");
         if (typeIt != node.properties.end() && std::holds_alternative<std::string>(typeIt->second))
             typeStr = std::get<std::string>(typeIt->second);
 
-        static const std::array<const char*, 3> serviceTypes = {"EQSRefresh", "LineOfSightRefresh", "FocusUpdate"};
-        int currentType = 0;
-        for (int i = 0; i < static_cast<int>(serviceTypes.size()); ++i)
+        if (ImGui::BeginCombo("Service Type", typeStr.c_str()))
         {
-            if (typeStr == serviceTypes[i]) { currentType = i; break; }
-        }
-        if (ImGui::Combo("Service Type", &currentType, serviceTypes.data(), static_cast<int>(serviceTypes.size())))
-        {
-            node.properties["serviceType"] = std::string(serviceTypes[currentType]);
-            notifyChanged();
+            for (const auto& serviceType : catalog::serviceTypes())
+            {
+                if (ImGui::Selectable(serviceType.c_str(), serviceType == typeStr) && serviceType != typeStr)
+                {
+                    applyServiceType(node, serviceType);
+                    typeStr = serviceType;
+                    notifyChanged();
+                }
+            }
+            ImGui::EndCombo();
         }
 
         const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
         const auto isBool = [](BlackboardValueType t) { return t == BlackboardValueType::Bool; };
-        const auto isEntityOrVec3 = [](BlackboardValueType t)
-        { return t == BlackboardValueType::Entity || t == BlackboardValueType::Vec3; };
 
         if (typeStr == "EQSRefresh")
         {
@@ -717,7 +860,7 @@ namespace editor::windows
         }
         else if (typeStr == "LineOfSightRefresh")
         {
-            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "targetKey", typeStr), "Target Key"))
                 notifyChanged();
             if (bt::drawKeyDropdown(node, graph, "Visibility Key", "visibilityKey", "targetVisible", isBool))
                 notifyChanged();
@@ -745,11 +888,24 @@ namespace editor::windows
         }
         else if (typeStr == "FocusUpdate")
         {
-            if (bt::drawKeyDropdown(node, graph, "Target Key", "targetKey", "target", isEntityOrVec3))
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "targetKey", typeStr), "Target Key"))
                 notifyChanged();
             if (bt::drawKeyDropdown(node, graph, "Focus Key", "focusKey", "focusPoint", isVec3))
                 notifyChanged();
             ImGui::TextDisabled("Writes the target's world position to the focus key on interval");
+        }
+        else if (typeStr == "TargetDistance")
+        {
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "targetKey", typeStr), "Target Key"))
+                notifyChanged();
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "distanceKey", typeStr), "Distance Key"))
+                notifyChanged();
+            if (drawBoolParam(node, findParamSpec(BTNodeType::Service, "horizontal", typeStr), "Horizontal"))
+                notifyChanged();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Measure on the XZ plane, ignoring height; off = 3D (flying agents)");
+            ImGui::TextDisabled("Writes the owner-to-target distance to the distance key on interval");
+            ImGui::TextDisabled("(1e9 while there is no target)");
         }
 
         ImGui::Separator();

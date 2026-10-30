@@ -2,12 +2,14 @@
 #include "../../data/EntityConversion.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/scene/EntityTransformEvents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "components/Components.hpp"
 #include "navigation/CorridorFollow.hpp"
 #include "navigation/RootMotionSpeed.hpp"
 #include "print/Log.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <iterator>
 #include <unordered_set>
@@ -15,6 +17,34 @@
 
 namespace services
 {
+    namespace
+    {
+        navigation::CrowdAgentConfig crowdConfigOf(const components::NavmeshAgentComponent& agent)
+        {
+            navigation::CrowdAgentConfig config;
+            config.radius = agent.radius;
+            config.height = agent.height;
+            config.maxSpeed = agent.maxSpeed;
+            config.maxAcceleration = agent.maxAcceleration;
+            config.avoidanceQuality = std::min<uint8_t>(agent.avoidanceQuality, 3);
+            return config;
+        }
+
+        bool isUsableAgentData(const NavmeshAgentData& data)
+        {
+            const float values[] = {data.radius, data.height, data.baseOffset, data.maxSpeed, data.maxAcceleration,
+                                    data.turnSpeed, data.stoppingDistance, data.rootMotionSpeedScale};
+            for (float value : values)
+            {
+                if (!std::isfinite(value))
+                    return false;
+            }
+            return data.radius > 0.0f && data.height > 0.0f && data.maxSpeed >= 0.0f &&
+                   data.maxAcceleration >= 0.0f && data.turnSpeed >= 0.0f && data.stoppingDistance >= 0.0f &&
+                   data.rootMotionSpeedScale >= 0.0f && data.avoidanceQuality >= 0 && data.avoidanceQuality <= 3;
+        }
+    }
+
     NavmeshAgentManager::NavmeshAgentManager(INavmeshProvider* provider, TileCoordFunc worldToTileCoordFunc,
                                              TileVersionFunc tileVersionFunc)
         : navmeshProvider(provider),
@@ -64,9 +94,24 @@ namespace services
         return it->second;
     }
 
+    int NavmeshAgentManager::addCrowdAgentFor(const glm::vec3& position, const components::NavmeshAgentComponent& agent)
+    {
+        int agentIdx = navmeshProvider->addCrowdAgent(position, agent.radius, agent.height, agent.maxSpeed,
+                                                      agent.maxAcceleration);
+        if (agentIdx >= 0)
+            navmeshProvider->updateCrowdAgentConfig(agentIdx, crowdConfigOf(agent)); // avoidance preset
+        return agentIdx;
+    }
+
     void NavmeshAgentManager::addAgent(EntityHandle entity)
     {
         if (entityToAgentIndex.count(entity.id))
+        {
+            return;
+        }
+
+        // A scene bake is re-creating the crowd: an index taken now would point into the old one.
+        if (rebuildingCrowd)
         {
             return;
         }
@@ -78,27 +123,25 @@ namespace services
             return;
         }
 
-        float radius = 0.3f;
-        float height = 2.0f;
-        float maxSpeed = 3.5f;
-        float maxAcceleration = 8.0f;
-
-        if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-        {
-            const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
-            radius = agent.radius;
-            height = agent.height;
-            maxSpeed = agent.maxSpeed;
-            maxAcceleration = agent.maxAcceleration;
-        }
-
         glm::vec3 position{0.0f};
         if (registry.all_of<components::TransformComponent>(enttEntity))
         {
             position = registry.get<components::TransformComponent>(enttEntity).position;
         }
 
-        int agentIdx = navmeshProvider->addCrowdAgent(position, radius, height, maxSpeed, maxAcceleration);
+        int agentIdx = -1;
+        if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+        {
+            const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
+            // The crowd walks the navmesh surface; the entity's pivot sits baseOffset above it.
+            position.y -= agent.baseOffset;
+            agentIdx = addCrowdAgentFor(position, agent);
+        }
+        else
+        {
+            agentIdx = navmeshProvider->addCrowdAgent(position, 0.3f, 2.0f, 3.5f, 8.0f);
+        }
+
         if (agentIdx >= 0)
         {
             entityToAgentIndex[entity.id] = agentIdx;
@@ -109,12 +152,32 @@ namespace services
                 agent.isActive = true;
                 agent.crowdAgentIndex = agentIdx;
             }
+
+            // A moving agent must render as dynamic: a static mesh keeps its baked culling bounds and its
+            // cached static shadow while it walks away (same as DebrisManager fragments).
+            if (registry.all_of<components::TransformComponent>(enttEntity) &&
+                registry.get<components::TransformComponent>(enttEntity).isStatic)
+            {
+                ::events::scene::SetEntityStaticCommand staticCmd;
+                staticCmd.entity = entity;
+                staticCmd.isStatic = false;
+                try
+                {
+                    ::events::EventDispatcher::instance().execute(staticCmd);
+                }
+                catch (const std::exception& e)
+                {
+                    vfLogDebug("NavmeshAgentManager: could not mark agent {} dynamic: {}", entity.id, e.what());
+                }
+            }
         }
     }
 
     void NavmeshAgentManager::removeAgent(EntityHandle entity)
     {
         removeEntityFromGroup(entity.id);
+        deferredDestinations.erase(entity.id);
+        pendingStops.erase(entity.id);
 
         auto it = entityToAgentIndex.find(entity.id);
         if (it != entityToAgentIndex.end())
@@ -139,6 +202,15 @@ namespace services
 
     void NavmeshAgentManager::setAgentDestination(EntityHandle entity, const glm::vec3& target)
     {
+        // A scene bake is re-creating the crowd: issue this move when it is back (endCrowdRebuild).
+        if (rebuildingCrowd)
+        {
+            deferredDestinations[entity.id] = target;
+            return;
+        }
+
+        pendingStops.erase(entity.id);
+
         // Snap the requested destination onto the navmesh. A raw off-mesh point would
         // otherwise leave the crowd agent with no valid target (setCrowdAgentTarget's
         // findNearestPoly finds nothing) and trip false stuck-detection in updatePositions.
@@ -201,6 +273,12 @@ namespace services
         if (entities.empty())
             return 0;
 
+        if (rebuildingCrowd)
+        {
+            vfLogWarning("NavmeshAgentManager: group move dropped - the navmesh is being rebaked");
+            return 0;
+        }
+
         navigation::FormationParams params = formation;
         params.spacing = std::max(0.1f, params.spacing);
 
@@ -235,7 +313,9 @@ namespace services
             if (agentIdx < 0)
                 continue;
 
-            const glm::vec3 position = registry.get<components::TransformComponent>(enttEntity).position;
+            // Navmesh-surface position: the pivot sits baseOffset above the surface the crowd walks.
+            glm::vec3 position = registry.get<components::TransformComponent>(enttEntity).position;
+            position.y -= registry.get<components::NavmeshAgentComponent>(enttEntity).baseOffset;
             validEntities.push_back(entity);
             positions.push_back(position);
             centroid += position;
@@ -291,6 +371,7 @@ namespace services
             entityToGroup[entity.id] = groupId;
             entityToTarget[entity.id] = slotWorld;
             entityStuckTimer.erase(entity.id);
+            pendingStops.erase(entity.id);
             velocityTransitionFrames.erase(entity.id);
 
             GroupMember member;
@@ -308,6 +389,8 @@ namespace services
     void NavmeshAgentManager::stopAgent(EntityHandle entity)
     {
         removeEntityFromGroup(entity.id);
+        deferredDestinations.erase(entity.id);
+        pendingStops.erase(entity.id);
 
         auto it = entityToAgentIndex.find(entity.id);
         if (it != entityToAgentIndex.end())
@@ -367,6 +450,60 @@ namespace services
         auto it = entityToAgentIndex.find(entity.id);
         if (it == entityToAgentIndex.end()) return 0.0f;
         return navmeshProvider->getCrowdAgentMaxSpeed(it->second);
+    }
+
+    std::optional<NavmeshAgentData> NavmeshAgentManager::getAgentData(EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto enttEntity = internal::fromHandle(entity);
+        if (!registry.valid(enttEntity) || !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+            return std::nullopt;
+
+        const auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
+        NavmeshAgentData data;
+        data.radius = agent.radius;
+        data.height = agent.height;
+        data.baseOffset = agent.baseOffset;
+        data.maxSpeed = agent.maxSpeed;
+        data.maxAcceleration = agent.maxAcceleration;
+        data.turnSpeed = agent.turnSpeed;
+        data.stoppingDistance = agent.stoppingDistance;
+        data.avoidanceQuality = agent.avoidanceQuality;
+        data.rootMotionDriven = agent.rootMotionDriven;
+        data.rootMotionSpeedScale = agent.rootMotionSpeedScale;
+        data.inCrowd = entityToAgentIndex.count(entity.id) > 0;
+        return data;
+    }
+
+    bool NavmeshAgentManager::setAgentData(EntityHandle entity, const NavmeshAgentData& data)
+    {
+        if (!isUsableAgentData(data))
+            return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto enttEntity = internal::fromHandle(entity);
+        if (!registry.valid(enttEntity) || !registry.all_of<components::NavmeshAgentComponent>(enttEntity))
+            return false;
+
+        auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
+        agent.radius = data.radius;
+        agent.height = data.height;
+        agent.baseOffset = data.baseOffset;
+        agent.maxSpeed = data.maxSpeed;
+        agent.maxAcceleration = data.maxAcceleration;
+        agent.turnSpeed = data.turnSpeed;
+        agent.stoppingDistance = data.stoppingDistance;
+        agent.avoidanceQuality = static_cast<uint8_t>(data.avoidanceQuality);
+        agent.rootMotionDriven = data.rootMotionDriven;
+        agent.rootMotionSpeedScale = data.rootMotionSpeedScale;
+
+        // turnSpeed, stoppingDistance, baseOffset and the root-motion fields are read every frame; the
+        // crowd's own copy of the shape, speed and avoidance is pushed here (a root-motion-driven agent's
+        // speed is re-derived from its clip on the next update).
+        auto it = entityToAgentIndex.find(entity.id);
+        if (it != entityToAgentIndex.end())
+            navmeshProvider->updateCrowdAgentConfig(it->second, crowdConfigOf(agent));
+        return true;
     }
 
     NavmeshAgentManager::GroupMoveStatus NavmeshAgentManager::getGroupStatus(uint64_t groupId) const
@@ -703,9 +840,27 @@ namespace services
                 continue;
             }
 
+            // The agent's tuning, copied before anything below publishes (a subscriber may edit the entity).
+            float baseOffset = 0.0f;
+            float turnSpeed = 0.0f;
+            float arrivalDist = ARRIVAL_DISTANCE;
+            float stoppingDist = 0.0f;
+            float stuckVelThresh = STUCK_VELOCITY_THRESHOLD;
+            float stuckTimeThresh = STUCK_TIME_THRESHOLD;
+            if (const auto* agentComp = registry.try_get<components::NavmeshAgentComponent>(enttEntity))
+            {
+                baseOffset = agentComp->baseOffset;
+                turnSpeed = agentComp->turnSpeed;
+                arrivalDist = agentComp->arrivalDistance;
+                stoppingDist = agentComp->stoppingDistance;
+                stuckVelThresh = agentComp->stuckVelocityThreshold;
+                stuckTimeThresh = agentComp->stuckTimeThreshold;
+            }
+
             glm::vec3 agentPos = navmeshProvider->getCrowdAgentPosition(agentIdx);
             auto& transform = registry.get<components::TransformComponent>(enttEntity);
-            transform.position = agentPos;
+            // The crowd moves a navmesh surface point; the entity's pivot sits baseOffset above it.
+            transform.position = agentPos + glm::vec3(0.0f, baseOffset, 0.0f);
 
             // Face the travel direction (yaw about Y) when actually moving, so the
             // mesh turns toward its path instead of sliding sideways. rotation is
@@ -714,9 +869,6 @@ namespace services
             if (agentVel.x * agentVel.x + agentVel.z * agentVel.z > 1e-4f)
             {
                 const float targetYaw = glm::degrees(glm::atan(agentVel.x, agentVel.z));
-                float turnSpeed = 0.0f;
-                if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-                    turnSpeed = registry.get<components::NavmeshAgentComponent>(enttEntity).turnSpeed;
 
                 if (turnSpeed <= 0.0f)
                 {
@@ -737,26 +889,26 @@ namespace services
 
             transform.isDirty = true;
 
-            // Check arrival and blocked state
+            // Check arrival, stopping distance and blocked state
             auto targetIt = entityToTarget.find(entityId);
             if (targetIt != entityToTarget.end())
             {
-                // Read per-agent thresholds from component, fall back to defaults
-                float arrivalDist = ARRIVAL_DISTANCE;
-                float stuckVelThresh = STUCK_VELOCITY_THRESHOLD;
-                float stuckTimeThresh = STUCK_TIME_THRESHOLD;
-                if (registry.all_of<components::NavmeshAgentComponent>(enttEntity))
-                {
-                    const auto& agentComp = registry.get<components::NavmeshAgentComponent>(enttEntity);
-                    arrivalDist = agentComp.arrivalDistance;
-                    stuckVelThresh = agentComp.stuckVelocityThreshold;
-                    stuckTimeThresh = agentComp.stuckTimeThreshold;
-                }
+                // Group members arrive at their formation slot; only a lone agent stops short (VK-1660).
+                const bool inGroup = entityToGroup.find(entityId) != entityToGroup.end();
+                const float stopDist = inGroup ? 0.0f : stoppingDist;
 
                 float distToTarget = glm::distance(agentPos, targetIt->second);
 
-                if (distToTarget <= arrivalDist)
+                if (distToTarget <= std::max(arrivalDist, stopDist))
                 {
+                    if (stopDist > 0.0f)
+                    {
+                        if (distToTarget <= stopDist)
+                            navmeshProvider->stopCrowdAgent(agentIdx);
+                        else
+                            pendingStops[entityId] = targetIt->second; // stop once within stopDist
+                    }
+
                     markGroupMemberArrived(entityId);
                     entityToTarget.erase(targetIt);
                     entityStuckTimer.erase(entityId);
@@ -775,7 +927,6 @@ namespace services
                         entityStuckTimer[entityId] += deltaTime;
                         if (entityStuckTimer[entityId] >= stuckTimeThresh)
                         {
-                            const bool inGroup = entityToGroup.find(entityId) != entityToGroup.end();
                             if (inGroup)
                                 markGroupNeedsRepath(entityId);
                             else
@@ -791,6 +942,16 @@ namespace services
                     {
                         entityStuckTimer.erase(entityId);
                     }
+                }
+            }
+            else
+            {
+                // Already arrived (arrivalDistance) and still closing in: stop at stoppingDistance.
+                auto stopIt = pendingStops.find(entityId);
+                if (stopIt != pendingStops.end() && glm::distance(agentPos, stopIt->second) <= stoppingDist)
+                {
+                    navmeshProvider->stopCrowdAgent(agentIdx);
+                    pendingStops.erase(stopIt);
                 }
             }
         }
@@ -853,6 +1014,7 @@ namespace services
             entityToAgentIndex.erase(id);
             entityToTarget.erase(id);
             entityStuckTimer.erase(id);
+            pendingStops.erase(id);
             velocityTransitionFrames.erase(id);
         }
 
@@ -890,8 +1052,8 @@ namespace services
                 {
                     auto& agent = registry.get<components::NavmeshAgentComponent>(enttEntity);
 
-                    int agentIdx = navmeshProvider->addCrowdAgent(
-                        it->position, agent.radius, agent.height, agent.maxSpeed, agent.maxAcceleration);
+                    // it->position is the crowd's own surface point (no baseOffset to remove)
+                    int agentIdx = addCrowdAgentFor(it->position, agent);
 
                     if (agentIdx >= 0)
                     {
@@ -926,11 +1088,50 @@ namespace services
         }
     }
 
-    void NavmeshAgentManager::clear()
+    void NavmeshAgentManager::beginCrowdRebuild()
     {
+        // Moves in progress (entityToTarget: arrival, stop and stuck detection erase them) resume on the
+        // new crowd - endCrowdRebuild issues them again with the destinations set meanwhile.
+        std::unordered_map<uint64_t, glm::vec3> moving = std::move(entityToTarget);
+        releaseAllAgents();
+        rebuildingCrowd = true;
+        deferredDestinations = std::move(moving);
+    }
+
+    void NavmeshAgentManager::endCrowdRebuild()
+    {
+        if (!rebuildingCrowd)
+            return;
+
+        rebuildingCrowd = false;
+        auto deferred = std::move(deferredDestinations);
+        deferredDestinations.clear();
+        for (const auto& [entityId, target] : deferred)
+            setAgentDestination(EntityHandle{entityId}, target);
+    }
+
+    void NavmeshAgentManager::releaseAllAgents()
+    {
+        for (const auto& [entityId, agentIdx] : entityToAgentIndex)
+            navmeshProvider->removeCrowdAgent(agentIdx);
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavmeshAgentComponent>();
+        for (auto entity : view)
+        {
+            auto& agent = view.get<components::NavmeshAgentComponent>(entity);
+            agent.isActive = false;
+            agent.isSuspended = false;
+            agent.crowdAgentIndex = -1;
+            agent.hasSuspendedTarget = false;
+        }
+
         entityToAgentIndex.clear();
         entityToTarget.clear();
         entityStuckTimer.clear();
+        pendingStops.clear();
+        rebuildingCrowd = false;
+        deferredDestinations.clear();
         suspendedAgents.clear();
         velocityTransitionFrames.clear();
         groups.clear();

@@ -2,12 +2,19 @@
 
 #include "../../providers/navmesh/INavmeshProvider.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../data/DTOs.hpp"
 #include "navigation/FormationSlots.hpp"
 #include "navigation/NavmeshData.hpp"
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <optional>
 #include <vector>
 #include <functional>
+
+namespace components
+{
+    struct NavmeshAgentComponent;
+}
 
 namespace services
 {
@@ -41,10 +48,24 @@ namespace services
         std::vector<glm::vec3> getGroupCorridor(uint64_t groupId) const;
         void updatePositions(float deltaTime);
 
+        // VK-1660: the NavmeshAgentComponent's editable fields; nullopt without the component.
+        std::optional<NavmeshAgentData> getAgentData(EntityHandle entity) const;
+        // Writes every field but inCrowd (false for a missing component or an unusable value, see
+        // SetNavmeshAgentDataCommand); a crowd agent takes the new shape, speed and avoidance at once.
+        bool setAgentData(EntityHandle entity, const NavmeshAgentData& data);
+
+        // VK-1660: a scene bake re-creates the detour crowd on a worker thread, so between begin and end
+        // no agent joins the crowd. begin releases every agent (releaseAllAgents) but keeps the moves in
+        // progress; endCrowdRebuild issues them, and the destinations set meanwhile, on the new crowd.
+        void beginCrowdRebuild();
+        void endCrowdRebuild();
+
         void suspendAgentsOnUnloadedTiles(const std::vector<navigation::NavmeshTileCoord>& unloadedTiles);
         void resumeAgentsOnLoadedTiles(const std::vector<navigation::NavmeshTileCoord>& loadedTiles);
 
-        void clear();
+        // Removes every agent from the crowd, resets each NavmeshAgentComponent's runtime crowd state and
+        // forgets all moves, groups and a crowd rebuild in progress.
+        void releaseAllAgents();
 
     private:
         INavmeshProvider* navmeshProvider;
@@ -54,6 +75,11 @@ namespace services
         std::unordered_map<uint64_t, int> entityToAgentIndex;
         std::unordered_map<uint64_t, glm::vec3> entityToTarget;
         std::unordered_map<uint64_t, float> entityStuckTimer;
+        // Arrived (within arrivalDistance) but not yet within stoppingDistance: the crowd agent is stopped
+        // once it gets there.
+        std::unordered_map<uint64_t, glm::vec3> pendingStops;
+        bool rebuildingCrowd = false;
+        std::unordered_map<uint64_t, glm::vec3> deferredDestinations;
         static constexpr float ARRIVAL_DISTANCE = 1.0f;
         static constexpr float STUCK_VELOCITY_THRESHOLD = 0.1f;
         static constexpr float STUCK_TIME_THRESHOLD = 0.5f;
@@ -102,6 +128,8 @@ namespace services
 
         bool resolveDestination(const glm::vec3& target, glm::vec3& snapped) const;
         int ensureAgentRegistered(EntityHandle entity);
+        // Adds a crowd agent at `position` (a navmesh surface point) shaped by `agent`; -1 on failure.
+        int addCrowdAgentFor(const glm::vec3& position, const components::NavmeshAgentComponent& agent);
         void removeEntityFromGroup(uint64_t entityId);
         bool rebuildGroupCorridor(GroupCorridor& group, uint64_t currentVersion);
         void updateGroupSteering(float deltaTime);

@@ -375,6 +375,23 @@ namespace services
         types::PhysicsAnimationConfig config;
     };
 
+    // VK-1660: the editable NavmeshAgentComponent fields - the agent's shape, speed, stopping and
+    // avoidance. inCrowd is read-only: the agent is registered with the detour crowd (Play).
+    struct NavmeshAgentData
+    {
+        float radius = 0.25f;
+        float height = 2.0f;
+        float baseOffset = 0.0f;
+        float maxSpeed = 3.5f;
+        float maxAcceleration = 8.0f;
+        float turnSpeed = 0.0f;
+        float stoppingDistance = 0.1f;
+        int avoidanceQuality = 3;
+        bool rootMotionDriven = false;
+        float rootMotionSpeedScale = 1.0f;
+        bool inCrowd = false;
+    };
+
     struct VFXData
     {
         asset::AssetRef vfxRef; // .vfVFX asset

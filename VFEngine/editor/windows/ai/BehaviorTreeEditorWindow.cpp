@@ -6,11 +6,13 @@
 #include "events/editor/EditorModeEvents.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
+#include <IconsFontAwesome6.h>
 #include <filesystem>
 #include <array>
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <system_error>
 
 using namespace behaviortree;
 
@@ -21,10 +23,36 @@ namespace editor::windows
     {
         std::filesystem::path p(path);
         windowTitle = p.stem().string() + " - Behavior Tree###BT_" + path;
+
+        // Pick up saves of this file made elsewhere (VK-1660). Compared normalised, because each
+        // publisher reports the path as it built it. The handler captures NO `this` (see the
+        // header): the flags by shared_ptr, the path by value.
+        assetSavedToken = events::EventDispatcher::instance()
+            .subscribe<events::resource::AssetSavedNotification>(
+                [changed = externalChange, ownSave = publishingOwnSave, watchedPath = treePath](
+                    const events::resource::AssetSavedNotification& notification)
+                {
+                    if (ownSave->load())
+                        return;
+
+                    std::error_code ec;
+                    const std::filesystem::path mine = std::filesystem::weakly_canonical(watchedPath, ec);
+                    if (ec)
+                        return;
+
+                    std::error_code theirsEc;
+                    const std::filesystem::path theirs =
+                        std::filesystem::weakly_canonical(notification.filePath, theirsEc);
+                    if (!theirsEc && theirs == mine)
+                        changed->store(true);
+                });
     }
 
     BehaviorTreeEditorWindow::~BehaviorTreeEditorWindow()
     {
+        if (assetSavedToken.isValid())
+            events::EventDispatcher::instance().unsubscribe(assetSavedToken);
+
         if (debugActive)
         {
             stopDebugging();
@@ -65,6 +93,26 @@ namespace editor::windows
         revalidate();
         graphEditor.navigateToContent();
         isDirty = false;
+        showExternalChangeBanner = false;
+    }
+
+    void BehaviorTreeEditorWindow::reloadFromDisk()
+    {
+        auto loaded = BehaviorTreeAsset::load(treePath);
+        if (!loaded.has_value())
+        {
+            // Keep what is on screen, unsaved edits included, rather than an empty default.
+            vfLogError("Failed to reload behavior tree: {}", treePath);
+            return;
+        }
+
+        treeData = std::make_unique<BehaviorTreeData>(std::move(loaded.value()));
+        graphEditor.reloadGraph(&treeData->graph);
+        isDirty = false;
+        showExternalChangeBanner = false;
+        validationDirty = false;
+        revalidate();
+        vfLogInfo("Reloaded behavior tree: {}", treePath);
     }
 
     void BehaviorTreeEditorWindow::saveTree()
@@ -74,9 +122,23 @@ namespace editor::windows
         if (BehaviorTreeAsset::save(treePath, *treeData))
         {
             isDirty = false;
+            // These edits now overwrite whatever changed on disk.
+            showExternalChangeBanner = false;
             events::resource::AssetSavedNotification assetNotif;
             assetNotif.filePath = treePath;
-            events::EventDispatcher::instance().publish(assetNotif);
+
+            // publish() runs this window's own handler synchronously, inside the call.
+            publishingOwnSave->store(true);
+            try
+            {
+                events::EventDispatcher::instance().publish(assetNotif);
+            }
+            catch (...)
+            {
+                publishingOwnSave->store(false);
+                throw;
+            }
+            publishingOwnSave->store(false);
 
             // Hot reload: rebind any live runtimes using this asset (no-op outside play)
             events::ai::ReloadBehaviorTreeAssetCommand reloadCmd;
@@ -109,8 +171,18 @@ namespace editor::windows
     {
         if (needsInit)
         {
+            // The first load reads the file, so a save announced before it is already in.
+            externalChange->store(false);
             initEditor();
             needsInit = false;
+        }
+
+        if (externalChange->exchange(false))
+        {
+            if (isDirty)
+                showExternalChangeBanner = true;
+            else
+                reloadFromDisk();
         }
 
         if (initialSize.x <= 0.0f)
@@ -130,6 +202,7 @@ namespace editor::windows
         }
 
         drawToolbar();
+        drawExternalChangeBanner();
         updateDebugState();
 
         // VK-1457 perf: coalesce a continuous edit (slider drag / typing) into a single full-graph
@@ -231,14 +304,34 @@ namespace editor::windows
         }
     }
 
+    void BehaviorTreeEditorWindow::drawExternalChangeBanner()
+    {
+        if (!showExternalChangeBanner)
+            return;
+
+        const std::string fileName = std::filesystem::path(treePath).filename().string();
+        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f),
+                           ICON_FA_TRIANGLE_EXCLAMATION " %s changed on disk", fileName.c_str());
+        ImGui::SameLine();
+        // Drawn before the graph and property panels, so the tree they show is replaced first.
+        if (ImGui::SmallButton("Reload##externalChange"))
+        {
+            reloadFromDisk();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Discard your unsaved edits and load the version on disk");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Keep mine##externalChange"))
+        {
+            showExternalChangeBanner = false;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Keep your edits; saving overwrites the version on disk");
+        ImGui::Separator();
+    }
+
     namespace
     {
-        std::string normalizePath(std::string path)
-        {
-            std::replace(path.begin(), path.end(), '\\', '/');
-            return path;
-        }
-
         const char* severityLabel(validation::Severity severity)
         {
             switch (severity)
@@ -323,13 +416,15 @@ namespace editor::windows
                     stopDebugging();
                 }
 
+                // Runtimes report BehaviorTreeAsset::canonicalPath (VK-1660); compare in that form, so a
+                // window opened from a project-relative path still finds its runtimes.
                 auto targets = dispatcher.query(events::ai::GetAttachedBehaviorTreesQuery{});
-                std::string thisPath = normalizePath(treePath);
+                const std::string thisPath = BehaviorTreeAsset::canonicalPath(treePath);
                 bool anyMatch = false;
 
                 for (const auto& target : targets)
                 {
-                    if (normalizePath(target.treePath) != thisPath) continue;
+                    if (BehaviorTreeAsset::canonicalPath(target.treePath) != thisPath) continue;
                     anyMatch = true;
 
                     std::string label = (target.name.empty() ? "Entity" : target.name) +

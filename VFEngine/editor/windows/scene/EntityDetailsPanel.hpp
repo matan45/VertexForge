@@ -51,6 +51,7 @@
 #include "../details/UIDropTargetDrawer.hpp"
 #include "../details/SocketAttachmentDrawer.hpp"
 #include "../details/NavmeshAgentDrawer.hpp"
+#include "../details/NavRouteDrawer.hpp"
 #include "../details/OffMeshLinkDrawer.hpp"
 #include "../details/NavmeshObstacleDrawer.hpp"
 #include "../details/NavmeshModifierVolumeDrawer.hpp"
@@ -126,6 +127,7 @@ namespace windows
         details::UIDropTargetDrawer uiDropTargetDrawer;
         details::SocketAttachmentDrawer socketAttachmentDrawer;
         details::NavmeshAgentDrawer navmeshAgentDrawer;
+        details::NavRouteDrawer navRouteDrawer;   // VK-1660
         details::OffMeshLinkDrawer offMeshLinkDrawer;
         details::NavmeshObstacleDrawer navmeshObstacleDrawer;
         details::NavmeshModifierVolumeDrawer navmeshModifierVolumeDrawer;

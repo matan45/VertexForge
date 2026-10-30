@@ -20,6 +20,7 @@ namespace editor::windows
         void drawWaitProperties(behaviortree::BTNode& node);
         void drawLogProperties(behaviortree::BTNode& node);
         void drawMoveToProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
+        void drawFollowRouteProperties(behaviortree::BTNode& node, const behaviortree::BTGraph* graph);
         void drawPlayAnimationProperties(behaviortree::BTNode& node);
         void drawParallelProperties(behaviortree::BTNode& node);
         void drawRepeaterProperties(behaviortree::BTNode& node);

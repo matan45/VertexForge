@@ -32,7 +32,26 @@ namespace editor::graph
     {
         currentGraph = graph;
         needsPositionInit = true;
+        keepViewOnPositionInit = false;
         selectedNodeId = 0;
+    }
+
+    void BTGraphEditor::reloadGraph(behaviortree::BTGraph* graph)
+    {
+        currentGraph = graph;
+        needsPositionInit = true;
+        keepViewOnPositionInit = true;
+
+        if (selectedNodeId != 0 && (!currentGraph || !currentGraph->findNodeById(selectedNodeId)))
+        {
+            selectedNodeId = 0;
+            if (editorContext)
+            {
+                ed::SetCurrentEditor(editorContext);
+                ed::ClearSelection();
+                ed::SetCurrentEditor(nullptr);
+            }
+        }
     }
 
     void BTGraphEditor::setOnGraphChanged(BTGraphChangedCallback callback)
@@ -152,7 +171,11 @@ namespace editor::graph
             ed::SetNodePosition(toEditorNodeId(node.id),
                                 ImVec2(node.position.x, node.position.y));
         }
-        ed::NavigateToContent(0.0f);
+        if (!keepViewOnPositionInit)
+        {
+            ed::NavigateToContent(0.0f);
+        }
+        keepViewOnPositionInit = false;
     }
 
     ImU32 BTGraphEditor::getNodeColor(behaviortree::BTNodeType type) const

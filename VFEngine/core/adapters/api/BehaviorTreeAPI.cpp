@@ -108,6 +108,26 @@ namespace core::api
                 return value::Value(std::monostate{});
             }});
 
+        // VK-1660: an Entity key takes an entity id; a negative id (-1) clears it.
+        interpreter->registerNativeFunction("_native_bt_setBlackboardEntity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 3) return value::Value(std::monostate{});
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(std::monostate{});
+
+                std::string key = extractString(args[1]);
+                int64_t targetId = extractInt64(args[2]);
+
+                events::ai::SetBlackboardValueCommand cmd;
+                cmd.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                cmd.key = key;
+                cmd.value = targetId < 0 ? services::EntityHandle::invalid()
+                                         : services::EntityHandle{static_cast<uint64_t>(targetId)};
+                dispatcher.execute(cmd);
+                return value::Value(std::monostate{});
+            }});
+
         // === Blackboard getters ===
 
         interpreter->registerNativeFunction("_native_bt_getBlackboardFloat",
@@ -188,6 +208,28 @@ namespace core::api
                 if (std::holds_alternative<glm::vec3>(result))
                     return makeVec3Array(std::get<glm::vec3>(result));
                 return makeVec3Array(glm::vec3(0.0f));
+            }});
+
+        // VK-1660: the entity id an Entity key holds; -1 when there is no tree, no such key, the key holds
+        // another type, or it is unset.
+        interpreter->registerNativeFunction("_native_bt_getBlackboardEntity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 2) return value::Value(static_cast<int64_t>(-1));
+                auto entity = resolveEntity(args[0]);
+                if (!entity) return value::Value(static_cast<int64_t>(-1));
+
+                events::ai::GetBlackboardValueQuery query;
+                query.entity = services::EntityHandle{static_cast<uint64_t>(extractInt64(args[0]))};
+                query.key = extractString(args[1]);
+                auto result = dispatcher.query(query);
+                if (std::holds_alternative<services::EntityHandle>(result))
+                {
+                    const services::EntityHandle target = std::get<services::EntityHandle>(result);
+                    if (target.isValid())
+                        return value::Value(static_cast<int64_t>(target.id));
+                }
+                return value::Value(static_cast<int64_t>(-1));
             }});
 
         // === Blackboard key check ===

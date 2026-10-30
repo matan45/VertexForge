@@ -2,12 +2,16 @@
 #include "../../../services/providers/ai/IBehaviorTreeProvider.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeRuntime.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
+#include "../../../utilities/behaviortree/MoveToTracker.hpp"
+#include "../../../utilities/behaviortree/RouteFollower.hpp"
 #include "../../../utilities/eqs/EQSTypes.hpp"
+#include <glm/glm.hpp>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
 #include <optional>
 #include <mutex>
+#include <string>
 #include <vector>
 #include <atomic>
 
@@ -55,10 +59,11 @@ namespace core
         void stepDebug() override;
         void setBreakpoints(services::EntityHandle entity, const std::vector<uint32_t>& nodeIds) override;
 
+        behaviortree::BTRuntimeState getRuntimeState(services::EntityHandle entity) const override;
+
         // === IBTTaskExecutor ===
         behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle entity,
-                                                  const std::string& targetKey,
-                                                  float arrivalDistance,
+                                                  const behaviortree::MoveToRequest& request,
                                                   behaviortree::Blackboard& blackboard,
                                                   bool isFirstTick) override;
 
@@ -88,6 +93,13 @@ namespace core
                                                        float eyeOffset,
                                                        behaviortree::Blackboard& blackboard) override;
 
+        behaviortree::BTNodeStatus executeFollowRoute(services::EntityHandle entity,
+                                                       const behaviortree::BTNode& node,
+                                                       const behaviortree::FollowRouteRequest& request,
+                                                       behaviortree::Blackboard& blackboard,
+                                                       float deltaTime,
+                                                       bool isFirstTick) override;
+
         void onAbort(services::EntityHandle entity, const behaviortree::BTNode& node) override;
 
         // Service hooks (VK-1456): dispatch on the node's "serviceType" property. onServiceStart uses
@@ -101,9 +113,55 @@ namespace core
         struct RuntimeInstance
         {
             std::unique_ptr<behaviortree::BehaviorTreeRuntime> runtime;
-            std::string treePath;
+            std::string treePath; // BehaviorTreeAsset::canonicalPath form
             bool enabled = true;
             std::optional<behaviortree::BTNodeStatus> lastTickStatus;
+            uint64_t tickCount = 0; // ticks since attach or the last stopAll (getRuntimeState)
+        };
+
+        // Per-(entity, node) task state. Keyed by the node's ADDRESS like the service EQS keys: a parent tree
+        // and a nested dynamic subtree have independent id spaces, and cached tree data is immutable.
+        struct NodeRunKey
+        {
+            uint64_t entityId = 0;
+            const behaviortree::BTNode* node = nullptr;
+            bool operator==(const NodeRunKey& other) const
+            {
+                return entityId == other.entityId && node == other.node;
+            }
+        };
+
+        struct NodeRunKeyHash
+        {
+            size_t operator()(const NodeRunKey& k) const
+            {
+                size_t h = std::hash<uint64_t>{}(k.entityId);
+                h ^= std::hash<const behaviortree::BTNode*>{}(k.node) + 0x9e3779b9 + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+
+        // FollowRoute progress (VK-1660). Survives an abort so re-entry resumes the leg.
+        struct RouteRun
+        {
+            behaviortree::RouteFollowerState follower;
+            std::vector<glm::vec3> points; // marker world positions snapped to the navmesh, gathered on entry
+        };
+
+        // How a blackboard target key resolved (VK-1660): Entity, Int (entity id, -1 = none) or Vec3 keys.
+        enum class TargetLookup : uint8_t
+        {
+            Found,
+            Missing,  // no such key
+            Unset,    // an unset / dead entity, or an Int key holding -1
+            WrongType // the key holds another type
+        };
+
+        struct BlackboardTarget
+        {
+            TargetLookup lookup = TargetLookup::Missing;
+            glm::vec3 position{0.0f};                                          // world position when Found
+            services::EntityHandle entity = services::EntityHandle::invalid(); // set for Entity / Int keys
         };
 
         // Collision-safe key for script instances: (entityId, scriptPath)
@@ -131,6 +189,14 @@ namespace core
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
         std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
+
+        // VK-1660 task state, all touched only from the tick (and detach / stopAll / reload between ticks).
+        std::unordered_map<uint64_t, behaviortree::MoveToTrackerState> moveTrackers; // keyed by EntityHandle::id
+        std::unordered_map<NodeRunKey, RouteRun, NodeRunKeyHash> routeRuns;
+        // Scripts that failed to load: one warning, then the task fails without reloading every tick.
+        std::unordered_set<ScriptInstanceKey, ScriptInstanceKeyHash> failedScriptLoads;
+        // Warnings already logged once, keyed "{entityId}:{what}" so an entity's entries can be swept.
+        std::unordered_set<std::string> loggedWarnings;
 
         // One immutable tree per asset path, shared by every runtime attached to it.
         // assetDependencies maps each cached root to the normalized paths of every
@@ -161,23 +227,51 @@ namespace core
 
         std::shared_ptr<const behaviortree::BehaviorTreeData> getOrLoadTree(const std::string& treePath);
         void applyPendingReloads();
+        // valid, tickIndex, subtreeEntryMap and the per-node fields (captureSnapshotCore) - shared by the
+        // debugger snapshot and getRuntimeState so both report the same live state.
+        void fillSnapshotCore(const behaviortree::BehaviorTreeRuntime& runtime, const std::string& treePath,
+                              behaviortree::BTRuntimeSnapshot& snapshot) const;
         void captureDebugSnapshot(const behaviortree::BehaviorTreeRuntime& runtime, const std::string& treePath);
         // Tick the debug target and apply post-tick breakpoint rising-edge detection (may set debugPaused).
         void tickDebugTarget(RuntimeInstance& instance, float deltaTime);
         void cleanupScriptInstances(uint64_t entityId);
         void cancelPendingEQSQueriesForEntity(uint64_t entityId);
+        // Drops the entity's MoveTo / FollowRoute progress.
+        void clearMovementState(uint64_t entityId);
+        // clearMovementState plus the script-load failures and logged warnings (detach / reload).
+        void clearEntityTaskState(uint64_t entityId);
+        // True the first time (entityId, what) is seen since the entity's state was last cleared.
+        bool warnOnce(uint64_t entityId, const std::string& what);
+        void forgetWarning(uint64_t entityId, const std::string& what);
 
         // Shared sensing delegation, reused by both the task methods and the built-in services so the
-        // task behavior stays identical.
+        // task behavior stays identical. The EQS calls never throw: a failure logs once per warnKey.
         eqs::EQSContext buildEQSContext(services::EntityHandle entity) const;
-        eqs::EQSQueryHandle submitEQS(services::EntityHandle entity, const std::string& queryName) const;
-        eqs::EQSResult pollEQS(const eqs::EQSQueryHandle& handle) const;
-        void cancelEQS(const eqs::EQSQueryHandle& handle) const;
-        std::optional<glm::vec3> resolveTargetPosition(const std::string& targetKey,
-                                                       behaviortree::Blackboard& blackboard,
+        eqs::EQSQueryHandle submitEQS(services::EntityHandle entity, const std::string& queryName,
+                                      const std::string& warnKey);
+        eqs::EQSResult pollEQS(services::EntityHandle entity, const eqs::EQSQueryHandle& handle,
+                               const std::string& warnKey);
+        void cancelEQS(services::EntityHandle entity, const eqs::EQSQueryHandle& handle);
+
+        // World position composed from the local transforms (scene::composeWorldPosition), so it reflects
+        // this frame's moves; nullopt for an invalid or dead entity.
+        std::optional<glm::vec3> worldPositionOf(services::EntityHandle entity) const;
+        BlackboardTarget lookupTarget(const std::string& targetKey, const behaviortree::Blackboard& blackboard) const;
+        // The point a sensing ray aims at: an entity eyeOffset above its pivot, a Vec3 as given. Warns when
+        // the key holds another type.
+        std::optional<glm::vec3> resolveTargetPosition(const std::string& targetKey, const BlackboardTarget& target,
                                                        float eyeOffset) const;
         bool computeLineOfSight(services::EntityHandle entity, const std::string& targetKey,
                                 float maxDistance, float eyeOffset,
                                 behaviortree::Blackboard& blackboard) const;
+
+        // FollowRoute: the route entity's children (in child order) as world positions snapped to the navmesh.
+        // nullopt with `problem` set when the route cannot be followed.
+        std::optional<std::vector<glm::vec3>> gatherRoutePoints(services::EntityHandle entity,
+                                                                const std::string& routeKey,
+                                                                const behaviortree::Blackboard& blackboard,
+                                                                std::string& problem) const;
+        glm::vec3 snapToNavmesh(const glm::vec3& point) const;
+        void stopAgent(services::EntityHandle entity) const;
     };
 }

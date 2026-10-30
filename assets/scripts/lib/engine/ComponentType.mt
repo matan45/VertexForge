@@ -38,6 +38,12 @@ public class ComponentType {
 
     // Navigation
     public static final string NAVMESH_AGENT = "NavmeshAgent";
+    public static final string NAV_ROUTE = "NavRoute";
+    public static final string VOLUMETRIC_NAV_VOLUME = "VolumetricNavVolume";
+    public static final string VOLUMETRIC_AGENT = "VolumetricAgent";
+
+    // AI
+    public static final string BEHAVIOR_TREE = "BehaviorTree";
 
     // Controller
     public static final string CONTROLLER = "Controller";

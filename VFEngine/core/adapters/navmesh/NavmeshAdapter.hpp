@@ -65,6 +65,7 @@ namespace core
                                  const std::vector<navigation::NavmeshTileData>& tiles) override;
         bool hasNavmesh() const override;
         void clearNavmesh() override;
+        navigation::NavmeshStats getNavmeshStats() const override;
 
         // === Pathfinding ===
         navigation::NavPath findPath(const glm::vec3& start, const glm::vec3& end,
@@ -80,6 +81,7 @@ namespace core
         void setCrowdAgentTarget(int agentIndex, const glm::vec3& target) override;
         void stopCrowdAgent(int agentIndex) override;
         void updateCrowdAgentParams(int agentIndex, float maxSpeed, float maxAcceleration) override;
+        bool updateCrowdAgentConfig(int agentIndex, const navigation::CrowdAgentConfig& config) override;
         glm::vec3 getCrowdAgentPosition(int agentIndex) const override;
         glm::vec3 getCrowdAgentVelocity(int agentIndex) const override;
         float getCrowdAgentMaxSpeed(int agentIndex) const override;

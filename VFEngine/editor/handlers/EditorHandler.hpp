@@ -91,6 +91,7 @@ namespace services {
 	class VFXAssetSummaryService;
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
+	class BehaviorTreeAuthoringService;
 	class EditorRenderServiceImpl;
 	class SaveService;
 	class ConfigService;
@@ -185,6 +186,7 @@ namespace handlers {
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+		std::unique_ptr<services::BehaviorTreeAuthoringService> behaviorTreeAuthoringService; // VK-1660: MCP bt_* asset load/save
 		// VK-1660: reset AFTER behaviorTreeService - stopping trees dispatches CancelEQSQueryCommand.
 		std::shared_ptr<services::IEQSService> eqsService;
 		std::shared_ptr<services::IRuntimePickerService> runtimePickerService;

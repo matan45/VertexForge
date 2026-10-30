@@ -30,6 +30,10 @@ namespace windows::details
             ImGui::PushItemWidth(-1);
             ImGui::DragFloat("##NavAgentRadius", &agent.radius, 0.01f, 0.1f, 5.0f, "Radius: %.2f");
             ImGui::DragFloat("##NavAgentHeight", &agent.height, 0.1f, 0.5f, 10.0f, "Height: %.1f");
+            ImGui::DragFloat("##NavAgentBaseOffset", &agent.baseOffset, 0.01f, -5.0f, 5.0f, "Base Offset: %.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Height of the entity's pivot above the navmesh surface the agent walks on:\n"
+                                  "1.0 for a 2 m capsule whose pivot is its centre, 0 for a mesh whose pivot is at its feet.");
             ImGui::PopItemWidth();
 
             ImGui::Spacing();

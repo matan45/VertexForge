@@ -27,6 +27,10 @@ namespace behaviortree
         // non-object root. Load warnings are logged like load().
         static std::optional<BehaviorTreeData> parse(std::string_view text);
         static bool exists(std::string_view path);
+        // One spelling per tree file (VK-1660): absolute (a project-relative path resolves against the
+        // project root), forward slashes, lexically normal. The runtime adapter keys its cache, dependencies
+        // and reloads by it; compare tree paths through it.
+        static std::string canonicalPath(std::string_view path);
         static BehaviorTreeData createDefault(const std::string& name = "New Behavior Tree");
 
         // Inline every SubTree node by splicing the referenced graph in with

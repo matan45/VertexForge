@@ -70,5 +70,17 @@ namespace services
 
         virtual void getDebugMesh(std::vector<glm::vec3>& outVertices,
                                    std::vector<uint32_t>& outIndices) const = 0;
+
+        // === VK-1660 (default bodies keep test fakes compiling) ===
+        // Counts and bounds of the current navmesh; all zero without one.
+        virtual navigation::NavmeshStats getNavmeshStats() const { return {}; }
+        // Re-applies a crowd agent's radius, height, speed, acceleration and avoidance preset.
+        // Returns false when agentIndex is not a live crowd agent.
+        virtual bool updateCrowdAgentConfig(int agentIndex, const navigation::CrowdAgentConfig& config)
+        {
+            (void)agentIndex;
+            (void)config;
+            return false;
+        }
     };
 }

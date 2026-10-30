@@ -51,6 +51,7 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/ai/BehaviorTreeAuthoringService.hpp"
 #include "impl/ai/EQSServiceImpl.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
@@ -370,6 +371,10 @@ namespace handlers
             behaviorTreePlayModeHandler = std::make_unique<services::BehaviorTreePlayModeHandler>(btProvider);
             behaviorTreePlayModeHandler->subscribeToEvents();
         }
+
+        // VK-1660: the validated .vfBehaviorTree write path of the MCP bt_* tools; reads files only.
+        behaviorTreeAuthoringService = std::make_unique<services::BehaviorTreeAuthoringService>();
+        behaviorTreeAuthoringService->registerEventHandlers();
 
         // VK-1660: EQS was never constructed (an EnvironmentQuery node threw in Play).
         if (auto* eqsProvider = bootstrap->getEQSProvider())

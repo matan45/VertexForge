@@ -69,6 +69,26 @@ namespace services
                 }
             }
         }
+
+        // VK-1660: a new scene, or a scene read from disk, must not inherit the previous scene's navmesh; a loaded
+        // scene brings its own back in finishLoad (root NavmeshComponent). A Play -> Stop snapshot restore keeps it.
+        // Without a navmesh service (some tests) there is no handler.
+        void clearNavmeshForSceneChange()
+        {
+            events::navmesh::ClearNavmeshCommand command;
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("ScenePersistenceService: the previous scene's navmesh was not cleared: {}", error.what());
+                }
+            }
+        }
     }
 
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
@@ -407,6 +427,8 @@ namespace services
         events::terrain::TerrainDeletedNotification terrainNotif;
         dispatcher.publish(terrainNotif);
 
+        clearNavmeshForSceneChange();
+
         sceneGraph->clearScene();
 
         sceneGraph->setPhysicsSettings(types::PhysicsSettings::createDefault());
@@ -575,6 +597,8 @@ namespace services
 
         events::terrain::TerrainDeletedNotification terrainNotif;
         dispatcher.publish(terrainNotif);
+
+        clearNavmeshForSceneChange();
 
         sceneGraph->clearScene();
 

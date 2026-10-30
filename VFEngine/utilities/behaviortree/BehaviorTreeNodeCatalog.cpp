@@ -678,7 +678,13 @@ namespace behaviortree::catalog
                     nodeError(node, "missing required parameter 'script'.");
                     return;
                 }
-                if (!context.scriptClass) return;
+                // The adapter fails a ScriptTask whose scriptClassName is empty (its loader ignores the name).
+                if (!context.scriptClass)
+                {
+                    if (node.scriptClassName.empty())
+                        nodeError(node, "missing scriptClassName: it must name the script's @Script class.");
+                    return;
+                }
 
                 const std::optional<std::string> scriptClass = context.scriptClass(node.scriptPath);
                 if (!scriptClass)
@@ -687,7 +693,12 @@ namespace behaviortree::catalog
                                     "' is not a ScriptTask: needs an @Script class with tick(float): string.");
                     return;
                 }
-                if (!node.scriptClassName.empty() && node.scriptClassName != *scriptClass)
+                if (node.scriptClassName.empty())
+                {
+                    nodeError(node, "missing scriptClassName: it must be '" + *scriptClass +
+                                    "', the class declared in '" + node.scriptPath + "'.");
+                }
+                else if (node.scriptClassName != *scriptClass)
                 {
                     nodeError(node, "scriptClassName '" + node.scriptClassName + "' does not match the class '" +
                                     *scriptClass + "' declared in '" + node.scriptPath + "'.");
@@ -979,11 +990,11 @@ namespace behaviortree::catalog
         StrictChecker checker(data, context, diagnostics);
 
         // Blackboard-key checks always run; structure and parameters only for the nodes in onlyNodes
-        // (all nodes when it is empty), so untouched editor nodes never block an edit.
+        // (every node when it is unset), so untouched editor nodes never block an edit.
         checker.checkBlackboardKeys();
         for (const auto& node : data.graph.nodes)
         {
-            if (!context.onlyNodes.empty() && !context.onlyNodes.contains(node.id)) continue;
+            if (context.onlyNodes && !context.onlyNodes->contains(node.id)) continue;
             checker.checkStructure(node);
             checker.checkNode(node);
         }
