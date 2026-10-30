@@ -92,6 +92,7 @@ namespace services {
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
 	class BehaviorTreeAuthoringService;
+	class EQSAuthoringService;
 	class EditorRenderServiceImpl;
 	class SaveService;
 	class ConfigService;
@@ -189,6 +190,7 @@ namespace handlers {
 		std::unique_ptr<services::BehaviorTreeAuthoringService> behaviorTreeAuthoringService; // VK-1660: MCP bt_* asset load/save
 		// VK-1660: reset AFTER behaviorTreeService - stopping trees dispatches CancelEQSQueryCommand.
 		std::shared_ptr<services::IEQSService> eqsService;
+		std::unique_ptr<services::EQSAuthoringService> eqsAuthoringService; // VK-1660: MCP eqs_* template load/save
 		std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
 		std::shared_ptr<services::IWeatherService> weatherService;
 		std::shared_ptr<services::IDestructionService> destructionService;

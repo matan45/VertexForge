@@ -1,9 +1,10 @@
 #pragma once
 #include "../../../services/providers/ai/IEQSProvider.hpp"
-#include "../../../utilities/eqs/EQSQueryEngine.hpp"
-#include <unordered_map>
-#include <memory>
+#include "../../../utilities/eqs/EQSQueryLibrary.hpp"
+#include "../../../utilities/eqs/EQSScheduler.hpp"
+#include <mutex>
 #include <string>
+#include <unordered_set>
 
 namespace services
 {
@@ -13,6 +14,10 @@ namespace services
 
 namespace core
 {
+    // VK-1660: the engine side of EQS. Templates are read by name from assets/eqs/<Name>.vfEQSQuery through
+    // the VFS (EQSQueryLibrary), queued queries run in the EQS frame task (EQSScheduler), and generators and
+    // tests reach the engine through the providers built here: the navmesh, physics line of sight and the
+    // scene's named entities.
     class EQSAdapter : public services::IEQSProvider
     {
     public:
@@ -21,19 +26,29 @@ namespace core
         ~EQSAdapter() override;
 
         // === IEQSProvider ===
-        void registerQuery(const std::string& name, const eqs::EQSQueryDef& def) override;
         eqs::EQSQueryHandle submitQuery(const std::string& queryName, const eqs::EQSContext& context) override;
         eqs::EQSResult getResult(eqs::EQSQueryHandle handle) const override;
-        void cancelQuery(eqs::EQSQueryHandle handle) override;
-        void update(float frameBudgetMs = 2.0f) override;
+        void releaseQuery(eqs::EQSQueryHandle handle) override;
+        void releaseAll() override;
+        void update(float budgetMs) override;
+        eqs::EQSDebugResult runQueryNow(const std::string& queryName, const eqs::EQSContext& context) override;
+        services::EQSQueryInfo lookupQuery(const std::string& queryName) override;
+        void invalidateQuery(const std::string& queryName) override;
 
     private:
-        void registerBuiltInQueries();
+        // The absolute path of assets/eqs/<queryName>.vfEQSQuery in the current project.
+        static std::string templatePath(const std::string& queryName);
         eqs::EQSProviderRefs buildProviderRefs() const;
+        // Logs `message` the first time `key` is seen since invalidateQuery / releaseAll.
+        void warnOnce(const std::string& key, const std::string& message);
 
         services::IPhysicsProvider* physicsProvider;
         services::INavmeshProvider* navmeshProvider;
-        eqs::EQSQueryEngine engine;
-        std::unordered_map<std::string, eqs::EQSQueryDef> queryDefs;
+        eqs::EQSProviderRefs providers;
+        eqs::EQSScheduler scheduler;
+        eqs::EQSQueryLibrary library;
+
+        std::mutex warningMutex;
+        std::unordered_set<std::string> warnedKeys;
     };
 }

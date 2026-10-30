@@ -375,7 +375,7 @@ TEST_SUITE("BTComponentData")
         const bt::BTRuntimeState state = events::EventDispatcher::instance().query(query);
         CHECK(state.attached);
         CHECK(state.treePath == "tests/Guard.vfBehaviorTree");
-        CHECK(state.tree == provider.tree);
+        CHECK(state.tree.get() == provider.tree.get());
 
         query.entity = services::EntityHandle::invalid();
         CHECK_FALSE(events::EventDispatcher::instance().query(query).attached);

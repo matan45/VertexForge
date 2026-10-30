@@ -86,7 +86,11 @@ namespace handlers
         // frame task terminates the editor, so the update is guarded.
         frameTaskGraph->addTask("EQS", [this]() {
             if (eqsService) {
-                try { eqsService->update(2.0f); }
+                // Queued queries run only while gameplay runs (pause / step / scale, like the agents);
+                // the debug overlay counts down on raw dt in every mode.
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                bool simulate = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+                try { eqsService->update(dt, simulate); }
                 catch (const std::exception& e) { vfLogError("[EQS] update threw: {}", e.what()); }
             }
         });
@@ -149,6 +153,18 @@ namespace handlers
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 bool simulateAgents = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
                 navmeshService->update(dt, simulateAgents);
+            }
+        });
+
+        // VK-1660: volumetric navigation. Bakes are harvested in every mode on raw dt; flying agents move only
+        // while gameplay runs (like the navmesh agents). After Navmesh, so the behavior trees' destinations of
+        // this frame are in; before Transforms, which propagates the agents' moves. Guarded like EQS.
+        frameTaskGraph->addTask("Volumetric", [this]() {
+            if (volumetricNavService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                bool simulate = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+                try { volumetricNavService->update(dt, simulate); }
+                catch (const std::exception& e) { vfLogError("[VolumetricNav] update threw: {}", e.what()); }
             }
         });
 
@@ -263,6 +279,7 @@ namespace handlers
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
+        frameTaskGraph->addDependency("Volumetric", "Navmesh");
         frameTaskGraph->addDependency("EQS", "Controllers");
         frameTaskGraph->addDependency("EQS", "WorldSector");
         frameTaskGraph->addDependency("BehaviorTrees", "EQS");
@@ -318,6 +335,7 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "SunSync");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "Navmesh");
+        frameTaskGraph->addDependency("Transforms", "Volumetric");
         frameTaskGraph->addDependency("Transforms", "VFX");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");

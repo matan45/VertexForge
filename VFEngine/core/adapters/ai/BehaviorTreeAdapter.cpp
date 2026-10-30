@@ -5,19 +5,22 @@
 #include "../../../services/events/physics/ControllerEvents.hpp"
 #include "../../../services/events/animation/AnimatorEvents.hpp"
 #include "../../../services/events/ai/EQSEvents.hpp"
-#include "../../../services/events/scene/EntityTransformEvents.hpp"
 #include "../../../services/events/physics/PhysicsEvents.hpp"
+#include "../../../services/events/volumetric/VolumetricNavEvents.hpp"
 #include "../../../services/data/EntityConversion.hpp"
 #include "print/Log.hpp"
 #include "behaviortree/BehaviorTreeValidation.hpp"
 #include "behaviortree/BehaviorTreeDynamic.hpp"
+#include "behaviortree/EQSResultWrite.hpp"
 #include "behaviortree/SightLine.hpp"
 #include "components/CoreComponents.hpp"
 #include "components/NavmeshComponents.hpp"
+#include "components/VolumetricComponents.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "scene/HierarchyMatrix.hpp"
 #include <algorithm>
 #include <any>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <unordered_set>
@@ -40,6 +43,9 @@ namespace core
         // SNAP_SEARCH_RADII), so arrival is measured at the point the agent actually walks to.
         constexpr float kRouteSnapTolerance = 1.0f;
         constexpr float kRouteSnapRadii[] = {5.0f, 25.0f, 100.0f};
+
+        // A flying agent's route marker inside geometry moves to the nearest navigable voxel within this (m).
+        constexpr float kRouteVolumeSnapRadius = 2.0f;
 
         // True when `entity` is `ancestor` or below it in the hierarchy (ParentComponent chain).
         bool isSelfOrDescendant(const entt::registry& registry, services::EntityHandle entity,
@@ -79,6 +85,28 @@ namespace core
     static std::string eqsServiceKey(uint64_t entityId, const BTNode& node)
     {
         return std::to_string(entityId) + ":svc:" + std::to_string(reinterpret_cast<uintptr_t>(&node));
+    }
+
+    // EnvironmentQuery tasks key the same way (VK-1660): two EnvironmentQuery nodes of one entity running the
+    // same template no longer share one pending handle.
+    static std::string eqsTaskKey(uint64_t entityId, const BTNode& node)
+    {
+        return std::to_string(entityId) + ":task:" + std::to_string(reinterpret_cast<uintptr_t>(&node));
+    }
+
+    static uint64_t splitMix64(uint64_t value)
+    {
+        value += 0x9E3779B97F4A7C15ull;
+        value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ull;
+        value = (value ^ (value >> 27)) * 0x94D049BB133111EBull;
+        return value ^ (value >> 31);
+    }
+
+    // A reproducible per-run EQS seed (NavMeshPoints sampling): every tick samples anew, and the same entity,
+    // node and tick always sample the same points.
+    static uint64_t eqsSeed(uint64_t entityId, uint32_t nodeId, uint64_t tick)
+    {
+        return splitMix64(splitMix64(splitMix64(entityId) ^ nodeId) ^ tick);
     }
 
     static void logValidationDiagnostics(const std::string& treePath,
@@ -721,18 +749,28 @@ namespace core
         // so the agent still holds the PREVIOUS destination this frame; reporting "arrived" the instant a new
         // move is issued (e.g. the return-home leg right after reaching the resource) collapses the loop and
         // pins the agent in place.
+        //
+        // A flying agent (VolumetricAgent, no NavmeshAgent) moves through the voxel volumes and arrives in 3D.
+        const bool flying = isVolumetricAgent(entity);
         const glm::vec3 ownerPosition = worldPositionOf(entity).value_or(target.position);
         MoveToTrackerState& tracker = moveTrackers[entity.id];
-        const MoveToStep step = stepMoveTo(tracker, request, ownerPosition, target.position, isFirstTick);
+        const MoveToStep step = stepMoveTo(tracker, request, ownerPosition, target.position, isFirstTick, !flying);
 
         switch (step.action)
         {
         case MoveToAction::IssueDestination:
         {
-            events::navmesh::SetAgentDestinationCommand navCmd;
-            navCmd.entity = entity;
-            navCmd.target = target.position;
-            dispatcher.execute(navCmd);
+            if (flying)
+            {
+                setVolumetricDestination(entity, target.position);
+            }
+            else
+            {
+                events::navmesh::SetAgentDestinationCommand navCmd;
+                navCmd.entity = entity;
+                navCmd.target = target.position;
+                dispatcher.execute(navCmd);
+            }
             break;
         }
         case MoveToAction::Stop:
@@ -740,6 +778,38 @@ namespace core
             break;
         case MoveToAction::None:
             break;
+        }
+
+        // A flying agent reports its own outcome: Failed (no path, stuck) fails the task, and Arrived counts as
+        // arrival - its stoppingDistance can hold it outside arrivalDistance - while the target is still near the
+        // point it was sent to. Not read on a tick that (re)issued the destination: from the next tick on the
+        // state is the new move's.
+        if (flying && step.status == BTNodeStatus::Running && step.action != MoveToAction::IssueDestination)
+        {
+            if (const auto state = volumetricAgentState(entity))
+            {
+                if (state->state == services::VolumetricAgentMoveState::Failed)
+                {
+                    if (warnOnce(entity.id, "moveto:flight"))
+                    {
+                        vfLogWarning("BT MoveTo: flying agent {} cannot reach its target: {}", entity.id,
+                                     state->failReason);
+                    }
+                    moveTrackers.erase(entity.id);
+                    return BTNodeStatus::Failure;
+                }
+
+                const float withinReach = std::max(request.repathDistance, request.arrivalDistance);
+                if (state->state == services::VolumetricAgentMoveState::Arrived &&
+                    glm::distance(target.position, tracker.issuedTarget) <= withinReach)
+                {
+                    if (request.stopOnArrival)
+                        stopAgent(entity);
+                    forgetWarning(entity.id, "moveto:flight");
+                    moveTrackers.erase(entity.id);
+                    return BTNodeStatus::Success;
+                }
+            }
         }
 
         if (step.status != BTNodeStatus::Running)
@@ -832,68 +902,76 @@ namespace core
 
     BTNodeStatus BehaviorTreeAdapter::executeEnvironmentQuery(
         services::EntityHandle entity,
-        const std::string& queryName,
-        const std::string& resultKey,
+        const BTNode& node,
+        const EnvironmentQueryRequest& request,
         Blackboard& blackboard,
         bool isFirstTick)
     {
-        if (queryName.empty())
+        if (request.queryName.empty())
         {
-            vfLogWarning("BT EnvironmentQuery: empty query name for entity {}", entity.id);
+            if (warnOnce(entity.id, "eqs:no-query-name"))
+                vfLogWarning("BT EnvironmentQuery '{}': no query name for entity {}", node.name, entity.id);
             return BTNodeStatus::Failure;
         }
 
-        const std::string warnKey = "eqs:" + queryName;
+        const std::string warnKey = "eqs:" + request.queryName;
+        const std::string eqsKey = eqsTaskKey(entity.id, node);
         if (isFirstTick)
         {
-            auto handle = submitEQS(entity, queryName, warnKey);
+            // A query of an earlier run of this node that was never read is dropped, not leaked.
+            auto stale = pendingEQSQueries.find(eqsKey);
+            if (stale != pendingEQSQueries.end())
+            {
+                cancelEQS(entity, stale->second);
+                pendingEQSQueries.erase(stale);
+            }
+
+            const eqs::EQSContext context = buildEQSContext(entity, node, request.targetKey, blackboard);
+            auto handle = submitEQS(entity, request.queryName, context, warnKey);
             if (!handle.isValid())
             {
                 if (warnOnce(entity.id, warnKey + ":submit"))
                 {
-                    vfLogWarning("BT EnvironmentQuery: failed to submit query '{}' for entity {}",
-                                 queryName, entity.id);
+                    vfLogWarning("BT EnvironmentQuery: failed to submit query '{}' for entity {} (no valid "
+                                 "assets/eqs/{}.vfEQSQuery, or the queue is full)",
+                                 request.queryName, entity.id, request.queryName);
                 }
                 return BTNodeStatus::Failure;
             }
 
-            std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
             pendingEQSQueries[eqsKey] = handle;
             return BTNodeStatus::Running;
         }
 
         // Poll for results on subsequent ticks
-        std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
         auto it = pendingEQSQueries.find(eqsKey);
         if (it == pendingEQSQueries.end())
         {
             return BTNodeStatus::Failure;
         }
 
-        eqs::EQSResult result = pollEQS(entity, it->second, warnKey);
+        const eqs::EQSResult result = pollEQS(entity, it->second, warnKey);
+        if (result.status == eqs::EQSQueryStatus::Pending || result.status == eqs::EQSQueryStatus::Running)
+        {
+            return BTNodeStatus::Running;
+        }
 
-        switch (result.status)
+        // Finished: free the result at once (VK-1660 - results used to stay in the engine forever).
+        cancelEQS(entity, it->second);
+        pendingEQSQueries.erase(it);
+
+        if (result.status == eqs::EQSQueryStatus::Failed)
         {
-        case eqs::EQSQueryStatus::Completed:
-        {
-            pendingEQSQueries.erase(it);
-            if (result.hasResults())
+            if (!result.error.empty() && warnOnce(entity.id, warnKey + ":failed"))
             {
-                blackboard.set(resultKey, result.getBestPosition());
-                return BTNodeStatus::Success;
+                vfLogWarning("BT EnvironmentQuery '{}': query '{}' failed for entity {}: {}",
+                             node.name, request.queryName, entity.id, result.error);
             }
             return BTNodeStatus::Failure;
         }
-        case eqs::EQSQueryStatus::Failed:
-        {
-            pendingEQSQueries.erase(it);
-            return BTNodeStatus::Failure;
-        }
-        case eqs::EQSQueryStatus::Pending:
-        case eqs::EQSQueryStatus::Running:
-        default:
-            return BTNodeStatus::Running;
-        }
+
+        writeEQSResult(entity, blackboard, result, request.resultKey, request.resultEntityKey);
+        return result.hasResults() ? BTNodeStatus::Success : BTNodeStatus::Failure;
     }
 
     void BehaviorTreeAdapter::onAbort(services::EntityHandle entity, const BTNode& node)
@@ -914,14 +992,7 @@ namespace core
         }
         case BTNodeType::EnvironmentQuery:
         {
-            std::string queryName;
-            auto qIt = node.properties.find("queryName");
-            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
-                queryName = std::get<std::string>(qIt->second);
-            if (queryName.empty()) break;
-
-            std::string eqsKey = std::to_string(entity.id) + ":" + queryName;
-            auto it = pendingEQSQueries.find(eqsKey);
+            auto it = pendingEQSQueries.find(eqsTaskKey(entity.id, node));
             if (it != pendingEQSQueries.end())
             {
                 cancelEQS(entity, it->second);
@@ -960,20 +1031,52 @@ namespace core
 
     // === Shared sensing helpers (reused by task methods and built-in services) ===
 
-    eqs::EQSContext BehaviorTreeAdapter::buildEQSContext(services::EntityHandle entity) const
+    eqs::EQSContext BehaviorTreeAdapter::buildEQSContext(services::EntityHandle entity, const BTNode& node,
+                                                         const std::string& targetKey, const Blackboard& blackboard)
     {
         eqs::EQSContext context;
         context.querierEntityId = entity.id;
+        context.seed = eqsSeed(entity.id, node.id, tickCounter);
 
-        events::scene::GetWorldTransformQuery transformQuery;
-        transformQuery.entity = entity;
-        auto transformOpt = events::EventDispatcher::instance().query(transformQuery);
-        if (transformOpt.has_value())
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (services::internal::isValidHandle(entity, registry))
         {
-            context.querierPosition = transformOpt->position;
-            // Derive forward from rotation (Y-axis euler rotation)
-            float yaw = glm::radians(transformOpt->rotation.y);
-            context.querierForward = glm::vec3(std::sin(yaw), 0.0f, std::cos(yaw));
+            const entt::entity querier = services::internal::fromHandle(entity);
+            // Composed from this frame's local transforms (like worldPositionOf). The forward is the entity's
+            // +Z on the ground plane - for a yaw-only rotation exactly (sin yaw, 0, cos yaw), as before.
+            const glm::mat4 world = scene::composeWorldMatrix(registry, querier);
+            context.querierPosition = glm::vec3(world[3]);
+            const glm::vec3 forward(world[2].x, 0.0f, world[2].z);
+            const float lengthSquared = glm::dot(forward, forward);
+            if (lengthSquared > 1.0e-8f)
+                context.querierForward = forward / std::sqrt(lengthSquared);
+
+            // PathCost tests search paths for the querier's own size.
+            if (const auto* agent = registry.try_get<components::NavmeshAgentComponent>(querier))
+            {
+                context.agentRadius = agent->radius;
+                context.agentHeight = agent->height;
+            }
+        }
+
+        if (!targetKey.empty())
+        {
+            const BlackboardTarget target = lookupTarget(targetKey, blackboard);
+            if (target.lookup == TargetLookup::Found)
+            {
+                context.hasTarget = true;
+                context.targetPosition = target.position;
+                context.targetEntityId = target.entity.isValid() ? target.entity.id : eqs::kNoEntity;
+            }
+            else if ((target.lookup == TargetLookup::Missing || target.lookup == TargetLookup::WrongType) &&
+                     warnOnce(entity.id, "eqs-target:" + targetKey))
+            {
+                vfLogWarning("BT EQS: target key '{}' {}", targetKey,
+                             target.lookup == TargetLookup::Missing
+                                 ? "is not on the blackboard"
+                                 : "is not an Entity, Int (entity id) or Vec3 key");
+            }
+            // Unset (no current target): the query runs without one.
         }
         return context;
     }
@@ -982,13 +1085,13 @@ namespace core
     // a failure becomes an invalid handle / a Failed result plus one warning per (entity, warnKey). A failed
     // submit shares its "{warnKey}:submit" entry with the caller's own warning, so it logs one line.
     eqs::EQSQueryHandle BehaviorTreeAdapter::submitEQS(services::EntityHandle entity, const std::string& queryName,
-                                                       const std::string& warnKey)
+                                                       const eqs::EQSContext& context, const std::string& warnKey)
     {
         try
         {
             events::ai::SubmitEQSQueryCommand submitCmd;
             submitCmd.queryName = queryName;
-            submitCmd.context = buildEQSContext(entity);
+            submitCmd.context = context;
             return events::EventDispatcher::instance().execute(submitCmd);
         }
         catch (const std::exception& e)
@@ -1015,6 +1118,20 @@ namespace core
             eqs::EQSResult failed;
             failed.status = eqs::EQSQueryStatus::Failed;
             return failed;
+        }
+    }
+
+    void BehaviorTreeAdapter::writeEQSResult(services::EntityHandle entity, Blackboard& blackboard,
+                                             const eqs::EQSResult& result, const std::string& resultKey,
+                                             const std::string& resultEntityKey)
+    {
+        const EQSResultWrite write = applyEQSResult(blackboard, result, resultKey, resultEntityKey);
+        if ((write.entity == EQSKeyWrite::Missing || write.entity == EQSKeyWrite::WrongType) &&
+            warnOnce(entity.id, "eqs-entity-key:" + resultEntityKey))
+        {
+            vfLogWarning("BT EQS: result entity key '{}' {}", resultEntityKey,
+                         write.entity == EQSKeyWrite::Missing ? "is not on the blackboard"
+                                                              : "is not an Entity or Int key");
         }
     }
 
@@ -1176,6 +1293,8 @@ namespace core
         {
             const std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
             const std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
+            const std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string{});
+            const std::string resultEntityKey = getNodeProperty<std::string>(node, "resultEntityKey", std::string{});
             if (queryName.empty())
                 return;
 
@@ -1184,26 +1303,36 @@ namespace core
             auto it = pendingEQSQueries.find(key);
             if (it != pendingEQSQueries.end())
             {
-                eqs::EQSResult result = pollEQS(entity, it->second, warnKey);
+                const eqs::EQSResult result = pollEQS(entity, it->second, warnKey);
+                if (result.status == eqs::EQSQueryStatus::Pending || result.status == eqs::EQSQueryStatus::Running)
+                    return; // still in flight — wait for it before resubmitting
+
+                // Finished: free the result at once, then write it (VK-1660: none found clears resultEntityKey).
+                cancelEQS(entity, it->second);
+                pendingEQSQueries.erase(it);
                 if (result.status == eqs::EQSQueryStatus::Completed)
                 {
-                    if (result.hasResults())
-                        blackboard.set(resultKey, result.getBestPosition());
-                    pendingEQSQueries.erase(it);
+                    writeEQSResult(entity, blackboard, result, resultKey, resultEntityKey);
                 }
-                else if (result.status == eqs::EQSQueryStatus::Failed)
+                else if (!result.error.empty() && warnOnce(entity.id, warnKey + ":failed"))
                 {
-                    pendingEQSQueries.erase(it);
-                }
-                else
-                {
-                    return; // still in flight — wait for it before resubmitting
+                    vfLogWarning("BT EQSRefresh '{}': query '{}' failed for entity {}: {}",
+                                 node.name, queryName, entity.id, result.error);
                 }
             }
 
-            auto handle = submitEQS(entity, queryName, warnKey);
+            const eqs::EQSContext context = buildEQSContext(entity, node, targetKey, blackboard);
+            auto handle = submitEQS(entity, queryName, context, warnKey);
             if (handle.isValid())
+            {
                 pendingEQSQueries[key] = handle;
+            }
+            else if (warnOnce(entity.id, warnKey + ":submit"))
+            {
+                vfLogWarning("BT EQSRefresh '{}': failed to submit query '{}' for entity {} (no valid "
+                             "assets/eqs/{}.vfEQSQuery, or the queue is full)",
+                             node.name, queryName, entity.id, queryName);
+            }
         }
         else if (serviceType == "LineOfSightRefresh")
         {
@@ -1273,11 +1402,90 @@ namespace core
 
     // === FollowRoute (VK-1660) ===
 
-    void BehaviorTreeAdapter::stopAgent(services::EntityHandle entity) const
+    void BehaviorTreeAdapter::stopAgent(services::EntityHandle entity)
     {
+        if (isVolumetricAgent(entity))
+        {
+            try
+            {
+                events::volumetric::StopVolumetricAgentCommand stopCmd;
+                stopCmd.entity = entity;
+                events::EventDispatcher::instance().execute(stopCmd);
+            }
+            catch (const std::exception& e)
+            {
+                if (warnOnce(entity.id, "flight:stop"))
+                    vfLogWarning("BT: stopping flying agent {} failed: {}", entity.id, e.what());
+            }
+            return;
+        }
+
         events::navmesh::StopAgentCommand stopCmd;
         stopCmd.entity = entity;
         events::EventDispatcher::instance().execute(stopCmd);
+    }
+
+    // === Flying agents (VK-1660) ===
+
+    bool BehaviorTreeAdapter::isVolumetricAgent(services::EntityHandle entity) const
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!services::internal::isValidHandle(entity, registry))
+            return false;
+        const entt::entity owner = services::internal::fromHandle(entity);
+        return registry.all_of<components::VolumetricAgentComponent>(owner) &&
+               !registry.all_of<components::NavmeshAgentComponent>(owner);
+    }
+
+    void BehaviorTreeAdapter::setVolumetricDestination(services::EntityHandle entity, const glm::vec3& target)
+    {
+        try
+        {
+            events::volumetric::SetVolumetricAgentDestinationCommand cmd;
+            cmd.entity = entity;
+            cmd.target = target;
+            events::EventDispatcher::instance().execute(cmd);
+        }
+        catch (const std::exception& e)
+        {
+            if (warnOnce(entity.id, "flight:destination"))
+                vfLogWarning("BT: sending flying agent {} to a destination failed: {}", entity.id, e.what());
+        }
+    }
+
+    std::optional<services::VolumetricAgentState> BehaviorTreeAdapter::volumetricAgentState(
+        services::EntityHandle entity)
+    {
+        try
+        {
+            events::volumetric::GetVolumetricAgentStateQuery query;
+            query.entity = entity;
+            return events::EventDispatcher::instance().query(query);
+        }
+        catch (const std::exception& e)
+        {
+            if (warnOnce(entity.id, "flight:state"))
+                vfLogWarning("BT: reading flying agent {}'s state failed: {}", entity.id, e.what());
+            return std::nullopt;
+        }
+    }
+
+    glm::vec3 BehaviorTreeAdapter::snapToVolume(const glm::vec3& point) const
+    {
+        // No volume near the marker (or no handler): keep it as placed - the destination command that follows
+        // reports the failure through the agent's state.
+        try
+        {
+            events::volumetric::GetNearestNavigable3DQuery query;
+            query.point = point;
+            query.snapRadius = kRouteVolumeSnapRadius;
+            if (const std::optional<glm::vec3> nearest = events::EventDispatcher::instance().query(query))
+                return *nearest;
+        }
+        catch (const std::exception&)
+        {
+        }
+        return point;
     }
 
     glm::vec3 BehaviorTreeAdapter::snapToNavmesh(const glm::vec3& point) const
@@ -1313,10 +1521,11 @@ namespace core
                                                                                 std::string& problem) const
     {
         auto& registry = scene::EntityRegistry::getRegistry();
+        const bool flying = isVolumetricAgent(entity);
         if (!services::internal::isValidHandle(entity, registry) ||
-            !registry.all_of<components::NavmeshAgentComponent>(services::internal::fromHandle(entity)))
+            (!flying && !registry.all_of<components::NavmeshAgentComponent>(services::internal::fromHandle(entity))))
         {
-            problem = "the entity has no NavmeshAgent";
+            problem = "the entity has no NavmeshAgent or VolumetricAgent";
             return std::nullopt;
         }
 
@@ -1347,7 +1556,8 @@ namespace core
             {
                 if (child == entt::null || !registry.valid(child))
                     continue;
-                points.push_back(snapToNavmesh(scene::composeWorldPosition(registry, child)));
+                const glm::vec3 marker = scene::composeWorldPosition(registry, child);
+                points.push_back(flying ? snapToVolume(marker) : snapToNavmesh(marker));
             }
         }
         if (points.empty())
@@ -1392,13 +1602,15 @@ namespace core
         if (!ownerPosition.has_value())
             return BTNodeStatus::Failure;
 
+        // A flying agent walks the markers in 3D through the voxel volumes.
+        const bool flying = isVolumetricAgent(entity);
         RouteFollowerSettings settings;
         settings.mode = request.mode;
         settings.arrivalDistance = request.arrivalDistance;
         settings.dwell = request.dwell;
         settings.startAtNearest = request.startAtNearest;
         settings.legTimeout = request.legTimeout;
-        settings.horizontal = true;
+        settings.horizontal = !flying;
 
         RouteRun& run = runIt->second;
         const RouteStep step = stepRoute(run.points, settings, run.follower, *ownerPosition, deltaTime, entering);
@@ -1406,10 +1618,18 @@ namespace core
         {
         case RouteAction::IssueDestination:
         {
-            events::navmesh::SetAgentDestinationCommand navCmd;
-            navCmd.entity = entity;
-            navCmd.target = run.points[static_cast<size_t>(step.targetIndex)];
-            events::EventDispatcher::instance().execute(navCmd);
+            const glm::vec3& marker = run.points[static_cast<size_t>(step.targetIndex)];
+            if (flying)
+            {
+                setVolumetricDestination(entity, marker);
+            }
+            else
+            {
+                events::navmesh::SetAgentDestinationCommand navCmd;
+                navCmd.entity = entity;
+                navCmd.target = marker;
+                events::EventDispatcher::instance().execute(navCmd);
+            }
             break;
         }
         case RouteAction::Stop:
@@ -1417,6 +1637,23 @@ namespace core
             break;
         case RouteAction::None:
             break;
+        }
+
+        // A flying agent that cannot reach its marker (no path through the volumes, stuck) fails the patrol, as a
+        // timed-out leg does. Not read on a tick that issued a leg: from the next tick on the state is that leg's.
+        if (flying && step.status == BTNodeStatus::Running && step.action != RouteAction::IssueDestination)
+        {
+            const auto state = volumetricAgentState(entity);
+            if (state && state->state == services::VolumetricAgentMoveState::Failed)
+            {
+                if (warnOnce(entity.id, warnKey + ":flight"))
+                {
+                    vfLogWarning("BT FollowRoute '{}' (entity {}): the flying agent cannot reach marker {}: {}",
+                                 node.name, entity.id, run.follower.targetIndex, state->failReason);
+                }
+                stopAgent(entity);
+                return BTNodeStatus::Failure;
+            }
         }
         return step.status;
     }

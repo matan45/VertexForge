@@ -1,11 +1,15 @@
 #include "BTPropertyPanel.hpp"
 #include "BTValueWidgets.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeNodeCatalog.hpp"
+#include "events/EventDispatcher.hpp"
+#include "events/ai/EQSEvents.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <array>
+#include <exception>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 using namespace behaviortree;
 
@@ -37,7 +41,8 @@ namespace editor::windows
             return nullptr;
         }
 
-        // A key parameter as a blackboard-key picker limited to the key types the catalogue allows.
+        // A key parameter as a blackboard-key picker limited to the key types the catalogue allows; an optional
+        // one (allowEmptyKey) also offers "(none)".
         bool drawKeyParam(BTNode& node, const BTGraph* graph, const catalog::ParamSpec* spec, const char* label)
         {
             if (!spec) return false;
@@ -49,7 +54,8 @@ namespace editor::windows
                                        [&allowed](BlackboardValueType type)
                                        {
                                            return std::find(allowed.begin(), allowed.end(), type) != allowed.end();
-                                       });
+                                       },
+                                       spec->allowEmptyKey);
         }
 
         // A Float parameter as a drag field over the catalogue's range, starting at its seed.
@@ -129,6 +135,96 @@ namespace editor::windows
                 }
             }
             node.properties = std::move(properties);
+        }
+
+        // VK-1660: the EQS template name - free text, plus a picker of the templates in the project's
+        // assets/eqs folder (read again each time it opens) and a status line for the current name.
+        bool drawQueryNameParam(BTNode& node)
+        {
+            std::string queryName;
+            auto it = node.properties.find("queryName");
+            if (it != node.properties.end() && std::holds_alternative<std::string>(it->second))
+                queryName = std::get<std::string>(it->second);
+
+            bool changed = false;
+            char queryBuf[128];
+            strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
+            queryBuf[sizeof(queryBuf) - 1] = '\0';
+            if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
+            {
+                queryName = queryBuf;
+                node.properties["queryName"] = queryName;
+                changed = true;
+            }
+
+            ImGui::SameLine();
+            static std::vector<services::EQSQueryInfo> templates;
+            if (!ImGui::BeginCombo("##eqsTemplates", nullptr, ImGuiComboFlags_NoPreview))
+            {
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Pick a template from assets/eqs");
+            }
+            else
+            {
+                if (ImGui::IsWindowAppearing())
+                {
+                    try
+                    {
+                        templates = events::EventDispatcher::instance().query(events::ai::ListEQSQueriesQuery{});
+                    }
+                    catch (const std::exception&)
+                    {
+                        templates.clear(); // no EQS service in this binary
+                    }
+                }
+                if (templates.empty())
+                    ImGui::TextDisabled("No templates in assets/eqs");
+                for (const auto& info : templates)
+                {
+                    const std::string label = info.valid ? info.name : info.name + " (invalid)";
+                    if (ImGui::Selectable(label.c_str(), info.name == queryName) && info.name != queryName)
+                    {
+                        queryName = info.name;
+                        node.properties["queryName"] = queryName;
+                        changed = true;
+                    }
+                    if (ImGui::IsItemHovered() && !info.summary.empty())
+                        ImGui::SetTooltip("%s", info.summary.c_str());
+                }
+                ImGui::EndCombo();
+            }
+
+            if (!queryName.empty())
+            {
+                try
+                {
+                    events::ai::GetEQSQueryInfoQuery query;
+                    query.queryName = queryName;
+                    const services::EQSQueryInfo info = events::EventDispatcher::instance().query(query);
+                    const ImVec4 warning(1.0f, 0.7f, 0.2f, 1.0f);
+                    if (!info.exists)
+                    {
+                        ImGui::TextColored(warning, "No template assets/eqs/%s.vfEQSQuery", queryName.c_str());
+                    }
+                    else if (!info.valid)
+                    {
+                        const std::string reason = info.errors.empty()
+                            ? std::string("The template is invalid")
+                            : (info.errors.front().path.empty() ? info.errors.front().message
+                                                                : info.errors.front().path + ": " + info.errors.front().message);
+                        ImGui::TextColored(warning, "%s", reason.c_str());
+                    }
+                    else if (!info.summary.empty())
+                    {
+                        ImGui::TextDisabled("%s", info.summary.c_str());
+                    }
+                }
+                catch (const std::exception&)
+                {
+                    // No EQS service in this binary: no status line.
+                }
+            }
+            return changed;
         }
 
         bool drawTypedNodeValue(BTNode& node,
@@ -614,26 +710,19 @@ namespace editor::windows
 
     void BTPropertyPanel::drawEnvironmentQueryProperties(BTNode& node, const BTGraph* graph)
     {
-        // Query name
-        std::string queryName;
-        auto qIt = node.properties.find("queryName");
-        if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
-            queryName = std::get<std::string>(qIt->second);
-
-        char queryBuf[128];
-        strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
-        queryBuf[sizeof(queryBuf) - 1] = '\0';
-        if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
-        {
-            node.properties["queryName"] = std::string(queryBuf);
+        if (drawQueryNameParam(node))
             notifyChanged();
-        }
 
-        // Result key (Vec3 blackboard keys), free-text fallback when none exist.
-        const auto isVec3 = [](BlackboardValueType t) { return t == BlackboardValueType::Vec3; };
-        if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+        // Key pickers limited to the key types the catalogue allows (VK-1660).
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::EnvironmentQuery, "targetKey"), "Target Key"))
             notifyChanged();
-        ImGui::TextDisabled("Best query position is written to the result key");
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::EnvironmentQuery, "resultKey"), "Result Key"))
+            notifyChanged();
+        if (drawKeyParam(node, graph, findParamSpec(BTNodeType::EnvironmentQuery, "resultEntityKey"),
+                         "Result Entity Key"))
+            notifyChanged();
+        ImGui::TextDisabled("Best position -> result key, its entity -> result entity key");
+        ImGui::TextDisabled("The target key (optional) is the query's target");
     }
 
     void BTPropertyPanel::drawSubTreeProperties(BTNode& node)
@@ -842,21 +931,17 @@ namespace editor::windows
 
         if (typeStr == "EQSRefresh")
         {
-            std::string queryName;
-            auto qIt = node.properties.find("queryName");
-            if (qIt != node.properties.end() && std::holds_alternative<std::string>(qIt->second))
-                queryName = std::get<std::string>(qIt->second);
-            char queryBuf[128];
-            strncpy(queryBuf, queryName.c_str(), sizeof(queryBuf) - 1);
-            queryBuf[sizeof(queryBuf) - 1] = '\0';
-            if (ImGui::InputText("Query Name", queryBuf, sizeof(queryBuf)))
-            {
-                node.properties["queryName"] = std::string(queryBuf);
+            if (drawQueryNameParam(node))
                 notifyChanged();
-            }
-            if (bt::drawKeyDropdown(node, graph, "Result Key", "resultKey", "eqsResult", isVec3))
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "targetKey", typeStr), "Target Key"))
                 notifyChanged();
-            ImGui::TextDisabled("Refreshes an EQS query on interval; best position -> result key");
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "resultKey", typeStr), "Result Key"))
+                notifyChanged();
+            if (drawKeyParam(node, graph, findParamSpec(BTNodeType::Service, "resultEntityKey", typeStr),
+                             "Result Entity Key"))
+                notifyChanged();
+            ImGui::TextDisabled("Refreshes an EQS query on interval; best position -> result key,");
+            ImGui::TextDisabled("its entity -> result entity key (cleared when it finds nothing)");
         }
         else if (typeStr == "LineOfSightRefresh")
         {

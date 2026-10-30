@@ -1,8 +1,11 @@
 #include <doctest.h>
 #include <serialization/SceneSerialization.hpp>
+#include <serialization/PrefabSerialization.hpp>
 #include <scene/SceneGraphSystem.hpp>
+#include <scene/Entity.hpp>
 #include <components/Components.hpp>
 #include <asset/AssetDatabase.hpp>
+#include <asset/AssetRef.hpp>
 #include <behaviortree/BlackboardInitialValue.hpp>
 #include <nlohmann/json.hpp>
 
@@ -12,9 +15,10 @@
 
 // ============================================================
 // VK-1660: scene round trips for the AI component fields:
-// BehaviorTreeComponent::initialValues, NavmeshAgentComponent::baseOffset, NavRouteComponent.
+// BehaviorTreeComponent::initialValues, NavmeshAgentComponent::baseOffset, NavRouteComponent, and the
+// redesigned VolumetricNavVolume / VolumetricAgent components (scene and prefab).
 // The per-component serializers are private to SceneSerialization, so everything goes through the
-// public saveScene / loadSceneInto path the editor uses.
+// public saveScene / loadSceneInto and savePrefab / loadPrefab paths the editor uses.
 // ============================================================
 
 namespace
@@ -196,5 +200,112 @@ TEST_SUITE("AIComponentSerialization")
         REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
         REQUIRE(loaded.GetRoot().hasComponent<components::NavRouteComponent>());
         CHECK(loaded.GetRoot().getComponent<components::NavRouteComponent>().showPath == false);
+    }
+
+    TEST_CASE("volumetric volume and agent round-trip through a scene and a prefab")
+    {
+        resetAiSerializationTestRoot();
+
+        // A baked file, so bakedRef is a registered asset.
+        const fs::path bakedPath = aiSerializationTestRoot() / "Volume.vfVolNav";
+        {
+            std::ofstream baked(bakedPath, std::ios::binary);
+            REQUIRE(baked.is_open());
+            baked << "VNVO";
+        }
+        const asset::AssetRef bakedRef = asset::AssetRef::fromPath(bakedPath.string());
+        REQUIRE(bakedRef.isValid());
+
+        components::VolumetricNavVolumeComponent volumeValues;
+        volumeValues.centerOffset = glm::vec3(1.0f, 2.0f, -3.0f);
+        volumeValues.halfExtents = glm::vec3(4.0f, 5.5f, 6.0f);
+        volumeValues.voxelSize = 0.5f;
+        volumeValues.connectivity = 6;
+        volumeValues.agentClearance = 0.75f;
+        volumeValues.includeTerrain = false;
+        volumeValues.includeStaticMeshes = true;
+        volumeValues.includeColliders = false;
+        volumeValues.bakedRef = bakedRef;
+        volumeValues.isBaked = true; // runtime state: never saved
+
+        components::VolumetricAgentComponent agentValues;
+        agentValues.radius = 0.6f;
+        agentValues.maxSpeed = 7.0f;
+        agentValues.maxAcceleration = 12.0f;
+        agentValues.stoppingDistance = 0.4f;
+        agentValues.turnSpeed = 180.0f;
+        agentValues.alignPitch = true;
+        agentValues.isActive = true; // runtime state: never saved
+
+        auto checkVolume = [&](const components::VolumetricNavVolumeComponent& volume)
+        {
+            CHECK(volume.centerOffset == volumeValues.centerOffset);
+            CHECK(volume.halfExtents == volumeValues.halfExtents);
+            CHECK(volume.voxelSize == doctest::Approx(0.5f));
+            CHECK(volume.connectivity == 6);
+            CHECK(volume.agentClearance == doctest::Approx(0.75f));
+            CHECK(volume.includeTerrain == false);
+            CHECK(volume.includeStaticMeshes == true);
+            CHECK(volume.includeColliders == false);
+            CHECK(volume.bakedRef == bakedRef);
+            CHECK(volume.isBaked == false);
+        };
+        auto checkAgent = [&](const components::VolumetricAgentComponent& agent)
+        {
+            CHECK(agent.radius == doctest::Approx(0.6f));
+            CHECK(agent.maxSpeed == doctest::Approx(7.0f));
+            CHECK(agent.maxAcceleration == doctest::Approx(12.0f));
+            CHECK(agent.stoppingDistance == doctest::Approx(0.4f));
+            CHECK(agent.turnSpeed == doctest::Approx(180.0f));
+            CHECK(agent.alignPitch == true);
+            CHECK(agent.isActive == false);
+        };
+
+        SUBCASE("scene")
+        {
+            scene::SceneGraphSystem source;
+            source.GetRoot().addOrReplaceComponent<components::VolumetricNavVolumeComponent>() = volumeValues;
+            source.GetRoot().addOrReplaceComponent<components::VolumetricAgentComponent>() = agentValues;
+
+            const fs::path scenePath = aiSerializationTestRoot() / "Volumetric.vfScene";
+            REQUIRE(serialization::SceneSerialization::saveScene(source, scenePath.string()));
+
+            {
+                std::ifstream file(scenePath);
+                REQUIRE(file.is_open());
+                const json sceneJson = json::parse(file);
+                const json& volumeJson = sceneJson["root"]["components"]["volumetricNavVolume"];
+                CHECK(volumeJson.contains("bakedRef")); // ends in "Ref": the dependency scanner follows it
+                CHECK_FALSE(volumeJson.contains("boundsMin"));
+            }
+
+            scene::SceneGraphSystem loaded;
+            REQUIRE(serialization::SceneSerialization::loadSceneInto(scenePath.string(), loaded));
+            REQUIRE(loaded.GetRoot().hasComponent<components::VolumetricNavVolumeComponent>());
+            REQUIRE(loaded.GetRoot().hasComponent<components::VolumetricAgentComponent>());
+            checkVolume(loaded.GetRoot().getComponent<components::VolumetricNavVolumeComponent>());
+            checkAgent(loaded.GetRoot().getComponent<components::VolumetricAgentComponent>());
+        }
+
+        SUBCASE("prefab")
+        {
+            scene::SceneGraphSystem source;
+            scene::Entity entity("VolumetricPrefabEntity");
+            source.addChild(source.GetRoot(), entity);
+            entity.addOrReplaceComponent<components::VolumetricNavVolumeComponent>() = volumeValues;
+            entity.addOrReplaceComponent<components::VolumetricAgentComponent>() = agentValues;
+
+            const fs::path prefabPath = aiSerializationTestRoot() / "Volumetric.vfPrefab";
+            REQUIRE(serialization::PrefabSerialization::savePrefab(entity, prefabPath.string()));
+
+            scene::SceneGraphSystem dest;
+            auto root = dest.GetRoot();
+            auto loaded = serialization::PrefabSerialization::loadPrefab(prefabPath.string(), root, dest);
+            REQUIRE(loaded.has_value());
+            REQUIRE(loaded->hasComponent<components::VolumetricNavVolumeComponent>());
+            REQUIRE(loaded->hasComponent<components::VolumetricAgentComponent>());
+            checkVolume(loaded->getComponent<components::VolumetricNavVolumeComponent>());
+            checkAgent(loaded->getComponent<components::VolumetricAgentComponent>());
+        }
     }
 }

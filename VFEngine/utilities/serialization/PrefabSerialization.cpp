@@ -128,6 +128,18 @@ namespace serialization
                 entity.getComponent<components::NavRouteComponent>());
         }
 
+        if (entity.hasComponent<components::VolumetricNavVolumeComponent>())
+        {
+            out["volumetricNavVolume"] = SceneSerialization::serializeVolumetricNavVolume(
+                entity.getComponent<components::VolumetricNavVolumeComponent>());
+        }
+
+        if (entity.hasComponent<components::VolumetricAgentComponent>())
+        {
+            out["volumetricAgent"] = SceneSerialization::serializeVolumetricAgent(
+                entity.getComponent<components::VolumetricAgentComponent>());
+        }
+
         if (entity.hasComponent<components::VFXComponent>())
         {
             out["vfx"] = SceneSerialization::serializeVFX(
@@ -527,6 +539,18 @@ namespace serialization
         {
             auto& navRouteComp = entity.addOrReplaceComponent<components::NavRouteComponent>();
             SceneSerialization::deserializeNavRoute(componentsJson["navRoute"], navRouteComp);
+        }
+
+        if (componentsJson.contains("volumetricNavVolume"))
+        {
+            auto& volumeComp = entity.addOrReplaceComponent<components::VolumetricNavVolumeComponent>();
+            SceneSerialization::deserializeVolumetricNavVolume(componentsJson["volumetricNavVolume"], volumeComp);
+        }
+
+        if (componentsJson.contains("volumetricAgent"))
+        {
+            auto& agentComp = entity.addOrReplaceComponent<components::VolumetricAgentComponent>();
+            SceneSerialization::deserializeVolumetricAgent(componentsJson["volumetricAgent"], agentComp);
         }
 
         if (componentsJson.contains("socketAttachment"))

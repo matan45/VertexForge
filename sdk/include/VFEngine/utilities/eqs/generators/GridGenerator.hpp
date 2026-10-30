@@ -1,21 +1,29 @@
 #pragma once
 
 #include "../IEQSGenerator.hpp"
+#include "../EQSContextPoint.hpp"
 
 namespace eqs
 {
+    // A square grid of points centered on the querier or the target, at its height.
     class GridGenerator : public IEQSGenerator
     {
     public:
-        GridGenerator(int gridSize = 11, float spacing = 2.0f);
+        struct Settings
+        {
+            EQSContextPoint center = EQSContextPoint::Querier;
+            int size = 11;         // points per side
+            float spacing = 2.0f;  // metres between neighbouring points
+        };
 
-        std::vector<EQSCandidate> generate(const EQSContext& context,
-                                            const EQSProviderRefs& providers) override;
+        explicit GridGenerator(const Settings& settings);
 
-        std::string getName() const override { return "GridGenerator"; }
+        bool generate(const EQSContext& context, const EQSProviderRefs& providers,
+                      std::vector<EQSCandidate>& out, std::string& error) const override;
+
+        std::string getName() const override { return "Grid"; }
 
     private:
-        int gridSize;
-        float spacing;
+        Settings settings;
     };
 }

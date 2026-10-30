@@ -1,40 +1,32 @@
 #pragma once
 
-#include "../../services/providers/volumetric/IVolumetricNavProvider.hpp"
-#include "navigation/volumetric/SparseVoxelOctree.hpp"
-#include "navigation/volumetric/VolumetricPathfinder.hpp"
-#include <memory>
-#include <mutex>
+#include "../../../services/providers/volumetric/IVolumetricNavProvider.hpp"
+#include "navigation/volumetric/VolumetricNavWorld.hpp"
 
 namespace core
 {
+    // VK-1660: the loaded voxel volumes, one per VolumetricNavVolume entity (keyed by its UUID). A thin owner of a
+    // volumetric::VolumetricNavWorld, which does the locking: bakes and loads replace grids while agents and
+    // queries read them.
     class VolumetricNavAdapter : public services::IVolumetricNavProvider
     {
-    private:
-        std::unique_ptr<volumetric::SparseVoxelOctree> octree;
-        std::unique_ptr<volumetric::VolumetricPathfinder> pathfinder;
-
-        mutable std::mutex mutex;
-        mutable std::mutex progressMutex;
-        volumetric::VolumetricBakeProgress currentProgress;
-
     public:
-        VolumetricNavAdapter();
-        ~VolumetricNavAdapter() override;
+        VolumetricNavAdapter() = default;
+        ~VolumetricNavAdapter() override = default;
 
         VolumetricNavAdapter(const VolumetricNavAdapter&) = delete;
         VolumetricNavAdapter& operator=(const VolumetricNavAdapter&) = delete;
 
-        bool bakeVolume(glm::vec3 boundsMin, glm::vec3 boundsMax, float voxelSize,
-                        uint8_t connectivity, float agentClearance,
-                        const std::function<bool(glm::vec3, float)>& isBlocked) override;
-        volumetric::VolumePath findPath3D(glm::vec3 start, glm::vec3 end) override;
-        bool isPointNavigable(glm::vec3 point) override;
-        void clear() override;
-        bool hasVolume() const override;
-        volumetric::VolumetricBakeProgress getBakeProgress() const override;
+        void setVolume(uint64_t volumeId, std::shared_ptr<const volumetric::VoxelGrid> grid) override;
+        void removeVolume(uint64_t volumeId) override;
+        void clearVolumes() override;
+        std::shared_ptr<const volumetric::VoxelGrid> getVolume(uint64_t volumeId) const override;
+        std::vector<uint64_t> getVolumeIds() const override;
+        uint64_t volumeAt(const glm::vec3& point) const override;
+        volumetric::VolumePathResult findPath3D(const volumetric::PathRequest& request) const override;
+        volumetric::VolumetricNavWorld::PointQuery queryPoint(const glm::vec3& point, float snapRadius) const override;
 
     private:
-        void updateProgress(volumetric::VolumetricBakeStatus status, float progress, const std::string& stage);
+        volumetric::VolumetricNavWorld world;
     };
 }

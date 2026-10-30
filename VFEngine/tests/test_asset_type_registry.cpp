@@ -61,6 +61,8 @@ namespace
             {".vfretarget", AssetType::RetargetMap},
             {".vftoonprofile", AssetType::ToonProfile}, // VK-1493
             {".vfscatterprofile", AssetType::ScatterProfile}, // VK-1585
+            {".vfeqsquery", AssetType::EQSQuery}, // VK-1660
+            {".vfvolnav", AssetType::VolumetricNav}, // VK-1660
             {".mt", AssetType::Script},
         };
         return m;
@@ -76,7 +78,7 @@ namespace
             ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
             ".vfnavindex", ".vfimposter", ".vfinputmapping",
             ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget",
-            ".vftoonprofile", ".vfscatterprofile", ".mt" // VK-1493, VK-1585
+            ".vftoonprofile", ".vfscatterprofile", ".vfeqsquery", ".vfvolnav", ".mt" // VK-1493, VK-1585, VK-1660
         };
         return s;
     }

@@ -70,6 +70,8 @@ namespace asset
                 {".vfretarget", resource::AssetType::RetargetMap},
                 {".vftoonprofile", resource::AssetType::ToonProfile},
                 {".vfscatterprofile", resource::AssetType::ScatterProfile}, // VK-1585
+                {".vfeqsquery", resource::AssetType::EQSQuery}, // VK-1660
+                {".vfvolnav", resource::AssetType::VolumetricNav}, // VK-1660 (binary)
                 {".mt", resource::AssetType::Script},
             };
 
@@ -84,7 +86,7 @@ namespace asset
                 ".vfterrain", ".vfterrainmat", ".vfwater", ".vfnavmesh",
                 ".vfnavindex", ".vfimposter", ".vfinputmapping",
                 ".vfbehaviortree", ".vfphysanim", ".vfrig", ".vfretarget",
-                ".vftoonprofile", ".vfscatterprofile", ".mt"
+                ".vftoonprofile", ".vfscatterprofile", ".vfeqsquery", ".vfvolnav", ".mt"
             };
 
             // JSON-based asset files that can reference other assets — the set

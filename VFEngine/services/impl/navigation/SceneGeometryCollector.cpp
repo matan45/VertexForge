@@ -429,6 +429,66 @@ namespace services
             collectFoliageInBounds(all, outGeometry);
         }
 
+        // Appends a collected triangle soup to a volumetric bake's vertex / index lists.
+        void appendTriangles(const navigation::NavmeshInputGeometry& geometry, std::vector<float>& vertices,
+                             std::vector<uint32_t>& indices)
+        {
+            const uint32_t base = static_cast<uint32_t>(vertices.size() / 3);
+            vertices.insert(vertices.end(), geometry.vertices.begin(), geometry.vertices.end());
+            indices.reserve(indices.size() + geometry.triangles.size());
+            for (int index : geometry.triangles)
+                indices.push_back(base + static_cast<uint32_t>(index));
+        }
+
+        // VK-1660: Sphere and Capsule colliders as solid shapes for the volumetric bake, shaped like the physics
+        // body (PhysicsConversions / PhysicsShapeFactory): a sphere of radius size.x; a capsule of radius size.x
+        // and total height `height` along the entity's local Y. Both sit at the collider offset in entity space;
+        // the radius follows the entity's X scale (physics scales the collider size by |scale|), the height does
+        // not. Filtered like collectColliders.
+        void collectColliderShapes(const navigation::NavmeshTileBounds& bounds, volumetric::VolumetricBakeInput& out)
+        {
+            auto& registry = scene::EntityRegistry::getRegistry();
+            auto view = registry.view<components::ColliderComponent, components::TransformComponent>();
+            for (auto entity : view)
+            {
+                // An entity with a mesh contributes the mesh itself.
+                if (registry.all_of<components::MeshComponent>(entity))
+                    continue;
+
+                if (isMover(registry, entity))
+                    continue;
+
+                const auto& collider = view.get<components::ColliderComponent>(entity);
+                if (collider.isTrigger)
+                    continue;
+                if (collider.shape != components::ColliderShape::Sphere &&
+                    collider.shape != components::ColliderShape::Capsule)
+                    continue;
+
+                const glm::mat4 entityMatrix = scene::composeWorldMatrix(registry, entity);
+                if (!originNear2D(bounds, glm::vec3(entityMatrix[3]), ENTITY_BOUNDS_MARGIN))
+                    continue;
+
+                const glm::vec3 center = glm::vec3(entityMatrix * glm::vec4(collider.offset, 1.0f));
+                const float radius = collider.size.x * glm::length(glm::vec3(entityMatrix[0]));
+                if (!(radius > 0.0f))
+                    continue;
+
+                if (collider.shape == components::ColliderShape::Sphere)
+                {
+                    out.spheres.push_back(volumetric::VoxelSphere{center, radius});
+                    continue;
+                }
+
+                glm::vec3 axis(entityMatrix[1]);
+                const float axisLength = glm::length(axis);
+                axis = axisLength > 1.0e-6f ? axis / axisLength : glm::vec3(0.0f, 1.0f, 0.0f);
+                const float halfSegment = glm::max(collider.height * 0.5f - radius, 0.0f);
+                out.capsules.push_back(volumetric::VoxelCapsule{center - axis * halfSegment, center + axis * halfSegment,
+                                                                radius});
+            }
+        }
+
         void collectObstacles(const navigation::NavmeshTileBounds* bounds, navigation::NavmeshInputGeometry& outGeometry)
         {
             auto& registry = scene::EntityRegistry::getRegistry();
@@ -477,6 +537,33 @@ namespace services
                                          navigation::NavmeshInputGeometry& outGeometry) const
     {
         collectSources(&bounds, outGeometry);
+    }
+
+    void SceneGeometryCollector::collectVolumetric(const glm::vec3& boxMin, const glm::vec3& boxMax,
+                                                   volumetric::VolumetricBakeInput& out) const
+    {
+        navigation::NavmeshTileBounds bounds;
+        bounds.min = boxMin;
+        bounds.max = boxMax;
+
+        if (sources.terrain)
+        {
+            navigation::NavmeshInputGeometry terrain;
+            collectTerrain(&bounds, terrain);
+            appendTriangles(terrain, out.terrainVertices, out.terrainIndices);
+        }
+
+        navigation::NavmeshInputGeometry solids;
+        if (sources.staticMeshes)
+            collectStaticMeshes(&bounds, solids);
+        if (sources.foliage)
+            collectFoliage(&bounds, solids);
+        if (sources.colliders)
+            collectColliders(&bounds, solids);
+        appendTriangles(solids, out.vertices, out.indices);
+
+        if (sources.colliders)
+            collectColliderShapes(bounds, out);
     }
 
     void SceneGeometryCollector::collectSources(const navigation::NavmeshTileBounds* bounds,

@@ -39,8 +39,8 @@ namespace
         {
             return bt::BTNodeStatus::Success;
         }
-        bt::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const std::string&, const std::string&,
-                                                 bt::Blackboard&, bool) override
+        bt::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const bt::BTNode&,
+                                                 const bt::EnvironmentQueryRequest&, bt::Blackboard&, bool) override
         {
             return bt::BTNodeStatus::Running;
         }
@@ -79,6 +79,23 @@ namespace
                                        bt::Blackboard&, bool) override
         {
             ++calls;
+            lastRequest = request;
+            return bt::BTNodeStatus::Running;
+        }
+    };
+
+    struct QueryRecorder : BaseTestExecutor
+    {
+        int calls = 0;
+        uint32_t lastNodeId = 0;
+        bt::EnvironmentQueryRequest lastRequest;
+
+        bt::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const bt::BTNode& node,
+                                                 const bt::EnvironmentQueryRequest& request, bt::Blackboard&,
+                                                 bool) override
+        {
+            ++calls;
+            lastNodeId = node.id;
             lastRequest = request;
             return bt::BTNodeStatus::Running;
         }
@@ -133,6 +150,21 @@ namespace
         auto move = makeNode(2, bt::BTNodeType::MoveTo);
         move.properties = std::move(properties);
         data.graph.nodes.push_back(move);
+        data.graph.rootNodeId = 1;
+        link(data.graph, 1, 2, 0);
+        data.graph.nextNodeId = 3;
+        return data;
+    }
+
+    // Root -> EnvironmentQuery(id 2) with the given properties.
+    bt::BehaviorTreeData makeQueryTree(std::unordered_map<std::string, bt::BlackboardValue> properties)
+    {
+        bt::BehaviorTreeData data;
+        data.name = "QueryTree";
+        data.graph.nodes.push_back(makeNode(1, bt::BTNodeType::Root));
+        auto query = makeNode(2, bt::BTNodeType::EnvironmentQuery);
+        query.properties = std::move(properties);
+        data.graph.nodes.push_back(query);
         data.graph.rootNodeId = 1;
         link(data.graph, 1, 2, 0);
         data.graph.nextNodeId = 3;
@@ -261,6 +293,51 @@ TEST_SUITE("BTFollowRouteTask")
         CHECK(executor.lastRequest.arrivalDistance == doctest::Approx(defaults.arrivalDistance));
         CHECK(executor.lastRequest.repathDistance == doctest::Approx(defaults.repathDistance));
         CHECK(executor.lastRequest.stopOnArrival == defaults.stopOnArrival);
+    }
+
+    TEST_CASE("tickTask hands every EnvironmentQuery property and the node to the executor")
+    {
+        bt::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<bt::BehaviorTreeData>(makeQueryTree({
+            {"queryName", std::string("NearestEnemy")},
+            {"resultKey", std::string("enemyPos")},
+            {"targetKey", std::string("target")},
+            {"resultEntityKey", std::string("enemyId")},
+        })), services::EntityHandle{});
+        QueryRecorder executor;
+        CHECK(runtime.tick(0.1f, &executor) == bt::BTNodeStatus::Running);
+
+        REQUIRE(executor.calls == 1);
+        CHECK(executor.lastNodeId == 2);
+        CHECK(executor.lastRequest.queryName == "NearestEnemy");
+        CHECK(executor.lastRequest.resultKey == "enemyPos");
+        CHECK(executor.lastRequest.targetKey == "target");
+        CHECK(executor.lastRequest.resultEntityKey == "enemyId");
+    }
+
+    TEST_CASE("missing EnvironmentQuery properties take the request defaults")
+    {
+        bt::BehaviorTreeRuntime runtime;
+        runtime.init(std::make_shared<bt::BehaviorTreeData>(makeQueryTree({})), services::EntityHandle{});
+        QueryRecorder executor;
+        runtime.tick(0.1f, &executor);
+
+        const bt::EnvironmentQueryRequest defaults;
+        REQUIRE(executor.calls == 1);
+        CHECK(executor.lastRequest.queryName == defaults.queryName);
+        CHECK(executor.lastRequest.resultKey == defaults.resultKey);
+        CHECK(executor.lastRequest.targetKey.empty());
+        CHECK(executor.lastRequest.resultEntityKey.empty());
+    }
+
+    TEST_CASE("the catalogue seeds EnvironmentQuery with the request defaults")
+    {
+        const bt::EnvironmentQueryRequest query;
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::EnvironmentQuery, "queryName") == query.queryName);
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::EnvironmentQuery, "resultKey") == query.resultKey);
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::EnvironmentQuery, "targetKey") == query.targetKey);
+        CHECK(catalogDefault<std::string>(bt::BTNodeType::EnvironmentQuery, "resultEntityKey") ==
+              query.resultEntityKey);
     }
 
     TEST_CASE("the catalogue seeds MoveTo and FollowRoute with the request defaults")

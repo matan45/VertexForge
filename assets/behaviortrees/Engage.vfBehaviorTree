@@ -22,7 +22,7 @@
         { "id": 1, "source": 1, "target": 2, "sortOrder": 0 }
     ],
     "blackboardKeys": [
-        { "name": "enemyId", "type": "Int", "default": 0 },
+        { "name": "enemyId", "type": "Int", "default": -1 },
         { "name": "enemyPos", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
         { "name": "attackRange", "type": "Float", "default": 2.5 }
     ]

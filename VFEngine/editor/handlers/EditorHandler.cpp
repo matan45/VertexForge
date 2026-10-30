@@ -16,6 +16,7 @@
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreeAuthoringService.hpp"
+#include "impl/ai/EQSAuthoringService.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
@@ -244,6 +245,7 @@ namespace handlers
         lightStreamingService.reset();
         giService.reset();
         behaviorTreeAuthoringService.reset(); // stateless; its saves dispatch to the BT service below
+        eqsAuthoringService.reset(); // stateless; its saves notify the EQS service below
         behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
         eqsService.reset(); // after the BT service: stopping trees cancels EQS queries

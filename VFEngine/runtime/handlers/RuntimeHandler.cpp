@@ -289,8 +289,9 @@ namespace {
             return false;
         }
 
-        // Runtime play-mode handlers listen for EditorModeChangedNotification.
-        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler)
+        // Runtime play-mode handlers listen for EditorModeChangedNotification (the volumetric service gates its
+        // flying agents on it, VK-1660).
+        if (physicsPlayModeHandler || vfxPlayModeHandler || vfxSequencePlayModeHandler || volumetricNavService)
         {
             events::editor::EditorModeChangedNotification notification;
             notification.previousMode = services::EditorMode::Edit;
@@ -391,15 +392,11 @@ namespace {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
-        // VK-1660: volumetric navigation was never constructed (every call threw).
+        // VK-1660: volumetric navigation was never constructed (every call threw). Bakes are refused in Play, so
+        // the Runtime only loads the volumes its scenes saved and moves the flying agents.
         if (auto* volumetricProvider = bootstrap->getVolumetricNavProvider())
         {
-            services::IPhysicsProvider* physicsProvider = bootstrap->getPhysicsProvider();
-            auto raycast = [physicsProvider](glm::vec3 origin, glm::vec3 direction, float maxDistance)
-            {
-                return physicsProvider && physicsProvider->raycast(origin, direction, maxDistance).hit;
-            };
-            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider, raycast);
+            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider);
         }
 
         controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
@@ -657,7 +654,10 @@ namespace {
         // VK-1660: harvest finished EQS queries before the behavior trees poll them (mirrors the editor).
         frameTaskGraph->addTask("EQS", [this]() {
             if (eqsService) {
-                try { eqsService->update(2.0f); }
+                // Queued queries follow isGameTimeActive() (slow-mo / freeze); the overlay uses raw dt.
+                // Mirrors editor.
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                try { eqsService->update(dt, engineTime::Timer::isGameTimeActive()); }
                 catch (const std::exception& e) { vfLogError("[EQS] update threw: {}", e.what()); }
             }
         });
@@ -675,6 +675,16 @@ namespace {
                 // so it follows isGameTimeActive() (slow-mo / freeze). Mirrors editor.
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 navmeshService->update(dt, engineTime::Timer::isGameTimeActive());
+            }
+        });
+
+        // VK-1660: volumetric navigation - flying agents move while game time runs (mirrors the editor's task:
+        // after Navmesh, before Transforms; guarded like EQS).
+        frameTaskGraph->addTask("Volumetric", [this]() {
+            if (volumetricNavService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                try { volumetricNavService->update(dt, engineTime::Timer::isGameTimeActive()); }
+                catch (const std::exception& e) { vfLogError("[VolumetricNav] update threw: {}", e.what()); }
             }
         });
 
@@ -753,6 +763,7 @@ namespace {
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
+        frameTaskGraph->addDependency("Volumetric", "Navmesh");
         frameTaskGraph->addDependency("EQS", "Controllers");
         frameTaskGraph->addDependency("EQS", "WorldSector");
         frameTaskGraph->addDependency("BehaviorTrees", "EQS");
@@ -866,6 +877,7 @@ namespace {
         frameTaskGraph->addDependency("Transforms", "SunSync");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "Navmesh");
+        frameTaskGraph->addDependency("Transforms", "Volumetric");
         frameTaskGraph->addDependency("Transforms", "AudioListener");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");

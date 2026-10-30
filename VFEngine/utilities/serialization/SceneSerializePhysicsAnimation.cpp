@@ -990,27 +990,40 @@ namespace serialization
     json SceneSerialization::serializeVolumetricNavVolume(const components::VolumetricNavVolumeComponent& volume)
     {
         json j;
-        j["boundsMin"] = {volume.boundsMin.x, volume.boundsMin.y, volume.boundsMin.z};
-        j["boundsMax"] = {volume.boundsMax.x, volume.boundsMax.y, volume.boundsMax.z};
+        j["centerOffset"] = {volume.centerOffset.x, volume.centerOffset.y, volume.centerOffset.z};
+        j["halfExtents"] = {volume.halfExtents.x, volume.halfExtents.y, volume.halfExtents.z};
         j["voxelSize"] = volume.voxelSize;
         j["connectivity"] = volume.connectivity;
         j["agentClearance"] = volume.agentClearance;
+        j["includeTerrain"] = volume.includeTerrain;
+        j["includeStaticMeshes"] = volume.includeStaticMeshes;
+        j["includeColliders"] = volume.includeColliders;
+        // VK-1660: the baked .vfVolNav. The key ends in "Ref", so the asset DependencyScanner (and with it the
+        // export closure) follows it.
+        writeAssetRef(j, "bakedRef", volume.bakedRef);
         return j;
     }
 
     void SceneSerialization::deserializeVolumetricNavVolume(const json& j, components::VolumetricNavVolumeComponent& volume)
     {
-        if (auto it = j.find("boundsMin"); it != j.end() && it->is_array() && it->size() >= 3)
-            volume.boundsMin = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
-        if (auto it = j.find("boundsMax"); it != j.end() && it->is_array() && it->size() >= 3)
-            volume.boundsMax = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("centerOffset"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.centerOffset = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
+        if (auto it = j.find("halfExtents"); it != j.end() && it->is_array() && it->size() >= 3)
+            volume.halfExtents = {(*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>()};
         if (auto it = j.find("voxelSize"); it != j.end() && it->is_number())
             volume.voxelSize = it->get<float>();
         if (auto it = j.find("connectivity"); it != j.end() && it->is_number_unsigned())
             volume.connectivity = it->get<uint8_t>();
         if (auto it = j.find("agentClearance"); it != j.end() && it->is_number())
             volume.agentClearance = it->get<float>();
-        // Reset runtime state
+        if (auto it = j.find("includeTerrain"); it != j.end() && it->is_boolean())
+            volume.includeTerrain = it->get<bool>();
+        if (auto it = j.find("includeStaticMeshes"); it != j.end() && it->is_boolean())
+            volume.includeStaticMeshes = it->get<bool>();
+        if (auto it = j.find("includeColliders"); it != j.end() && it->is_boolean())
+            volume.includeColliders = it->get<bool>();
+        volume.bakedRef = readAssetRef(j, "bakedRef");
+        // Reset runtime state: the grid is loaded by the volumetric service (LoadSceneVolumetricVolumesCommand)
         volume.isBaked = false;
     }
 
@@ -1025,6 +1038,8 @@ namespace serialization
         j["maxSpeed"] = agent.maxSpeed;
         j["maxAcceleration"] = agent.maxAcceleration;
         j["stoppingDistance"] = agent.stoppingDistance;
+        j["turnSpeed"] = agent.turnSpeed;
+        j["alignPitch"] = agent.alignPitch;
         return j;
     }
 
@@ -1038,6 +1053,10 @@ namespace serialization
             agent.maxAcceleration = it->get<float>();
         if (auto it = j.find("stoppingDistance"); it != j.end() && it->is_number())
             agent.stoppingDistance = it->get<float>();
+        if (auto it = j.find("turnSpeed"); it != j.end() && it->is_number())
+            agent.turnSpeed = it->get<float>();
+        if (auto it = j.find("alignPitch"); it != j.end() && it->is_boolean())
+            agent.alignPitch = it->get<bool>();
         // Reset runtime state
         agent.isActive = false;
     }

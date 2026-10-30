@@ -266,8 +266,9 @@ struct AbortRecorder : behaviortree::IBTTaskExecutor {
     behaviortree::BTNodeStatus executeLog(const std::string&, behaviortree::LogLevel) override {
         return behaviortree::BTNodeStatus::Success;
     }
-    behaviortree::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const std::string&,
-                                                       const std::string&, behaviortree::Blackboard&, bool) override {
+    behaviortree::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const behaviortree::BTNode&,
+                                                       const behaviortree::EnvironmentQueryRequest&,
+                                                       behaviortree::Blackboard&, bool) override {
         return behaviortree::BTNodeStatus::Running;
     }
     behaviortree::BTNodeStatus executeLineOfSight(services::EntityHandle, const std::string&, float, float,

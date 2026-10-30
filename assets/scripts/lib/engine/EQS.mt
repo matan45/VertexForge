@@ -1,5 +1,8 @@
 // EQS - Static utility class for Environment Query System
-// Provides spatial AI decision-making queries (find cover, flanking positions, etc.)
+// Provides spatial AI decision-making queries (find cover, flanking positions, nearest enemy, etc.)
+//
+// A query is a template asset, assets/eqs/<Name>.vfEQSQuery; its name is the file stem (there is no
+// registration step). A submitted query runs in the next frame's EQS pass during Play.
 //
 // Usage examples:
 //   int self = Entity::self();
@@ -11,9 +14,11 @@
 //   if (result[0] == 2.0) { // status 2 = Completed
 //       Vec3f bestPos = new Vec3f(result[1], result[2], result[3]);
 //       Navmesh::setDestination(self, bestPos);
+//       EQS::cancelQuery(handle); // done with it
 //   }
 //
-// Note: Queries must be registered by name before use (typically in game setup code).
+// Call cancelQuery once you have read a result (or no longer need the query): finished results are
+// otherwise kept until they expire 600 frames later.
 // Status values: 0=Pending, 1=Running, 2=Completed, 3=Failed
 
 import * from "../math/Vec3f.mt";
@@ -44,6 +49,17 @@ public class EQS {
             position.x, position.y, position.z, forward.x, forward.z);
     }
 
+    // Submit a query built around a target (e.g. "find cover from the player")
+    // targetEntityId: the target entity, or -1 for a point target
+    // targetPosition: the target's world position (the entity's position for an entity target)
+    public static function submitQueryWithTarget(string queryName, int querierEntityId,
+                                                  Vec3f position, Vec3f forward,
+                                                  int targetEntityId, Vec3f targetPosition): int {
+        return (int)_native_eqs_submitQueryTarget(queryName, querierEntityId,
+            position.x, position.y, position.z, forward.x, forward.z,
+            targetEntityId, targetPosition.x, targetPosition.y, targetPosition.z);
+    }
+
     // ============================================
     // Result Polling
     // ============================================
@@ -65,6 +81,12 @@ public class EQS {
         return new Vec3f(0.0, 0.0, 0.0);
     }
 
+    // Get the entity of the best result of a completed query (an Entities query, e.g. NearestEnemy)
+    // Returns -1 if not completed, nothing was found, or the best result is a point
+    public static function getBestEntity(int handle): int {
+        return _native_eqs_getResultEntity(handle);
+    }
+
     // Check if a query is completed
     public static function isCompleted(int handle): bool {
         float[] raw = _native_eqs_getResult(handle);
@@ -75,7 +97,7 @@ public class EQS {
     // Query Management
     // ============================================
 
-    // Cancel a pending or running query
+    // Cancel a queued query, or free the result of a finished one
     public static function cancelQuery(int handle): void {
         _native_eqs_cancelQuery(handle);
     }

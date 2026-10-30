@@ -52,6 +52,15 @@ namespace behaviortree
         bool stopOnArrival = true;        // stop the agent when the task succeeds
     };
 
+    // EnvironmentQuery parameters (VK-1660), read from the node's properties by tickTask.
+    struct EnvironmentQueryRequest
+    {
+        std::string queryName;              // EQS template (assets/eqs/<Name>.vfEQSQuery)
+        std::string resultKey = "eqsResult"; // Vec3 key: the best candidate's position
+        std::string targetKey;              // optional Entity / Vec3 / Int key: the query's target ("" = none)
+        std::string resultEntityKey;        // optional Entity / Int key: the best candidate's entity ("" = unused)
+    };
+
     // FollowRoute parameters (VK-1660), read from the node's properties by tickTask.
     struct FollowRouteRequest
     {
@@ -85,10 +94,11 @@ namespace behaviortree
 
         virtual BTNodeStatus executeLog(const std::string& message, LogLevel level) = 0;
 
+        // `node` identifies the query in flight (an entity may run several EnvironmentQuery nodes).
         virtual BTNodeStatus executeEnvironmentQuery(
             services::EntityHandle entity,
-            const std::string& queryName,
-            const std::string& resultKey,
+            const BTNode& node,
+            const EnvironmentQueryRequest& request,
             Blackboard& blackboard,
             bool isFirstTick) = 0;
 

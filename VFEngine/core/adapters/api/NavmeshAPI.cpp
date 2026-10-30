@@ -9,6 +9,10 @@
 #include "../../../services/events/navmesh/NavmeshEvents.hpp"
 #include "../../../services/events/volumetric/VolumetricNavEvents.hpp"
 #include "../../../services/events/ai/EQSEvents.hpp"
+#include "components/NavmeshComponents.hpp"
+#include <glm/glm.hpp>
+#include <atomic>
+#include <cmath>
 
 namespace core::api
 {
@@ -362,7 +366,8 @@ namespace core::api
 
                 auto path = dispatcher.query(query);
 
-                if (!path.isValid || path.waypoints.empty())
+                // VK-1660: only a Found or Partial path has waypoints; every refusal reads as "no path".
+                if (!path.hasPath() || path.waypoints.empty())
                 {
                     auto result = std::make_shared<value::NativeArray>(1, value::ValueType::FLOAT);
                     result->set(0, value::Value(0.0f));
@@ -416,6 +421,60 @@ namespace core::api
                                          extractFloat(args[2]));
                 return value::Value(dispatcher.query(query));
             }});
+
+        // VK-1660: 0 Idle, 1 Moving, 2 Arrived, 3 Failed; -1 when the entity has no VolumetricAgent.
+        interpreter->registerNativeFunction("_native_volumetric_getAgentState",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(-1));
+
+                events::volumetric::GetVolumetricAgentStateQuery query;
+                query.entity = intToEntity(extractInt64(args[0]));
+                const auto state = dispatcher.query(query);
+                if (!state.has_value()) return value::Value(static_cast<int64_t>(-1));
+                return value::Value(static_cast<int64_t>(state->state));
+            }});
+    }
+
+    namespace
+    {
+        // The querier part of a script query's context (VK-1660): args 1-6 = querierId, position xyz,
+        // forward xz. A negative id is "no entity"; the forward is normalised on the ground plane; PathCost
+        // tests use the querier's NavmeshAgent size when it has one.
+        eqs::EQSContext scriptQueryContext(std::span<const value::Value> args)
+        {
+            static std::atomic<uint64_t> submissions{0};
+
+            eqs::EQSContext context;
+            const int64_t querierId = extractInt64(args[1]);
+            context.querierEntityId = querierId < 0 ? eqs::kNoEntity : static_cast<uint64_t>(querierId);
+            context.querierPosition = glm::vec3(extractFloat(args[2]), extractFloat(args[3]), extractFloat(args[4]));
+            const glm::vec3 forward(extractFloat(args[5]), 0.0f, extractFloat(args[6]));
+            const float lengthSquared = glm::dot(forward, forward);
+            if (lengthSquared > 1.0e-8f)
+                context.querierForward = forward / std::sqrt(lengthSquared);
+
+            if (context.querierEntityId != eqs::kNoEntity)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                const auto querier = services::internal::fromHandle(services::EntityHandle{context.querierEntityId});
+                if (registry.valid(querier))
+                {
+                    if (const auto* agent = registry.try_get<components::NavmeshAgentComponent>(querier))
+                    {
+                        context.agentRadius = agent->radius;
+                        context.agentHeight = agent->height;
+                    }
+                }
+            }
+
+            // Reproducible per call: the n-th script submission of a session always samples the same points.
+            uint64_t seed = submissions.fetch_add(1, std::memory_order_relaxed) + 0x9E3779B97F4A7C15ull;
+            seed = (seed ^ (seed >> 30)) * 0xBF58476D1CE4E5B9ull;
+            seed = (seed ^ (seed >> 27)) * 0x94D049BB133111EBull;
+            context.seed = seed ^ (seed >> 31);
+            return context;
+        }
     }
 
     void NavmeshAPI::registerEQSAPI(services::ScriptInterpreter* interpreter)
@@ -429,10 +488,26 @@ namespace core::api
 
                 events::ai::SubmitEQSQueryCommand cmd;
                 cmd.queryName = extractString(args[0]);
-                cmd.context.querierEntityId = static_cast<uint64_t>(extractInt64(args[1]));
-                cmd.context.querierPosition = glm::vec3(extractFloat(args[2]), extractFloat(args[3]),
-                                                          extractFloat(args[4]));
-                cmd.context.querierForward = glm::vec3(extractFloat(args[5]), 0.0f, extractFloat(args[6]));
+                cmd.context = scriptQueryContext(args);
+
+                auto handle = dispatcher.execute(cmd);
+                return value::Value(static_cast<double>(handle.id));
+            }});
+
+        // VK-1660: a query built around a target - an entity (targetId >= 0) or a point (targetId -1) at t.
+        interpreter->registerNativeFunction("_native_eqs_submitQueryTarget",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.size() < 11) return value::Value(0.0);
+
+                events::ai::SubmitEQSQueryCommand cmd;
+                cmd.queryName = extractString(args[0]);
+                cmd.context = scriptQueryContext(args);
+                const int64_t targetId = extractInt64(args[7]);
+                cmd.context.hasTarget = true;
+                cmd.context.targetEntityId = targetId < 0 ? eqs::kNoEntity : static_cast<uint64_t>(targetId);
+                cmd.context.targetPosition = glm::vec3(extractFloat(args[8]), extractFloat(args[9]),
+                                                         extractFloat(args[10]));
 
                 auto handle = dispatcher.execute(cmd);
                 return value::Value(static_cast<double>(handle.id));
@@ -458,6 +533,20 @@ namespace core::api
                     arr->set(4, value::Value(result.getBestScore()));
                 }
                 return value::Value(arr);
+            }});
+
+        // VK-1660: the entity of the best result (an Entities query); -1 when the query is not Completed, found
+        // nothing, or found a point.
+        interpreter->registerNativeFunction("_native_eqs_getResultEntity",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                if (args.empty()) return value::Value(static_cast<int64_t>(-1));
+
+                events::ai::GetEQSQueryResultQuery query;
+                query.handle.id = static_cast<uint64_t>(extractInt64(args[0]));
+                auto result = dispatcher.query(query);
+                const uint64_t best = result.hasResults() ? result.getBestEntity() : eqs::kNoEntity;
+                return value::Value(best == eqs::kNoEntity ? static_cast<int64_t>(-1) : static_cast<int64_t>(best));
             }});
 
         interpreter->registerNativeFunction("_native_eqs_cancelQuery",

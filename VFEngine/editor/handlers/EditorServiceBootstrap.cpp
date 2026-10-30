@@ -53,6 +53,7 @@
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreeAuthoringService.hpp"
 #include "impl/ai/EQSServiceImpl.hpp"
+#include "impl/ai/EQSAuthoringService.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/memory/CpuMemoryServiceImpl.hpp"
@@ -228,16 +229,10 @@ namespace handlers
         if (auto* navmeshProvider = bootstrap->getNavmeshProvider())
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
 
-        // VK-1660: volumetric navigation was never constructed (its inspector threw every frame).
+        // VK-1660: volumetric navigation was never constructed (its inspector threw every frame). Bakes voxelize
+        // a world-space snapshot of the scene geometry, so the service needs no physics access.
         if (auto* volumetricProvider = bootstrap->getVolumetricNavProvider())
-        {
-            services::IPhysicsProvider* physicsProvider = bootstrap->getPhysicsProvider();
-            auto raycast = [physicsProvider](glm::vec3 origin, glm::vec3 direction, float maxDistance)
-            {
-                return physicsProvider && physicsProvider->raycast(origin, direction, maxDistance).hit;
-            };
-            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider, raycast);
-        }
+            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider);
 
         controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
@@ -379,6 +374,10 @@ namespace handlers
         // VK-1660: EQS was never constructed (an EnvironmentQuery node threw in Play).
         if (auto* eqsProvider = bootstrap->getEQSProvider())
             eqsService = std::make_shared<services::EQSServiceImpl>(eqsProvider);
+
+        // VK-1660: the validated .vfEQSQuery write path of the MCP eqs_* tools; reads files only.
+        eqsAuthoringService = std::make_unique<services::EQSAuthoringService>();
+        eqsAuthoringService->registerEventHandlers();
 
         runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
             bootstrap->getRuntimePickerProvider()

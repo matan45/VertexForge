@@ -25,6 +25,7 @@
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/CloudEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/volumetric/VolumetricNavEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/ui/UIAuthoringEvents.hpp"
@@ -34,6 +35,7 @@
 #include <fstream>
 #include <filesystem>
 #include <stdexcept>
+#include <string_view>
 
 namespace services
 {
@@ -88,6 +90,38 @@ namespace services
                     vfLogWarning("ScenePersistenceService: the previous scene's navmesh was not cleared: {}", error.what());
                 }
             }
+        }
+
+        // VK-1660: the same for the volumetric navigation grids (keyed by volume UUID): a new scene or a disk load
+        // drops them, and finishLoad loads the ones the scene's VolumetricNavVolumes saved (bakedRef). A Play -> Stop
+        // snapshot restore keeps the loaded grids. Without a volumetric service (some tests) there is no handler.
+        template <typename Command>
+        void executeVolumetricNav(Command command, std::string_view what)
+        {
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("ScenePersistenceService: {}: {}", what, error.what());
+                }
+            }
+        }
+
+        void unloadVolumetricNavForSceneChange()
+        {
+            executeVolumetricNav(events::volumetric::UnloadVolumetricNavCommand{},
+                                 "the previous scene's volumetric navigation was not unloaded");
+        }
+
+        void loadSceneVolumetricVolumes()
+        {
+            executeVolumetricNav(events::volumetric::LoadSceneVolumetricVolumesCommand{},
+                                 "the scene's volumetric navigation volumes were not loaded");
         }
     }
 
@@ -428,6 +462,7 @@ namespace services
         dispatcher.publish(terrainNotif);
 
         clearNavmeshForSceneChange();
+        unloadVolumetricNavForSceneChange();
 
         sceneGraph->clearScene();
 
@@ -599,6 +634,7 @@ namespace services
         dispatcher.publish(terrainNotif);
 
         clearNavmeshForSceneChange();
+        unloadVolumetricNavForSceneChange();
 
         sceneGraph->clearScene();
 
@@ -721,6 +757,10 @@ namespace services
                     }
                 }
             }
+
+            // VK-1660: the volumetric navigation grids the scene's volumes saved (also on Play -> Stop: volumes whose
+            // grid is still loaded keep it).
+            loadSceneVolumetricVolumes();
 
             auto& registry = scene::EntityRegistry::getRegistry();
             auto meshView = registry.view<components::MeshComponent>();

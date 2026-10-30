@@ -1,349 +1,368 @@
 #include "VolumetricPathfinder.hpp"
+#include <algorithm>
+#include <cmath>
+#include <functional>
+#include <limits>
 #include <queue>
 #include <unordered_map>
-#include <unordered_set>
-#include <cmath>
-#include <algorithm>
+#include <vector>
 
 namespace volumetric
 {
     namespace
     {
-        struct AStarNode
+        float coordDistance(const VoxelCoord& a, const VoxelCoord& b)
         {
-            VoxelCoord coord;
-            float gCost = 0.0f;
-            float fCost = 0.0f;
+            const float dx = static_cast<float>(a.x - b.x);
+            const float dy = static_cast<float>(a.y - b.y);
+            const float dz = static_cast<float>(a.z - b.z);
+            return std::sqrt(dx * dx + dy * dy + dz * dz);
+        }
 
-            bool operator>(const AStarNode& other) const
+        struct OpenEntry
+        {
+            float f = 0.0f;
+            float g = 0.0f;
+            int64_t index = 0;
+
+            bool operator>(const OpenEntry& other) const
             {
-                return fCost > other.fCost;
+                if (f != other.f)
+                    return f > other.f;
+                return index > other.index; // deterministic order on ties
             }
         };
 
-        float edgeCost(int dx, int dy, int dz)
+        struct NodeRecord
         {
-            int absDx = std::abs(dx);
-            int absDy = std::abs(dy);
-            int absDz = std::abs(dz);
-            int nonZero = absDx + absDy + absDz;
+            float g = std::numeric_limits<float>::infinity();
+            int64_t parent = -1;
+            bool closed = false;
+        };
 
-            if (nonZero == 1)
+        // Drops every waypoint whose neighbours see each other through navigable voxels (greedy string pulling).
+        std::vector<glm::vec3> smoothPath(const VoxelGrid& grid, const std::vector<glm::vec3>& points)
+        {
+            if (points.size() <= 2)
+                return points;
+
+            std::vector<glm::vec3> smoothed;
+            smoothed.push_back(points.front());
+            size_t anchor = 0;
+            for (size_t i = 2; i < points.size(); ++i)
             {
-                return 1.0f;
+                if (!hasLineOfSight(grid, points[anchor], points[i]))
+                {
+                    smoothed.push_back(points[i - 1]);
+                    anchor = i - 1;
+                }
             }
-            if (nonZero == 2)
-            {
-                return 1.41421356f; // sqrt(2)
-            }
-            return 1.73205081f; // sqrt(3)
+            smoothed.push_back(points.back());
+            return smoothed;
         }
     }
 
-    float VolumetricPathfinder::heuristic(const VoxelCoord& a, const VoxelCoord& b)
+    const char* volumePathStatusName(VolumePathStatus status)
     {
-        // Octile distance in 3D
-        int dx = std::abs(a.x - b.x);
-        int dy = std::abs(a.y - b.y);
-        int dz = std::abs(a.z - b.z);
-
-        // Sort so that d1 <= d2 <= d3
-        int vals[3] = {dx, dy, dz};
-        if (vals[0] > vals[1]) std::swap(vals[0], vals[1]);
-        if (vals[1] > vals[2]) std::swap(vals[1], vals[2]);
-        if (vals[0] > vals[1]) std::swap(vals[0], vals[1]);
-
-        int d1 = vals[0]; // smallest
-        int d2 = vals[1];
-        int d3 = vals[2]; // largest
-
-        // space diagonals + face diagonals + axis-aligned
-        return (1.73205081f - 1.41421356f) * static_cast<float>(d1)
-             + (1.41421356f - 1.0f) * static_cast<float>(d2)
-             + 1.0f * static_cast<float>(d3);
+        switch (status)
+        {
+        case VolumePathStatus::Found: return "Found";
+        case VolumePathStatus::Partial: return "Partial";
+        case VolumePathStatus::NoVolume: return "NoVolume";
+        case VolumePathStatus::OutsideVolume: return "OutsideVolume";
+        case VolumePathStatus::StartBlocked: return "StartBlocked";
+        case VolumePathStatus::EndBlocked: return "EndBlocked";
+        case VolumePathStatus::DifferentVolumes: return "DifferentVolumes";
+        case VolumePathStatus::NoPath: return "NoPath";
+        }
+        return "Unknown";
     }
 
-    VolumePath VolumetricPathfinder::findPath(const SparseVoxelOctree& grid,
-                                               const glm::vec3& start, const glm::vec3& end,
-                                               VoxelConnectivity conn, int maxNodes) const
+    std::optional<glm::vec3> snapToNavigable(const VoxelGrid& grid, const glm::vec3& point, float snapRadius)
     {
-        VolumePath result;
+        const std::optional<VoxelCoord> origin = grid.coordAt(point);
+        if (!origin)
+            return std::nullopt;
+        if (grid.isNavigable(*origin))
+            return point;
+        if (!std::isfinite(snapRadius) || !(snapRadius > 0.0f))
+            return std::nullopt;
 
-        VoxelCoord startCoord = grid.worldToVoxel(start);
-        VoxelCoord endCoord = grid.worldToVoxel(end);
+        const float voxelSize = grid.voxelSize();
+        const int maxShell = static_cast<int>(std::ceil(static_cast<double>(snapRadius) / static_cast<double>(voxelSize)));
+        float bestDistanceSquared = snapRadius * snapRadius;
+        std::optional<glm::vec3> best;
 
-        if (!grid.isNavigable(startCoord) || !grid.isNavigable(endCoord))
+        for (int shell = 1; shell <= maxShell; ++shell)
         {
-            return result;
+            // A voxel on Chebyshev shell k has its center at least (k - 0.5) voxels from any point of the
+            // origin voxel, so once that bound passes the best distance no later shell can do better.
+            const float shellBound = (static_cast<float>(shell) - 0.5f) * voxelSize;
+            if (best && shellBound * shellBound > bestDistanceSquared)
+                break;
+
+            for (int dz = -shell; dz <= shell; ++dz)
+                for (int dy = -shell; dy <= shell; ++dy)
+                    for (int dx = -shell; dx <= shell; ++dx)
+                    {
+                        if (std::max({std::abs(dx), std::abs(dy), std::abs(dz)}) != shell)
+                            continue; // inside the shell: an earlier one
+                        const VoxelCoord candidate{origin->x + dx, origin->y + dy, origin->z + dz};
+                        if (!grid.isNavigable(candidate))
+                            continue;
+                        const glm::vec3 center = grid.centerOf(candidate);
+                        const glm::vec3 delta = center - point;
+                        const float distanceSquared = glm::dot(delta, delta);
+                        if (distanceSquared <= bestDistanceSquared)
+                        {
+                            bestDistanceSquared = distanceSquared;
+                            best = center;
+                        }
+                    }
+        }
+        return best;
+    }
+
+    bool hasLineOfSight(const VoxelGrid& grid, const glm::vec3& from, const glm::vec3& to)
+    {
+        const std::optional<VoxelCoord> startCoord = grid.coordAt(from);
+        const std::optional<VoxelCoord> endCoord = grid.coordAt(to);
+        if (!startCoord || !endCoord)
+            return false;
+        if (!grid.isNavigable(*startCoord) || !grid.isNavigable(*endCoord))
+            return false;
+
+        // Amanatides-Woo traversal. Steps that cross several voxel faces at once (an edge or a corner) also need
+        // the voxels on either side free - the same no-corner-cutting rule as VoxelGrid::neighbors.
+        const glm::vec3 direction = to - from;
+        const float voxelSize = grid.voxelSize();
+        const glm::vec3 local = (from - grid.origin()) / voxelSize;
+
+        VoxelCoord current = *startCoord;
+        int step[3] = {0, 0, 0};
+        float tMax[3] = {0.0f, 0.0f, 0.0f};
+        float tDelta[3] = {0.0f, 0.0f, 0.0f};
+        const int coord[3] = {current.x, current.y, current.z};
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            const float d = direction[axis] / voxelSize; // voxels per unit t
+            if (d > 0.0f)
+            {
+                step[axis] = 1;
+                tDelta[axis] = 1.0f / d;
+                tMax[axis] = (static_cast<float>(coord[axis] + 1) - local[axis]) / d;
+            }
+            else if (d < 0.0f)
+            {
+                step[axis] = -1;
+                tDelta[axis] = -1.0f / d;
+                tMax[axis] = (local[axis] - static_cast<float>(coord[axis])) / -d;
+            }
+            else
+            {
+                tMax[axis] = std::numeric_limits<float>::infinity();
+                tDelta[axis] = std::numeric_limits<float>::infinity();
+            }
         }
 
-        if (startCoord == endCoord)
+        const int span = std::abs(endCoord->x - startCoord->x) + std::abs(endCoord->y - startCoord->y) +
+                         std::abs(endCoord->z - startCoord->z);
+        constexpr float kTieTolerance = 1.0e-6f;
+        for (int guard = 0; current != *endCoord; ++guard)
         {
-            result.waypoints.push_back(start);
-            result.waypoints.push_back(end);
-            result.isValid = true;
-            return result;
-        }
+            if (guard > span + 3)
+                return false; // the walk does not converge (numerical trouble): refuse rather than guess
 
-        std::priority_queue<AStarNode, std::vector<AStarNode>, std::greater<AStarNode>> openList;
-        std::unordered_map<VoxelCoord, float, VoxelCoordHash> gCosts;
-        std::unordered_map<VoxelCoord, VoxelCoord, VoxelCoordHash> cameFrom;
-        std::unordered_set<VoxelCoord, VoxelCoordHash> closedSet;
+            const float nearest = std::min({tMax[0], tMax[1], tMax[2]});
+            if (!std::isfinite(nearest) || nearest > 1.0f + kTieTolerance)
+                break; // past the end point: the end voxel is reached through rounding only
 
-        float startH = heuristic(startCoord, endCoord);
-        openList.push(AStarNode{startCoord, 0.0f, startH});
-        gCosts[startCoord] = 0.0f;
-
-        int nodesExpanded = 0;
-        VoxelCoord bestNode = startCoord;
-        float bestH = startH;
-
-        while (!openList.empty() && nodesExpanded < maxNodes)
-        {
-            AStarNode current = openList.top();
-            openList.pop();
-
-            if (current.coord == endCoord)
+            bool moves[3] = {false, false, false};
+            int moving = 0;
+            for (int axis = 0; axis < 3; ++axis)
             {
-                // Reconstruct path
-                std::vector<VoxelCoord> voxelPath;
-                VoxelCoord c = endCoord;
-                while (!(c == startCoord))
+                if (tMax[axis] <= nearest + kTieTolerance)
                 {
-                    voxelPath.push_back(c);
-                    c = cameFrom[c];
+                    moves[axis] = true;
+                    ++moving;
                 }
-                voxelPath.push_back(startCoord);
-                std::reverse(voxelPath.begin(), voxelPath.end());
+            }
 
-                result = smoothPath(grid, voxelPath);
-                result.isValid = true;
-                result.isPartial = false;
-
-                // Replace first and last waypoints with exact world positions
-                if (!result.waypoints.empty())
+            // Several faces at once: every partial step must be free as well.
+            if (moving > 1)
+            {
+                for (int mask = 1; mask < 7; ++mask)
                 {
-                    result.waypoints.front() = start;
-                    result.waypoints.back() = end;
+                    int count = 0;
+                    VoxelCoord partial = current;
+                    bool usable = true;
+                    for (int axis = 0; axis < 3; ++axis)
+                    {
+                        if ((mask & (1 << axis)) == 0)
+                            continue;
+                        if (!moves[axis])
+                        {
+                            usable = false;
+                            break;
+                        }
+                        ++count;
+                        if (axis == 0) partial.x += step[axis];
+                        else if (axis == 1) partial.y += step[axis];
+                        else partial.z += step[axis];
+                    }
+                    if (!usable || count == moving)
+                        continue;
+                    if (!grid.isNavigable(partial))
+                        return false;
                 }
-
-                return result;
             }
 
-            if (closedSet.count(current.coord))
+            for (int axis = 0; axis < 3; ++axis)
             {
-                continue;
-            }
-            closedSet.insert(current.coord);
-            ++nodesExpanded;
-
-            // Track best node for partial path
-            float currentH = heuristic(current.coord, endCoord);
-            if (currentH < bestH)
-            {
-                bestH = currentH;
-                bestNode = current.coord;
-            }
-
-            auto neighbors = grid.getNavigableNeighbors(current.coord, conn);
-            for (const auto& neighbor : neighbors)
-            {
-                if (closedSet.count(neighbor))
-                {
+                if (!moves[axis])
                     continue;
-                }
-
-                int dx = neighbor.x - current.coord.x;
-                int dy = neighbor.y - current.coord.y;
-                int dz = neighbor.z - current.coord.z;
-                float tentativeG = current.gCost + edgeCost(dx, dy, dz);
-
-                auto it = gCosts.find(neighbor);
-                if (it != gCosts.end() && tentativeG >= it->second)
-                {
-                    continue;
-                }
-
-                gCosts[neighbor] = tentativeG;
-                cameFrom[neighbor] = current.coord;
-                float h = heuristic(neighbor, endCoord);
-                openList.push(AStarNode{neighbor, tentativeG, tentativeG + h});
+                if (axis == 0) current.x += step[axis];
+                else if (axis == 1) current.y += step[axis];
+                else current.z += step[axis];
+                tMax[axis] += tDelta[axis];
             }
+            if (!grid.isNavigable(current))
+                return false;
         }
-
-        // Return partial path to best node
-        if (bestNode != startCoord)
-        {
-            std::vector<VoxelCoord> voxelPath;
-            VoxelCoord c = bestNode;
-            while (!(c == startCoord))
-            {
-                voxelPath.push_back(c);
-                c = cameFrom[c];
-            }
-            voxelPath.push_back(startCoord);
-            std::reverse(voxelPath.begin(), voxelPath.end());
-
-            result = smoothPath(grid, voxelPath);
-            result.isValid = true;
-            result.isPartial = true;
-
-            if (!result.waypoints.empty())
-            {
-                result.waypoints.front() = start;
-            }
-        }
-
-        return result;
-    }
-
-    bool VolumetricPathfinder::lineOfSight(const SparseVoxelOctree& grid,
-                                            const VoxelCoord& from, const VoxelCoord& to) const
-    {
-        // 3D Bresenham line algorithm
-        int dx = std::abs(to.x - from.x);
-        int dy = std::abs(to.y - from.y);
-        int dz = std::abs(to.z - from.z);
-
-        int sx = (to.x > from.x) ? 1 : -1;
-        int sy = (to.y > from.y) ? 1 : -1;
-        int sz = (to.z > from.z) ? 1 : -1;
-
-        int maxDim = std::max({dx, dy, dz});
-        if (maxDim == 0)
-        {
-            return true;
-        }
-
-        int x = from.x;
-        int y = from.y;
-        int z = from.z;
-
-        // Use the dominant axis to drive the iteration
-        if (dx >= dy && dx >= dz)
-        {
-            int errY = 2 * dy - dx;
-            int errZ = 2 * dz - dx;
-
-            for (int i = 0; i <= dx; ++i)
-            {
-                if (!grid.isNavigable(VoxelCoord{x, y, z}))
-                {
-                    return false;
-                }
-                if (errY > 0)
-                {
-                    y += sy;
-                    errY -= 2 * dx;
-                }
-                if (errZ > 0)
-                {
-                    z += sz;
-                    errZ -= 2 * dx;
-                }
-                errY += 2 * dy;
-                errZ += 2 * dz;
-                x += sx;
-            }
-        }
-        else if (dy >= dx && dy >= dz)
-        {
-            int errX = 2 * dx - dy;
-            int errZ = 2 * dz - dy;
-
-            for (int i = 0; i <= dy; ++i)
-            {
-                if (!grid.isNavigable(VoxelCoord{x, y, z}))
-                {
-                    return false;
-                }
-                if (errX > 0)
-                {
-                    x += sx;
-                    errX -= 2 * dy;
-                }
-                if (errZ > 0)
-                {
-                    z += sz;
-                    errZ -= 2 * dy;
-                }
-                errX += 2 * dx;
-                errZ += 2 * dz;
-                y += sy;
-            }
-        }
-        else
-        {
-            int errX = 2 * dx - dz;
-            int errY = 2 * dy - dz;
-
-            for (int i = 0; i <= dz; ++i)
-            {
-                if (!grid.isNavigable(VoxelCoord{x, y, z}))
-                {
-                    return false;
-                }
-                if (errX > 0)
-                {
-                    x += sx;
-                    errX -= 2 * dz;
-                }
-                if (errY > 0)
-                {
-                    y += sy;
-                    errY -= 2 * dz;
-                }
-                errX += 2 * dx;
-                errY += 2 * dy;
-                z += sz;
-            }
-        }
-
         return true;
     }
 
-    VolumePath VolumetricPathfinder::smoothPath(const SparseVoxelOctree& grid,
-                                                 const std::vector<VoxelCoord>& voxelPath) const
+    VolumePathResult findPath(const VoxelGrid& grid, const PathRequest& request)
     {
-        VolumePath result;
-
-        if (voxelPath.empty())
+        VolumePathResult result;
+        std::optional<VoxelCoord> startCoord = grid.coordAt(request.start);
+        std::optional<VoxelCoord> endCoord = grid.coordAt(request.end);
+        if (!startCoord || !endCoord)
         {
+            result.status = VolumePathStatus::OutsideVolume;
             return result;
         }
 
-        if (voxelPath.size() == 1)
+        glm::vec3 startPoint = request.start;
+        if (!grid.isNavigable(*startCoord))
         {
-            result.waypoints.push_back(grid.voxelToWorld(voxelPath[0]));
-            return result;
-        }
-
-        // Greedy line-of-sight smoothing
-        std::vector<VoxelCoord> smoothed;
-        smoothed.push_back(voxelPath[0]);
-
-        size_t current = 0;
-        while (current < voxelPath.size() - 1)
-        {
-            size_t furthest = current + 1;
-            for (size_t test = voxelPath.size() - 1; test > current + 1; --test)
+            const std::optional<glm::vec3> snapped = snapToNavigable(grid, request.start, request.snapRadius);
+            if (!snapped)
             {
-                if (lineOfSight(grid, voxelPath[current], voxelPath[test]))
-                {
-                    furthest = test;
-                    break;
-                }
+                result.status = VolumePathStatus::StartBlocked;
+                return result;
             }
-            smoothed.push_back(voxelPath[furthest]);
-            current = furthest;
+            startPoint = *snapped;
+            result.startSnapped = *snapped;
+            startCoord = grid.coordAt(*snapped);
         }
 
-        result.waypoints.reserve(smoothed.size());
-        for (const auto& vc : smoothed)
+        glm::vec3 endPoint = request.end;
+        if (!grid.isNavigable(*endCoord))
         {
-            result.waypoints.push_back(grid.voxelToWorld(vc));
+            const std::optional<glm::vec3> snapped = snapToNavigable(grid, request.end, request.snapRadius);
+            if (!snapped)
+            {
+                result.status = VolumePathStatus::EndBlocked;
+                return result;
+            }
+            endPoint = *snapped;
+            result.endSnapped = *snapped;
+            endCoord = grid.coordAt(*snapped);
         }
 
+        if (!startCoord || !endCoord)
+        {
+            result.status = VolumePathStatus::OutsideVolume; // a snapped point always lies inside; defensive
+            return result;
+        }
+        if (*startCoord == *endCoord)
+        {
+            result.status = VolumePathStatus::Found;
+            result.waypoints = {startPoint, endPoint};
+            return result;
+        }
+
+        const float voxelSize = grid.voxelSize();
+        const int64_t startIndex = grid.index(*startCoord);
+        const int64_t goalIndex = grid.index(*endCoord);
+
+        std::unordered_map<int64_t, NodeRecord> nodes;
+        std::priority_queue<OpenEntry, std::vector<OpenEntry>, std::greater<OpenEntry>> open;
+
+        nodes[startIndex].g = 0.0f;
+        open.push(OpenEntry{coordDistance(*startCoord, *endCoord) * voxelSize, 0.0f, startIndex});
+
+        int64_t bestIndex = startIndex;
+        float bestHeuristic = coordDistance(*startCoord, *endCoord) * voxelSize;
+        bool reachedGoal = false;
+        uint32_t expanded = 0;
+        std::vector<VoxelCoord> neighbours;
+        neighbours.reserve(26);
+
+        while (!open.empty())
+        {
+            const OpenEntry entry = open.top();
+            open.pop();
+
+            NodeRecord& record = nodes[entry.index];
+            if (record.closed || entry.g > record.g)
+                continue; // a stale entry
+            if (expanded >= request.maxNodes)
+                break;
+            record.closed = true;
+            ++expanded;
+
+            if (entry.index == goalIndex)
+            {
+                reachedGoal = true;
+                break;
+            }
+
+            const VoxelCoord coord = grid.coordOf(entry.index);
+            const float heuristic = coordDistance(coord, *endCoord) * voxelSize;
+            if (heuristic < bestHeuristic)
+            {
+                bestHeuristic = heuristic;
+                bestIndex = entry.index;
+            }
+
+            grid.neighbors(coord, neighbours);
+            for (const VoxelCoord& next : neighbours)
+            {
+                const int64_t nextIndex = grid.index(next);
+                const float tentative = entry.g + coordDistance(coord, next) * voxelSize;
+                NodeRecord& nextRecord = nodes[nextIndex];
+                if (nextRecord.closed || tentative >= nextRecord.g)
+                    continue;
+                nextRecord.g = tentative;
+                nextRecord.parent = entry.index;
+                open.push(OpenEntry{tentative + coordDistance(next, *endCoord) * voxelSize, tentative, nextIndex});
+            }
+        }
+        result.nodesExpanded = expanded;
+
+        const int64_t lastIndex = reachedGoal ? goalIndex : bestIndex;
+        if (!reachedGoal && lastIndex == startIndex)
+        {
+            result.status = VolumePathStatus::NoPath;
+            return result;
+        }
+
+        std::vector<glm::vec3> points;
+        for (int64_t index = lastIndex; index != -1; index = nodes[index].parent)
+        {
+            points.push_back(grid.centerOf(grid.coordOf(index)));
+            if (index == startIndex)
+                break;
+        }
+        std::reverse(points.begin(), points.end());
+        points.front() = startPoint;
+        if (reachedGoal)
+            points.back() = endPoint;
+
+        result.status = reachedGoal ? VolumePathStatus::Found : VolumePathStatus::Partial;
+        result.waypoints = smoothPath(grid, points);
         return result;
     }
 }

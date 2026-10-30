@@ -58,7 +58,8 @@ namespace events::render {
     };
 
     struct LoadEditorTextureFromDataCommand : ICommand<services::EditorTextureHandle> {
-        mutable resource::TextureData textureData;  // mutable to allow move from const ref
+        // ::resource - inside events::render, a bare "resource" finds events::resource (ResourceEvents.hpp) first.
+        mutable ::resource::TextureData textureData;  // mutable to allow move from const ref
 
         std::string_view getName() const override { return "LoadEditorTextureFromData"; }
     };

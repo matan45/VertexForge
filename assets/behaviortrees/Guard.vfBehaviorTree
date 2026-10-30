@@ -15,7 +15,8 @@
                 "randomDeviation": 0.05,
                 "runOnActivation": true,
                 "queryName": "NearestEnemy",
-                "resultKey": "enemyPos"
+                "resultKey": "enemyPos",
+                "resultEntityKey": "enemyId"
             }
         },
         {
@@ -28,7 +29,7 @@
                 "interval": 0.25,
                 "randomDeviation": 0.05,
                 "runOnActivation": true,
-                "targetKey": "enemyPos",
+                "targetKey": "enemyId",
                 "visibilityKey": "enemyVisible",
                 "maxDistance": 25.0,
                 "eyeOffset": 1.6
@@ -95,7 +96,7 @@
         { "name": "enemyName", "type": "String", "default": "Enemy" },
         { "name": "aggroRange", "type": "Float", "default": 25.0 },
         { "name": "enemyVisible", "type": "Bool", "default": false },
-        { "name": "enemyId", "type": "Int", "default": 0 },
+        { "name": "enemyId", "type": "Int", "default": -1 },
         { "name": "enemyPos", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
         { "name": "attackRange", "type": "Float", "default": 2.5 },
         { "name": "hasOrder", "type": "Bool", "default": false },

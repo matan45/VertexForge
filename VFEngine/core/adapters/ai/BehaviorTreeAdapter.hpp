@@ -1,5 +1,6 @@
 #pragma once
 #include "../../../services/providers/ai/IBehaviorTreeProvider.hpp"
+#include "../../../services/data/VolumetricNavData.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeRuntime.hpp"
 #include "../../../utilities/behaviortree/BehaviorTreeAsset.hpp"
 #include "../../../utilities/behaviortree/MoveToTracker.hpp"
@@ -82,8 +83,8 @@ namespace core
 
         behaviortree::BTNodeStatus executeEnvironmentQuery(
             services::EntityHandle entity,
-            const std::string& queryName,
-            const std::string& resultKey,
+            const behaviortree::BTNode& node,
+            const behaviortree::EnvironmentQueryRequest& request,
             behaviortree::Blackboard& blackboard,
             bool isFirstTick) override;
 
@@ -188,7 +189,9 @@ namespace core
         services::IScriptingProvider* scriptingProvider;
         std::unordered_map<uint64_t, RuntimeInstance> runtimes; // keyed by EntityHandle::id
         std::unordered_map<ScriptInstanceKey, uint64_t, ScriptInstanceKeyHash> scriptInstances;
-        std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries; // key: "{entityId}:{queryName}"
+        // In-flight EQS queries, keyed "{entityId}:task:{node address}" (EnvironmentQuery) or
+        // "{entityId}:svc:{node address}" (EQSRefresh); released as soon as their result is read.
+        std::unordered_map<std::string, eqs::EQSQueryHandle> pendingEQSQueries;
 
         // VK-1660 task state, all touched only from the tick (and detach / stopAll / reload between ticks).
         std::unordered_map<uint64_t, behaviortree::MoveToTrackerState> moveTrackers; // keyed by EntityHandle::id
@@ -246,9 +249,17 @@ namespace core
 
         // Shared sensing delegation, reused by both the task methods and the built-in services so the
         // task behavior stays identical. The EQS calls never throw: a failure logs once per warnKey.
-        eqs::EQSContext buildEQSContext(services::EntityHandle entity) const;
+        // The query's context (VK-1660): the querier's world position, ground forward and NavmeshAgent size,
+        // the target from targetKey ("" = none; Entity / Vec3 / Int entity-id keys) and a per-run seed.
+        eqs::EQSContext buildEQSContext(services::EntityHandle entity, const behaviortree::BTNode& node,
+                                        const std::string& targetKey, const behaviortree::Blackboard& blackboard);
         eqs::EQSQueryHandle submitEQS(services::EntityHandle entity, const std::string& queryName,
-                                      const std::string& warnKey);
+                                      const eqs::EQSContext& context, const std::string& warnKey);
+        // A Completed result -> resultKey / resultEntityKey (behaviortree::applyEQSResult), warning once per
+        // (entity, key) about an entity key that is missing or of the wrong type.
+        void writeEQSResult(services::EntityHandle entity, behaviortree::Blackboard& blackboard,
+                            const eqs::EQSResult& result, const std::string& resultKey,
+                            const std::string& resultEntityKey);
         eqs::EQSResult pollEQS(services::EntityHandle entity, const eqs::EQSQueryHandle& handle,
                                const std::string& warnKey);
         void cancelEQS(services::EntityHandle entity, const eqs::EQSQueryHandle& handle);
@@ -265,13 +276,26 @@ namespace core
                                 float maxDistance, float eyeOffset,
                                 behaviortree::Blackboard& blackboard) const;
 
-        // FollowRoute: the route entity's children (in child order) as world positions snapped to the navmesh.
-        // nullopt with `problem` set when the route cannot be followed.
+        // FollowRoute: the route entity's children (in child order) as world positions, snapped to the navmesh -
+        // or, for a flying agent, to the voxel volumes. nullopt with `problem` set when the route cannot be
+        // followed (no route, no markers, an entity with neither a NavmeshAgent nor a VolumetricAgent).
         std::optional<std::vector<glm::vec3>> gatherRoutePoints(services::EntityHandle entity,
                                                                 const std::string& routeKey,
                                                                 const behaviortree::Blackboard& blackboard,
                                                                 std::string& problem) const;
         glm::vec3 snapToNavmesh(const glm::vec3& point) const;
-        void stopAgent(services::EntityHandle entity) const;
+        // Stops whichever agent moves the entity (navmesh, or the flying agent).
+        void stopAgent(services::EntityHandle entity);
+
+        // Flying agents (VK-1660): an entity with a VolumetricAgent and no NavmeshAgent moves through the voxel
+        // volumes instead of the navmesh. Its commands never throw into the tick (a throw inside a frame task
+        // terminates the process): a failure logs once per entity.
+        bool isVolumetricAgent(services::EntityHandle entity) const;
+        void setVolumetricDestination(services::EntityHandle entity, const glm::vec3& target);
+        // nullopt when the state cannot be read (no VolumetricAgent, or no handler).
+        std::optional<services::VolumetricAgentState> volumetricAgentState(services::EntityHandle entity);
+        // The point when its voxel is navigable, else the nearest navigable voxel within 2 m, else the point
+        // itself.
+        glm::vec3 snapToVolume(const glm::vec3& point) const;
     };
 }

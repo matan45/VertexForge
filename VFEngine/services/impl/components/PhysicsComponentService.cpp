@@ -9,6 +9,7 @@
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/physics/PhysicsAnimationEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/volumetric/VolumetricNavEvents.hpp"
 
 namespace services
 {
@@ -1325,6 +1326,19 @@ namespace services
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::VolumetricAgentComponent>())
         {
+            // Stop the flight first (VK-1660), as the NavmeshAgent removal leaves the crowd; the agent manager
+            // forgets the agent on its next update, once the component is gone.
+            try
+            {
+                events::volumetric::StopVolumetricAgentCommand stopCmd;
+                stopCmd.entity = entity;
+                events::EventDispatcher::instance().execute(stopCmd);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogDebug("PhysicsComponentService: volumetric agent not stopped: {}", e.what());
+            }
+
             sceneEntity.removeComponent<components::VolumetricAgentComponent>();
             return true;
         }

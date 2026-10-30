@@ -761,9 +761,12 @@ namespace behaviortree
         case BTNodeType::EnvironmentQuery:
         {
             if (!executor) return BTNodeStatus::Failure;
-            std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
-            std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
-            return executor->executeEnvironmentQuery(ownerEntity, queryName, resultKey, blackboard, state.isFirstTick);
+            EnvironmentQueryRequest request;
+            request.queryName = getNodeProperty<std::string>(node, "queryName", request.queryName);
+            request.resultKey = getNodeProperty<std::string>(node, "resultKey", request.resultKey);
+            request.targetKey = getNodeProperty<std::string>(node, "targetKey", request.targetKey);
+            request.resultEntityKey = getNodeProperty<std::string>(node, "resultEntityKey", request.resultEntityKey);
+            return executor->executeEnvironmentQuery(ownerEntity, node, request, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::LineOfSight:

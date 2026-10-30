@@ -1,44 +1,48 @@
 #include "NavMeshPointsGenerator.hpp"
 #include <glm/gtc/constants.hpp>
-#include <random>
 #include <cmath>
+#include <random>
 
 namespace eqs
 {
-    NavMeshPointsGenerator::NavMeshPointsGenerator(float radius, int pointCount)
-        : radius(radius)
-        , pointCount(pointCount)
+    NavMeshPointsGenerator::NavMeshPointsGenerator(const Settings& settings)
+        : settings(settings)
     {
     }
 
-    std::vector<EQSCandidate> NavMeshPointsGenerator::generate(const EQSContext& context,
-                                                                const EQSProviderRefs& providers)
+    bool NavMeshPointsGenerator::generate(const EQSContext& context, const EQSProviderRefs& providers,
+                                          std::vector<EQSCandidate>& out, std::string& error) const
     {
-        std::vector<EQSCandidate> candidates;
-        candidates.reserve(static_cast<size_t>(pointCount));
-
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_real_distribution<float> distAngle(0.0f, glm::two_pi<float>());
-        std::uniform_real_distribution<float> distRadius(0.0f, radius);
-
-        for (int i = 0; i < pointCount; ++i)
+        if (!providers.projectToNavmesh)
         {
-            float angle = distAngle(gen);
-            // Use square root for uniform distribution within circle
-            float r = std::sqrt(distRadius(gen) / radius) * radius;
+            error = "the NavMeshPoints generator needs the navmesh (projectToNavmesh is not available)";
+            return false;
+        }
+        glm::vec3 center{0.0f};
+        if (!resolveContextPoint(context, settings.center, center, error, "the NavMeshPoints generator"))
+            return false;
+        if (settings.pointCount <= 0)
+            return true;
+
+        // Seeded, so a query is reproducible for a given (entity, node, tick) seed.
+        std::mt19937_64 rng(context.seed);
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+
+        out.reserve(out.size() + static_cast<size_t>(settings.pointCount));
+        for (int i = 0; i < settings.pointCount; ++i)
+        {
+            const float angle = unit(rng) * glm::two_pi<float>();
+            const float radius = std::sqrt(unit(rng)) * settings.radius; // uniform over the disc's area
+            const glm::vec3 sample = center + glm::vec3(std::cos(angle) * radius, 0.0f, std::sin(angle) * radius);
+
+            const std::optional<glm::vec3> projected = providers.projectToNavmesh(sample, settings.snapRadius);
+            if (!projected)
+                continue;
 
             EQSCandidate candidate;
-            candidate.position = context.querierPosition + glm::vec3(
-                std::cos(angle) * r,
-                0.0f,
-                std::sin(angle) * r
-            );
-            candidate.totalScore = 0.0f;
-            candidate.filtered = false;
-            candidates.push_back(candidate);
+            candidate.position = *projected;
+            out.push_back(candidate);
         }
-
-        return candidates;
+        return true;
     }
 }
