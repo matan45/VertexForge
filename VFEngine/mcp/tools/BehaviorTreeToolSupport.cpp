@@ -120,9 +120,15 @@ namespace mcp::tools::bttool
             return env::detail::valueText(value);
         }
 
+        // A range bound as the catalogue's own messages spell it (formatNumber): "60", "0.01", never "60.0".
         std::string floatText(float value)
         {
-            return env::detail::floatText(value);
+            std::string text = env::detail::floatText(value);
+            if (text.size() > 2 && text.ends_with(".0"))
+            {
+                text.resize(text.size() - 2);
+            }
+            return text;
         }
 
         std::string typeName(Type type)
