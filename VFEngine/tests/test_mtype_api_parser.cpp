@@ -274,6 +274,13 @@ TEST_SUITE("mType API doc")
         CHECK(contains(doc::primer(), hudController));
         CHECK(contains(doc::primer(), "## 11. UI"));
         CHECK(contains(doc::primer(), "Never write `import engine::IUIButtonListener;`"));
+
+        // And section 12 game/examples/MeleeAttack.mt (VK-1660).
+        const std::string meleeAttack = readExample(*scripts, "MeleeAttack.mt");
+        REQUIRE_FALSE(meleeAttack.empty());
+        CHECK(contains(doc::primer(), meleeAttack));
+        CHECK(contains(doc::primer(), "## 12. Behavior tree tasks"));
+        CHECK(contains(doc::primer(), "`onUpdate` is NEVER called for a ScriptTask"));
     }
 
     TEST_CASE("extractApi over the real engine scripts")
@@ -392,6 +399,13 @@ TEST_SUITE("mType API doc")
         CHECK(contains(full, "function onCheckboxToggled(int entityId, string entityName, bool newState, "
                              "bool previousState): void;"));
         CHECK_FALSE(contains(full, "- `engine/IUICheckboxListener`:"));
+        // VK-1660: the APIs a behavior tree ScriptTask uses are core too.
+        CHECK(contains(full, "## engine/Blackboard\n"));
+        CHECK(contains(full, "public static function getEntity(int entityId, string key): int;"));
+        CHECK_FALSE(contains(full, "- `engine/Blackboard`:"));
+        CHECK(contains(full, "## engine/Navmesh\n"));
+        CHECK(contains(full, "public static function stopAgent(int entityId): void;"));
+        CHECK_FALSE(contains(full, "- `engine/Navmesh`:"));
         CHECK_FALSE(contains(full, "signatures unavailable"));
 
         const std::string physics = doc::buildModuleDoc(*scripts, "engine/Physics");

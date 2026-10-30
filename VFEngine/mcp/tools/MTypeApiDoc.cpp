@@ -519,6 +519,87 @@ public class HudController extends Behaviour implements IUIButtonListener {
 ```
 )MTDOC";
 
+        constexpr const char* primerBehaviorTree = R"MTDOC(
+## 12. Behavior tree tasks
+
+A behavior tree (an asset edited with the `bt_*` tools; read `vf://docs/bt`) runs its built-in tasks itself. A ScriptTask node runs a game script you write instead, and the TREE drives that script, not the frame loop. In a tree spec the node is `{"type": "ScriptTask", "params": {"script": "game/ai/EnemyMeleeAttack.mt"}}`.
+
+- The script's `@Script` class declares `public function tick(float deltaTime): string`. Every tree tick while the node runs, the tree calls `tick` and reads the result: `"running"` keeps the node running, `"success"` finishes it, anything else (e.g. `"failure"`) fails it.
+- `onStart()` runs once, when the tree first runs the script on that entity, not each time the node starts again. `onAbort()` (no parameters) runs when a condition or a higher-priority branch interrupts the running task; `onEnd(bool success)` runs when `tick` finished it. Both are optional.
+- `onUpdate` is NEVER called for a ScriptTask: only the tree runs it, so put the per-frame work in `tick`.
+- Do NOT `script_attach` a task script: the node names it, and an attached copy is a separate instance whose `tick` nothing calls.
+- There is ONE instance per entity and script for the whole Play session, shared by every node of that entity's tree that names the script. Reset per-run state in `onAbort` and `onEnd`, as below.
+- `Behaviour` declares no `tick`, `onAbort` or `onEnd`, so do NOT put `@Override` on them.
+- `this.entityId()` is the tree's owner, the entity every `Blackboard::` call takes. Read keys with `Blackboard::getFloat` / `getInt` / `getBool` / `getString` / `getVec3` (a `float[]` of 3) and `Blackboard::getEntity(entityId, key)`, the entity an Entity key holds (`-1` when it is unset); write them with the matching `set*` (`Blackboard::setVec3(entityId, key, x, y, z)`; `Blackboard::setEntity(entityId, key, targetId)`, where `-1` clears the key).
+- Build before Play: `scripts_build` after every `script_write`, then `play_start`. A ScriptTask whose script does not load fails every tick, after one warning in `logs_read`.
+
+Example: `scripts/game/examples/MeleeAttack.mt` ships with the engine (quoted verbatim). Give your copy a NEW class name, e.g. `EnemyMeleeAttack` in `game/ai/EnemyMeleeAttack.mt`: `MeleeAttack` already exists in projects that carry the examples. Its tree needs an Entity key `target` and an Int key `hits`.
+
+```mtype
+// MeleeAttack - Example of a behavior tree ScriptTask (VK-1660).
+//
+// A ScriptTask node runs this class through the behavior tree, not through
+// onUpdate: the tree calls onStart once, then tick(deltaTime) every frame
+// while the node runs ("running", "success", anything else = failure),
+// onAbort() when a condition or a higher-priority branch interrupts it, and
+// onEnd(success) when tick finished it. One instance per entity lives for the
+// whole Play session, so per-attack state is reset in onAbort and onEnd.
+//
+// Blackboard: target (Entity) = who to hit, hits (Int) = hits landed so far.
+// Guard the node with a BlackboardCondition on the distance to the target
+// (abortMode Both): the tree stops this task when the target leaves range.
+
+import * from "../../lib/engine/oop/Behaviour.mt";
+import * from "../../lib/engine/Blackboard.mt";
+import * from "../../lib/engine/Entity.mt";
+import * from "../../lib/engine/Navmesh.mt";
+import * from "../../lib/math/Vec3f.mt";
+
+@Script
+public class MeleeAttack extends Behaviour {
+    private float swingInterval = 1.0;
+    private float cooldown = 0.0;
+    private bool engaged = false;
+
+    public constructor() : super() {
+    }
+
+    public function tick(float deltaTime): string {
+        int selfId = this.entityId();
+        int target = Blackboard::getEntity(selfId, "target");
+        if (!Entity::isValid(target)) {
+            return "failure";
+        }
+        if (!this.engaged) {
+            this.engaged = true;
+            this.cooldown = 0.0;
+            Navmesh::stopAgent(selfId);
+        }
+        Vec3f selfPos = this.transform().worldPosition();
+        Vec3f targetPos = Entity::getWorldPosition(target);
+        this.transform().lookAt(new Vec3f(targetPos.x, selfPos.y, targetPos.z));
+
+        this.cooldown = this.cooldown - deltaTime;
+        if (this.cooldown <= 0.0) {
+            this.cooldown = this.swingInterval;
+            int hits = Blackboard::getInt(selfId, "hits") + 1;
+            Blackboard::setInt(selfId, "hits", hits);
+            this.log("hits " + Entity::getName(target) + " (" + parsePrimitive(hits) + ")");
+        }
+        return "running";
+    }
+
+    public function onAbort(): void {
+        this.engaged = false;
+    }
+
+    public function onEnd(bool success): void {
+        this.engaged = false;
+    }
+}
+```
+)MTDOC";
+
         bool isIdentChar(char c)
         {
             return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
@@ -943,7 +1024,7 @@ public class HudController extends Behaviour implements IUIButtonListener {
     const std::string& primer()
     {
         static const std::string text = std::string(primerOverview) + primerBehaviour + primerLanguage + primerExample +
-                                        primerAnimation + primerEffects + primerWater + primerUi;
+                                        primerAnimation + primerEffects + primerWater + primerUi + primerBehaviorTree;
         return text;
     }
 
@@ -963,6 +1044,8 @@ public class HudController extends Behaviour implements IUIButtonListener {
             "engine/IWaterListener",
             "engine/IUIButtonListener",
             "engine/IUICheckboxListener",
+            "engine/Blackboard",
+            "engine/Navmesh",
             "math/Vec3f"
         };
         return modules;

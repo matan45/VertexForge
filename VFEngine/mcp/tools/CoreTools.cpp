@@ -27,5 +27,9 @@ namespace mcp::tools
         registerVFXTools(registry, context);
         registerWaterTools(registry, context);
         registerUITools(registry, context);
+        registerBehaviorTreeTools(registry, context);
+        registerEQSTools(registry, context);
+        registerNavigationTools(registry, context);
+        registerVolumetricTools(registry, context);
     }
 }

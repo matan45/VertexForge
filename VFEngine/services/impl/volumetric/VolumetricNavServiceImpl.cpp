@@ -271,6 +271,10 @@ namespace services
                 return point.nearest;
             });
 
+        // === Debug overlay ===
+        dispatcher.registerCommandHandler<vol::ShowVolumetricPathCommand>(
+            [this](const vol::ShowVolumetricPathCommand& cmd) { showPath(cmd.waypoints, cmd.snaps, cmd.seconds); });
+
         // === Agents ===
         dispatcher.registerCommandHandler<vol::SetVolumetricAgentDestinationCommand>(
             [this](const vol::SetVolumetricAgentDestinationCommand& cmd)
@@ -323,6 +327,7 @@ namespace services
         dispatcher.unregisterQueryHandler<vol::FindPath3DQuery>();
         dispatcher.unregisterQueryHandler<vol::IsPointNavigable3DQuery>();
         dispatcher.unregisterQueryHandler<vol::GetNearestNavigable3DQuery>();
+        dispatcher.unregisterCommandHandler<vol::ShowVolumetricPathCommand>();
         dispatcher.unregisterCommandHandler<vol::SetVolumetricAgentDestinationCommand>();
         dispatcher.unregisterCommandHandler<vol::StopVolumetricAgentCommand>();
         dispatcher.unregisterQueryHandler<vol::GetVolumetricAgentStateQuery>();
@@ -340,6 +345,7 @@ namespace services
             agentManager.update(deltaTime);
         if (debugVisible())
             drawDebug();
+        drawShownPath(deltaTime);
     }
 
     // === Bake ===
@@ -1059,6 +1065,76 @@ namespace services
         {
             debugToggleMissing = true; // no debug-draw handlers in this binary
             vfLogWarning("VolumetricNav: the debug overlay is unavailable: {}", e.what());
+        }
+    }
+
+    void VolumetricNavServiceImpl::showPath(std::vector<glm::vec3> waypoints,
+                                            std::vector<std::pair<glm::vec3, glm::vec3>> snaps, float seconds)
+    {
+        std::lock_guard lock(shownPathMutex);
+        if (waypoints.empty() || !(seconds > 0.0f))
+        {
+            shownPath.clear();
+            shownSnaps.clear();
+            shownSecondsLeft = 0.0f;
+            return;
+        }
+        shownPath = std::move(waypoints);
+        shownSnaps = std::move(snaps);
+        shownSecondsLeft = seconds;
+    }
+
+    // The ShowVolumetricPathCommand path (magenta) and the moves of its snapped ends (yellow), every frame while its
+    // time lasts, whatever the overlay toggle says. Drawn from a copy: no lock is held while dispatching.
+    void VolumetricNavServiceImpl::drawShownPath(float deltaTime)
+    {
+        std::vector<glm::vec3> path;
+        std::vector<std::pair<glm::vec3, glm::vec3>> snaps;
+        {
+            std::lock_guard lock(shownPathMutex);
+            if (shownPathUnavailable || shownSecondsLeft <= 0.0f)
+                return;
+            shownSecondsLeft -= deltaTime;
+            if (shownSecondsLeft <= 0.0f)
+            {
+                shownPath.clear();
+                shownSnaps.clear();
+                return;
+            }
+            path = shownPath;
+            snaps = shownSnaps;
+        }
+
+        const glm::vec4 pathColor{1.0f, 0.3f, 0.9f, 1.0f};
+        const glm::vec4 snapColor{1.0f, 0.9f, 0.2f, 1.0f};
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        try
+        {
+            for (size_t i = 0; i + 1 < path.size(); ++i)
+            {
+                ::events::debugdraw::DrawLineCommand line;
+                line.start = path[i];
+                line.end = path[i + 1];
+                line.color = pathColor;
+                dispatcher.execute(line);
+            }
+            for (const auto& [given, snapped] : snaps)
+            {
+                ::events::debugdraw::DrawLineCommand line;
+                line.start = given;
+                line.end = snapped;
+                line.color = snapColor;
+                dispatcher.execute(line);
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::lock_guard lock(shownPathMutex);
+            shownPathUnavailable = true; // no debug-draw handlers in this binary
+            shownPath.clear();
+            shownSnaps.clear();
+            shownSecondsLeft = 0.0f;
+            vfLogWarning("VolumetricNav: the path overlay is unavailable: {}", e.what());
         }
     }
 }

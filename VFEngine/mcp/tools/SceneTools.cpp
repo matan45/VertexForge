@@ -6,11 +6,13 @@
 
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "events/navmesh/NavmeshAuthoringEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/render/MaterialEvents.hpp"
 #include "events/scene/ComponentPhysicsLightEvents.hpp"
 #include "events/scene/EntityTransformEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/volumetric/VolumetricNavEvents.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -277,6 +279,51 @@ namespace mcp::tools
             registry.add(std::move(tool));
         }
 
+        // VK-1660: SaveSceneCommand writes only where the navmesh and each volume's grid live (the root
+        // NavmeshComponent, the volumes' bakedRef); the data is in files of their own, which navmesh_bake and
+        // volumetric_bake write. Warns about a bake that never reached one. A missing service (tests) or a failing
+        // query adds no warning.
+        std::vector<std::string> unsavedNavigationWarnings()
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            std::vector<std::string> warnings;
+            try
+            {
+                const events::navmesh::NavmeshStatus navmesh =
+                    dispatcher.query(events::navmesh::GetNavmeshStatusQuery{});
+                if (navmesh.unsavedChanges)
+                {
+                    warnings.push_back("The navmesh has a bake that was never saved, so this scene file " +
+                                       (navmesh.indexPath.empty()
+                                            ? std::string("loads without a navmesh")
+                                            : "still loads the previous one ('" + navmesh.indexPath + "')") +
+                                       ". Run navmesh_bake (it saves what it bakes) or use 'Save Navmesh...' in "
+                                       "the editor's Navigation window, then scene_save again");
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+            try
+            {
+                for (const services::VolumetricVolumeStatus& volume :
+                     dispatcher.query(events::volumetric::ListVolumetricVolumesQuery{}))
+                {
+                    if (volume.baked && volume.file.empty())
+                    {
+                        warnings.push_back("Volume " + std::to_string(static_cast<uint32_t>(volume.entity.id)) +
+                                           " ('" + volume.name + "') has a bake that was never saved to a "
+                                           ".vfVolNav, so this scene file loads it unbaked. Run volumetric_bake on "
+                                           "it (it saves what it bakes), then scene_save again");
+                    }
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+            return warnings;
+        }
+
         void registerSceneSave(ToolRegistry& registry)
         {
             ToolDef tool;
@@ -289,8 +336,9 @@ namespace mcp::tools
                 "to a new path does not change the scene's current path - pass 'path' again on later saves, "
                 "or scene_load the file to make it current. Terrain data lives in its own .vfTerrain file, so first "
                 "every terrain with unsaved changes is saved (a never-saved one to terrains/<name>.vfTerrain); if any "
-                "terrain fails to save, the scene is NOT written. Returns {saved, path, terrains:[{terrain, name, "
-                "path, incremental}], warnings}.";
+                "terrain fails to save, the scene is NOT written. The navmesh and the volumetric volumes' grids live in "
+                "files of their own too, which navmesh_bake and volumetric_bake write: a warning names a bake that was "
+                "never saved. Returns {saved, path, terrains:[{terrain, name, path, incremental}], warnings}.";
             tool.inputSchema = schema::object({
                 {"path", schema::string("Target .vfScene path (absolute or project-relative). Optional.")},
                 {"saveTerrains", schema::boolean("Save terrains with unsaved changes first. Default true.")}
@@ -362,6 +410,10 @@ namespace mcp::tools
                 if (!dispatcher.execute(command))
                 {
                     return ToolResult::error("Failed to save scene to '" + pathToUtf8(target) + "' (see logs_read)");
+                }
+                for (std::string& warning : unsavedNavigationWarnings())
+                {
+                    terrains.warnings.push_back(std::move(warning));
                 }
                 return ToolResult::ok({
                     {"saved", true},

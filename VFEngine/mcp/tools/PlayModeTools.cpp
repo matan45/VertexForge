@@ -4,10 +4,13 @@
 
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
+#include "events/navmesh/NavmeshAuthoringEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
+#include "events/volumetric/VolumetricNavEvents.hpp"
 
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <optional>
 #include <string>
 #include <thread>
@@ -69,6 +72,50 @@ namespace mcp::tools
             return std::nullopt;
         }
 
+        // VK-1660: a navmesh or volume bake that never reached a file still drives Play. play_stop (finishLoad)
+        // reloads the scene's saved navmesh in its place when the scene has one; a volume keeps its grid; a scene
+        // change drops both. A missing service (tests) or a failing query adds no warning.
+        void addUnsavedNavigationWarnings(std::vector<std::string>& warnings)
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            try
+            {
+                const events::navmesh::NavmeshStatus navmesh =
+                    dispatcher.query(events::navmesh::GetNavmeshStatusQuery{});
+                if (navmesh.unsavedChanges)
+                {
+                    warnings.push_back(navmesh.indexPath.empty()
+                        ? std::string("The navmesh has a bake that was never saved: it survives play_stop, but the "
+                                      "scene file has no navmesh. After play_stop, run navmesh_bake (it saves what it "
+                                      "bakes), then scene_save")
+                        : "The navmesh has a bake that was never saved: play_stop reloads the scene's saved navmesh ('" +
+                              navmesh.indexPath + "') in its place. To keep a new navmesh, run navmesh_bake after "
+                              "play_stop (it saves what it bakes)");
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+            try
+            {
+                for (const services::VolumetricVolumeStatus& volume :
+                     dispatcher.query(events::volumetric::ListVolumetricVolumesQuery{}))
+                {
+                    if (volume.baked && volume.file.empty())
+                    {
+                        warnings.push_back("Volume " + std::to_string(static_cast<uint32_t>(volume.entity.id)) +
+                                           " ('" + volume.name + "') has a bake that was never saved to a .vfVolNav: "
+                                           "it survives play_stop, but the scene file loads the volume unbaked. After "
+                                           "play_stop, run volumetric_bake on it (it saves what it bakes), then "
+                                           "scene_save");
+                    }
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+        }
+
         nlohmann::json playState()
         {
             auto& dispatcher = events::EventDispatcher::instance();
@@ -93,7 +140,9 @@ namespace mcp::tools
                 "(the edit-time scene is restored). play_stop reloads terrain from its .vfTerrain file, so "
                 "'unsavedTerrain' decides what happens to unsaved terrain edits: 'refuse' (default) does not start "
                 "Play, 'save' saves them first (like scene_save does), 'discard' starts anyway and they are lost "
-                "on play_stop. Returns {mode, paused, timeScale} (+ terrainsSaved, warnings).";
+                "on play_stop. A navmesh or volumetric volume bake that was never saved only adds a warning (when the "
+                "scene has a saved navmesh, play_stop reloads it in place of the bake). Returns {mode, paused, "
+                "timeScale} (+ terrainsSaved, warnings).";
             tool.inputSchema = schema::object({
                 {"withDebugger", schema::boolean("Also start the mType debug server for VS Code. Default false.")},
                 {"unsavedTerrain", schema::enumString("Terrain with unsaved changes: refuse (default), save, discard.",
@@ -118,6 +167,7 @@ namespace mcp::tools
                 {
                     return ToolResult::error(*refusal);
                 }
+                addUnsavedNavigationWarnings(warnings);
 
                 // SetEditorModeCommand builds on its own when needed but only logs the
                 // errors; building here first lets the model see them.

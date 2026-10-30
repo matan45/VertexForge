@@ -5,6 +5,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorModeEvents.hpp"
 #include "events/project/ResourceEvents.hpp"
+#include "events/render/DebugDrawEvents.hpp"
 #include "events/volumetric/VolumetricNavEvents.hpp"
 #include "data/EntityConversion.hpp"
 #include "components/Components.hpp"
@@ -661,5 +662,63 @@ TEST_SUITE("VolumetricNavService")
         CHECK(input.capsules[0].radius == doctest::Approx(0.5f));
         CHECK(glm::distance(input.capsules[0].a, site + glm::vec3(-5.0f, -1.0f, 0.0f)) < 1.0e-3f);
         CHECK(glm::distance(input.capsules[0].b, site + glm::vec3(-5.0f, 1.0f, 0.0f)) < 1.0e-3f);
+    }
+
+    TEST_CASE("a shown path is drawn every frame until its seconds run out, whatever the overlay toggle")
+    {
+        std::vector<std::pair<glm::vec3, glm::vec3>> lines; // outlives the fixture, which clears the handler
+        ServiceFixture fixture;
+        auto& dispatcher = events::EventDispatcher::instance();
+        dispatcher.registerCommandHandler<events::debugdraw::DrawLineCommand>(
+            [&lines](const events::debugdraw::DrawLineCommand& command) { lines.emplace_back(command.start, command.end); });
+
+        events::volumetric::ShowVolumetricPathCommand show;
+        show.waypoints = {glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(4.0f, 1.0f, 0.0f), glm::vec3(4.0f, 3.0f, 2.0f)};
+        show.snaps = {{glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)}};
+        show.seconds = 1.0f;
+        dispatcher.execute(show);
+
+        // GetShowNavmeshDebugQuery has no handler here, so the volumetric overlay itself is off.
+        fixture.service->update(0.25f, false);
+        REQUIRE(lines.size() == 3); // the two path segments, then the snap
+        CHECK(glm::distance(lines[0].first, glm::vec3(0.0f, 1.0f, 0.0f)) < 1.0e-6f);
+        CHECK(glm::distance(lines[1].second, glm::vec3(4.0f, 3.0f, 2.0f)) < 1.0e-6f);
+        CHECK(glm::distance(lines[2].first, glm::vec3(0.0f, 0.0f, 0.0f)) < 1.0e-6f);
+        CHECK(glm::distance(lines[2].second, glm::vec3(0.0f, 1.0f, 0.0f)) < 1.0e-6f);
+
+        lines.clear();
+        fixture.service->update(0.5f, false); // 0.25 s left
+        CHECK(lines.size() == 3);
+
+        lines.clear();
+        fixture.service->update(0.5f, false); // its time is up
+        CHECK(lines.empty());
+        fixture.service->update(0.5f, false);
+        CHECK(lines.empty());
+
+        SUBCASE("a new path replaces the drawn one")
+        {
+            dispatcher.execute(show);
+            show.waypoints = {glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(11.0f, 0.0f, 0.0f)};
+            show.snaps.clear();
+            dispatcher.execute(show);
+            fixture.service->update(0.1f, false);
+            REQUIRE(lines.size() == 1);
+            CHECK(glm::distance(lines[0].first, glm::vec3(10.0f, 0.0f, 0.0f)) < 1.0e-6f);
+        }
+        SUBCASE("an empty path or no time clears it")
+        {
+            dispatcher.execute(show);
+            events::volumetric::ShowVolumetricPathCommand empty;
+            dispatcher.execute(empty);
+            fixture.service->update(0.1f, false);
+            CHECK(lines.empty());
+
+            dispatcher.execute(show);
+            show.seconds = 0.0f;
+            dispatcher.execute(show);
+            fixture.service->update(0.1f, false);
+            CHECK(lines.empty());
+        }
     }
 }

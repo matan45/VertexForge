@@ -385,6 +385,126 @@ namespace mcp::tools
             };
             registry.add(std::move(prompt));
         }
+
+        // VK-1660: a patrolling, chasing, attacking enemy built with the AI tools. The tree is the worked patrol /
+        // chase / attack tree of vf://docs/bt and its attack task the primer's MeleeAttack example (section 12 of
+        // vf://docs/mtype-api).
+        void registerEnemyAiTemplate(PromptRegistry& registry)
+        {
+            PromptDef prompt;
+            prompt.name = "create_enemy_ai";
+            prompt.title = "Create an enemy AI";
+            prompt.description =
+                "Walk the agent through giving the open scene an enemy that patrols a route, chases the Player when it "
+                "comes within range and attacks it up close: a navmesh bake, a navmesh agent, a patrol route, an attack "
+                "script, a behavior tree, then a play-test, a tree edit and a save and reload check.";
+            prompt.arguments = {
+                {"name", "Enemy name, used for the entity, its route, its tree and the script class. Default 'Enemy'.",
+                 false},
+                {"chaseRange", "Distance to the Player in metres within which the enemy chases it (2-100). Default 10.",
+                 false},
+                {"attackRange", "Distance in metres within which it attacks (1-20, less than chaseRange). Default 2.",
+                 false}
+            };
+            prompt.build = [](const nlohmann::json& args) -> nlohmann::json
+            {
+                const std::string enemy = identifierName(args, "Enemy");
+                const double chase = optNumber(args, "chaseRange", 2.0, 100.0).value_or(10.0);
+                const double attack = optNumber(args, "attackRange", 1.0, 20.0).value_or(2.0);
+                if (attack >= chase)
+                {
+                    throw ArgError("argument 'attackRange' must be less than chaseRange (" + formatNumber(chase) + ")");
+                }
+                // MoveTo must arrive inside the attack range, or the chase ends before the attack can start.
+                const double arrival = attack * 0.75;
+                const std::string attackClass = enemy + "MeleeAttack";
+                const std::string scriptPath = "game/ai/" + attackClass + ".mt";
+                const std::string treePath = "ai/" + enemy + "AI.vfBehaviorTree";
+
+                const std::string tree =
+                    "{\"name\": \"" + enemy + "AI\", \"blackboard\": [{\"name\": \"target\", \"type\": \"Entity\"}, "
+                    "{\"name\": \"route\", \"type\": \"Entity\"}, {\"name\": \"targetDistance\", \"type\": \"Float\", "
+                    "\"default\": 1000000.0}, {\"name\": \"hits\", \"type\": \"Int\", \"default\": 0}], "
+                    "\"root\": {\"type\": \"Service\", \"name\": \"Sense Target\", \"params\": {\"serviceType\": "
+                    "\"TargetDistance\", \"interval\": 0.2, \"runOnActivation\": true, \"targetKey\": \"target\", "
+                    "\"distanceKey\": \"targetDistance\", \"horizontal\": true}, "
+                    "\"child\": {\"type\": \"Selector\", \"name\": \"Brain\", \"children\": ["
+                    "{\"type\": \"BlackboardCondition\", \"name\": \"In Attack Range\", \"params\": {\"key\": "
+                    "\"targetDistance\", \"compareOp\": \"<=\", \"compareValue\": " + formatNumber(attack) +
+                    ", \"abortMode\": \"Both\"}, \"child\": {\"type\": \"ScriptTask\", \"name\": \"Attack\", "
+                    "\"params\": {\"script\": \"" + scriptPath + "\"}}}, "
+                    "{\"type\": \"BlackboardCondition\", \"name\": \"In Chase Range\", \"params\": {\"key\": "
+                    "\"targetDistance\", \"compareOp\": \"<=\", \"compareValue\": " + formatNumber(chase) +
+                    ", \"abortMode\": \"Both\"}, \"child\": {\"type\": \"MoveTo\", \"name\": \"Chase\", \"params\": "
+                    "{\"targetKey\": \"target\", \"arrivalDistance\": " + formatNumber(arrival) +
+                    ", \"repathDistance\": 1.0, \"stopOnArrival\": true}}}, "
+                    "{\"type\": \"FollowRoute\", \"name\": \"Patrol\", \"params\": {\"routeKey\": \"route\", \"mode\": "
+                    "\"loop\", \"arrivalDistance\": 1.0, \"dwell\": 1.0, \"startAtNearest\": true, \"legTimeout\": "
+                    "30.0}}]}}}";
+
+                std::string text =
+                    "Give the scene open in the VertexForge editor an enemy '" + enemy + "': it patrols a route, "
+                    "chases the Player once it is within " + formatNumber(chase) + " m and attacks it within " +
+                    formatNumber(attack) + " m. Use only the vertexforge MCP tools named below. Work step by step and "
+                    "check every tool result before moving on.\n\n"
+                    "1. Read vf://docs/bt (behavior trees: the JSON format, the nodes, reactivity, debugging) and section "
+                    "12 (Behavior tree tasks) of vf://docs/mtype-api before building anything; vf://docs/navigation "
+                    "covers the navmesh and routes.\n"
+                    "2. editor_get_info: confirm a project is open. If it reports Play mode, call play_stop. "
+                    "navmesh_get_info: if worldMode is true, tell the user and stop (a World-mode scene bakes its navmesh "
+                    "in the editor's Navigation window).\n"
+                    "3. scene_get_hierarchy: find the Player (the entity the enemy hunts; if there is none, ask the user "
+                    "which entity to use) and the ground and obstacles the enemy walks between. If editor_get_info showed "
+                    "no scenePath, scene_save with a path such as 'scenes/" + enemy + "Arena.vfScene' first: navmesh_bake "
+                    "saves the navmesh in a folder named after the scene.\n"
+                    "4. navmesh_bake {\"agentRadius\": 0.4, \"agentHeight\": 2}: polygons must be above 0 (an empty bake "
+                    "is an error that says what to fix); read its warnings, then viewport_screenshot shows the navmesh "
+                    "overlay.\n"
+                    "5. entity_create '" + enemy + "' at the scene root, on the navmesh 1 m above the ground and more "
+                    "than " + formatNumber(chase) + " m from the Player; component_add type 'Mesh' (data {\"meshRef\": "
+                    "<capsule path>}; assets_list type 'Mesh' lists the meshes) and type 'NavmeshAgent' with data "
+                    "{\"radius\": 0.4, \"baseOffset\": 1} (a 2 m capsule's centred pivot sits 1 m above its feet). "
+                    "navmesh_find_path {\"start\": <enemy id>, \"end\": <Player id>} must report found; move the enemy "
+                    "otherwise.\n"
+                    "6. route_create {\"name\": \"" + enemy + "Patrol\", \"points\": <four [x, y, z] points on the "
+                    "navmesh>}: a loop with one leg passing within " + formatNumber(chase) + " m of the Player and the "
+                    "other points farther away; route_get shows the snapped points.\n"
+                    "7. script_write '" + scriptPath + "': the MeleeAttack example of section 12 of vf://docs/mtype-api "
+                    "with the class renamed to " + attackClass + ". game/ai/ is as deep as game/examples/, so the imports "
+                    "stay as they are. Then scripts_build; if success is false, fix every '<file>: <diagnostic>' error "
+                    "with script_write and run scripts_build again until it succeeds. Do not script_attach it: the tree "
+                    "runs it.\n"
+                    "8. bt_list_node_types: check the params of Service (TargetDistance), BlackboardCondition, MoveTo, "
+                    "FollowRoute and ScriptTask, and that scriptTasks lists " + scriptPath + ". Then bt_create {\"path\": "
+                    "\"" + treePath + "\", \"tree\": <this tree>}:\n" +
+                    tree + "\n"
+                    "The TargetDistance service writes the distance to the Player into targetDistance every 0.2 s, and "
+                    "the Selector runs the first branch that fits: Attack within " + formatNumber(attack) + " m, Chase "
+                    "within " + formatNumber(chase) + " m, otherwise Patrol. abortMode Both drops a branch as soon as its "
+                    "range is left and lets a higher one take over at once, so Attack starts at " + formatNumber(attack) +
+                    " m, before Chase would arrive at " + formatNumber(arrival) + " m.\n"
+                    "9. bt_assign {\"entity\": <enemy id>, \"tree\": \"" + treePath + "\", \"blackboard\": {\"target\": "
+                    "<Player id>, \"route\": <route id>}} and read its warnings, then bt_get_blackboard {\"entity\": "
+                    "<enemy id>}: target and route name the Player and the route.\n"
+                    "10. scene_save.\n"
+                    "11. play_start, then bt_debug_state {\"entity\": <enemy id>, \"sampleSeconds\": 10}: the samples go "
+                    "Patrol, then Chase on the leg near the Player, then Attack while hits counts up (sample again if the "
+                    "enemy has not reached that leg yet). logs_read (minLevel 'info') shows the attack script's 'hits' "
+                    "lines and no script errors. Then play_stop.\n"
+                    "12. Widen the chase range: bt_edit {\"path\": \"" + treePath + "\", \"ops\": [{\"op\": "
+                    "\"setParams\", \"node\": \"In Chase Range\", \"params\": {\"compareValue\": " +
+                    formatNumber(chase + 5.0) + "}}]}, then bt_get {\"path\": \"" + treePath + "\"} to confirm it. "
+                    "bt_edit saves the tree file itself.\n"
+                    "13. scene_save, then scene_load the same scene and wait until scene_get_hierarchy works (entity ids "
+                    "change). navmesh_get_info (a navmesh, no unsaved changes), route_get (the route and its points) and "
+                    "bt_get_blackboard {\"entity\": <the enemy's new id>} (target and route still resolve) show that "
+                    "everything came back from disk.\n"
+                    "14. Finish with a short summary: the entity ids, the files written (navmesh, tree, script) and "
+                    "anything left to tune.\n";
+                return userMessage(std::move(text));
+            };
+            registry.add(std::move(prompt));
+        }
     }
 
     void registerCorePrompts(PromptRegistry& registry)
@@ -392,5 +512,6 @@ namespace mcp::tools
         registerPlatformerTemplate(registry);
         registerTopDownTemplate(registry);
         registerHudTemplate(registry);
+        registerEnemyAiTemplate(registry);
     }
 }

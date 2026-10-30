@@ -546,7 +546,11 @@ namespace mcp::tools
                     "audioRef (.vfAudio path), volume, pitch, loop (bool), busName (string), fadeInMs, "
                     "clipVariants ([paths]), playOrder (Single | Random | RoundRobin), pitchVariation, volumeVariation",
                     &SetAudioSource2DDataCommand::audioData, &audioSource2DToJson, &audioSource2DFromJson),
-                makeVFXBinding()
+                makeVFXBinding(),
+                makeNavmeshAgentBinding(),        // VK-1660
+                makeBehaviorTreeBinding(),
+                makeVolumetricNavVolumeBinding(),
+                makeVolumetricAgentBinding()
             };
             return table;
         }

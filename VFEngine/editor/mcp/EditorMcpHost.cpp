@@ -95,8 +95,18 @@ namespace editor
             "anchored to the whole canvas: placement handles that, and ui_set moves a widget's children with it. "
             "ui_create_canvas, ui_add_widget, ui_set and ui_instantiate_prefab are one undo step each, are saved by "
             "scene_save and are refused in Play mode.\n"
+            "AI: read vf://docs/bt first (vf://docs/navigation for the navmesh, routes and flying agents). "
+            "navmesh_bake (bakes the walkable surface and saves it) -> entity_create + component_add NavmeshAgent (at "
+            "the scene root) -> route_create (patrol waypoints) -> a ScriptTask script when the built-in nodes are not "
+            "enough (section 12 of vf://docs/mtype-api, then scripts_build) -> bt_create {path, tree} (a tree is an "
+            "asset: bt_get reads it, bt_set and bt_edit change the file, also in Play mode) -> bt_assign {entity, tree, "
+            "blackboard} -> scene_save -> play_start -> bt_debug_state {entity, sampleSeconds} (trees run only in Play "
+            "mode) -> play_stop. eqs_set_query / eqs_run author environment queries; volumetric_bake bakes a "
+            "VolumetricNavVolume for VolumetricAgent flyers. bt_assign, bt_unassign, route_create and route_set are one "
+            "undo step each and are refused in Play mode; tree edits, bakes and EQS queries are not undoable.\n"
             "Prompts: create_platformer_template and create_top_down_template walk through building a "
-            "playable game; create_hud builds a HUD wired to a script.";
+            "playable game; create_hud builds a HUD wired to a script; create_enemy_ai builds an enemy that "
+            "patrols, chases and attacks the player.";
     }
 
     void EditorMcpHost::init(const McpLaunchOptions& launchOptions)

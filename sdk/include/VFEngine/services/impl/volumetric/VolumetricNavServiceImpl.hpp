@@ -19,6 +19,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace services
@@ -88,6 +89,11 @@ namespace services
         void pruneVolumes();
         void drawDebug();
         bool debugVisible();
+        // ShowVolumetricPathCommand: replaces the drawn path (an empty path clears it).
+        void showPath(std::vector<glm::vec3> waypoints, std::vector<std::pair<glm::vec3, glm::vec3>> snaps,
+                      float seconds);
+        // Draws the shown path while its time lasts, in every mode.
+        void drawShownPath(float deltaTime);
         void recordOutcome(const VolumetricBakeOutcome& outcome, uint64_t uuid);
         void setLoaded(uint64_t uuid, std::shared_ptr<const volumetric::VoxelGrid> grid, std::string source,
                        int64_t navigable);
@@ -107,6 +113,13 @@ namespace services
         std::unordered_map<uint64_t, LoadedVolume> loaded;               // by volume UUID
         std::unordered_map<uint64_t, VolumetricBakeState> lastBakeState; // by volume UUID, this session
         uint64_t nextTicket = 1;
+
+        // The ShowVolumetricPathCommand path: set on the main thread, drawn by update() in the Volumetric task.
+        std::mutex shownPathMutex;
+        std::vector<glm::vec3> shownPath;
+        std::vector<std::pair<glm::vec3, glm::vec3>> shownSnaps;
+        float shownSecondsLeft = 0.0f;
+        bool shownPathUnavailable = false; // the debug-draw commands have no handler in this binary
 
         std::atomic<bool> playMode{false};
         bool debugToggleMissing = false;

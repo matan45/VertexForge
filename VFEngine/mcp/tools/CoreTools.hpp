@@ -46,14 +46,24 @@ namespace mcp::tools
     void registerVFXTools(ToolRegistry& registry, const ToolContext& context);        // vfx_* (VK-1657)
     void registerWaterTools(ToolRegistry& registry, const ToolContext& context);      // water_*, ocean_* (VK-1658)
     void registerUITools(ToolRegistry& registry, const ToolContext& context);         // ui_* (VK-1659)
+    void registerBehaviorTreeTools(ToolRegistry& registry, const ToolContext& context); // bt_* (VK-1660)
+    void registerEQSTools(ToolRegistry& registry, const ToolContext& context);        // eqs_* (VK-1660)
+    void registerNavigationTools(ToolRegistry& registry, const ToolContext& context); // navmesh_*, route_* (VK-1660)
+    void registerVolumetricTools(ToolRegistry& registry, const ToolContext& context); // volumetric_* (VK-1660)
 
     // Registers all of the above. Called once on the main thread before start().
     void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);
 
     // VK-1652 (ResourceDefs.cpp): vf://scene/hierarchy, vf://logs, vf://scripts/{+path},
-    // vf://docs/components, vf://docs/mtype-api, vf://docs/mtype-api/{+module}.
+    // vf://docs/components, vf://docs/mtype-api, vf://docs/mtype-api/{+module}; plus the two below.
     void registerCoreResources(ResourceRegistry& registry, MainThreadQueue& queue);
 
-    // VK-1652 (PromptDefs.cpp): create_platformer_template, create_top_down_template.
+    // VK-1660 (BehaviorTreeDocs.cpp): vf://docs/bt - behavior trees, the node catalogue, EQS.
+    void registerBehaviorTreeResources(ResourceRegistry& registry, const ToolContext& context);
+    // VK-1660 (NavigationDocs.cpp): vf://docs/navigation - navmesh, agents, routes, volumetric volumes.
+    void registerNavigationResources(ResourceRegistry& registry, const ToolContext& context);
+
+    // VK-1652 (PromptDefs.cpp): create_platformer_template, create_top_down_template, create_hud,
+    // create_enemy_ai (VK-1660).
     void registerCorePrompts(PromptRegistry& registry);
 }

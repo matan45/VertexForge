@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // Volumetric navigation for flying agents (rewritten for VK-1660). Each VolumetricNavVolume entity bakes its own
@@ -111,6 +112,19 @@ namespace events::volumetric
         glm::vec3 point{0.0f};
         float snapRadius = 2.0f;
         std::string_view getName() const override { return "GetNearestNavigable3D"; }
+    };
+
+    // === Debug overlay (any thread) ===
+
+    // Draws a flight path (magenta) and the moves of its snapped ends (yellow, given point -> navigable point) for
+    // `seconds`, whether or not the volumetric overlay is on (debug draw, any mode; MCP volumetric_find_path). A
+    // new command replaces the previous drawing; an empty path clears it.
+    struct ShowVolumetricPathCommand : ICommand<>
+    {
+        std::vector<glm::vec3> waypoints;
+        std::vector<std::pair<glm::vec3, glm::vec3>> snaps;
+        float seconds = 10.0f;
+        std::string_view getName() const override { return "ShowVolumetricPath"; }
     };
 
     // === Agents (Play; the behavior-tree task may send these) ===

@@ -134,6 +134,12 @@ namespace services
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
             COLLECT_CASE(Decal, DecalComponent);
             COLLECT_CASE(SocketAttachment, SocketAttachmentComponent);
+            // VK-1660: bt_get's attachedTo, route_get and scripts' Entity.findWithComponent list these.
+            COLLECT_CASE(NavmeshAgent, NavmeshAgentComponent);
+            COLLECT_CASE(BehaviorTree, BehaviorTreeComponent);
+            COLLECT_CASE(NavRoute, NavRouteComponent);
+            COLLECT_CASE(VolumetricNavVolume, VolumetricNavVolumeComponent);
+            COLLECT_CASE(VolumetricAgent, VolumetricAgentComponent);
         default:
             break;
         }

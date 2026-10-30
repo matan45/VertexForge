@@ -151,8 +151,10 @@ TEST_SUITE("MCP content resources")
             CHECK_FALSE(resource.mimeType.empty());
         }
         std::sort(uris.begin(), uris.end());
+        // VK-1660: vf://docs/bt (behavior trees) and vf://docs/navigation.
         CHECK(uris == std::vector<std::string>{
-            "vf://docs/components", "vf://docs/mtype-api", "vf://logs", "vf://scene/hierarchy"
+            "vf://docs/bt", "vf://docs/components", "vf://docs/mtype-api", "vf://docs/navigation", "vf://logs",
+            "vf://scene/hierarchy"
         });
         CHECK(fixture.registry.findExact("vf://logs")->affinity == mcp::ThreadAffinity::Worker);
         CHECK(fixture.registry.findExact("vf://scene/hierarchy")->affinity == mcp::ThreadAffinity::Main);
@@ -321,6 +323,22 @@ TEST_SUITE("MCP content resources")
         for (const char* tool : {"ui_create_canvas", "ui_add_widget", "ui_set", "ui_get", "ui_list_widget_types",
                                  "ui_save_prefab", "ui_instantiate_prefab", "ui_click", "moveDescendants",
                                  "IUIButtonListener"})
+        {
+            CAPTURE(tool);
+            CHECK(contains(withoutPlugins, tool));
+        }
+        // VK-1660: AI is a behavior tree the BehaviorTree component runs, over the navmesh or a volumetric volume.
+        CHECK(contains(withoutPlugins, "## AI & navigation\n"));
+        for (const char* type : {"### NavmeshAgent\n", "### BehaviorTree\n", "### VolumetricNavVolume\n",
+                                 "### VolumetricAgent\n"})
+        {
+            CAPTURE(type);
+            CHECK(contains(withoutPlugins, type));
+        }
+        for (const char* tool : {"vf://docs/bt", "vf://docs/navigation", "section 12 of vf://docs/mtype-api",
+                                 "bt_list_node_types", "bt_create", "bt_edit", "bt_assign", "bt_set_blackboard",
+                                 "bt_debug_state", "navmesh_bake", "navmesh_find_path", "route_create", "eqs_run",
+                                 "volumetric_bake", "baseOffset"})
         {
             CAPTURE(tool);
             CHECK(contains(withoutPlugins, tool));

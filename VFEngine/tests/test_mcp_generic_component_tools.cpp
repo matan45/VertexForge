@@ -264,13 +264,18 @@ TEST_SUITE("McpGenericComponentTools")
         auto result = fixture.call("component_list_types", nlohmann::json::object());
         REQUIRE_FALSE(result.isError);
         const nlohmann::json& builtin = result.structured["builtin"];
-        REQUIRE(builtin.size() == 11);
+        REQUIRE(builtin.size() == 15);
         CHECK(builtin[0]["name"] == "Mesh");
         CHECK(builtin[0]["fieldHelp"].get<std::string>().find("meshRef") != std::string::npos);
         CHECK(builtin[1]["name"] == "Animator"); // VK-1656: right after Mesh, whose fields it presents
         CHECK(builtin[1]["fieldHelp"].get<std::string>().find("animation_set_state_machine") != std::string::npos);
-        CHECK(builtin[10]["name"] == "VFX"); // VK-1657: appended last
+        CHECK(builtin[10]["name"] == "VFX"); // VK-1657
         CHECK(builtin[10]["fieldHelp"].get<std::string>().find("vfx_set_params") != std::string::npos);
+        // VK-1660: the AI and navigation bindings, appended after VFX in this order.
+        CHECK(builtin[11]["name"] == "NavmeshAgent");
+        CHECK(builtin[12]["name"] == "BehaviorTree");
+        CHECK(builtin[13]["name"] == "VolumetricNavVolume");
+        CHECK(builtin[14]["name"] == "VolumetricAgent");
         REQUIRE(result.structured["plugin"].size() == 1);
         CHECK(result.structured["plugin"][0]["name"] == "Health");
     }

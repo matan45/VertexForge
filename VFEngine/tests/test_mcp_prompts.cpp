@@ -60,10 +60,10 @@ namespace
 
 TEST_SUITE("MCP prompts")
 {
-    TEST_CASE("the three templates are registered with their optional arguments")
+    TEST_CASE("the four templates are registered with their optional arguments")
     {
         PromptFixture fixture;
-        REQUIRE(fixture.prompts.all().size() == 3);
+        REQUIRE(fixture.prompts.all().size() == 4);
 
         const mcp::PromptDef* platformer = fixture.prompts.find("create_platformer_template");
         REQUIRE(platformer != nullptr);
@@ -88,9 +88,22 @@ TEST_SUITE("MCP prompts")
         CHECK(hud->arguments[0].name == "name");
         CHECK_FALSE(hud->arguments[0].required);
 
+        // VK-1660
+        const mcp::PromptDef* enemy = fixture.prompts.find("create_enemy_ai");
+        REQUIRE(enemy != nullptr);
+        REQUIRE(enemy->arguments.size() == 3);
+        CHECK(enemy->arguments[0].name == "name");
+        CHECK(enemy->arguments[1].name == "chaseRange");
+        CHECK(enemy->arguments[2].name == "attackRange");
+        for (const mcp::PromptArgument& argument : enemy->arguments)
+        {
+            CHECK_FALSE(argument.required);
+        }
+
         const nlohmann::json list = fixture.prompts.listJson();
-        REQUIRE(list.size() == 3);
+        REQUIRE(list.size() == 4);
         CHECK(list[0]["name"] == "create_platformer_template");
+        CHECK(list[3]["name"] == "create_enemy_ai");
     }
 
     TEST_CASE("create_hud walks the HUD acceptance with registered tools only (VK-1659)")
@@ -124,6 +137,76 @@ TEST_SUITE("MCP prompts")
         CHECK(contains(named, "game/SpaceRun/SpaceRunHudController.mt"));
         CHECK(contains(named, "renamed to SpaceRunHudController"));
         CHECK_THROWS_AS(fixture.prompts.find("create_hud")->build({{"name", 5}}), mcp::ArgError);
+    }
+
+    TEST_CASE("create_enemy_ai walks the AI acceptance with registered tools only (VK-1660)")
+    {
+        PromptFixture fixture;
+
+        const std::string text = fixture.text("create_enemy_ai", nlohmann::json::object());
+        const std::set<std::string> tokens = snakeCaseTokens(text);
+        REQUIRE_FALSE(tokens.empty());
+        for (const std::string& token : tokens)
+        {
+            CAPTURE(token);
+            CHECK(fixture.tools.find(token).get() != nullptr);
+        }
+        for (const char* tool : {"editor_get_info", "navmesh_get_info", "scene_get_hierarchy", "navmesh_bake",
+                                 "entity_create", "component_add", "navmesh_find_path", "route_create", "route_get",
+                                 "script_write", "scripts_build", "bt_list_node_types", "bt_create", "bt_assign",
+                                 "bt_get_blackboard", "scene_save", "play_start", "bt_debug_state", "logs_read",
+                                 "play_stop", "bt_edit", "bt_get", "scene_load", "viewport_screenshot"})
+        {
+            CAPTURE(tool);
+            CHECK(tokens.count(tool) == 1);
+        }
+        CHECK(contains(text, "vf://docs/bt"));
+        CHECK(contains(text, "section 12 of vf://docs/mtype-api with the class renamed to EnemyMeleeAttack"));
+        CHECK(contains(text, "script_write 'game/ai/EnemyMeleeAttack.mt'"));
+        CHECK(contains(text, "'NavmeshAgent' with data {\"radius\": 0.4, \"baseOffset\": 1}"));
+        CHECK(contains(text, "\"params\": {\"compareValue\": 15.0}"));
+
+        // The tree handed to bt_create is the one line after "<this tree>}:", and it is valid JSON.
+        const std::string marker = "\"tree\": <this tree>}:\n";
+        const std::size_t begin = text.find(marker);
+        REQUIRE(begin != std::string::npos);
+        const std::size_t treeBegin = begin + marker.size();
+        const std::size_t treeEnd = text.find('\n', treeBegin);
+        REQUIRE(treeEnd != std::string::npos);
+        const nlohmann::json tree = nlohmann::json::parse(text.substr(treeBegin, treeEnd - treeBegin));
+        CHECK(tree["name"] == "EnemyAI");
+        REQUIRE(tree["blackboard"].size() == 4);
+        CHECK(tree["blackboard"][0]["name"] == "target");
+        CHECK(tree["blackboard"][0]["type"] == "Entity");
+        CHECK(tree["root"]["type"] == "Service");
+        CHECK(tree["root"]["params"]["serviceType"] == "TargetDistance");
+        const nlohmann::json& branches = tree["root"]["child"]["children"];
+        REQUIRE(branches.size() == 3);
+        CHECK(branches[0]["params"]["compareValue"] == 2.0);
+        CHECK(branches[0]["child"]["type"] == "ScriptTask");
+        CHECK(branches[0]["child"]["params"]["script"] == "game/ai/EnemyMeleeAttack.mt");
+        CHECK(branches[1]["params"]["compareValue"] == 10.0);
+        CHECK(branches[1]["child"]["type"] == "MoveTo");
+        CHECK(branches[1]["child"]["params"]["arrivalDistance"] == 1.5);
+        CHECK(branches[2]["type"] == "FollowRoute");
+        CHECK(branches[2]["params"]["routeKey"] == "route");
+
+        const std::string named = fixture.text("create_enemy_ai",
+            {{"name", "orc grunt"}, {"chaseRange", "12"}, {"attackRange", " 3 "}});
+        CHECK(contains(named, "game/ai/OrcGruntMeleeAttack.mt"));
+        CHECK(contains(named, "renamed to OrcGruntMeleeAttack"));
+        CHECK(contains(named, "ai/OrcGruntAI.vfBehaviorTree"));
+        CHECK(contains(named, "\"compareValue\": 3.0"));
+        CHECK(contains(named, "\"compareValue\": 12.0"));
+        CHECK(contains(named, "\"arrivalDistance\": 2.25"));
+
+        const mcp::PromptDef* prompt = fixture.prompts.find("create_enemy_ai");
+        REQUIRE(prompt != nullptr);
+        CHECK_THROWS_AS(prompt->build({{"name", 5}}), mcp::ArgError);
+        CHECK_THROWS_AS(prompt->build({{"chaseRange", "1"}}), mcp::ArgError);
+        CHECK_THROWS_AS(prompt->build({{"attackRange", "25"}}), mcp::ArgError);
+        CHECK_THROWS_AS(prompt->build({{"chaseRange", "5"}, {"attackRange", "5"}}), mcp::ArgError);
+        CHECK_NOTHROW(prompt->build({{"chaseRange", "5"}, {"attackRange", "4.5"}}));
     }
 
     TEST_CASE("every tool named by a prompt exists in the core tool registry")

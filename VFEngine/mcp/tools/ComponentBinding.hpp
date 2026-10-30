@@ -237,4 +237,17 @@ namespace mcp::tools
     // VK-1657 (VFXBinding.cpp): "VFX", an effect inside the project plus its per-entity parameters.
     // Building it dispatches nothing.
     ComponentBinding makeVFXBinding();
+
+    // VK-1660 (NavmeshAgentBinding.cpp): "NavmeshAgent", the navmesh agent's shape, speed, stopping and
+    // avoidance ("NavAgent" in scripts). Building it dispatches nothing.
+    ComponentBinding makeNavmeshAgentBinding();
+
+    // VK-1660 (BehaviorTreeBinding.cpp): "BehaviorTree", the entity's tree, enabled flag and per-entity
+    // blackboard start values. Building it dispatches nothing.
+    ComponentBinding makeBehaviorTreeBinding();
+
+    // VK-1660 (VolumetricBindings.cpp): "VolumetricNavVolume" (a flying agents' volume) and "VolumetricAgent"
+    // (a flying agent). Building them dispatches nothing.
+    ComponentBinding makeVolumetricNavVolumeBinding();
+    ComponentBinding makeVolumetricAgentBinding();
 }

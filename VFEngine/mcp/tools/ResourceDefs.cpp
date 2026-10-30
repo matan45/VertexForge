@@ -212,7 +212,8 @@ namespace mcp::tools
                 "(component_*_generic) loaded in this editor. Also how terrain, the lighting environment (sky, "
                 "IBL, GI, fog, weather), character animation (animators, clips, sockets, IK), visual effects "
                 "(effects, per-entity parameters, the edit preview), water (the ocean, lakes and pools, the "
-                "water look) and game UI (canvases, widgets, HUD placement, UI prefabs) are edited.";
+                "water look), game UI (canvases, widgets, HUD placement, UI prefabs) and AI (behavior trees, the "
+                "navmesh, patrol routes, EQS, flying agents) are edited.";
             resource.mimeType = "text/markdown";
             resource.affinity = ThreadAffinity::Main;
             resource.reader = []() -> ResourceContents
@@ -512,6 +513,50 @@ namespace mcp::tools
                         "drive the UI with the UI class and the listener interfaces such as IUIButtonListener "
                         "(vf://docs/mtype-api, section 11).\n\n";
 
+                // VK-1660: AI is a behavior tree asset an entity's BehaviorTree component runs, moving the entity
+                // over the navmesh or through a volumetric volume; vf://docs/bt and vf://docs/navigation hold the
+                // details.
+                text += "## AI & navigation\n\n"
+                        "Enemy and NPC AI is a behavior tree (.vfBehaviorTree) that an entity's BehaviorTree component runs "
+                        "in Play mode; its movement nodes walk the entity's NavmeshAgent over the baked navmesh, or fly its "
+                        "VolumetricAgent through a baked VolumetricNavVolume. Read vf://docs/bt (the tree format, the node "
+                        "catalogue, a patrol / chase / attack example, debugging) and vf://docs/navigation (the navmesh, "
+                        "routes, volumes, flying agents) before building AI; scripts for ScriptTask nodes are section 12 of "
+                        "vf://docs/mtype-api. A typical pass: navmesh_bake -> entity_create + component_add "
+                        "{type:\"NavmeshAgent\"} -> route_create -> script_write + scripts_build (a ScriptTask) -> bt_create "
+                        "{path, tree} -> bt_assign {entity, tree, blackboard} -> scene_save -> play_start -> bt_debug_state "
+                        "{entity, sampleSeconds:10} -> play_stop.\n\n"
+                        "- Trees: bt_list_node_types lists every node type with its params; bt_get reads the tree file, "
+                        "bt_create, bt_set and bt_edit write it (each call saves the file, and running trees reload). "
+                        "bt_get_blackboard / bt_set_blackboard read and write the tree's keys, an entity's start values and, "
+                        "in Play mode, its live values.\n"
+                        "- BehaviorTree component: bt_assign / bt_unassign, or component_* {type:\"BehaviorTree\"} (tree, "
+                        "enabled, blackboard). A tree attaches when Play starts and ticks only in Play mode; bt_debug_state "
+                        "shows the branch that runs and the blackboard.\n"
+                        "- Navmesh: navmesh_bake bakes the walkable surface and saves it; navmesh_get_info and "
+                        "navmesh_find_path check it; navmesh_clear removes it from the scene (its files stay). NavmeshAgent "
+                        "(NavAgent in scripts) holds the agent's size and speeds. Keep agents at the scene root (an agent "
+                        "writes its LOCAL position), with a radius no larger than the baked agentRadius; baseOffset is how "
+                        "high the pivot sits above the feet (1 for a 2 m capsule with a centred pivot).\n"
+                        "- Routes: route_create / route_set / route_get author patrol routes (a container entity whose "
+                        "ordered children are the waypoints), which the FollowRoute node follows.\n"
+                        "- EQS: eqs_list_queries, eqs_get_query, eqs_set_query and eqs_run author and test the environment "
+                        "queries that EnvironmentQuery nodes and EQSRefresh services run (a position or an entity scored by "
+                        "tests).\n"
+                        "- Flying agents: volumetric_bake bakes and saves the grid of a VolumetricNavVolume (its box and "
+                        "voxel size are component fields); volumetric_get_info, volumetric_find_path and volumetric_clear go "
+                        "with it. A VolumetricAgent flies through it with the same MoveTo and FollowRoute nodes.\n"
+                        "- Persistence: scene_save saves the components and routes with the scene. Trees, the navmesh, the "
+                        "volume grids and EQS queries are files of their own, written by their tools; scene_save warns about "
+                        "a navmesh or volume bake that was never saved.\n"
+                        "- Undo: bt_assign, bt_unassign, bt_set_blackboard {entity}, route_create, route_set and component_* "
+                        "on NavmeshAgent, BehaviorTree, VolumetricNavVolume and VolumetricAgent are undo steps; bt_create, "
+                        "bt_set, bt_edit, bt_set_blackboard {path} or {entity, live:true}, eqs_set_query, navmesh_bake, "
+                        "navmesh_clear, volumetric_bake and volumetric_clear are not. bt_create, bt_set, bt_edit, "
+                        "bt_set_blackboard {path} and eqs_set_query also work in Play mode; bt_assign, bt_unassign, "
+                        "bt_set_blackboard {entity}, navmesh_bake, navmesh_clear, route_create, route_set and "
+                        "volumetric_bake refuse in Play mode and while a scene load is pending.\n\n";
+
                 text += "## Plugin components\n\n"
                         "Edit with component_add_generic / component_get_generic / component_set_generic / "
                         "component_remove_generic. Field values use the scene-file JSON format.\n\n";
@@ -624,5 +669,7 @@ namespace mcp::tools
         addScripts(registry, context);
         addComponentDocs(registry);
         addMTypeDocs(registry, context);
+        registerBehaviorTreeResources(registry, context);
+        registerNavigationResources(registry, context);
     }
 }
