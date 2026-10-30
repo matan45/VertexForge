@@ -48,6 +48,7 @@ namespace components
                                                UIListViewComponent,
                                                SocketAttachmentComponent, SocketOverrideComponent,
                                                NavmeshAgentComponent, NavmeshComponent, OffMeshLinkComponent, NavmeshObstacleComponent, NavmeshModifierVolumeComponent, NavInvokerComponent, ControllerComponent,
+                                               NavRouteComponent, // VK-1660
                                                IKTargetComponent, WorldSectorComponent,
                                                // VK-1597: a duplicated landmark must keep its
                                                // always-loaded pin, or the copy silently starts

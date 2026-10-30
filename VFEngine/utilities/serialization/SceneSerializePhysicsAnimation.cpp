@@ -4,6 +4,10 @@
 #include "../components/Components.hpp"
 #include "../print/Log.hpp"
 #include "../vfx/VFXParamOverrideJson.hpp"
+#include "../behaviortree/BehaviorTreeTypes.hpp"
+#include <optional>
+#include <type_traits>
+#include <variant>
 
 namespace serialization
 {
@@ -377,6 +381,7 @@ namespace serialization
         j["maxAcceleration"] = agent.maxAcceleration;
         j["turnSpeed"] = agent.turnSpeed;
         j["stoppingDistance"] = agent.stoppingDistance;
+        j["baseOffset"] = agent.baseOffset;
         j["avoidanceQuality"] = agent.avoidanceQuality;
         j["separationWeight"] = agent.separationWeight;
         j["useCustomCosts"] = agent.useCustomCosts;
@@ -414,6 +419,8 @@ namespace serialization
             agent.turnSpeed = it->get<float>();
         if (auto it = j.find("stoppingDistance"); it != j.end() && it->is_number())
             agent.stoppingDistance = it->get<float>();
+        if (auto it = j.find("baseOffset"); it != j.end() && it->is_number())
+            agent.baseOffset = it->get<float>();
         if (auto it = j.find("avoidanceQuality"); it != j.end() && it->is_number_unsigned())
             agent.avoidanceQuality = std::min(it->get<uint8_t>(), static_cast<uint8_t>(3));
         if (auto it = j.find("separationWeight"); it != j.end() && it->is_number())
@@ -847,11 +854,85 @@ namespace serialization
     // Behavior Tree Component
     // ============================================
 
+    namespace
+    {
+        // VK-1660: {"key", "type", "value"}; an Entity value is {"uuid", "name"} (BlackboardEntityRef).
+        json serializeBlackboardInitialValue(const behaviortree::BlackboardInitialValue& entry)
+        {
+            json j;
+            j["key"] = entry.key;
+            j["type"] = behaviortree::blackboardValueTypeToString(
+                static_cast<behaviortree::BlackboardValueType>(entry.value.index()));
+            std::visit([&j](const auto& value)
+            {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, glm::vec3>)
+                    j["value"] = json::array({value.x, value.y, value.z});
+                else if constexpr (std::is_same_v<T, behaviortree::BlackboardEntityRef>)
+                    j["value"] = json{{"uuid", value.uuid}, {"name", value.name}};
+                else
+                    j["value"] = value;
+            }, entry.value);
+            return j;
+        }
+
+        // Strict: a value whose type tag and JSON shape disagree is dropped (nullopt), never coerced.
+        std::optional<behaviortree::BlackboardInitialValue> deserializeBlackboardInitialValue(const json& j)
+        {
+            if (!j.is_object())
+                return std::nullopt;
+            const auto keyIt = j.find("key");
+            const auto typeIt = j.find("type");
+            const auto valueIt = j.find("value");
+            if (keyIt == j.end() || !keyIt->is_string() || typeIt == j.end() || !typeIt->is_string() ||
+                valueIt == j.end())
+                return std::nullopt;
+
+            behaviortree::BlackboardInitialValue entry;
+            entry.key = keyIt->get<std::string>();
+            if (entry.key.empty())
+                return std::nullopt;
+
+            const std::string type = typeIt->get<std::string>();
+            const json& value = *valueIt;
+            if (type == "Float" && value.is_number())
+                entry.value = value.get<float>();
+            else if (type == "Int" && value.is_number_integer())
+                entry.value = value.get<int32_t>();
+            else if (type == "Bool" && value.is_boolean())
+                entry.value = value.get<bool>();
+            else if (type == "String" && value.is_string())
+                entry.value = value.get<std::string>();
+            else if (type == "Vec3" && value.is_array() && value.size() == 3 &&
+                     value[0].is_number() && value[1].is_number() && value[2].is_number())
+                entry.value = glm::vec3(value[0].get<float>(), value[1].get<float>(), value[2].get<float>());
+            else if (type == "Entity" && value.is_object())
+            {
+                behaviortree::BlackboardEntityRef ref;
+                if (auto it = value.find("uuid"); it != value.end() && it->is_number_unsigned())
+                    ref.uuid = it->get<uint64_t>();
+                if (auto it = value.find("name"); it != value.end() && it->is_string())
+                    ref.name = it->get<std::string>();
+                entry.value = std::move(ref);
+            }
+            else
+                return std::nullopt;
+            return entry;
+        }
+    }
+
     json SceneSerialization::serializeBehaviorTree(const components::BehaviorTreeComponent& bt)
     {
         json j;
         writeAssetRef(j, "behaviorTreeRef", bt.behaviorTreeRef);
         j["enabled"] = bt.enabled;
+        if (!bt.initialValues.empty())
+        {
+            json values = json::array();
+            for (const auto& entry : bt.initialValues)
+                values.push_back(serializeBlackboardInitialValue(entry));
+            j["initialValues"] = std::move(values);
+        }
         return j;
     }
 
@@ -861,6 +942,17 @@ namespace serialization
         if (auto it = j.find("enabled"); it != j.end() && it->is_boolean())
         {
             bt.enabled = it->get<bool>();
+        }
+        bt.initialValues.clear();
+        if (auto it = j.find("initialValues"); it != j.end() && it->is_array())
+        {
+            for (const auto& entryJson : *it)
+            {
+                if (auto entry = deserializeBlackboardInitialValue(entryJson))
+                    bt.initialValues.push_back(std::move(*entry));
+                else
+                    vfLogWarning("Behavior tree component: skipped a malformed blackboard initial value");
+            }
         }
         // Reset runtime state
         bt.isInitialized = false;
@@ -876,6 +968,19 @@ namespace serialization
     void SceneSerialization::deserializeNavmesh(const json& j, components::NavmeshComponent& navmesh)
     {
         navmesh.navmeshRef = readAssetRef(j, "navmeshRef", "navmeshPath");
+    }
+
+    json SceneSerialization::serializeNavRoute(const components::NavRouteComponent& route)
+    {
+        json j;
+        j["showPath"] = route.showPath;
+        return j;
+    }
+
+    void SceneSerialization::deserializeNavRoute(const json& j, components::NavRouteComponent& route)
+    {
+        if (auto it = j.find("showPath"); it != j.end() && it->is_boolean())
+            route.showPath = it->get<bool>();
     }
 
     // ============================================

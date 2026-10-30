@@ -216,6 +216,7 @@ namespace handlers
         physicsService.reset();
         physicsAnimationService.reset();
         navmeshService.reset();
+        volumetricNavService.reset();
         physicsPlayModeHandler.reset();
         oceanService.reset();
         vfxPlayModeHandler.reset();
@@ -243,6 +244,7 @@ namespace handlers
         giService.reset();
         behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
+        eqsService.reset(); // after the BT service: stopping trees cancels EQS queries
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();

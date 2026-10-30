@@ -21,6 +21,8 @@
 #include "interfaces/lifecycle/IAssetLifecycleService.hpp"
 #include "interfaces/world/IWorldSectorService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/ai/IEQSService.hpp"
+#include "interfaces/volumetric/IVolumetricNavService.hpp"
 #include "interfaces/input/IRuntimePickerService.hpp"
 #include "interfaces/render/IPluginTextureService.hpp"
 #include "interfaces/weather/IWeatherService.hpp"
@@ -74,6 +76,7 @@ namespace handlers {
         std::shared_ptr<services::IPhysicsService> physicsService;
         std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
         std::shared_ptr<services::INavmeshService> navmeshService;
+        std::shared_ptr<services::IVolumetricNavService> volumetricNavService; // VK-1660
         std::unique_ptr<services::PhysicsPlayModeHandler> physicsPlayModeHandler;
         std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
         // VK-1506: caches the doppler teleport-guard speed from applied audio settings.
@@ -88,6 +91,8 @@ namespace handlers {
         std::shared_ptr<services::IWorldSectorService> worldSectorService;
         std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
         std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+        // VK-1660: reset AFTER behaviorTreeService - stopping trees dispatches CancelEQSQueryCommand.
+        std::shared_ptr<services::IEQSService> eqsService;
         std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
         std::unique_ptr<services::VFXPlayModeHandler> vfxPlayModeHandler;
         std::unique_ptr<services::VFXSequenceRuntimeServiceImpl> vfxSequenceRuntimeService;

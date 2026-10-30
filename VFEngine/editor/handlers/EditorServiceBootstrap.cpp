@@ -15,6 +15,8 @@
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
 #include "impl/navmesh/NavmeshServiceImpl.hpp"
+#include "impl/volumetric/VolumetricNavServiceImpl.hpp"
+#include "providers/physics/IPhysicsProvider.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
@@ -49,6 +51,7 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/ai/EQSServiceImpl.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/memory/CpuMemoryServiceImpl.hpp"
@@ -224,6 +227,17 @@ namespace handlers
         if (auto* navmeshProvider = bootstrap->getNavmeshProvider())
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
 
+        // VK-1660: volumetric navigation was never constructed (its inspector threw every frame).
+        if (auto* volumetricProvider = bootstrap->getVolumetricNavProvider())
+        {
+            services::IPhysicsProvider* physicsProvider = bootstrap->getPhysicsProvider();
+            auto raycast = [physicsProvider](glm::vec3 origin, glm::vec3 direction, float maxDistance)
+            {
+                return physicsProvider && physicsProvider->raycast(origin, direction, maxDistance).hit;
+            };
+            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider, raycast);
+        }
+
         controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
         if (auto* ikProvider = bootstrap->getIKProvider())
@@ -357,6 +371,10 @@ namespace handlers
             behaviorTreePlayModeHandler->subscribeToEvents();
         }
 
+        // VK-1660: EQS was never constructed (an EnvironmentQuery node threw in Play).
+        if (auto* eqsProvider = bootstrap->getEQSProvider())
+            eqsService = std::make_shared<services::EQSServiceImpl>(eqsProvider);
+
         runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
             bootstrap->getRuntimePickerProvider()
         );
@@ -385,6 +403,7 @@ namespace handlers
         physicsService->registerEventHandlers();
         if (physicsAnimationService) physicsAnimationService->registerEventHandlers();
         if (navmeshService) navmeshService->registerEventHandlers();
+        if (volumetricNavService) volumetricNavService->registerEventHandlers();
         projectService->registerEventHandlers();
         assetDatabaseService->registerEventHandlers();
         terrainService->registerEventHandlers();
@@ -427,6 +446,7 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        if (eqsService) eqsService->registerEventHandlers();
         runtimePickerService->registerEventHandlers();
         weatherService->registerEventHandlers();
         if (destructionService) destructionService->registerEventHandlers();

@@ -143,7 +143,8 @@ TEST_CASE("String/Enum roundtrip: nodeTypeToString and stringToNodeType") {
         behaviortree::BTNodeType::BlackboardCondition,
         behaviortree::BTNodeType::SubTree,
         behaviortree::BTNodeType::Service,
-        behaviortree::BTNodeType::DynamicSubTree
+        behaviortree::BTNodeType::DynamicSubTree,
+        behaviortree::BTNodeType::FollowRoute
     };
 
     for (auto type : allTypes) {

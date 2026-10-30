@@ -388,6 +388,11 @@ namespace serialization
             auto& comp = entity.addOrReplaceComponent<components::NavInvokerComponent>();
             deserializeNavInvoker(c["navInvoker"], comp);
         }
+        if (c.contains("navRoute"))
+        {
+            auto& comp = entity.addOrReplaceComponent<components::NavRouteComponent>();
+            deserializeNavRoute(c["navRoute"], comp);
+        }
         if (c.contains("renderTexture"))
         {
             auto& comp = entity.addOrReplaceComponent<components::RenderTextureComponent>();

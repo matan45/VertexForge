@@ -439,6 +439,9 @@ namespace serialization
         static json serializeNavInvoker(const components::NavInvokerComponent& invoker);
         static void deserializeNavInvoker(const json& j, components::NavInvokerComponent& invoker);
 
+        static json serializeNavRoute(const components::NavRouteComponent& route);
+        static void deserializeNavRoute(const json& j, components::NavRouteComponent& route);
+
         static json serializeRenderTexture(const components::RenderTextureComponent& rtt);
         static void deserializeRenderTexture(const json& j, components::RenderTextureComponent& rtt);
 

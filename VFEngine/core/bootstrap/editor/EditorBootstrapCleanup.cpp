@@ -5,6 +5,8 @@
 #include "../../adapters/scripting/ScriptingAdapter.hpp"
 #include "../../adapters/physics/PhysicsAdapter.hpp"
 #include "../../adapters/navmesh/NavmeshAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/render/OffScreenAdapter.hpp"
 #include "../../adapters/render/EditorTextureAdapter.hpp"
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
@@ -51,6 +53,10 @@ namespace core
         {
             scriptingAdapter->cleanUp();
         }
+
+        // VK-1660: EQS queries use the physics and navmesh adapters, so EQS goes first.
+        eqsAdapter.reset();
+        volumetricNavAdapter.reset();
 
         if (physicsAdapter)
         {

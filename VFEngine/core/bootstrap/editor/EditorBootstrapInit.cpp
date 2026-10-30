@@ -39,6 +39,8 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
@@ -94,6 +96,10 @@ namespace core
         objectStreamingAdapter = std::make_unique<adapters::ObjectStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        // VK-1660: EQS and volumetric navigation existed but were never constructed, so an EQS node or
+        // a volume inspector dispatched to a missing handler, and that throw terminated the editor.
+        eqsAdapter = std::make_unique<EQSAdapter>(physicsAdapter.get(), navmeshAdapter.get());
+        volumetricNavAdapter = std::make_unique<VolumetricNavAdapter>();
         runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
 
         offScreen->init();

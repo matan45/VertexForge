@@ -20,6 +20,8 @@ namespace services
     class IBillboardRenderProvider;
     class IDecalRenderProvider;
     class IBehaviorTreeProvider;
+    class IEQSProvider;
+    class IVolumetricNavProvider;
     class IRuntimePickerProvider;
     class IPluginTextureProvider;
 }
@@ -69,6 +71,8 @@ namespace core
         class DecalRenderAdapter;
     }
     class BehaviorTreeAdapter;
+    class EQSAdapter;
+    class VolumetricNavAdapter;
     class RuntimePickerAdapter;
     class PluginTextureAdapter;
     class PipelineWarmupAdapter;
@@ -96,6 +100,8 @@ namespace core
         std::unique_ptr<adapters::BillboardRenderAdapter> billboardRenderAdapter;
         std::unique_ptr<adapters::DecalRenderAdapter> decalRenderAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<EQSAdapter> eqsAdapter;                   // VK-1660: was never constructed
+        std::unique_ptr<VolumetricNavAdapter> volumetricNavAdapter; // VK-1660: was never constructed
         std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
         std::unique_ptr<PluginTextureAdapter> pluginTextureAdapter;
         std::unique_ptr<PipelineWarmupAdapter> pipelineWarmupAdapter;
@@ -145,6 +151,10 @@ namespace core
         services::IDecalRenderProvider* getDecalRenderProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IEQSProvider* getEQSProvider();
+
+        services::IVolumetricNavProvider* getVolumetricNavProvider();
 
         services::IRuntimePickerProvider* getRuntimePickerProvider();
 

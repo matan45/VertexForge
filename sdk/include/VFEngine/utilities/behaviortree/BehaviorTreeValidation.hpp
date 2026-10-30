@@ -172,7 +172,13 @@ namespace behaviortree::validation
 
         inline bool isValidServiceType(const std::string& type)
         {
-            return type == "EQSRefresh" || type == "LineOfSightRefresh" || type == "FocusUpdate";
+            return type == "EQSRefresh" || type == "LineOfSightRefresh" || type == "FocusUpdate" ||
+                   type == "TargetDistance";
+        }
+
+        inline bool isValidRouteMode(const std::string& mode)
+        {
+            return mode == "Loop" || mode == "PingPong" || mode == "Once";
         }
 
         inline void validateStringEnumProperty(ValidationReport& report,
@@ -545,6 +551,10 @@ namespace behaviortree::validation
             case BTNodeType::EnvironmentQuery:
                 detail::validateReferencedKey(report, graph, node, "resultKey");
                 break;
+            case BTNodeType::FollowRoute:
+                detail::validateReferencedKey(report, graph, node, "routeKey");
+                detail::validateStringEnumProperty(report, node, "mode", "FollowRoute", detail::isValidRouteMode);
+                break;
             case BTNodeType::SubTree:
             {
                 std::string treePath;
@@ -672,6 +682,11 @@ namespace behaviortree::validation
                 {
                     detail::validateReferencedKey(report, graph, node, "targetKey");
                     detail::validateReferencedKey(report, graph, node, "focusKey");
+                }
+                else if (serviceType == "TargetDistance")
+                {
+                    detail::validateReferencedKey(report, graph, node, "targetKey");
+                    detail::validateReferencedKey(report, graph, node, "distanceKey");
                 }
                 break;
             }

@@ -777,6 +777,19 @@ namespace behaviortree
             return tickDynamicSubTree(node, dt, executor);
         }
 
+        case BTNodeType::FollowRoute:
+        {
+            if (!executor) return BTNodeStatus::Failure;
+            FollowRouteRequest request;
+            request.routeKey = getNodeProperty<std::string>(node, "routeKey", request.routeKey);
+            request.mode = stringToRouteMode(getNodeProperty<std::string>(node, "mode", std::string("Loop")));
+            request.arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", request.arrivalDistance);
+            request.dwell = getNodeProperty<float>(node, "dwell", request.dwell);
+            request.startAtNearest = getNodeProperty<bool>(node, "startAtNearest", request.startAtNearest);
+            request.legTimeout = getNodeProperty<float>(node, "legTimeout", request.legTimeout);
+            return executor->executeFollowRoute(ownerEntity, node, request, blackboard, dt, state.isFirstTick);
+        }
+
         default:
             return BTNodeStatus::Failure;
         }

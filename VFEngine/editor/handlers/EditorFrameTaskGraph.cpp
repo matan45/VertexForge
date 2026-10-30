@@ -81,6 +81,16 @@ namespace handlers
             }
         });
 
+        // VK-1660: harvest finished EQS queries before the behavior trees poll them. Ordered after
+        // Controllers and the main-pinned WorldSector task (it spawns / destroys entities). A throw in a
+        // frame task terminates the editor, so the update is guarded.
+        frameTaskGraph->addTask("EQS", [this]() {
+            if (eqsService) {
+                try { eqsService->update(2.0f); }
+                catch (const std::exception& e) { vfLogError("[EQS] update threw: {}", e.what()); }
+            }
+        });
+
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && behaviorTreeService) {
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
@@ -253,6 +263,9 @@ namespace handlers
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
+        frameTaskGraph->addDependency("EQS", "Controllers");
+        frameTaskGraph->addDependency("EQS", "WorldSector");
+        frameTaskGraph->addDependency("BehaviorTrees", "EQS");
         frameTaskGraph->addDependency("VFX", "Scripts");
         // VK-1657: Weather creates/drives the precipitation instance the VFX tick then advances;
         // WorldSector (main-pinned) and Plugins write EnTT / spawn effects the VFX task reads.

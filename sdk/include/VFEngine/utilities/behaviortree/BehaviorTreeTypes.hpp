@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <variant>
 #include <cstdint>
+#include <memory>
 #include <glm/glm.hpp>
 #include "../../services/data/EntityHandle.hpp"
 
@@ -45,7 +46,11 @@ namespace behaviortree
         // that resolves its target tree at runtime (blackboard key / injection tag / default path) and
         // runs it as a nested runtime with an isolated blackboard. Appended LAST so existing enum
         // values never renumber.
-        DynamicSubTree
+        DynamicSubTree,
+
+        // Built-in patrol task (VK-1660): follows the ordered child markers of a route container
+        // entity (NavRouteComponent) named by an Entity blackboard key. Task leaf. Appended last.
+        FollowRoute
     };
 
     enum class BTNodeStatus : uint8_t
@@ -97,6 +102,14 @@ namespace behaviortree
         Info,
         Warn,
         Error
+    };
+
+    // How FollowRoute (VK-1660) walks a route's markers.
+    enum class RouteMode : uint8_t
+    {
+        Loop,     // A -> B -> C -> A -> ...
+        PingPong, // A -> B -> C -> B -> A -> ...
+        Once      // A -> B -> C, then Success
     };
 
     using BlackboardValue = std::variant<float, int32_t, bool, std::string, glm::vec3, services::EntityHandle>;
@@ -241,6 +254,21 @@ namespace behaviortree
         std::unordered_map<uint32_t, uint32_t> subtreeEntryMap;
     };
 
+    // On-demand view of one entity's live runtime (VK-1660, MCP bt_debug_state). Built from the live
+    // runtime when asked - unlike BTRuntimeSnapshot, which the adapter only records for the single
+    // debug target the editor's BT debugger owns. `snapshot` carries no execution history / aborts.
+    // `tree` is the EXPANDED tree the runtime ticks (node ids in `snapshot` refer to it).
+    struct BTRuntimeState
+    {
+        bool attached = false;
+        bool enabled = false;
+        std::string treePath;
+        std::string status; // "running" | "success" | "failure" | "stopped"
+        uint64_t tickCount = 0;
+        BTRuntimeSnapshot snapshot;
+        std::shared_ptr<const BehaviorTreeData> tree;
+    };
+
     bool isCompositeNode(BTNodeType type);
     bool isDecoratorNode(BTNodeType type);
     bool isTaskNode(BTNodeType type);
@@ -268,4 +296,7 @@ namespace behaviortree
 
     const char* mappingDirectionToString(MappingDirection direction);
     MappingDirection stringToMappingDirection(const std::string& str);
+
+    const char* routeModeToString(RouteMode mode);
+    RouteMode stringToRouteMode(const std::string& str);
 }

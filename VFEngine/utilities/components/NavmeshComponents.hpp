@@ -21,7 +21,12 @@ namespace components
         // snap (back-compat); >0 eases the unit toward its heading so a fast unit does
         // not "jump" forward when the path bends.
         float turnSpeed = 0.0f;
+        // VK-1660: the crowd agent stops once it is within this distance of its destination.
         float stoppingDistance = 0.1f;
+        // VK-1660: height of the entity's pivot above the navmesh surface the crowd walks on. The crowd
+        // moves a surface point; the transform gets surface + baseOffset (1.0 for a 2 m capsule whose
+        // pivot is its centre, 0 for a mesh whose pivot is at its feet).
+        float baseOffset = 0.0f;
 
         // Arrival and stuck detection
         float arrivalDistance = 1.0f;
@@ -64,6 +69,14 @@ namespace components
         glm::vec3 suspendedPosition{0.0f};
         glm::vec3 suspendedTarget{0.0f};
         bool hasSuspendedTarget = false;
+    };
+
+    // A patrol route (VK-1660): the entity's ordered children are the route's markers (waypoints).
+    // FollowRoute walks them in child order using their WORLD positions. Created at the origin with an
+    // identity transform so scripts that read LOCAL marker positions (RTSDemo FollowRoute.mt) agree.
+    struct NavRouteComponent
+    {
+        bool showPath = true; // draw the route while navmesh debug drawing is on
     };
 
     enum class OffMeshLinkType : uint8_t

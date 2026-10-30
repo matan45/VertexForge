@@ -43,6 +43,17 @@ namespace behaviortree
         bool result = false;
     };
 
+    // FollowRoute parameters (VK-1660), read from the node's properties by tickTask.
+    struct FollowRouteRequest
+    {
+        std::string routeKey = "route";  // Entity (or Int entity id) key holding the route container
+        RouteMode mode = RouteMode::Loop;
+        float arrivalDistance = 1.0f;    // a marker counts as reached within this distance (m)
+        float dwell = 0.0f;              // seconds to wait at each marker
+        bool startAtNearest = true;      // begin at the nearest marker instead of the first
+        float legTimeout = 30.0f;        // seconds per leg before the task fails (0 = never)
+    };
+
     class IBTTaskExecutor
     {
     public:
@@ -111,6 +122,24 @@ namespace behaviortree
             (void)entity;
             (void)node;
             (void)blackboard;
+        }
+
+        // Built-in patrol (VK-1660). Non-pure so existing executors/mocks keep compiling; an executor
+        // without route support fails the task.
+        virtual BTNodeStatus executeFollowRoute(services::EntityHandle entity,
+                                                const BTNode& node,
+                                                const FollowRouteRequest& request,
+                                                Blackboard& blackboard,
+                                                float deltaTime,
+                                                bool isFirstTick)
+        {
+            (void)entity;
+            (void)node;
+            (void)request;
+            (void)blackboard;
+            (void)deltaTime;
+            (void)isFirstTick;
+            return BTNodeStatus::Failure;
         }
     };
 

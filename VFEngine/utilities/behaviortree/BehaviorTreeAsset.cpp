@@ -491,23 +491,85 @@ namespace behaviortree
         return resolveExistingBehaviorTreePath(path).has_value();
     }
 
+    std::string BehaviorTreeAsset::serialize(const BehaviorTreeData& data)
+    {
+        return buildBehaviorTreeJson(data).dump(4);
+    }
+
+    std::optional<BehaviorTreeData> BehaviorTreeAsset::parse(std::string_view text)
+    {
+        json j = json::parse(text.begin(), text.end(), nullptr, false);
+        if (j.is_discarded() || !j.is_object())
+        {
+            return std::nullopt;
+        }
+
+        int warningCount = 0;
+        constexpr int MAX_WARNINGS = 20;
+        auto logWarningLimited = [&](const std::string& msg)
+        {
+            if (warningCount < MAX_WARNINGS)
+            {
+                vfLogWarning("{}", msg);
+                ++warningCount;
+            }
+        };
+
+        try
+        {
+            return parseBehaviorTreeData(j, logWarningLimited);
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Failed to parse behavior tree JSON: {}", e.what());
+            return std::nullopt;
+        }
+    }
+
     bool BehaviorTreeAsset::save(std::string_view path, const BehaviorTreeData& data)
     {
-        json j = buildBehaviorTreeJson(data);
+        const std::string text = serialize(data);
 
         try
         {
             fs::path filePath(path);
-            fs::create_directories(filePath.parent_path());
-
-            std::ofstream file(filePath);
-            if (!file.is_open())
+            if (filePath.has_parent_path())
             {
-                vfLogError("Failed to create behavior tree file: {}", path);
+                fs::create_directories(filePath.parent_path());
+            }
+
+            fs::path tempPath = filePath;
+            tempPath += ".tmp";
+            {
+                std::ofstream file(tempPath, std::ios::binary | std::ios::trunc);
+                if (!file.is_open())
+                {
+                    vfLogError("Failed to create behavior tree file: {}", tempPath.string());
+                    return false;
+                }
+                file << text;
+                file.flush();
+                if (!file.good())
+                {
+                    vfLogError("Failed to write behavior tree file: {}", tempPath.string());
+                    file.close();
+                    std::error_code removeError;
+                    fs::remove(tempPath, removeError);
+                    return false;
+                }
+            }
+
+            // std::filesystem::rename replaces an existing file (MoveFileExW REPLACE_EXISTING on MSVC).
+            std::error_code renameError;
+            fs::rename(tempPath, filePath, renameError);
+            if (renameError)
+            {
+                vfLogError("Failed to replace behavior tree file {}: {}", path, renameError.message());
+                std::error_code removeError;
+                fs::remove(tempPath, removeError);
                 return false;
             }
 
-            file << j.dump(4);
             vfLogInfo("Saved behavior tree: {} to {}", data.name, path);
             return true;
         }

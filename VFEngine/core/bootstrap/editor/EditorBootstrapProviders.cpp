@@ -31,6 +31,8 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 
 namespace core
@@ -203,6 +205,16 @@ namespace core
     services::IBehaviorTreeProvider* EditorBootstrap::getBehaviorTreeProvider()
     {
         return behaviorTreeAdapter.get();
+    }
+
+    services::IEQSProvider* EditorBootstrap::getEQSProvider()
+    {
+        return eqsAdapter.get();
+    }
+
+    services::IVolumetricNavProvider* EditorBootstrap::getVolumetricNavProvider()
+    {
+        return volumetricNavAdapter.get();
     }
 
     services::IRuntimePickerProvider* EditorBootstrap::getRuntimePickerProvider()

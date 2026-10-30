@@ -11,6 +11,7 @@
 #include "../vfx/VFXParameterRegistry.hpp"
 #include "../types/AudioEffectTypes.hpp"
 #include "../types/AudioVariationTypes.hpp"
+#include "../behaviortree/BlackboardInitialValue.hpp"
 
 namespace components
 {
@@ -366,6 +367,9 @@ namespace components
         asset::AssetRef behaviorTreeRef;
         bool isInitialized = false;
         bool enabled = true;
+        // Per-entity blackboard start values (VK-1660), applied after the tree attaches at Edit->Play.
+        // Entity values are UUID + name (see BlackboardEntityRef). Serialized with the scene / prefab.
+        std::vector<behaviortree::BlackboardInitialValue> initialValues;
     };
 
     enum class ReverbZoneShape : uint8_t

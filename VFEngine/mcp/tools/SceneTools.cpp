@@ -84,6 +84,10 @@ namespace mcp::tools
             case ComponentTypeId::UIListView: return "UIListView";
             case ComponentTypeId::Terrain: return "Terrain";
             case ComponentTypeId::TerrainTile: return "TerrainTile";
+            case ComponentTypeId::BehaviorTree: return "BehaviorTree";
+            case ComponentTypeId::NavRoute: return "NavRoute";
+            case ComponentTypeId::VolumetricNavVolume: return "VolumetricNavVolume";
+            case ComponentTypeId::VolumetricAgent: return "VolumetricAgent";
             }
             return "Unknown";
         }

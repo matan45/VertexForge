@@ -3,19 +3,25 @@
 #include "../../services/providers/render/IDebugDrawProvider.hpp"
 #include "../../graphics/render/tools/ImmediateDebugTypes.hpp"
 #include <glm/glm.hpp>
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 
 namespace core
 {
     class DebugDrawAdapter : public services::IDebugDrawProvider
     {
     private:
+        // VK-1660: lines arrive from several frame tasks at once (Navmesh and Volumetric workers,
+        // the main-pinned WorldSector task, script natives), so every access holds this mutex.
+        mutable std::mutex mutex;
         render::mesh::ImmediateDebugDrawList drawList;
-        bool enabled = true;
+        std::atomic<bool> enabled{true};
         bool budgetWarned = false;
 
         static constexpr size_t MAX_LINE_VERTICES = 128 * 1024; // 64K line segments = 128K vertices
 
+        // Caller holds `mutex`.
         void addLine(const glm::vec3& start, const glm::vec3& end, const glm::vec4& color);
 
     public:

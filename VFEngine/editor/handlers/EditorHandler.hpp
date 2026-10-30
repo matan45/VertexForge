@@ -53,6 +53,8 @@
 #include "interfaces/render/IObjectStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/ai/IEQSService.hpp"
+#include "interfaces/volumetric/IVolumetricNavService.hpp"
 #include "interfaces/input/IRuntimePickerService.hpp"
 #include "interfaces/weather/IWeatherService.hpp"
 #include "interfaces/destruction/IDestructionService.hpp"
@@ -141,6 +143,7 @@ namespace handlers {
 		std::shared_ptr<services::ISplineTerrainService> splineTerrainService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
+		std::shared_ptr<services::IVolumetricNavService> volumetricNavService; // VK-1660
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		// VK-1505: editor reverb-zone tracking. Declared AFTER audioSceneUpdater so it is
 		// destroyed FIRST (unsubscribes before the updater it captures is torn down).
@@ -182,6 +185,8 @@ namespace handlers {
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+		// VK-1660: reset AFTER behaviorTreeService - stopping trees dispatches CancelEQSQueryCommand.
+		std::shared_ptr<services::IEQSService> eqsService;
 		std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
 		std::shared_ptr<services::IWeatherService> weatherService;
 		std::shared_ptr<services::IDestructionService> destructionService;

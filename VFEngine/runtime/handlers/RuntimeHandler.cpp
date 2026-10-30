@@ -15,6 +15,8 @@
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
 #include "impl/navmesh/NavmeshServiceImpl.hpp"
+#include "impl/volumetric/VolumetricNavServiceImpl.hpp"
+#include "providers/physics/IPhysicsProvider.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/physics/ControllerServiceImpl.hpp"
 #include "../audio/AudioSceneUpdater.hpp"
@@ -29,6 +31,7 @@
 #include "impl/world/WorldSectorServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/ai/EQSServiceImpl.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/time/TimeServiceImpl.hpp"
 #include "impl/save/ConfigService.hpp"
@@ -192,10 +195,12 @@ namespace {
         controllerService.reset();
         behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
+        eqsService.reset(); // after the BT service: stopping trees cancels EQS queries
         ikComponentService.reset();
         physicsAnimationService.reset();
         physicsService.reset();
         navmeshService.reset();
+        volumetricNavService.reset();
         weatherService.reset();
         oceanService.reset();
         terrainService.reset();
@@ -386,6 +391,17 @@ namespace {
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
         }
 
+        // VK-1660: volumetric navigation was never constructed (every call threw).
+        if (auto* volumetricProvider = bootstrap->getVolumetricNavProvider())
+        {
+            services::IPhysicsProvider* physicsProvider = bootstrap->getPhysicsProvider();
+            auto raycast = [physicsProvider](glm::vec3 origin, glm::vec3 direction, float maxDistance)
+            {
+                return physicsProvider && physicsProvider->raycast(origin, direction, maxDistance).hit;
+            };
+            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider, raycast);
+        }
+
         controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
         if (auto* ikProvider = bootstrap->getIKProvider())
@@ -410,6 +426,12 @@ namespace {
         behaviorTreeService = std::make_shared<services::BehaviorTreeServiceImpl>(
             bootstrap->getBehaviorTreeProvider()
         );
+
+        // VK-1660: EQS was never constructed (an EnvironmentQuery node threw).
+        if (auto* eqsProvider = bootstrap->getEQSProvider())
+        {
+            eqsService = std::make_shared<services::EQSServiceImpl>(eqsProvider);
+        }
 
         runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
             bootstrap->getRuntimePickerProvider()
@@ -493,12 +515,20 @@ namespace {
         {
             navmeshService->registerEventHandlers();
         }
+        if (volumetricNavService)
+        {
+            volumetricNavService->registerEventHandlers();
+        }
         renderTextureService->registerEventHandlers();
         debugDrawService->registerEventHandlers();
         assetLifecycleService->registerEventHandlers();
         worldSectorService->registerEventHandlers();
         controllerService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        if (eqsService)
+        {
+            eqsService->registerEventHandlers();
+        }
         runtimePickerService->registerEventHandlers();
         pluginTextureService->registerEventHandlers();
         timeService->registerEventHandlers();
@@ -624,6 +654,14 @@ namespace {
             }
         });
 
+        // VK-1660: harvest finished EQS queries before the behavior trees poll them (mirrors the editor).
+        frameTaskGraph->addTask("EQS", [this]() {
+            if (eqsService) {
+                try { eqsService->update(2.0f); }
+                catch (const std::exception& e) { vfLogError("[EQS] update threw: {}", e.what()); }
+            }
+        });
+
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
             if (engineTime::Timer::isGameTimeActive() && behaviorTreeService) {
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
@@ -715,6 +753,9 @@ namespace {
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
+        frameTaskGraph->addDependency("EQS", "Controllers");
+        frameTaskGraph->addDependency("EQS", "WorldSector");
+        frameTaskGraph->addDependency("BehaviorTrees", "EQS");
         frameTaskGraph->addDependency("AudioListener", "Scripts");
 
         // === Full frame pipeline tasks ===

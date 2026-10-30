@@ -53,6 +53,13 @@ namespace plugin {
     //      boundary by reference in PluginContext::createVFXInstance and the other types
     //      are SDK-exported and embedded by value, so a plugin built against v22 would lay
     //      them out at the wrong size. IVFXRuntimeProvider also appends a virtual.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 23;
+    // v24: VK-1660 AI tools. SDK-exported layouts change: components::BehaviorTreeComponent gains
+    //      `initialValues`, components::NavmeshAgentComponent gains `baseOffset`, the volumetric
+    //      navigation components are redesigned, and the EQS types (EQSCandidate, EQSContext,
+    //      EQSProviderRefs, EQSTestConfig) change. Interfaces change: IBTTaskExecutor (executeMoveTo,
+    //      new executeFollowRoute), IBehaviorTreeProvider and INavmeshProvider append virtuals, and
+    //      IEQSProvider / IVolumetricNavProvider are rewritten. BTNodeType, ComponentTypeId and
+    //      AssetType append values. No in-tree plugin uses these types, but every plugin rebuilds.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 24;
 
 }

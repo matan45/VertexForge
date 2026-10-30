@@ -108,7 +108,7 @@ namespace behaviortree
                type == BTNodeType::SetBlackboardValue || type == BTNodeType::CheckBlackboardValue ||
                type == BTNodeType::ScriptTask || type == BTNodeType::EnvironmentQuery ||
                type == BTNodeType::LineOfSight || type == BTNodeType::SubTree ||
-               type == BTNodeType::DynamicSubTree;
+               type == BTNodeType::DynamicSubTree || type == BTNodeType::FollowRoute;
     }
 
     bool isRootNode(BTNodeType type)
@@ -154,6 +154,7 @@ namespace behaviortree
         case BTNodeType::SubTree: return "SubTree";
         case BTNodeType::Service: return "Service";
         case BTNodeType::DynamicSubTree: return "DynamicSubTree";
+        case BTNodeType::FollowRoute: return "FollowRoute";
         default: return "Unknown";
         }
     }
@@ -183,6 +184,7 @@ namespace behaviortree
         if (str == "SubTree") return BTNodeType::SubTree;
         if (str == "Service") return BTNodeType::Service;
         if (str == "DynamicSubTree") return BTNodeType::DynamicSubTree;
+        if (str == "FollowRoute") return BTNodeType::FollowRoute;
         return BTNodeType::Sequence;
     }
 
@@ -310,5 +312,24 @@ namespace behaviortree
         if (str == "Out") return MappingDirection::Out;
         if (str == "InOut") return MappingDirection::InOut;
         return MappingDirection::In;
+    }
+
+    const char* routeModeToString(RouteMode mode)
+    {
+        switch (mode)
+        {
+        case RouteMode::Loop: return "Loop";
+        case RouteMode::PingPong: return "PingPong";
+        case RouteMode::Once: return "Once";
+        default: return "Loop";
+        }
+    }
+
+    RouteMode stringToRouteMode(const std::string& str)
+    {
+        if (str == "Loop") return RouteMode::Loop;
+        if (str == "PingPong") return RouteMode::PingPong;
+        if (str == "Once") return RouteMode::Once;
+        return RouteMode::Loop;
     }
 }

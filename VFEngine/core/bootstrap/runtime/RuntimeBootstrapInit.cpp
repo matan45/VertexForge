@@ -19,6 +19,8 @@
 #include "../../adapters/render/BillboardRenderAdapter.hpp"
 #include "../../adapters/render/DecalRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 #include "../../adapters/render/PipelineWarmupAdapter.hpp"
@@ -55,6 +57,9 @@ namespace core
         billboardRenderAdapter = std::make_unique<adapters::BillboardRenderAdapter>();
         decalRenderAdapter = std::make_unique<adapters::DecalRenderAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        // VK-1660: EQS and volumetric navigation existed but were never constructed.
+        eqsAdapter = std::make_unique<EQSAdapter>(physicsAdapter.get(), navmeshAdapter.get());
+        volumetricNavAdapter = std::make_unique<VolumetricNavAdapter>();
         runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
         pluginTextureAdapter = std::make_unique<PluginTextureAdapter>(offScreen.get());
         pipelineWarmupAdapter = std::make_unique<PipelineWarmupAdapter>(offScreen.get());

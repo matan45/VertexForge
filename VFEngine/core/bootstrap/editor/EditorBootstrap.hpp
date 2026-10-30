@@ -38,6 +38,8 @@ namespace services
     class IObjectStreamingProvider;
     class IGIProvider;
     class IBehaviorTreeProvider;
+    class IEQSProvider;
+    class IVolumetricNavProvider;
     class IRuntimePickerProvider;
 }
 
@@ -106,6 +108,8 @@ namespace core
         class GIAdapter;
     }
     class BehaviorTreeAdapter;
+    class EQSAdapter;
+    class VolumetricNavAdapter;
     class RuntimePickerAdapter;
 
     class EditorBootstrap
@@ -151,6 +155,8 @@ namespace core
         std::unique_ptr<adapters::ObjectStreamingAdapter> objectStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<EQSAdapter> eqsAdapter;                   // VK-1660: was never constructed
+        std::unique_ptr<VolumetricNavAdapter> volumetricNavAdapter; // VK-1660: was never constructed
         std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
 
     public:
@@ -236,6 +242,10 @@ namespace core
         services::IGIProvider* getGIProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IEQSProvider* getEQSProvider();
+
+        services::IVolumetricNavProvider* getVolumetricNavProvider();
 
         services::IRuntimePickerProvider* getRuntimePickerProvider();
 
