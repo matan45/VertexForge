@@ -195,15 +195,21 @@ namespace mcp::tools
         std::string antiAliasingText(const types::RenderSettings& settings, const env::PostProcessSettings& live,
                                      const std::optional<services::UpscaleStatus>& status)
         {
+            std::string text;
             if (upscalerActive(live, status))
             {
-                return live.upscale.quality == ::postprocess::UpscaleQuality::Native ? "DLAA" : "DLSS";
+                text = live.upscale.quality == ::postprocess::UpscaleQuality::Native ? "DLAA" : "DLSS";
             }
-            if (settings.display.msaa != types::MsaaSamples::Off)
+            else if (settings.display.msaa != types::MsaaSamples::Off)
             {
-                return "MSAA " + enumText(env::msaaNames, settings.display.msaa);
+                text = "MSAA " + enumText(env::msaaNames, settings.display.msaa);
             }
-            return "none";
+            // FXAA is a built-in effect (it needs the master switch) and still runs after the upscaler.
+            if (live.enabled && live.fxaa.enabled)
+            {
+                return text.empty() ? std::string("FXAA") : text + " + FXAA";
+            }
+            return text.empty() ? std::string("none") : text;
         }
 
         nlohmann::json exposureJson(const env::PostProcessSettings& live)
@@ -245,11 +251,13 @@ namespace mcp::tools
             return nlohmann::json::array({
                 "Effect order: SSAO, rain droplets, underwater, depth of field, auto exposure, plugin effects before "
                 "the tonemap (priority 95), tone mapping, color grading, plugin effects after the tonemap (130), "
-                "bloom, edge detection, chromatic aberration, vignette, film grain. With DLSS active, SSAO, depth "
-                "of field and auto exposure run before the upscaler at render resolution and the rest after it at "
-                "display resolution, in the same order.",
-                "Anti-aliasing: MSAA (display.msaa) or the upscaler (postProcess.upscale; quality Native = DLAA, "
-                "full resolution). There is no FXAA. MSAA is ignored while the upscaler is active.",
+                "bloom, edge detection, FXAA, chromatic aberration, vignette, film grain. With DLSS active, SSAO, "
+                "depth of field and auto exposure run before the upscaler at render resolution and the rest after "
+                "it at display resolution, in the same order.",
+                "Anti-aliasing: MSAA (display.msaa), FXAA (postProcess.fxaa: FXAA 3.11 over the tone-mapped image, "
+                "any GPU, can be combined with MSAA) or the upscaler (postProcess.upscale; quality Native = DLAA, "
+                "full resolution). MSAA is ignored while the upscaler is active; FXAA still runs after it and only "
+                "softens the image further.",
                 "Everything here is saved with the scene (scene_save). In an exported game a player's graphics "
                 "preset (Graphics.applyPreset / setMsaa) overrides the shadows and MSAA after each load.",
                 "The volumetric fog is part of the post-process settings but belongs to fog_get / fog_set. Plugin "
@@ -264,6 +272,9 @@ namespace mcp::tools
         const char* const masterOffWarning =
             "postProcess.enabled is false: no built-in effect renders (tone mapping included) until "
             "render_settings_set {postProcess:{enabled:true}}; plugin effects still render";
+
+        const char* const fxaaUnderUpscalerWarning =
+            "postProcess.fxaa runs after DLSS / DLAA, which already anti-alias the image: FXAA only softens it further";
 
         std::string missingLutWarning(const std::string& path)
         {
@@ -294,6 +305,10 @@ namespace mcp::tools
             {
                 warnings.emplace_back("display.msaa is ignored while the upscaler is active (DLSS / DLAA anti-alias "
                                       "the image themselves)");
+            }
+            if (live.enabled && live.fxaa.enabled && upscalerActive(live, status))
+            {
+                warnings.emplace_back(fxaaUnderUpscalerWarning);
             }
             if (settings.postProcess.colorGrading.enabled)
             {
@@ -339,6 +354,14 @@ namespace mcp::tools
                 {
                     warnings.emplace_back("autoExposure.enabled overrides toneMapping.exposure; to brighten or darken, "
                                           "change autoExposure.exposureCompensation");
+                }
+                // This call put FXAA on top of the upscaler when it changed FXAA, the upscaler or the master switch
+                // (a bool, so diffHas - which wants a section object - cannot see it).
+                if ((postProcessDiff->contains("enabled") || diffHas(*postProcessDiff, "fxaa", "") ||
+                     diffHas(*postProcessDiff, "upscale", "")) &&
+                    live.fxaa.enabled && upscalerActive(live, status))
+                {
+                    warnings.emplace_back(fxaaUnderUpscalerWarning);
                 }
             }
             if (postProcessChanged && diffHas(*postProcessDiff, "upscale", "") && status.has_value() &&
@@ -539,9 +562,9 @@ namespace mcp::tools
             tool.title = "Get render settings";
             tool.description =
                 "Read the scene's look: postProcess {enabled (master switch), toneMapping, autoExposure, bloom, "
-                "colorGrading, ssao, vignette, chromaticAberration, filmGrain, depthOfField, edgeDetection, upscale "
-                "(DLSS / DLAA)}, shadows (quality and filtering) and display {msaa}, as saved with the scene - the "
-                "same shape render_settings_set takes, so any part can be passed back. Also: live (post-process "
+                "colorGrading, ssao, vignette, chromaticAberration, filmGrain, depthOfField, edgeDetection, fxaa, "
+                "upscale (DLSS / DLAA)}, shadows (quality and filtering) and display {msaa}, as saved with the scene - "
+                "the same shape render_settings_set takes, so any part can be passed back. Also: live (post-process "
                 "keys whose live value differs from the saved one), effective (what renders now: each effect, the "
                 "exposure source, the active anti-aliasing, the upscaler status), warnings, notes (effect order, "
                 "anti-aliasing options) and ranges = every key with its type and range (includeRanges:false omits "
@@ -610,12 +633,12 @@ namespace mcp::tools
                 "whole call, changes nothing and names the valid range). Nothing built-in renders unless "
                 "postProcess.enabled is true, and exposure / the tone curve need toneMapping.enabled. While "
                 "autoExposure.enabled, change autoExposure.exposureCompensation rather than toneMapping.exposure. "
-                "Anti-aliasing: display.msaa, or postProcess.upscale {enabled:true, quality:\"Native\"} for DLAA "
-                "(DLSS needs an RTX GPU; MSAA is ignored while it runs; there is no FXAA). colorGrading LUT paths "
-                "are .cube files relative to the project (\"\" clears). A shadows change re-applies the scene's "
-                "culling and terrain settings too, like the Render window's Apply. Saved with the scene on "
-                "scene_save; one undo step; refused in Play mode. Returns {changed, diff, effective, warnings}. "
-                "Volumetric fog: fog_set.";
+                "Anti-aliasing: display.msaa, postProcess.fxaa {enabled:true} (any GPU), or postProcess.upscale "
+                "{enabled:true, quality:\"Native\"} for DLAA (DLSS needs an RTX GPU; MSAA is ignored while it runs, "
+                "FXAA still runs after it). colorGrading LUT paths are .cube files relative to the project (\"\" "
+                "clears). A shadows change re-applies the scene's culling and terrain settings too, like the Render "
+                "window's Apply. Saved with the scene on scene_save; one undo step; refused in Play mode. Returns "
+                "{changed, diff, effective, warnings}. Volumetric fog: fog_set.";
             tool.inputSchema = setSchema();
             tool.timeout = renderSettingsTimeout;
             tool.handler = [](const nlohmann::json& args) -> ToolResult

@@ -454,6 +454,10 @@ namespace mcp::tools::env
             {
                 return edgeDetectionTable().name;
             }
+            else if constexpr (std::is_same_v<S, FXAASettings>)
+            {
+                return fxaaTable().name;
+            }
             else if constexpr (std::is_same_v<S, UpscaleSettings>)
             {
                 return upscaleTable().name;

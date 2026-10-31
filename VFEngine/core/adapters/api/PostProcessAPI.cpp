@@ -1,6 +1,7 @@
 // mType headers must come first to avoid Windows macro conflicts
 #include <services/ScriptInterpreter.hpp>
 #include <environment/NativeContext.hpp>
+#include <algorithm>
 #include <span>
 
 #include "PostProcessAPI.hpp"
@@ -405,6 +406,98 @@ namespace core::api
                 return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
                 {
                     s.filmGrain.size = extractFloat(args[0], "PostProcess.filmGrain.setSize");
+                });
+            }});
+
+        // =============================================
+        // FXAA (VK-1661)
+        // =============================================
+        // The setters clamp to the scene loader's ranges (FXAA 3.11's tuning limits), so a value a script
+        // sets is one render_settings_set accepts back.
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_isEnabled",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.fxaa.enabled);
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEnabled",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.fxaa.enabled = extractBool(args[0]);
+                });
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_getQuality",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(static_cast<int64_t>(s.fxaa.quality));
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_setQuality",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    int64_t quality = extractInt64(args[0], "PostProcess.fxaa.setQuality");
+                    if (quality >= 0 && quality <= 3)
+                    {
+                        s.fxaa.quality = static_cast<postprocess::FXAAQuality>(quality);
+                    }
+                });
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_getSubpixel",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.fxaa.subpixel);
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_setSubpixel",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.fxaa.subpixel = std::clamp(extractFloat(args[0], "PostProcess.fxaa.setSubpixel"), 0.0f, 1.0f);
+                });
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_getEdgeThreshold",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.fxaa.edgeThreshold);
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEdgeThreshold",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.fxaa.edgeThreshold =
+                        std::clamp(extractFloat(args[0], "PostProcess.fxaa.setEdgeThreshold"), 0.063f, 0.333f);
+                });
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_getEdgeThresholdMin",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value>) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                auto s = dispatcher.query(events::postprocess::GetPostProcessSettingsQuery{});
+                return value::Value(s.fxaa.edgeThresholdMin);
+            }});
+
+        interpreter->registerNativeFunction("_native_postprocess_fxaa_setEdgeThresholdMin",
+            {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
+                auto& dispatcher = events::EventDispatcher::instance();
+                return modifySettings(dispatcher, [&](postprocess::PostProcessSettings& s)
+                {
+                    s.fxaa.edgeThresholdMin =
+                        std::clamp(extractFloat(args[0], "PostProcess.fxaa.setEdgeThresholdMin"), 0.0312f, 0.0833f);
                 });
             }});
     }

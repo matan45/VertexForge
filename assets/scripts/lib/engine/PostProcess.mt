@@ -1,5 +1,5 @@
 // PostProcess - Static utility class for post-processing settings
-// Controls all post-process effects: tone mapping, TAA, bloom, vignette,
+// Controls all post-process effects: tone mapping, FXAA, bloom, vignette,
 // chromatic aberration, film grain, color grading, and more.
 //
 // Usage examples:
@@ -97,12 +97,55 @@ public class PostProcess {
     }
 
     // ============================================
-    // Anti-Aliasing note
+    // Anti-Aliasing (FXAA)
     // ============================================
-    // There is no script-facing TAA control: temporal anti-aliasing is
-    // driven by the upscaler (DLSS/FSR) — projection jitter is enabled
-    // automatically when upscaling is active. The former TAA wrappers here
-    // called natives that were never registered and could not work.
+    // FXAA 3.11 over the tone-mapped image (any GPU; needs setEnabled(true)).
+    // It can be combined with MSAA and still runs after DLSS / DLAA. The
+    // setters clamp to the ranges below.
+
+    public static function isFXAAEnabled(): bool {
+        return _native_postprocess_fxaa_isEnabled();
+    }
+
+    public static function setFXAAEnabled(bool enabled): void {
+        _native_postprocess_fxaa_setEnabled(enabled);
+    }
+
+    // Quality preset (use FXAAQuality constants: LOW, MEDIUM, HIGH, ULTRA)
+    public static function getFXAAQuality(): int {
+        return _native_postprocess_fxaa_getQuality();
+    }
+
+    public static function setFXAAQuality(int quality): void {
+        _native_postprocess_fxaa_setQuality(quality);
+    }
+
+    // Sub-pixel aliasing removal: 0 = off, 0.75 = default, 1 = softest (0.0 - 1.0)
+    public static function getFXAASubpixel(): float {
+        return _native_postprocess_fxaa_getSubpixel();
+    }
+
+    public static function setFXAASubpixel(float value): void {
+        _native_postprocess_fxaa_setSubpixel(value);
+    }
+
+    // Minimum local contrast to anti-alias; lower = more edges (0.063 - 0.333)
+    public static function getFXAAEdgeThreshold(): float {
+        return _native_postprocess_fxaa_getEdgeThreshold();
+    }
+
+    public static function setFXAAEdgeThreshold(float value): void {
+        _native_postprocess_fxaa_setEdgeThreshold(value);
+    }
+
+    // Contrast below which dark areas are skipped (0.0312 - 0.0833)
+    public static function getFXAAEdgeThresholdMin(): float {
+        return _native_postprocess_fxaa_getEdgeThresholdMin();
+    }
+
+    public static function setFXAAEdgeThresholdMin(float value): void {
+        _native_postprocess_fxaa_setEdgeThresholdMin(value);
+    }
 
     // ============================================
     // Bloom

@@ -245,6 +245,38 @@ namespace serialization
             };
         }
 
+        std::string fxaaQualityToStr(postprocess::FXAAQuality quality)
+        {
+            switch (quality)
+            {
+            case postprocess::FXAAQuality::Low: return "low";
+            case postprocess::FXAAQuality::Medium: return "medium";
+            case postprocess::FXAAQuality::High: return "high";
+            case postprocess::FXAAQuality::Ultra: return "ultra";
+            default: return "medium";
+            }
+        }
+
+        postprocess::FXAAQuality strToFXAAQuality(const std::string& str)
+        {
+            if (str == "low") return postprocess::FXAAQuality::Low;
+            if (str == "medium") return postprocess::FXAAQuality::Medium;
+            if (str == "high") return postprocess::FXAAQuality::High;
+            if (str == "ultra") return postprocess::FXAAQuality::Ultra;
+            return postprocess::FXAAQuality::Medium;
+        }
+
+        json serializeFXAA(const postprocess::FXAASettings& s)
+        {
+            return {
+                {"enabled", s.enabled},
+                {"quality", fxaaQualityToStr(s.quality)},
+                {"subpixel", s.subpixel},
+                {"edgeThreshold", s.edgeThreshold},
+                {"edgeThresholdMin", s.edgeThresholdMin}
+            };
+        }
+
         void deserializeToneMapping(const json& j, postprocess::ToneMappingSettings& s)
         {
             if (!j.contains("toneMapping") || !j["toneMapping"].is_object())
@@ -589,6 +621,25 @@ namespace serialization
                 s.colorTint = std::clamp(cg["colorTint"].get<float>(), -1.0f, 1.0f);
         }
 
+        // VK-1661: the clamps are FXAA 3.11's documented tuning limits and equal the render-settings
+        // tool ranges (RenderSettingsToolSupport.cpp fxaaTable) and the editor sliders.
+        void deserializeFXAA(const json& j, postprocess::FXAASettings& s)
+        {
+            if (!j.contains("fxaa") || !j["fxaa"].is_object())
+                return;
+            const auto& fxaa = j["fxaa"];
+            if (fxaa.contains("enabled") && fxaa["enabled"].is_boolean())
+                s.enabled = fxaa["enabled"].get<bool>();
+            if (fxaa.contains("quality") && fxaa["quality"].is_string())
+                s.quality = strToFXAAQuality(fxaa["quality"].get<std::string>());
+            if (fxaa.contains("subpixel") && fxaa["subpixel"].is_number())
+                s.subpixel = std::clamp(fxaa["subpixel"].get<float>(), 0.0f, 1.0f);
+            if (fxaa.contains("edgeThreshold") && fxaa["edgeThreshold"].is_number())
+                s.edgeThreshold = std::clamp(fxaa["edgeThreshold"].get<float>(), 0.063f, 0.333f);
+            if (fxaa.contains("edgeThresholdMin") && fxaa["edgeThresholdMin"].is_number())
+                s.edgeThresholdMin = std::clamp(fxaa["edgeThresholdMin"].get<float>(), 0.0312f, 0.0833f);
+        }
+
     } // anonymous namespace
 
     json SceneSerialization::serializePostProcessSettings(const postprocess::PostProcessSettings& settings)
@@ -610,6 +661,7 @@ namespace serialization
         j["autoExposure"] = serializeAutoExposure(settings.autoExposure);
         j["colorGrading"] = serializeColorGrading(settings.colorGrading);
         j["underwater"] = serializeUnderwater(settings.underwater);
+        j["fxaa"] = serializeFXAA(settings.fxaa);
         return j;
     }
 
@@ -632,5 +684,6 @@ namespace serialization
         deserializeAutoExposure(j, settings.autoExposure);
         deserializeColorGrading(j, settings.colorGrading);
         deserializeUnderwater(j, settings.underwater);
+        deserializeFXAA(j, settings.fxaa);
     }
 }

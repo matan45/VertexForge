@@ -29,6 +29,7 @@ namespace mcp::tools::env
     inline constexpr std::array<std::string_view, 7> toneMappingModeNames{
         "ACES", "Reinhard", "Uncharted2", "Linear", "GranTurismo", "AgX", "KhronosPBRNeutral"};
     inline constexpr std::array<std::string_view, 4> ssaoQualityNames{"Low", "Medium", "High", "Ultra"};
+    inline constexpr std::array<std::string_view, 4> fxaaQualityNames{"Low", "Medium", "High", "Ultra"};
     inline constexpr std::array<std::string_view, 2> focusModeNames{"Manual", "TargetPoint"};
     inline constexpr std::array<std::string_view, 3> upscaleModeNames{"Off", "DLSS", "Auto"};
     inline constexpr std::array<std::string_view, 5> upscaleQualityNames{
@@ -46,6 +47,12 @@ namespace mcp::tools::env
     struct EnumNames<::postprocess::SSAOQuality>
     {
         static constexpr std::span<const std::string_view> names{ssaoQualityNames};
+    };
+
+    template <>
+    struct EnumNames<::postprocess::FXAAQuality>
+    {
+        static constexpr std::span<const std::string_view> names{fxaaQualityNames};
     };
 
     template <>
@@ -93,11 +100,12 @@ namespace mcp::tools::env
     const SectionTable<FilmGrainSettings>& filmGrainTable();
     const SectionTable<DepthOfFieldSettings>& depthOfFieldTable();
     const SectionTable<EdgeDetectionSettings>& edgeDetectionTable();
+    const SectionTable<FXAASettings>& fxaaTable();
     const SectionTable<UpscaleSettings>& upscaleTable();
     const SectionTable<ShadowQualitySettings>& shadowTable();
     const SectionTable<DisplayAntiAliasingSettings>& displayTable();
 
-    // The 11 effect sections inside RenderSettings::postProcess, in the order the tools report them:
+    // The 12 effect sections inside RenderSettings::postProcess, in the order the tools report them:
     // f(key, table, member) once per section; key = the scene serializer's JSON key. Any thread.
     template <typename F>
     void forEachPostProcessSection(F&& f)
@@ -112,6 +120,7 @@ namespace mcp::tools::env
         f(std::string_view("filmGrain"), filmGrainTable(), &PostProcessSettings::filmGrain);
         f(std::string_view("depthOfField"), depthOfFieldTable(), &PostProcessSettings::depthOfField);
         f(std::string_view("edgeDetection"), edgeDetectionTable(), &PostProcessSettings::edgeDetection);
+        f(std::string_view("fxaa"), fxaaTable(), &PostProcessSettings::fxaa);
         f(std::string_view("upscale"), upscaleTable(), &PostProcessSettings::upscale);
     }
 

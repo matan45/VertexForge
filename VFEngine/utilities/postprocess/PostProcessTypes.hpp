@@ -18,6 +18,7 @@ namespace postprocess
         ColorGrading,
         Underwater,
         RainDroplets,
+        FXAA,
         PluginCustom   // plugin-registered full-screen effect (VK-1409); ordered by getPriority()
     };
 
@@ -171,6 +172,25 @@ namespace postprocess
         float opacity = 1.0f;
     };
 
+    // FXAA 3.11 quality presets (VK-1661): Low = preset 10, Medium = 12 (FXAA's default),
+    // High = 29, Ultra = 39. Higher presets search further along an edge and cost more.
+    enum class FXAAQuality : uint8_t
+    {
+        Low = 0,
+        Medium,
+        High,
+        Ultra
+    };
+
+    struct FXAASettings
+    {
+        bool enabled = false;
+        FXAAQuality quality = FXAAQuality::Medium;
+        float subpixel = 0.75f;           // sub-pixel aliasing removal [0, 1]
+        float edgeThreshold = 0.125f;     // minimum local contrast [0.063, 0.333]
+        float edgeThresholdMin = 0.0312f; // dark-area cutoff [0.0312, 0.0833]
+    };
+
     struct AutoExposureSettings
     {
         bool enabled = false;
@@ -319,6 +339,7 @@ namespace postprocess
         UnderwaterSettings underwater;
         RainDropletsSettings rainDroplets;
         SSRSettings ssr;
+        FXAASettings fxaa;
 
         static PostProcessSettings createDefault()
         {

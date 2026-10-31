@@ -60,6 +60,12 @@ namespace plugin {
     //      new executeFollowRoute), IBehaviorTreeProvider and INavmeshProvider append virtuals, and
     //      IEQSProvider / IVolumetricNavProvider are rewritten. BTNodeType, ComponentTypeId and
     //      AssetType append values. No in-tree plugin uses these types, but every plugin rebuilds.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 24;
+    // v25: VK-1661 FXAA. postprocess::PostProcessSettings appends `fxaa` (FXAASettings) and
+    //      postprocess::EffectType gains FXAA before PluginCustom. PostProcessSettings is SDK-exported and
+    //      crosses the boundary by value through the dispatcher plugins reach with
+    //      PluginContext::getEventDispatcher() (ApplyPostProcessSettingsCommand, GetPostProcessSettingsQuery,
+    //      and RenderSettings::postProcess in Get/SetRenderSettings), so a plugin built against v24 would lay it
+    //      out at the wrong size. No in-tree plugin uses these types, but every plugin rebuilds.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
 
 }

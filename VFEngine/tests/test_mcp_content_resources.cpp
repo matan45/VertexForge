@@ -278,11 +278,13 @@ TEST_SUITE("MCP content resources")
         // VK-1654: the lighting environment is edited with the environment tools; weather is not saved.
         CHECK(contains(withoutPlugins, "environment_set"));
         CHECK(contains(withoutPlugins, "session-only"));
-        // VK-1655: the look is edited with the render-settings tools; there is no FXAA.
+        // VK-1655: the look is edited with the render-settings tools; VK-1661: FXAA is one of the
+        // anti-aliasing options again.
         CHECK(contains(withoutPlugins, "## Post-processing & render settings"));
         CHECK(contains(withoutPlugins, "render_settings_set"));
         CHECK(contains(withoutPlugins, "postprocess_effect_set"));
-        CHECK(contains(withoutPlugins, "There is no FXAA"));
+        CHECK(contains(withoutPlugins, "postProcess.fxaa"));
+        CHECK_FALSE(contains(withoutPlugins, "There is no FXAA"));
         // VK-1656: the Animator binding is a built-in type; animators, clips, sockets and IK have their own tools.
         CHECK(contains(withoutPlugins, "### Animator\n"));
         CHECK(contains(withoutPlugins, "## Animation\n"));

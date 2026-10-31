@@ -11,6 +11,7 @@
 #include "effects/ColorGradingEffect.hpp"
 #include "effects/UnderwaterEffect.hpp"
 #include "effects/RainDropletsEffect.hpp"
+#include "effects/FXAAEffect.hpp"
 #include "effects/PluginPostProcessEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
@@ -867,6 +868,9 @@ namespace render::postprocess
 
         syncEffect(::postprocess::EffectType::RainDroplets, settings.rainDroplets.enabled,
             [this]() { return std::make_unique<RainDropletsEffect>(device, *this); });
+
+        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
+            [this]() { return std::make_unique<FXAAEffect>(device); });
 
         updateSettings(settings);
     }

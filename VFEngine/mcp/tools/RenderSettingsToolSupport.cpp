@@ -276,6 +276,32 @@ namespace mcp::tools::env
         return table;
     }
 
+    const SectionTable<FXAASettings>& fxaaTable()
+    {
+        using S = FXAASettings;
+        static const SectionTable<S> table{
+            "FXAA",
+            {
+                boolField<S, &S::enabled>("enabled",
+                    "FXAA 3.11 anti-aliasing over the tone-mapped image: smooths geometry, alpha-tested and shading "
+                    "edges on any GPU, can be combined with display.msaa and still runs after DLSS / DLAA. With "
+                    "tone mapping off, edges against highlights brighter than white stay hard."),
+                enumField<S, ::postprocess::FXAAQuality, &S::quality>("quality",
+                    "Edge-search preset: Low = FXAA preset 10 (fastest), Medium = 12 (FXAA's default), High = 29, "
+                    "Ultra = 39 (longest search)."),
+                floatField<S, &S::subpixel>("subpixel", 0.0, 1.0,
+                    "Sub-pixel aliasing removal: 0 = off (sharpest), 0.75 = default, 1 = softest."),
+                floatField<S, &S::edgeThreshold>("edgeThreshold", 0.063, 0.333,
+                    "Minimum local contrast to anti-alias, relative to the brightest neighbour: lower = more edges "
+                    "and slower (0.125 = high quality, 0.166 = FXAA's default)."),
+                floatField<S, &S::edgeThresholdMin>("edgeThresholdMin", 0.0312, 0.0833,
+                    "Contrast below which dark areas are skipped: 0.0312 = processes the most, 0.0833 = fastest."),
+            },
+            nullptr
+        };
+        return table;
+    }
+
     const SectionTable<UpscaleSettings>& upscaleTable()
     {
         using S = UpscaleSettings;

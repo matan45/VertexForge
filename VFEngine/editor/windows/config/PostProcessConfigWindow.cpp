@@ -559,6 +559,87 @@ namespace windows
         }
     }
 
+    void PostProcessConfigWindow::drawFXAASection()
+    {
+        if (ImGui::CollapsingHeader("Anti-Aliasing (FXAA)", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::Indent(10.0f);
+
+            if (ImGui::Checkbox("Enable FXAA", &settings.fxaa.enabled))
+            {
+                isDirty = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Fast approximate anti-aliasing (FXAA 3.11) over the tone-mapped image.\n"
+                                  "Works on any GPU and can be combined with MSAA.");
+            }
+
+            if (settings.fxaa.enabled)
+            {
+                ImGui::Spacing();
+
+                const char* qualityNames[] = {"Low", "Medium", "High", "Ultra"};
+                int currentQuality = static_cast<int>(settings.fxaa.quality);
+                if (ImGui::Combo("Quality##fxaa", &currentQuality, qualityNames, IM_ARRAYSIZE(qualityNames)))
+                {
+                    settings.fxaa.quality = static_cast<postprocess::FXAAQuality>(currentQuality);
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("FXAA 3.11 preset: Low = 10, Medium = 12 (FXAA's default), High = 29, Ultra = 39.\n"
+                                      "Higher presets follow long edges further and cost more.");
+                }
+
+                // The ranges are FXAA 3.11's tuning limits, the same the scene loader and render_settings_set
+                // accept. AlwaysClamp bounds Ctrl+Click input, and each format keeps enough decimals that the
+                // slider's round-to-format never leaves the range (0.0312 shown as %.3f would store 0.031).
+                if (ImGui::SliderFloat("Subpixel##fxaa", &settings.fxaa.subpixel, 0.0f, 1.0f, "%.2f",
+                                       ImGuiSliderFlags_AlwaysClamp))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Sub-pixel aliasing removal.\n0 = off (sharpest), 0.75 = default, 1 = softest.");
+                }
+
+                if (ImGui::SliderFloat("Edge Threshold##fxaa", &settings.fxaa.edgeThreshold, 0.063f, 0.333f, "%.3f",
+                                       ImGuiSliderFlags_AlwaysClamp))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Minimum local contrast to anti-alias, relative to the brightest neighbour.\n"
+                                      "Lower = more edges, slower (0.125 = high quality, 0.166 = FXAA's default).");
+                }
+
+                if (ImGui::SliderFloat("Edge Threshold Min##fxaa", &settings.fxaa.edgeThresholdMin, 0.0312f, 0.0833f,
+                                       "%.4f", ImGuiSliderFlags_AlwaysClamp))
+                {
+                    isDirty = true;
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Skips dark areas whose contrast is below this value.\n"
+                                      "0.0312 = processes the most, 0.0833 = fastest.");
+                }
+
+                // The upscaler that actually runs, not just the request (DLSS needs an RTX GPU).
+                auto& dispatcher = events::EventDispatcher::instance();
+                const auto upscaleStatus = dispatcher.query(events::postprocess::GetUpscaleStatusQuery{});
+                if (upscaleStatus.activeMode != postprocess::UpscaleMode::Off)
+                {
+                    ImGui::TextDisabled("Runs after DLSS / DLAA, which already anti-alias: FXAA only softens the image.");
+                }
+            }
+
+            ImGui::Unindent(10.0f);
+        }
+    }
+
     void PostProcessConfigWindow::draw()
     {
         if (!visible)
@@ -587,6 +668,7 @@ namespace windows
 
             drawToneMappingSection();
             drawUpscaleSection();
+            drawFXAASection();
             drawBloomSection();
             drawVignetteSection();
             drawChromaticAberrationSection();

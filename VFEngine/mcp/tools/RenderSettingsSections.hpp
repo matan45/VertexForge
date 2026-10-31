@@ -22,7 +22,8 @@ namespace mcp::tools::env
         std::is_same_v<S, ::postprocess::VignetteSettings> ||
         std::is_same_v<S, ::postprocess::ChromaticAberrationSettings> ||
         std::is_same_v<S, ::postprocess::FilmGrainSettings> || std::is_same_v<S, ::postprocess::DepthOfFieldSettings> ||
-        std::is_same_v<S, ::postprocess::EdgeDetectionSettings> || std::is_same_v<S, ::postprocess::UpscaleSettings>;
+        std::is_same_v<S, ::postprocess::EdgeDetectionSettings> || std::is_same_v<S, ::postprocess::FXAASettings> ||
+        std::is_same_v<S, ::postprocess::UpscaleSettings>;
 
     // The RenderSettings::postProcess member such a section is stored in.
     template <typename S>
@@ -72,6 +73,10 @@ namespace mcp::tools::env
         else if constexpr (std::is_same_v<S, ::postprocess::EdgeDetectionSettings>)
         {
             return &PostProcessSettings::edgeDetection;
+        }
+        else if constexpr (std::is_same_v<S, ::postprocess::FXAASettings>)
+        {
+            return &PostProcessSettings::fxaa;
         }
         else
         {

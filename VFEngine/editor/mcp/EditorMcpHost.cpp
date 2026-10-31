@@ -68,7 +68,7 @@ namespace editor
             "one undo step, is saved by scene_save (weather is session-only) and is refused in Play mode. Check the "
             "look with viewport_screenshot.\n"
             "Look: render_settings_get / render_settings_set (tone mapping and exposure, bloom, color grading, SSAO, "
-            "vignette, film grain, depth of field and the other post-process effects, the DLSS upscaler, MSAA and "
+            "vignette, film grain, depth of field and the other post-process effects, FXAA, the DLSS upscaler, MSAA and "
             "shadow quality; nothing built-in renders until postProcess.enabled is true) and postprocess_effect_list "
             "/ postprocess_effect_set for plugin effects. Same strict updates, one undo step per call; the plugin "
             "effect toggles are session-only.\n"

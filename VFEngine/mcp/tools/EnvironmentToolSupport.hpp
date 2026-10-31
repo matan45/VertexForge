@@ -45,6 +45,7 @@ namespace mcp::tools::env
     using FilmGrainSettings = ::postprocess::FilmGrainSettings;
     using DepthOfFieldSettings = ::postprocess::DepthOfFieldSettings;
     using EdgeDetectionSettings = ::postprocess::EdgeDetectionSettings;
+    using FXAASettings = ::postprocess::FXAASettings;
     using UpscaleSettings = ::postprocess::UpscaleSettings;
 
     // Canonical enum spellings, indexed by the enumerator's value. Matched case-insensitively.
@@ -77,7 +78,7 @@ namespace mcp::tools::env
                                       PostProcessMasterSettings, ToneMappingSettings, AutoExposureSettings,
                                       BloomSettings, ColorGradingSettings, SSAOSettings, VignetteSettings,
                                       ChromaticAberrationSettings, FilmGrainSettings, DepthOfFieldSettings,
-                                      EdgeDetectionSettings, UpscaleSettings, ShadowQualitySettings,
+                                      EdgeDetectionSettings, FXAASettings, UpscaleSettings, ShadowQualitySettings,
                                       DisplayAntiAliasingSettings>;
 
     // The section's table name ("atmosphere", "clouds", "volumetric fog", "GI", "bloom", ...). Any thread.

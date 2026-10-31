@@ -373,7 +373,7 @@ TEST_CASE("mcp render settings tools: four Main-affinity tools with closed schem
     nlohmann::json postProcess = schema["properties"]["postProcess"];
     CHECK(schemaValue(postProcess, "additionalProperties") == false);
     for (const char* key : {"enabled", "toneMapping", "autoExposure", "bloom", "colorGrading", "ssao", "vignette",
-                            "chromaticAberration", "filmGrain", "depthOfField", "edgeDetection", "upscale"})
+                            "chromaticAberration", "filmGrain", "depthOfField", "edgeDetection", "fxaa", "upscale"})
     {
         CAPTURE(key);
         CHECK(postProcess["properties"].contains(key));
@@ -389,6 +389,8 @@ TEST_CASE("mcp render settings tools: four Main-affinity tools with closed schem
           nlohmann::json::array({"ACES", "Reinhard", "Uncharted2", "Linear", "GranTurismo", "AgX", "KhronosPBRNeutral"}));
     CHECK(postProcess["properties"]["upscale"]["properties"]["quality"]["enum"] ==
           nlohmann::json::array({"Native", "Quality", "Balanced", "Performance", "UltraPerformance"}));
+    CHECK(postProcess["properties"]["fxaa"]["properties"]["quality"]["enum"] ==
+          nlohmann::json::array({"Low", "Medium", "High", "Ultra"}));
     CHECK(schema["properties"]["shadows"]["properties"]["quality"]["enum"] ==
           nlohmann::json::array({"Off", "Low", "Medium", "High", "Ultra"}));
     CHECK(schema["properties"]["display"]["properties"]["msaa"]["enum"] == nlohmann::json::array({"Off", "X2", "X4", "X8"}));
@@ -419,7 +421,7 @@ TEST_CASE("mcp render settings tools: invalid arguments fail the whole call and 
     CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", 5}}), "'postProcess' must be an object (got 5)"));
     CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"glow", true}}}}),
                    "unknown postProcess key 'glow'; valid keys: enabled, toneMapping, autoExposure, bloom, colorGrading, "
-                   "ssao, vignette, chromaticAberration, filmGrain, depthOfField, edgeDetection, upscale"));
+                   "ssao, vignette, chromaticAberration, filmGrain, depthOfField, edgeDetection, fxaa, upscale"));
     CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"bloom", {{"glow", 1}}}}}}),
                    "unknown postProcess.bloom key 'glow'; valid keys: enabled, threshold, intensity, radius, passes"));
     CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"volumetricFog", {{"enabled", true}}}}}}),
@@ -436,6 +438,8 @@ TEST_CASE("mcp render settings tools: invalid arguments fail the whole call and 
                    "'postProcess.ssao.kernelSize' must be between 8 and 64 (got 65)"));
     CHECK(contains(fixture.argError("render_settings_set", {{"shadows", {{"shadowIntensity", 2}}}}),
                    "'shadows.shadowIntensity' must be between 0.0 and 1.0 (got 2)"));
+    CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"fxaa", {{"edgeThreshold", 0.5}}}}}}),
+                   "'postProcess.fxaa.edgeThreshold' must be between 0.063 and 0.333 (got 0.5)"));
 
     // Types and enum names.
     CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"enabled", "yes"}}}}),
@@ -445,6 +449,8 @@ TEST_CASE("mcp render settings tools: invalid arguments fail the whole call and 
                    "KhronosPBRNeutral (got \"Filmic\")"));
     CHECK(contains(fixture.argError("render_settings_set", {{"shadows", {{"quality", "Epic"}}}}),
                    "'shadows.quality' must be one of Off, Low, Medium, High, Ultra (got \"Epic\")"));
+    CHECK(contains(fixture.argError("render_settings_set", {{"postProcess", {{"fxaa", {{"quality", "Extreme"}}}}}}),
+                   "'postProcess.fxaa.quality' must be one of Low, Medium, High, Ultra (got \"Extreme\")"));
     CHECK(contains(fixture.argError("render_settings_set", {{"display", {{"msaa", "X16"}}}}),
                    "'display.msaa' must be one of Off, X2, X4, X8 (got \"X16\")"));
     CHECK(contains(fixture.argError("render_settings_set", {{"display", {{"presentMode", 0}}}}),
@@ -550,6 +556,35 @@ TEST_CASE("mcp render settings tools: undo restores only what the call changed, 
     CHECK(engine.scene.postProcess.bloom.enabled);
     CHECK(engine.scene.postProcess.bloom.intensity == 2.0f);
     CHECK(engine.scene.postProcess.vignette.enabled);
+}
+
+TEST_CASE("mcp render settings tools: VK-1661 FXAA is written to both copies and undone in one step")
+{
+    RenderSettingsToolFixture fixture;
+    FakeRenderEngine& engine = fixture.engine;
+    const nlohmann::json result = fixture.callOk("render_settings_set", {
+        {"postProcess", {{"fxaa", {{"enabled", true}, {"quality", "ultra"}, {"subpixel", 0.5}}}}}});
+    CHECK(result["diff"]["postProcess"]["fxaa"] ==
+          nlohmann::json{{"enabled", true}, {"quality", "Ultra"}, {"subpixel", 0.5}}); // canonical spelling
+    CHECK(engine.scene.postProcess.fxaa.enabled);
+    CHECK(engine.scene.postProcess.fxaa.quality == ::postprocess::FXAAQuality::Ultra);
+    CHECK(engine.scene.postProcess.fxaa.subpixel == 0.5f);
+    CHECK(engine.scene.postProcess.fxaa.edgeThreshold == 0.125f); // keys the call did not name keep their value
+    CHECK(engine.live.fxaa.enabled);
+    CHECK(engine.live.fxaa.quality == ::postprocess::FXAAQuality::Ultra);
+    CHECK(engine.live.fxaa.subpixel == 0.5f);
+
+    REQUIRE(engine.undoStack.size() == 1);
+    engine.undoStack[0]->undo();
+    CHECK_FALSE(engine.scene.postProcess.fxaa.enabled);
+    CHECK(engine.scene.postProcess.fxaa.quality == ::postprocess::FXAAQuality::Medium);
+    CHECK(engine.scene.postProcess.fxaa.subpixel == 0.75f);
+    CHECK_FALSE(engine.live.fxaa.enabled);
+    CHECK(engine.live.fxaa.quality == ::postprocess::FXAAQuality::Medium);
+
+    engine.undoStack[0]->execute();
+    CHECK(engine.scene.postProcess.fxaa.enabled);
+    CHECK(engine.live.fxaa.quality == ::postprocess::FXAAQuality::Ultra);
 }
 
 TEST_CASE("mcp render settings tools: undo and redo of a call that changed several sections")
@@ -753,6 +788,40 @@ TEST_CASE("mcp render settings tools: warnings explain why a change does not sho
         CHECK(dlaa["effective"]["antiAliasing"] == "DLAA");
     }
 
+    SUBCASE("VK-1661: FXAA alone, with MSAA and after the upscaler")
+    {
+        const nlohmann::json fxaa = fixture.callOk("render_settings_set", {
+            {"postProcess", {{"enabled", true}, {"fxaa", {{"enabled", true}}}}}});
+        CHECK(fxaa["effective"]["rendered"]["fxaa"] == true);
+        CHECK(fxaa["effective"]["antiAliasing"] == "FXAA");
+        CHECK_FALSE(anyContains(fxaa["warnings"], "postProcess.fxaa runs after DLSS"));
+
+        const nlohmann::json msaa = fixture.callOk("render_settings_set", {{"display", {{"msaa", "X4"}}}});
+        CHECK(msaa["effective"]["antiAliasing"] == "MSAA X4 + FXAA");
+
+        // FXAA still runs after the upscaler (MSAA does not): it is reported and warned about.
+        const nlohmann::json dlss = fixture.callOk("render_settings_set", {{"postProcess", {{"upscale", {{"enabled", true}}}}}});
+        CHECK(dlss["effective"]["antiAliasing"] == "DLSS + FXAA");
+        CHECK(anyContains(dlss["warnings"], "postProcess.fxaa runs after DLSS / DLAA"));
+
+        const nlohmann::json dlaa = fixture.callOk("render_settings_set", {{"postProcess", {{"upscale", {{"quality", "Native"}}}}}});
+        CHECK(dlaa["effective"]["antiAliasing"] == "DLAA + FXAA");
+        const nlohmann::json got = fixture.callOk("render_settings_get", nlohmann::json::object());
+        CHECK(anyContains(got["warnings"], "postProcess.fxaa runs after DLSS / DLAA"));
+    }
+
+    SUBCASE("VK-1661: the master switch turns on FXAA over an upscaler that already runs")
+    {
+        // The upscaler runs with the master switch off; FXAA (a built-in effect) starts with it.
+        engine.scene.postProcess.fxaa.enabled = true;
+        engine.live.fxaa.enabled = true;
+        engine.scene.postProcess.upscale.enabled = true;
+        engine.live.upscale.enabled = true;
+        const nlohmann::json set = fixture.callOk("render_settings_set", {{"postProcess", {{"enabled", true}}}});
+        CHECK(set["effective"]["antiAliasing"] == "DLSS + FXAA");
+        CHECK(anyContains(set["warnings"], "postProcess.fxaa runs after DLSS / DLAA"));
+    }
+
     SUBCASE("shadow quality Off")
     {
         const nlohmann::json set = fixture.callOk("render_settings_set", {{"shadows", {{"quality", "Off"}}}});
@@ -787,6 +856,7 @@ TEST_CASE("mcp render settings tools: render_settings_get reports the settings, 
     CHECK(got["postProcess"]["enabled"] == false);
     CHECK(got["postProcess"]["toneMapping"]["mode"] == "ACES");
     CHECK(got["postProcess"]["ssao"]["quality"] == "Medium");
+    CHECK(got["postProcess"]["fxaa"]["quality"] == "Medium");
     CHECK(got["shadows"]["quality"] == "High");
     CHECK(got["display"]["msaa"] == "Off");
     CHECK_FALSE(got["postProcess"].contains("volumetricFog"));
@@ -796,12 +866,21 @@ TEST_CASE("mcp render settings tools: render_settings_get reports the settings, 
     CHECK(got["ranges"]["display"]["msaa"]["values"] == nlohmann::json::array({"Off", "X2", "X4", "X8"}));
     CHECK(got["effective"]["upscaler"]["requested"] == false);
     CHECK(got["effective"]["antiAliasing"] == "none");
+    CHECK(got["effective"]["rendered"]["fxaa"] == false);
+    CHECK(got["ranges"]["postProcess"]["fxaa"]["edgeThreshold"] ==
+          nlohmann::json{{"type", "number"}, {"min", 0.063}, {"max", 0.333}});
+    CHECK(got["ranges"]["postProcess"]["fxaa"]["quality"]["values"] ==
+          nlohmann::json::array({"Low", "Medium", "High", "Ultra"}));
+    // VK-1661: FXAA is an anti-aliasing option again.
     bool mentionsFxaa = false;
+    bool deniesFxaa = false;
     for (const nlohmann::json& note : got["notes"])
     {
-        mentionsFxaa = mentionsFxaa || contains(note.get<std::string>(), "There is no FXAA");
+        mentionsFxaa = mentionsFxaa || contains(note.get<std::string>(), "postProcess.fxaa");
+        deniesFxaa = deniesFxaa || contains(note.get<std::string>(), "There is no FXAA");
     }
     CHECK(mentionsFxaa);
+    CHECK_FALSE(deniesFxaa);
 }
 
 TEST_CASE("mcp render settings tools: plugin post-process effects are listed and toggled by id or name")
