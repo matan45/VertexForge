@@ -526,7 +526,8 @@ namespace render
                         region);
 
                     // Post-copy: restore scene depth to DepthAttachmentOptimal (matches write declaration),
-                    // transition prevFrameDepth to ShaderReadOnly for async compute.
+                    // transition prevFrameDepth to ShaderReadOnly for the VFX depth-collision sim (graphics or
+                    // async compute; VK-1502).
                     {
                         std::array<vk::ImageMemoryBarrier2, 2> postCopyBarriers{};
                         postCopyBarriers[0].srcStageMask = vk::PipelineStageFlagBits2::eCopy;
@@ -589,8 +590,8 @@ namespace render
                     builder.setSideEffect();
                 }
 
-                // The upscaler (and the motion-vector fallback) sample colour and read-only depth in compute.
-                // The colour write orders the post-upscale pass after this one.
+                // The motion-vector pass (from this frame's depth, VK-1662) and the upscaler sample colour and
+                // read-only depth in compute. The colour write orders the post-upscale pass after this one.
                 {
                     auto builder = frameGraph->addPass("Upscale",
                         [this](vk::CommandBuffer cmd, uint32_t idx) {

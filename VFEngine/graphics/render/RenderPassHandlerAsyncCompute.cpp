@@ -469,28 +469,20 @@ namespace render
         auto renderRes = resMgr.getRenderResolution();
         auto displayRes = resMgr.getDisplayResolution();
 
-        // Depth transition handled by render graph (already in DepthStencilReadOnlyOptimal)
-
-        if (asyncComputeActive && offscreenResources.prevFrameDepthCreated
-            && motionVectorPass && motionVectorPass->isInitialized())
+        // VK-1662: the motion vectors are always built here, on the graphics queue, from THIS frame's depth (the
+        // render graph leaves it in DepthStencilReadOnlyOptimal for this pass). They used to be built on async
+        // compute from a 1-3-frame-old depth copy, which skewed them wherever the camera translated, and that async
+        // submit could overwrite the single motion-vector image while the previous frame's upscaler still read it.
+        // Jitter-free and previous - current, as DLSS expects (TemporalUpscaleMath.hpp).
+        const bool motionVectorsReady = motionVectorPass->isInitialized();
+        if (motionVectorsReady)
         {
-            // Motion vectors already computed on async compute queue — ready for upscaler
-        }
-        else
-        {
-            // Fallback: dispatch motion vectors on graphics queue
-            glm::mat4 viewProjection = currentProjection * currentView;
-            glm::mat4 invVP = glm::inverse(viewProjection);
-            glm::mat4 prevVP = prevProjection * prevView;
-
-            // Depth already in DepthStencilReadOnlyOptimal via graph
-
             motionVectorPass->dispatch(commandBuffer,
                 offscreenResources.depthImage.depthImageView,
-                offscreenResources.depthImage.depthImage,
                 offscreenResources.motionVectors.imageView,
                 offscreenResources.motionVectors.image,
-                invVP, prevVP,
+                upscaling::buildMotionVectorMatrices(currentView, currentProjection, unjitteredProjection,
+                                                     prevView, prevUnjitteredProjection),
                 renderRes.width, renderRes.height,
                 taaFrameIndex);
         }
@@ -575,9 +567,9 @@ namespace render
         inputs.preExposure = exposureValue;
         inputs.resetAccumulation = resetAccum;
         inputs.viewMatrix = currentView;
-        inputs.projectionMatrix = currentProjection;
+        inputs.unjitteredProjection = unjitteredProjection; // VK-1662: Streamline's matrices must not contain jitter
         inputs.prevViewMatrix = prevView;
-        inputs.prevProjectionMatrix = prevProjection;
+        inputs.prevUnjitteredProjection = prevUnjitteredProjection;
         inputs.cameraPosition = currentCameraPosition;
         inputs.nearPlane = currentNearPlane;
         inputs.farPlane = currentFarPlane;
@@ -606,8 +598,9 @@ namespace render
         }
 
         // On success the output stays in eGeneral holding DLSS's result; executePostUpscale's
-        // General -> TransferSrc barrier orders its blit after the write.
-        bool evaluateOk = upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
+        // General -> TransferSrc barrier orders its blit after the write. Without motion vectors (their shader
+        // failed to compile) take the fallback blit rather than hand the upscaler an unwritten image.
+        bool evaluateOk = motionVectorsReady && upscaleManager->evaluate(commandBuffer, taaFrameIndex, inputs);
         if (!evaluateOk)
         {
             // Fallback blit (internal intermediate transitions on scene color). The scene colour was sampled
@@ -792,7 +785,7 @@ namespace render
         }
     }
 
-    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd, uint32_t frameIndex) const
+    void RenderPassHandler::recordAsyncCompute(vk::CommandBuffer asyncCmd) const
     {
         if (gpuDrivenRendererInitialized && gpuDrivenRenderer->isEnabled())
             gpuDrivenRenderer->dispatchAsyncCompute(asyncCmd);
@@ -848,36 +841,6 @@ namespace render
             vfxRuntimeProvider->setCamera(vfxCamera);
 
             vfxRuntimeProvider->recordComputeCommands(asyncCmd);
-        }
-
-        // Async compute motion vectors using previous-frame depth
-        if (offscreenResources.prevFrameDepthCreated && offscreenResources.upscaleResourcesCreated)
-        {
-            auto* upscaleManager = device.getUpscaleManager();
-            if (upscaleManager && upscaleManager->isActive() && motionVectorPass && motionVectorPass->isInitialized())
-            {
-                auto& resMgr = upscaleManager->getResolutionManager();
-                auto renderRes = resMgr.getRenderResolution();
-
-                // Read depth from the same flight slot (written by frame N-2, guaranteed complete
-                // by the in-flight fence). Using current-frame VP matrices with stale depth
-                // produces approximate motion vectors — camera motion dominates and DLSS
-                // have built-in robustness to handle slight inaccuracy.
-                auto& prevDepth = offscreenResources.prevFrameDepth[frameIndex];
-
-                glm::mat4 invVP = glm::inverse(currentProjection * currentView);
-                glm::mat4 prevVP = prevProjection * prevView;
-
-                motionVectorPass->dispatch(asyncCmd,
-                    prevDepth.imageView,
-                    prevDepth.image,
-                    offscreenResources.motionVectors.imageView,
-                    offscreenResources.motionVectors.image,
-                    invVP, prevVP,
-                    renderRes.width, renderRes.height,
-                    taaFrameIndex,
-                    vk::ImageLayout::eShaderReadOnlyOptimal);
-            }
         }
     }
 }

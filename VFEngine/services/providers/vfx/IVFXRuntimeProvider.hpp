@@ -46,7 +46,8 @@ namespace services
         virtual void setSceneDepthImageView(vk::ImageView depthView) = 0;
 
         // VK-1502: depth-buffer collision. needsPrevFrameDepth() drives lazy creation of the last-frame
-        // depth copies (prevFrameDepth) even when upscaling is off. setPrevFrameDepth feeds the sim the depth
+        // depth copies (prevFrameDepth), with or without upscaling - VFX is their only consumer since VK-1662
+        // (the DLSS motion vectors read the current depth). setPrevFrameDepth feeds the sim the depth
         // views (one per frame-in-flight; empty => bind the fallback), which slot to sample this frame, and
         // whether depth collision is active (true only once the depth is populated and shader-readable).
         // Default-empty so existing test/plugin providers stay source-compatible.

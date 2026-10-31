@@ -549,14 +549,19 @@ namespace render
         }
     }
 
-    void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection)
+    void RenderPassHandler::setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& jitteredProjection,
+                                                   const glm::mat4& projectionWithoutJitter)
     {
-        prevPrevView = prevView;
-        prevPrevProjection = prevProjection;
+        // VK-1662: the camera history, rotated exactly once per frame. Single caller: CameraController::updateCamera,
+        // reached once per frame from OffScreenController::meshUpdateCamera (its only callers, the editor and runtime
+        // render services, pass MAIN_CAMERA_ID), on the main thread while the render thread is idle. The motion
+        // vectors and Streamline's camera constants need the previous view and UNJITTERED projection; every other
+        // pass rasterises with the jittered currentProjection.
         prevView = currentView;
-        prevProjection = currentProjection;
+        prevUnjitteredProjection = unjitteredProjection;
         currentView = view;
-        currentProjection = projection;
+        currentProjection = jitteredProjection;
+        unjitteredProjection = projectionWithoutJitter;
     }
 
     // --- Camera/occlusion forwarding ---

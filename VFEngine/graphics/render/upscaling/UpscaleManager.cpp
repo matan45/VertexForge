@@ -1,6 +1,9 @@
 #include "UpscaleManager.hpp"
+#include "TemporalUpscaleMath.hpp"
 #include "../../core/Device.hpp"
 #include "../../../utilities/print/Log.hpp"
+
+#include <array>
 
 #ifdef VF_STREAMLINE_ENABLED
 #include <sl.h>
@@ -16,14 +19,15 @@
 namespace render::upscaling
 {
 #ifdef VF_STREAMLINE_ENABLED
-    // GLM is column-major, Streamline is row-major — transpose during conversion
+    // Streamline matrices are row-major AND row-vector (p' = p * S), which is byte-identical to GLM's column-major,
+    // column-vector memory: a straight copy, never a transpose (VK-1662; see toStreamlineMatrix). The old transpose
+    // handed DLSS, Ray Reconstruction and Frame Generation transposed camera matrices.
     static sl::float4x4 toSL(const glm::mat4& m)
     {
+        const std::array<float, 16> rows = toStreamlineMatrix(m);
         sl::float4x4 r;
-        r[0] = {m[0][0], m[1][0], m[2][0], m[3][0]};
-        r[1] = {m[0][1], m[1][1], m[2][1], m[3][1]};
-        r[2] = {m[0][2], m[1][2], m[2][2], m[3][2]};
-        r[3] = {m[0][3], m[1][3], m[2][3], m[3][3]};
+        for (uint32_t i = 0; i < 4; ++i)
+            r[i] = {rows[4 * i], rows[4 * i + 1], rows[4 * i + 2], rows[4 * i + 3]};
         return r;
     }
 
@@ -419,44 +423,51 @@ namespace render::upscaling
             static_cast<sl::FrameToken*>(acquireFrameToken(lastKickedFrameIndex.load(std::memory_order_acquire)));
         if (!frameToken) return false;
 
-        // Set constants — all SL matrices are row-major, GLM is column-major
+        // Set constants. Matrices go through toSL (Streamline's row-vector, row-major layout = GLM's memory).
         sl::Constants constants{};
         constants.jitterOffset = {inputs.jitterOffset.x, inputs.jitterOffset.y};
+        // VK-1662: MotionVectorPass stores the vectors DLSS-native (previous - current, NDC, +y down), so 0.5 only
+        // converts NDC to UV; Streamline multiplies by the render size to get the render pixels DLSS expects.
         constants.mvecScale = {0.5f, 0.5f};
         constants.reset = inputs.resetAccumulation ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         constants.depthInverted = sl::Boolean::eFalse; // Standard Z (near=0, far=1)
         constants.cameraPinholeOffset = {0.0f, 0.0f};
 
-        // Camera matrices (must NOT contain jitter)
-        constants.cameraViewToClip = toSL(inputs.projectionMatrix);
-        constants.clipToCameraView = toSL(glm::inverse(inputs.projectionMatrix));
+        // Camera matrices WITHOUT jitter (sl_consts.h: "must NOT contain temporal AA jitter offset")
+        constants.cameraViewToClip = toSL(inputs.unjitteredProjection);
+        constants.clipToCameraView = toSL(glm::inverse(inputs.unjitteredProjection));
 
-        // Reprojection: clipToPrevClip = invProj * invView * prevView * prevProj
-        glm::mat4 clipToPrevClip = inputs.prevProjectionMatrix * inputs.prevViewMatrix
-                                 * glm::inverse(inputs.viewMatrix)
-                                 * glm::inverse(inputs.projectionMatrix);
-        constants.clipToPrevClip = toSL(clipToPrevClip);
-        constants.prevClipToClip = toSL(glm::inverse(clipToPrevClip));
+        // Reprojection between the current and previous clip spaces, camera-relative in double
+        // (clipToPrevClip = clipToView * viewToViewPrev * viewToClipPrev in Streamline's row-vector order).
+        constants.clipToPrevClip = toSL(reprojectionMatrix(inputs.prevUnjitteredProjection, inputs.prevViewMatrix,
+                                                           inputs.viewMatrix, inputs.unjitteredProjection));
+        constants.prevClipToClip = toSL(reprojectionMatrix(inputs.unjitteredProjection, inputs.viewMatrix,
+                                                           inputs.prevViewMatrix, inputs.prevUnjitteredProjection));
 
         // Camera vectors from view matrix (inverse view = camera-to-world)
         glm::mat4 invView = glm::inverse(inputs.viewMatrix);
         constants.cameraPos = {invView[3][0], invView[3][1], invView[3][2]};
         constants.cameraRight = {invView[0][0], invView[0][1], invView[0][2]};
         constants.cameraUp = {invView[1][0], invView[1][1], invView[1][2]};
-        constants.cameraFwd = {invView[2][0], invView[2][1], invView[2][2]};
+        // VK-1662: forward = the look direction. The engine's views are right-handed (cameras look down -Z), so it
+        // is -Z of camera-to-world, as RTX Remix sends for right-handed matrices; +Z was the backward vector.
+        constants.cameraFwd = {-invView[2][0], -invView[2][1], -invView[2][2]};
 
         constants.cameraNear = inputs.nearPlane;
         constants.cameraFar = inputs.farPlane;
         float aspectRatio = static_cast<float>(inputs.renderExtent.width)
                           / static_cast<float>(inputs.renderExtent.height);
         constants.cameraAspectRatio = aspectRatio;
-        constants.cameraFOV = 2.0f * std::atan(1.0f / inputs.projectionMatrix[1][1]);
+        constants.cameraFOV = verticalFov(inputs.unjitteredProjection); // |[1][1]|: the projections are Y-flipped
 
         constants.cameraMotionIncluded = sl::Boolean::eTrue;
         constants.motionVectors3D = sl::Boolean::eFalse;
         constants.motionVectorsInvalidValue = 0.0f;
-        constants.orthographicProjection = sl::Boolean::eFalse;
+        constants.orthographicProjection = isOrthographic(inputs.unjitteredProjection)
+                                         ? sl::Boolean::eTrue : sl::Boolean::eFalse;
         constants.motionVectorsDilated = sl::Boolean::eFalse;
+        // VK-1662: both ends of every vector are re-projected with unjittered projections (MotionVectorPass), so
+        // DLSS must not subtract any jitter from them.
         constants.motionVectorsJittered = sl::Boolean::eFalse;
 
         slSetConstants(constants, *frameToken, viewport);

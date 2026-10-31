@@ -149,7 +149,7 @@ namespace render
         if (useAsyncCompute)
         {
             vk::CommandBuffer asyncCmd = asyncComputeManager->beginFrame(currentFrame);
-            renderPassHandler->recordAsyncCompute(asyncCmd, currentFrame);
+            renderPassHandler->recordAsyncCompute(asyncCmd);
             asyncComputeManager->submitComputeWork(currentFrame);
         }
 
@@ -380,6 +380,12 @@ namespace render
         }
 
         cleanupUpscaleResources();
+
+        // VK-1502/VK-1662: the last-frame depth copies belong to the VFX depth collision, not the upscaler, so every
+        // offscreen teardown/resize releases them; render() recreates them lazily at the new size. Before, only
+        // cleanupUpscaleResources released them, and with upscaling off it returns early - they leaked and kept their
+        // old size across a resize. Idempotent: a no-op when cleanupUpscaleResources already released them.
+        cleanupPrevFrameDepthResources();
     }
 
     void OffScreenViewPort::recreate()
@@ -938,9 +944,8 @@ namespace render
         }
 
         offscreenResources.upscaleResourcesCreated = true;
-
-        // Create previous-frame depth copies for async compute motion vectors
-        createPrevFrameDepthResources(renderWidth, renderHeight);
+        // VK-1662: no previous-frame depth copies here any more - the motion vectors read this frame's depth, and
+        // the VFX depth collision (their only consumer) creates them lazily in render().
     }
 
     void OffScreenViewPort::cleanupUpscaleResources()

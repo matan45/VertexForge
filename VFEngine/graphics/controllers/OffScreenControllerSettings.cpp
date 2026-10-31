@@ -332,8 +332,10 @@ namespace controllers
         if (cameraController)
         {
             cameraController->setTAAEnabled(upscaleManager && upscaleManager->isActive());
-            auto extent = swapChain.getSwapchainExtent();
-            cameraController->setViewportExtent(extent.width, extent.height);
+            const auto renderExtent = swapChain.getSwapchainExtent();
+            const auto displayExtent = swapChain.getDisplayExtent();
+            cameraController->setJitterExtents(renderExtent.width, renderExtent.height,
+                                               displayExtent.width, displayExtent.height);
         }
 
         // SSR

@@ -114,6 +114,11 @@ Large modules are split into separately compiled subsystem projects using `remov
 - **ECS**: EnTT-based. Entities wrap `entt::entity` handles; components defined in `utilities/components/Components.hpp`.
 - **Async Resources**: `ResourceManager` loads assets via `std::async`, returns futures.
 - **Event System**: `EventDispatcher` singleton for decoupled communication via CQRS pattern (see Services Layer below).
+- **DLSS inputs** (VK-1662, `graphics/render/upscaling/TemporalUpscaleMath.hpp`):
+  - **Motion vectors** are `previous − current` in NDC (+y down). They are built on the graphics queue in the Upscale pass from THIS frame's depth, with UNJITTERED matrices (camera-relative clip→clip, composed in double). Streamline gets `motionVectorsJittered = false` and `mvecScale = 0.5` (NDC→UV).
+  - **Jitter:** `JitterSequence::applyJitter` moves the image by exactly `+jitterOffset` render px for perspective and ortho, using DLSS's `8·(display/render)²` Halton phases.
+  - **Streamline matrices** are jitter-free and a straight copy of GLM memory (row-vector + row-major): never transpose.
+  - The GLSL convention lives in `resources/shaders/common/motion_vectors.glsl`; its CPU twin is tested by `test_upscale_motion_vectors`.
 
 ### Entry Points
 

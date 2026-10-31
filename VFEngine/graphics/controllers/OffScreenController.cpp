@@ -330,9 +330,12 @@ namespace controllers
                                                const glm::vec3& cameraPos, float time)
     {
         // VK-1655: keep the jitter in render pixels across resizes / render-extent changes, which do not
-        // re-apply the post-process settings (where the extent was otherwise only set).
-        auto extent = swapChain.getSwapchainExtent();
-        cameraController->setViewportExtent(extent.width, extent.height);
+        // re-apply the post-process settings (where the extent was otherwise only set). VK-1662: the display
+        // extent picks the Halton phase count.
+        const auto renderExtent = swapChain.getSwapchainExtent();
+        const auto displayExtent = swapChain.getDisplayExtent();
+        cameraController->setJitterExtents(renderExtent.width, renderExtent.height,
+                                           displayExtent.width, displayExtent.height);
         cameraController->updateCamera(cameraId, view, projection, cameraPos, time);
     }
 

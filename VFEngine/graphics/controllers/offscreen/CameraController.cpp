@@ -70,11 +70,14 @@ namespace controllers::offscreen
 
         if (taaEnabled && cameraId == renderHandler.getActiveCameraId())
         {
-            glm::vec2 jitter = render::postprocess::JitterSequence::halton23(taaFrameIndex % 16);
+            // VK-1662: as many Halton phases as DLSS recommends for this scaling ratio (8 * ratio^2).
+            const uint32_t phases = render::postprocess::JitterSequence::phaseCount(
+                renderWidth, renderHeight, displayWidth, displayHeight);
+            glm::vec2 jitter = render::postprocess::JitterSequence::halton23(taaFrameIndex % phases);
             currentJitterOffset = jitter - 0.5f; // center to [-0.5, 0.5] sub-pixel range
 
             effectiveProjection = render::postprocess::JitterSequence::applyJitter(
-                projection, currentJitterOffset, viewportWidth, viewportHeight);
+                projection, currentJitterOffset, renderWidth, renderHeight);
             taaFrameIndex++;
         }
 
@@ -101,8 +104,7 @@ namespace controllers::offscreen
         }
         renderHandler.setGPUDrivenCameraData(cameraPos, currentNearPlane, farPlane, time);
 
-        renderHandler.setDebugCameraMatrices(view, effectiveProjection);
-        renderHandler.setUnjitteredProjection(unjitteredProjection);
+        renderHandler.setDebugCameraMatrices(view, effectiveProjection, unjitteredProjection);
         renderHandler.setTAAJitterData(currentJitterOffset, taaFrameIndex);
 
         // Get or create camera data
