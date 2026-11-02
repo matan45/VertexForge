@@ -4,12 +4,22 @@
 layout(local_size_x = 256) in;
 
 layout(set = 0, binding = 0) buffer Histogram { uint bins[256]; } histogram;
-layout(set = 0, binding = 1) buffer ExposureData {
+
+// render::postprocess::AutoExposureState / AutoExposureBuffer (AutoExposureEffect.hpp), field for field.
+struct ExposureState
+{
     float currentExposure;
     float targetExposure;
     float avgLuminance;
     float padding;
-} exposureData;
+};
+
+// VK-1664: ONE adaptation chain (state), plus the host readback copy for each frame in flight. The CPU reads a copy
+// MAX_FRAMES_IN_FLIGHT frames after this shader wrote it.
+layout(set = 0, binding = 1) buffer Exposure {
+    ExposureState state;
+    ExposureState readback[2];
+} exposure;
 
 layout(push_constant) uniform PushConstants {
     float minLogLuminance;
@@ -23,6 +33,7 @@ layout(push_constant) uniform PushConstants {
     float minExposure;
     float maxExposure;
     uint pixelCount;
+    uint readbackSlot;
 } pc;
 
 shared uint sharedHistogram[256];
@@ -70,15 +81,16 @@ void main()
         targetExp *= exp2(pc.exposureCompensation);
         targetExp = clamp(targetExp, pc.minExposure, pc.maxExposure);
 
-        float prevExposure = exposureData.currentExposure;
-        if (prevExposure <= 0.0) prevExposure = 1.0;
+        // NaN-safe (!(x > 0) is true for NaN): the one persistent chain must never stay stuck on a bad value.
+        float prevExposure = exposure.state.currentExposure;
+        if (!(prevExposure > 0.0) || isinf(prevExposure)) prevExposure = 1.0;
 
         float speed = (targetExp > prevExposure) ? pc.adaptSpeedUp : pc.adaptSpeedDown;
         float adaptedExposure = prevExposure + (targetExp - prevExposure) * (1.0 - exp(-pc.deltaTime * speed));
         adaptedExposure = clamp(adaptedExposure, pc.minExposure, pc.maxExposure);
 
-        exposureData.currentExposure = adaptedExposure;
-        exposureData.targetExposure = targetExp;
-        exposureData.avgLuminance = avgLum;
+        ExposureState result = ExposureState(adaptedExposure, targetExp, avgLum, 0.0);
+        exposure.state = result;
+        exposure.readback[pc.readbackSlot] = result;
     }
 }

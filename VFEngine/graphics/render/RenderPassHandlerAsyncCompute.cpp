@@ -15,6 +15,7 @@
 #include "gpudriven/GPUDrivenRenderer.hpp"
 #include "gpudriven/terrain/TerrainRaycastPipeline.hpp"
 #include "postprocess/PostProcessPipeline.hpp"
+#include "postprocess/ExposureMath.hpp"
 #include "volumetric/VolumetricFogComposite.hpp"
 #include "gi/SSGIPipeline.hpp"
 #include "transparency/WBOITPipeline.hpp"
@@ -503,22 +504,41 @@ namespace render
         }
         upscaleFirstFrame = false;
 
-        // Write the 1x1 exposure texture for Streamline. DLSS guide §3.9: it is "typically the same
-        // value provided to the tonemapper", so feed what the tonemap applies this frame. DLSS-SR
-        // ignores it while useAutoExposure=eTrue (UpscaleManager::applySettings), but Ray
-        // Reconstruction ignores that flag and always reads it.
-        float exposureValue = postProcessPipeline ? postProcessPipeline->getTonemapExposure() : 1.0f;
+        // VK-1663: write the 1x1 exposure texel DLSS-SR reads (UpscaleManager::applySettings sets
+        // useAutoExposure = eFalse; Ray Reconstruction ignores exposure). DLSS guide §3.9: the linear multiplier,
+        // "typically the same value provided to the renderer's tonemapper". getTonemapExposure() is exactly what the
+        // tonemap applies this frame; it is sanitised because Streamline forwards the texel unchecked and a bad value
+        // would persist in DLSS history. DLSS's preExposure stays 1: the colour input is not pre-exposed.
+        const float exposureValue = render::postprocess::sanitizeExposure(
+            postProcessPipeline ? postProcessPipeline->getTonemapExposure() : 1.0f);
 
         if (offscreenResources.exposureImage.image)
         {
-            core::ImageUtilities::transitionImageLayout(commandBuffer,
-                offscreenResources.exposureImage.image,
-                vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-                vk::ImageAspectFlagBits::eColor);
+            const vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
+
+            // One image serves every frame in flight and no semaphore links consecutive offscreen submits, so wait for
+            // the previous frame's upscaler read before clearing it (write-after-read). ALL_COMMANDS because NGX's
+            // read stages are undocumented; the upscaler waits on everything earlier in the queue anyway. A
+            // TOP_OF_PIPE transition (ImageUtilities) gave no dependency on earlier commands at all.
+            vk::ImageMemoryBarrier2 toClear{};
+            toClear.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+            toClear.srcAccessMask = vk::AccessFlagBits2::eNone;
+            toClear.dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer;
+            toClear.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            toClear.oldLayout = vk::ImageLayout::eUndefined;
+            toClear.newLayout = vk::ImageLayout::eTransferDstOptimal;
+            toClear.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toClear.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toClear.image = offscreenResources.exposureImage.image;
+            toClear.subresourceRange = range;
+
+            vk::DependencyInfo clearDependency{};
+            clearDependency.imageMemoryBarrierCount = 1;
+            clearDependency.pImageMemoryBarriers = &toClear;
+            commandBuffer.pipelineBarrier2KHR(clearDependency);
 
             vk::ClearColorValue clearValue;
             clearValue.setFloat32({exposureValue, 0.0f, 0.0f, 0.0f});
-            vk::ImageSubresourceRange range(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1);
             commandBuffer.clearColorImage(offscreenResources.exposureImage.image,
                 vk::ImageLayout::eTransferDstOptimal, clearValue, range);
 
@@ -564,7 +584,6 @@ namespace render
         inputs.renderExtent = renderRes;
         inputs.displayExtent = displayRes;
         inputs.jitterOffset = currentJitterOffset;
-        inputs.preExposure = exposureValue;
         inputs.resetAccumulation = resetAccum;
         inputs.viewMatrix = currentView;
         inputs.unjitteredProjection = unjitteredProjection; // VK-1662: Streamline's matrices must not contain jitter

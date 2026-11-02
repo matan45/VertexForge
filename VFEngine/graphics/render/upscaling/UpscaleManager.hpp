@@ -29,7 +29,7 @@ namespace render::upscaling
         vk::ImageView motionView;
         vk::Image reactiveMask;       // Transparency/particle mask (R8_UNORM)
         vk::ImageView reactiveView;
-        vk::Image exposureImage;      // 1x1 R32_SFLOAT exposure value
+        vk::Image exposureImage;      // 1x1 R32_SFLOAT: the linear exposure the tonemapper applies (VK-1663)
         vk::ImageView exposureView;
         vk::Image output;             // Upscaled output at display resolution
         vk::ImageView outputView;
@@ -57,7 +57,6 @@ namespace render::upscaling
         vk::Extent2D displayExtent;
         glm::vec2 jitterOffset{0.0f};   // render px the projection jitter moved the image by (+y down)
         float deltaTime = 0.016f;
-        float preExposure = 1.0f;
         bool resetAccumulation = false; // True on camera cuts / teleports
         VkFormat colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;

@@ -387,11 +387,23 @@ namespace render::upscaling
             dlssOptions.outputWidth = outputWidth;
             dlssOptions.outputHeight = outputHeight;
             dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
-            dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+            // VK-1663: DLSS-SR uses the engine's exposure, not its own. evaluate() tags a 1x1 kBufferTypeExposure
+            // texel every frame holding the LINEAR multiplier the tonemapper applies this frame (DLSS SR guide §3.9:
+            // "typically the same value provided to the renderer's tonemapper"), so DLSS history follows the engine's
+            // eye adaptation and manual exposure. Streamline 2.11.1 reads this flag only when it creates the NGX
+            // feature (sl.dlss dlssEntry.cpp: its recreate check compares mode, output size and presets only) and
+            // forces auto exposure if the exposure tag is missing on that frame, so keep it a constant: a runtime
+            // toggle would silently wait for the next mode / size / preset change. Re-sending identical options (the
+            // Weather service re-applies the post-process settings every frame) is a plain store. preExposure and
+            // exposureScale keep their 1.0 defaults: the colour input is not pre-exposed (the tonemapper applies the
+            // exposure after the upscaler).
+            dlssOptions.useAutoExposure = sl::Boolean::eFalse;
 
             // Force transformer-based (DLTSS) presets for all quality modes.
             // Without this, Blackwell GPUs auto-select DLUnified (encoder/decoder)
             // for Performance/UltraPerf which requires denoiser inputs we don't provide.
+            // VK-1663: presets J and K are also the only ones that read the exposure texel (DLSS SR guide §3.9;
+            // preset L always auto-exposes), so keep K while useAutoExposure is eFalse.
             dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
             dlssOptions.qualityPreset = sl::DLSSPreset::ePresetK;
             dlssOptions.balancedPreset = sl::DLSSPreset::ePresetK;

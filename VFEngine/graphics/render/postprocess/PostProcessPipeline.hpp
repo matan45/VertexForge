@@ -158,8 +158,9 @@ namespace render::postprocess
         bool hasEnabledEffects() const;
         bool isInitialized() const { return initialized; }
         std::optional<float> getComputedExposure() const { return autoExposureOverride; }
-        // VK-1655: the exposure the tonemap applies this frame - 1 without an active tone-mapping effect,
-        // else the auto-exposure value when one was computed, else the tone-mapping setting.
+        // VK-1655: the exposure the tonemap applies this frame - 1 without an active (enabled and initialized)
+        // tone-mapping effect, else the auto-exposure value when one was computed, else the tone-mapping setting.
+        // VK-1663: DLSS-SR reads this same value from the 1x1 exposure texel (useAutoExposure = eFalse).
         float getTonemapExposure() const;
         uint32_t getCurrentImageIndex() const { return currentImageIndex; }
 

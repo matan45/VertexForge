@@ -6,9 +6,14 @@
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
 #include "../../../core/BufferUtilities.hpp"
-#include <cmath>
+#include "../ExposureMath.hpp"
 #include <cstring>
 #include <algorithm>
+
+// Windows defines MemoryBarrier as a macro, which conflicts with vk::MemoryBarrier.
+#ifdef MemoryBarrier
+#undef MemoryBarrier
+#endif
 
 namespace render::postprocess
 {
@@ -18,29 +23,6 @@ namespace render::postprocess
         float logLuminanceRange;
         uint32_t width;
         uint32_t height;
-    };
-
-    struct ReducePushConstants
-    {
-        float minLogLuminance;
-        float logLuminanceRange;
-        float lowPercentile;
-        float highPercentile;
-        float adaptSpeedUp;
-        float adaptSpeedDown;
-        float deltaTime;
-        float exposureCompensation;
-        float minExposure;
-        float maxExposure;
-        uint32_t pixelCount;
-    };
-
-    struct ExposureData
-    {
-        float currentExposure;
-        float targetExposure;
-        float avgLuminance;
-        float padding;
     };
 
     AutoExposureEffect::AutoExposureEffect(core::Device& device, core::SwapChain& swapChain,
@@ -64,11 +46,15 @@ namespace render::postprocess
         createReducePipeline();
         createPassthroughPipeline(colorFormat, extent);
 
-        ExposureData initialData{1.0f, 1.0f, 0.18f, 0.0f};
-        for (auto& ef : exposureFrames)
-        {
-            std::memcpy(ef.mapped, &initialData, sizeof(ExposureData));
-        }
+        // VK-1664: seed the chain and every readback slot with the neutral exposure. The buffer was just created, so
+        // nothing on the GPU uses it yet.
+        constexpr AutoExposureState neutral{1.0f, 1.0f, 0.18f, 0.0f};
+        AutoExposureBuffer seed{};
+        seed.state = neutral;
+        seed.readback.fill(neutral);
+        std::memcpy(exposureMapped, &seed, sizeof(seed));
+        currentExposureFrame = 0;
+        firstFrame = true;
 
         initialized = true;
     }
@@ -154,12 +140,13 @@ namespace render::postprocess
     void AutoExposureEffect::preRecord(const vk::CommandBuffer& commandBuffer,
                                         vk::DescriptorSet inputDescriptorSet)
     {
-        // Read exposure from the previous frame's buffer
-        uint32_t readFrame = (currentExposureFrame + core::MAX_FRAMES_IN_FLIGHT - 1) % core::MAX_FRAMES_IN_FLIGHT;
-        auto* readMapped = static_cast<ExposureData*>(exposureFrames[readFrame].mapped);
-        computedExposure = readMapped->currentExposure;
-        if (computedExposure <= 0.0f || std::isnan(computedExposure))
-            computedExposure = 1.0f;
+        // VK-1664: the readback slot this frame writes was last written MAX_FRAMES_IN_FLIGHT AE frames ago, and that
+        // submission has completed. OffScreenViewPort::render waits its slot fence before recording; that wait, or the
+        // previous frame's, always covers the offscreen submission two back, and a fence covers every earlier
+        // submission on the queue. The Compute -> Host barrier at the end of that frame made the write host-visible.
+        // (The old code read the OTHER frame's buffer, which the GPU could still be writing.) The tonemapper and the
+        // DLSS exposure texel both take this value (PostProcessPipeline::getTonemapExposure).
+        computedExposure = sanitizeExposure(exposureMapped->readback[currentExposureFrame].currentExposure);
 
         float currentTime = pipeline.getCameraData().time;
         float deltaTime = firstFrame ? 0.016f : (currentTime - previousTime);
@@ -172,6 +159,19 @@ namespace render::postprocess
         const uint32_t imageIndex = pipeline.getCurrentImageIndex();
         if (imageIndex >= histogramDescriptorSets.size())
             return;
+
+        // VK-1664: consecutive offscreen submissions are not linked by a semaphore, so order the previous frame's
+        // histogram atomics and reduce (histogram read, exposure state read + write) before this frame clears the
+        // histogram and adapts the state again.
+        vk::MemoryBarrier previousFrameBarrier{};
+        previousFrameBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
+        previousFrameBarrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eShaderRead
+                                           | vk::AccessFlagBits::eShaderWrite;
+
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eComputeShader,
+            {}, previousFrameBarrier, {}, {});
 
         // Clear histogram buffer
         commandBuffer.fillBuffer(histogramBuffer, 0, 256 * sizeof(uint32_t), 0);
@@ -221,11 +221,8 @@ namespace render::postprocess
             vk::PipelineStageFlagBits::eComputeShader,
             {}, {}, histBarrier, {});
 
-        // Update reduce descriptor set with current frame's exposure buffer
-        updateReduceDescriptorSet();
-
-        // Dispatch histogram reduce
-        ReducePushConstants reducePC{};
+        // Dispatch histogram reduce (reduceDescriptorSet is static: histogram + exposureBuffer)
+        AutoExposureReducePushConstants reducePC{};
         reducePC.minLogLuminance = MIN_LOG_LUMINANCE;
         reducePC.logLuminanceRange = LOG_LUMINANCE_RANGE;
         reducePC.lowPercentile = lowPercentile;
@@ -237,20 +234,21 @@ namespace render::postprocess
         reducePC.minExposure = minExposure;
         reducePC.maxExposure = maxExposure;
         reducePC.pixelCount = currentExtent.width * currentExtent.height;
+        reducePC.readbackSlot = currentExposureFrame;
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, reducePipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, reducePipelineLayout,
                                           0, reduceDescriptorSet, nullptr);
         commandBuffer.pushConstants(reducePipelineLayout, vk::ShaderStageFlagBits::eCompute,
-                                     0, sizeof(ReducePushConstants), &reducePC);
+                                     0, sizeof(AutoExposureReducePushConstants), &reducePC);
 
         commandBuffer.dispatch(1, 1, 1);
 
-        // Barrier: compute write → host read (for next frame's readback)
+        // Barrier: compute write → host read (this readback slot is read MAX_FRAMES_IN_FLIGHT frames from now)
         vk::BufferMemoryBarrier expBarrier{};
         expBarrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
         expBarrier.dstAccessMask = vk::AccessFlagBits::eHostRead;
-        expBarrier.buffer = exposureFrames[currentExposureFrame].buffer;
+        expBarrier.buffer = exposureBuffer;
         expBarrier.size = VK_WHOLE_SIZE;
 
         commandBuffer.pipelineBarrier(
@@ -258,7 +256,7 @@ namespace render::postprocess
             vk::PipelineStageFlagBits::eHost,
             {}, {}, expBarrier, {});
 
-        // Advance to next frame
+        // The next frame reads and writes the other readback slot
         currentExposureFrame = (currentExposureFrame + 1) % core::MAX_FRAMES_IN_FLIGHT;
     }
 
@@ -312,17 +310,15 @@ namespace render::postprocess
 
         core::BufferUtilities::createBuffer(histReq, histogramBuffer, histogramBufferAllocation, device.getMemoryManager());
 
-        // Exposure buffers - host visible for CPU readback (per-frame)
-        for (auto& ef : exposureFrames)
-        {
-            core::BufferInfoRequest expReq(dev, device.getPhysicalDevice());
-            expReq.size = sizeof(ExposureData);
-            expReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
-            expReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+        // VK-1664: one exposure buffer (adaptation state + a readback copy per frame in flight), host visible and
+        // coherent for the CPU readback; 48 bytes that the reduce's single thread touches once per frame.
+        core::BufferInfoRequest expReq(dev, device.getPhysicalDevice());
+        expReq.size = sizeof(AutoExposureBuffer);
+        expReq.usage = vk::BufferUsageFlagBits::eStorageBuffer;
+        expReq.properties = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
 
-            core::BufferUtilities::createBuffer(expReq, ef.buffer, ef.allocation, device.getMemoryManager());
-            ef.mapped = ef.allocation.mappedPtr;
-        }
+        core::BufferUtilities::createBuffer(expReq, exposureBuffer, exposureAllocation, device.getMemoryManager());
+        exposureMapped = static_cast<AutoExposureBuffer*>(exposureAllocation.mappedPtr);
     }
 
     void AutoExposureEffect::createDescriptorSetLayouts()
@@ -426,8 +422,10 @@ namespace render::postprocess
             reduceDescriptorSet = dev.allocateDescriptorSets(allocInfo)[0];
         }
 
-        // Update reduce descriptor set with histogram buffer (exposure buffer updated per-frame in preRecord)
-        updateReduceDescriptorSet();
+        // VK-1664: the reduce set is written only here (init / recreate). preRecord used to rewrite it every frame,
+        // while the previous frame's still-pending command buffer used it: update-after-bind only covers updates
+        // made before submission, not while the command buffer is pending.
+        writeReduceDescriptorSet();
     }
 
     void AutoExposureEffect::updateHistogramDescriptorSet(vk::DescriptorSet set, vk::ImageView sceneImageView)
@@ -460,7 +458,7 @@ namespace render::postprocess
         dev.updateDescriptorSets(writes, nullptr);
     }
 
-    void AutoExposureEffect::updateReduceDescriptorSet()
+    void AutoExposureEffect::writeReduceDescriptorSet()
     {
         auto& dev = device.getLogicalDevice();
 
@@ -470,7 +468,7 @@ namespace render::postprocess
         histBufInfo.range = VK_WHOLE_SIZE;
 
         vk::DescriptorBufferInfo expBufInfo{};
-        expBufInfo.buffer = exposureFrames[currentExposureFrame].buffer;
+        expBufInfo.buffer = exposureBuffer;
         expBufInfo.offset = 0;
         expBufInfo.range = VK_WHOLE_SIZE;
 
@@ -534,7 +532,7 @@ namespace render::postprocess
         vk::PushConstantRange pushRange{};
         pushRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
         pushRange.offset = 0;
-        pushRange.size = sizeof(ReducePushConstants);
+        pushRange.size = sizeof(AutoExposureReducePushConstants);
 
         vk::PipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.setLayoutCount = 1;
@@ -574,11 +572,8 @@ namespace render::postprocess
     {
         auto& dev = device.getLogicalDevice();
 
-        for (auto& ef : exposureFrames)
-        {
-            ef.mapped = nullptr;
-            core::BufferUtilities::destroyBuffer(dev, ef.buffer, ef.allocation, device.getMemoryManager());
-        }
+        exposureMapped = nullptr;
+        core::BufferUtilities::destroyBuffer(dev, exposureBuffer, exposureAllocation, device.getMemoryManager());
 
         core::BufferUtilities::destroyBuffer(dev, histogramBuffer, histogramBufferAllocation, device.getMemoryManager());
     }

@@ -119,6 +119,9 @@ Large modules are split into separately compiled subsystem projects using `remov
   - **Jitter:** `JitterSequence::applyJitter` moves the image by exactly `+jitterOffset` render px for perspective and ortho, using DLSS's `8·(display/render)²` Halton phases.
   - **Streamline matrices** are jitter-free and a straight copy of GLM memory (row-vector + row-major): never transpose.
   - The GLSL convention lives in `resources/shaders/common/motion_vectors.glsl`; its CPU twin is tested by `test_upscale_motion_vectors`.
+  - **Exposure** (VK-1663/1664): DLSS-SR reads the engine exposure (`useAutoExposure = eFalse`). The 1x1 R32F `kBufferTypeExposure` texel is `sanitizeExposure(PostProcessPipeline::getTonemapExposure())` (`graphics/render/postprocess/ExposureMath.hpp`): the LINEAR multiplier the tonemapper applies this frame.
+    - Streamline reads `useAutoExposure` only when it creates the NGX feature, so keep it a constant. `preExposure`/`exposureScale` stay 1 (the colour is not pre-exposed). Only presets J/K read the texel; every mode uses K.
+    - Auto exposure is ONE chain (`AutoExposureBuffer::state`); the CPU reads the copy written two frames back. Pinned by `test_upscale_exposure` and `test_auto_exposure`.
 
 ### Entry Points
 

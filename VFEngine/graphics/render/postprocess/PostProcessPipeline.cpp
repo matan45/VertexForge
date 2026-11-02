@@ -69,9 +69,14 @@ namespace render::postprocess
 
     float PostProcessPipeline::getTonemapExposure() const
     {
-        // Without an active tonemap nothing applies an exposure, auto-exposure's included.
+        // Without an active tonemap nothing applies an exposure, auto-exposure's included. "Active" is the same
+        // filter executePostUpscale / execute use (enabled AND initialized), so the DLSS exposure texel (VK-1663)
+        // never claims an exposure that a not-yet-initialized tonemap does not apply.
         const bool toneMappingActive = std::any_of(effects.begin(), effects.end(),
-            [](const auto& e) { return e->getType() == ::postprocess::EffectType::ToneMapping && e->isEnabled(); });
+            [](const auto& e)
+            {
+                return e->getType() == ::postprocess::EffectType::ToneMapping && e->isEnabled() && e->isInitialized();
+            });
         if (!toneMappingActive)
             return 1.0f;
         return autoExposureOverride.value_or(lastToneMapping.exposure);
