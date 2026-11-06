@@ -4,6 +4,7 @@
 #include "../../../core/RenderManager.hpp"
 #include "../../../core/VulkanMemoryManager.hpp"
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -115,7 +116,9 @@ namespace render::postprocess
         float highPercentile = 0.9f;
 
         float computedExposure = 1.0f;
-        float previousTime = 0.0f;
+        // VK-1664: the adaptation clock, the steady_clock time of the previous AE step (FilmGrainEffect keeps its own
+        // clock too). firstFrame: no step since init.
+        std::chrono::steady_clock::time_point previousStepTime{};
         bool firstFrame = true;
 
         vk::Extent2D currentExtent{};

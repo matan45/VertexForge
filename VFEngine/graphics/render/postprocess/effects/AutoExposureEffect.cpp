@@ -148,17 +148,23 @@ namespace render::postprocess
         // DLSS exposure texel both take this value (PostProcessPipeline::getTonemapExposure).
         computedExposure = sanitizeExposure(exposureMapped->readback[currentExposureFrame].currentExposure);
 
-        float currentTime = pipeline.getCameraData().time;
-        float deltaTime = firstFrame ? 0.016f : (currentTime - previousTime);
-        deltaTime = std::clamp(deltaTime, 0.001f, 0.5f);
-        previousTime = currentTime;
-        firstFrame = false;
-
         // Histogram input: the set for the offscreen colour image this frame renders into (was always
         // image 0, i.e. another frame's image whenever imageIndex != 0).
         const uint32_t imageIndex = pipeline.getCurrentImageIndex();
         if (imageIndex >= histogramDescriptorSets.size())
             return;
+
+        // VK-1664: adapt over the REAL time since the previous AE step. It is sampled here, after the early return, so
+        // each step integrates exactly the time since the dispatch before it and the steps add up to the elapsed time
+        // at any frame rate. The camera time used before is the Runtime's SCALED gameplay clock (VK-992,
+        // RuntimeHandler): pause, freeze and slow-mo stalled or slowed the adaptation there, while the editor ran on
+        // real time. Auto exposure follows the image on screen, like the rest of the render pacing (engineTime::Timer,
+        // Time.mt).
+        const auto now = std::chrono::steady_clock::now();
+        const float stepSeconds = firstFrame ? firstAdaptationStepSeconds
+                                             : std::chrono::duration<float>(now - previousStepTime).count();
+        previousStepTime = now;
+        firstFrame = false;
 
         // VK-1664: consecutive offscreen submissions are not linked by a semaphore, so order the previous frame's
         // histogram atomics and reduce (histogram read, exposure state read + write) before this frame clears the
@@ -188,14 +194,10 @@ namespace render::postprocess
             vk::PipelineStageFlagBits::eComputeShader,
             {}, {}, clearBarrier, {});
 
-        // Dispatch histogram build
-        constexpr float MIN_LOG_LUMINANCE = -10.0f;
-        constexpr float MAX_LOG_LUMINANCE = 12.0f;
-        constexpr float LOG_LUMINANCE_RANGE = MAX_LOG_LUMINANCE - MIN_LOG_LUMINANCE;
-
+        // Dispatch histogram build (ExposureMath.hpp: the log2 luminance range both shaders and the CPU twins use)
         HistogramPushConstants histPC{};
-        histPC.minLogLuminance = MIN_LOG_LUMINANCE;
-        histPC.logLuminanceRange = LOG_LUMINANCE_RANGE;
+        histPC.minLogLuminance = exposureMinLogLuminance;
+        histPC.logLuminanceRange = exposureLogLuminanceRange;
         histPC.width = currentExtent.width;
         histPC.height = currentExtent.height;
 
@@ -223,13 +225,13 @@ namespace render::postprocess
 
         // Dispatch histogram reduce (reduceDescriptorSet is static: histogram + exposureBuffer)
         AutoExposureReducePushConstants reducePC{};
-        reducePC.minLogLuminance = MIN_LOG_LUMINANCE;
-        reducePC.logLuminanceRange = LOG_LUMINANCE_RANGE;
+        reducePC.minLogLuminance = exposureMinLogLuminance;
+        reducePC.logLuminanceRange = exposureLogLuminanceRange;
         reducePC.lowPercentile = lowPercentile;
         reducePC.highPercentile = highPercentile;
         reducePC.adaptSpeedUp = adaptSpeedUp;
         reducePC.adaptSpeedDown = adaptSpeedDown;
-        reducePC.deltaTime = deltaTime;
+        reducePC.deltaTime = clampAdaptationDelta(stepSeconds);
         reducePC.exposureCompensation = exposureCompensation;
         reducePC.minExposure = minExposure;
         reducePC.maxExposure = maxExposure;

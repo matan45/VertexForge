@@ -130,7 +130,7 @@ namespace windows
                     }
                     if (ImGui::IsItemHovered())
                     {
-                        ImGui::SetTooltip("Speed of adaptation when scene gets brighter (EV/sec).");
+                        ImGui::SetTooltip("Adaptation rate when the scene gets brighter (the exposure falls), per second; higher is faster.\n95%% of a change takes about 3 / rate seconds.");
                     }
 
                     if (ImGui::DragFloat("Adapt Speed Down", &settings.autoExposure.adaptSpeedDown, 0.1f, 0.1f, 10.0f, "%.1f"))
@@ -139,7 +139,7 @@ namespace windows
                     }
                     if (ImGui::IsItemHovered())
                     {
-                        ImGui::SetTooltip("Speed of adaptation when scene gets darker (EV/sec).");
+                        ImGui::SetTooltip("Adaptation rate when the scene gets darker (the exposure rises), per second; higher is faster.\n95%% of a change takes about 3 / rate seconds.");
                     }
 
                     if (ImGui::DragFloat("Exposure Compensation", &settings.autoExposure.exposureCompensation, 0.1f, -5.0f, 5.0f, "%.1f EV"))

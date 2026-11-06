@@ -122,6 +122,7 @@ Large modules are split into separately compiled subsystem projects using `remov
   - **Exposure** (VK-1663/1664): DLSS-SR reads the engine exposure (`useAutoExposure = eFalse`). The 1x1 R32F `kBufferTypeExposure` texel is `sanitizeExposure(PostProcessPipeline::getTonemapExposure())` (`graphics/render/postprocess/ExposureMath.hpp`): the LINEAR multiplier the tonemapper applies this frame.
     - Streamline reads `useAutoExposure` only when it creates the NGX feature, so keep it a constant. `preExposure`/`exposureScale` stay 1 (the colour is not pre-exposed). Only presets J/K read the texel; every mode uses K.
     - Auto exposure is ONE chain (`AutoExposureBuffer::state`); the CPU reads the copy written two frames back. Pinned by `test_upscale_exposure` and `test_auto_exposure`.
+    - It adapts over REAL time: the effect's own `steady_clock` delta between steps, capped at 0.5 s (`clampAdaptationDelta`). Never use the camera time; the Runtime's is scaled gameplay time (VK-992). `adaptSpeedUp` applies when the scene gets brighter (the exposure falls) and `adaptSpeedDown` when it gets darker (VK-1670). The histogram binning and the reduce math have CPU twins in `ExposureMath.hpp` (decode with 254; the percentile window is at least one pixel wide), and string guards keep the GLSL identical.
 
 ### Entry Points
 

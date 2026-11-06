@@ -96,9 +96,11 @@ namespace mcp::tools::env
                 floatField<S, &S::maxExposure>("maxExposure", 1.0, 20.0,
                     "Highest exposure it may pick: keeps dark scenes from going too bright."),
                 floatField<S, &S::adaptSpeedUp>("adaptSpeedUp", 0.1, 10.0,
-                    "Adaptation speed when the scene gets brighter (EV per second)."),
+                    "Adaptation rate when the scene gets brighter (the exposure falls), per second: higher is faster; "
+                    "95% of a change takes about 3 / adaptSpeedUp seconds."),
                 floatField<S, &S::adaptSpeedDown>("adaptSpeedDown", 0.1, 10.0,
-                    "Adaptation speed when the scene gets darker (EV per second)."),
+                    "Adaptation rate when the scene gets darker (the exposure rises), per second: higher is faster; "
+                    "95% of a change takes about 3 / adaptSpeedDown seconds."),
                 floatField<S, &S::exposureCompensation>("exposureCompensation", -5.0, 5.0,
                     "Artistic offset in EV stops: positive = brighter, negative = darker."),
                 floatField<S, &S::lowPercentile>("lowPercentile", 0.0, 0.5,
