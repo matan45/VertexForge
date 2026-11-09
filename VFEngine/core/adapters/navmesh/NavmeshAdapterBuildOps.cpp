@@ -450,7 +450,10 @@ namespace core
                     glm::vec3 triMin = glm::min(va, glm::min(vb, vc));
                     glm::vec3 triMax = glm::max(va, glm::max(vb, vc));
 
+                    // XZ: the tile plus its border. Y: the geometry bounds, which a bounded bake narrows to a
+                    // floor and a ceiling (VK-1660); an unbounded bake's bounds contain every triangle.
                     if (triMax.x < clipMin.x || triMin.x > clipMax.x ||
+                        triMax.y < clipMin.y || triMin.y > clipMax.y ||
                         triMax.z < clipMin.z || triMin.z > clipMax.z)
                         continue;
 
@@ -463,6 +466,11 @@ namespace core
 
                 if (!tileGeometry.isEmpty())
                 {
+                    // Rasterize no lower or higher than the geometry bounds: a triangle crossing a bounded
+                    // bake's floor or ceiling is clipped there. A no-op for an unbounded bake.
+                    tileGeometry.boundsMin.y = glm::max(tileGeometry.boundsMin.y, bmin.y);
+                    tileGeometry.boundsMax.y = glm::min(tileGeometry.boundsMax.y, bmax.y);
+
                     const navigation::NavmeshOffMeshConnections* tileLinks = nullptr;
                     navigation::NavmeshTileCoord tileCoord{tx, tz};
                     auto linkIt = tileOffMeshLinks.find(tileCoord);

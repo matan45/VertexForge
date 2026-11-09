@@ -42,6 +42,30 @@ namespace plugin {
     //      SDK-exported and embedded by value, so a plugin built against v20 would lay the
     //      trailing fields out at the wrong offsets. services::AudioParams::priority is
     //      untouched — it still arbitrates the pooled 3D path.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 21;
+    // v22: registerMcpTool/unregisterMcpTool on PluginContext + PluginMcpToolDesc/
+    //      PluginMcpToolResult (VK-1652) — plugins contribute tools to the Editor's MCP
+    //      server. The two virtuals are inserted after registerEditorWindow, so every
+    //      later vtable slot shifts: every plugin must rebuild.
+    // v23: VK-1657 per-entity VFX parameters. components::VFXComponent and
+    //      services::VFXData gain `overrides` (vector of vfx::VFXParamOverride);
+    //      services::VFXEmitterOverrides appends blendMode / sortOrder / colorTint and
+    //      services::VFXRuntimeParams appends `persistent`. VFXRuntimeParams crosses the
+    //      boundary by reference in PluginContext::createVFXInstance and the other types
+    //      are SDK-exported and embedded by value, so a plugin built against v22 would lay
+    //      them out at the wrong size. IVFXRuntimeProvider also appends a virtual.
+    // v24: VK-1660 AI tools. SDK-exported layouts change: components::BehaviorTreeComponent gains
+    //      `initialValues`, components::NavmeshAgentComponent gains `baseOffset`, the volumetric
+    //      navigation components are redesigned, and the EQS types (EQSCandidate, EQSContext,
+    //      EQSProviderRefs, EQSTestConfig) change. Interfaces change: IBTTaskExecutor (executeMoveTo,
+    //      new executeFollowRoute), IBehaviorTreeProvider and INavmeshProvider append virtuals, and
+    //      IEQSProvider / IVolumetricNavProvider are rewritten. BTNodeType, ComponentTypeId and
+    //      AssetType append values. No in-tree plugin uses these types, but every plugin rebuilds.
+    // v25: VK-1661 FXAA. postprocess::PostProcessSettings appends `fxaa` (FXAASettings) and
+    //      postprocess::EffectType gains FXAA before PluginCustom. PostProcessSettings is SDK-exported and
+    //      crosses the boundary by value through the dispatcher plugins reach with
+    //      PluginContext::getEventDispatcher() (ApplyPostProcessSettingsCommand, GetPostProcessSettingsQuery,
+    //      and RenderSettings::postProcess in Get/SetRenderSettings), so a plugin built against v24 would lay it
+    //      out at the wrong size. No in-tree plugin uses these types, but every plugin rebuilds.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
 
 }

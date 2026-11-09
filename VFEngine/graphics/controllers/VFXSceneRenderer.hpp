@@ -66,6 +66,10 @@ namespace controllers
         std::optional<float> collisionLifetimeLoss;
         std::optional<glm::vec3> shapeDimensions;
         std::optional<float> coneSpread;
+        // VK-1657
+        std::optional<int> blendMode;
+        std::optional<int> sortOrder;
+        std::optional<glm::vec4> colorTint;
     };
 
     struct VFXRuntimeParams
@@ -79,6 +83,7 @@ namespace controllers
         bool autoDestroy = false;
         uint32_t seed = 0; // VK-1451: 0 => random seed chosen once at creation
         bool poolable = false; // VK-1453: opt into dormant-instance reuse (fire-and-forget only)
+        bool persistent = false; // VK-1657: kept by destroyTransientInstances (the Play->Edit purge)
         std::optional<glm::vec3> injectedEmitterVelocity;
         std::optional<glm::vec4> startColorMultiplier;
         std::optional<float> startSizeMultiplier;
@@ -143,6 +148,15 @@ namespace controllers
         // Listener: set when this channel listener is fed by GPU event appends (owns one child region).
         bool gpuFastPathChild = false;
         uint32_t gpuChildRegion = 0xFFFFFFFFu; // 0xFFFFFFFF = not a GPU event->child listener
+
+        // VK-1657: the creator owns this instance's lifetime across editor mode changes, so the
+        // Play->Edit purge (destroyTransientInstances) keeps it. Copied from VFXRuntimeParams and
+        // inherited by event sub-emitters and by the GPU event->child listeners a parent feeds.
+        bool persistent = false;
+        // VK-1657: the render mode the pipelines' per-slot entries were set up for at creation. A
+        // renderMode override changes config.renderMode only, so pushEmitterRenderingConfig keeps
+        // targeting these pipelines instead of creating a mesh/ribbon entry the slot never had.
+        render::vfx::VFXRenderMode pipelineRenderMode = render::vfx::VFXRenderMode::Billboard;
     };
 
     class VFXSceneRenderer
@@ -301,6 +315,9 @@ namespace controllers
                            bool hasTint);
         void destroyInstance(VFXInstanceId id);
         void destroyAllInstances();
+        // VK-1657: destroy every non-persistent instance plus the dormant pool (the Play->Edit purge)
+        // and return the destroyed ids. Deferred-free path like destroyInstance — no device wait.
+        std::vector<VFXInstanceId> destroyTransientInstances();
 
         void applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides);
         void setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform);
@@ -456,6 +473,10 @@ namespace controllers
         // VK-1526: resolve an optional PBR material (.vfMat/.vfMatInstance) and push it to a mesh emitter,
         // or clear it (empty path => the single-.vfImage path). Shared by createInstance + the revive path.
         void applyMeshMaterial(uint32_t emitterIndex, const std::string& materialPath);
+        // VK-1657: push alpha clip / blend / glow / sort to a GPU-driven instance's pipeline slots
+        // (billboard always; mesh / ribbon per pipelineRenderMode). Shared by createInstance and
+        // applyInstanceOverrides (blendMode / sortOrder overrides). No-op for CPU-simulated instances.
+        void pushEmitterRenderingConfig(const VFXRuntimeInstance& instance);
         void updateGPU(float deltaTime);
         void recordGPUDrawCommands(vk::CommandBuffer cmd);
         void processPendingEmitterFrees();

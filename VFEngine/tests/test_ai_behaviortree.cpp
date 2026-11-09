@@ -143,7 +143,8 @@ TEST_CASE("String/Enum roundtrip: nodeTypeToString and stringToNodeType") {
         behaviortree::BTNodeType::BlackboardCondition,
         behaviortree::BTNodeType::SubTree,
         behaviortree::BTNodeType::Service,
-        behaviortree::BTNodeType::DynamicSubTree
+        behaviortree::BTNodeType::DynamicSubTree,
+        behaviortree::BTNodeType::FollowRoute
     };
 
     for (auto type : allTypes) {
@@ -251,7 +252,7 @@ namespace {
 struct AbortRecorder : behaviortree::IBTTaskExecutor {
     std::vector<std::pair<uint32_t, behaviortree::BTNodeType>> aborts;
 
-    behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle, const std::string&, float,
+    behaviortree::BTNodeStatus executeMoveTo(services::EntityHandle, const behaviortree::MoveToRequest&,
                                              behaviortree::Blackboard&, bool) override {
         return behaviortree::BTNodeStatus::Running;
     }
@@ -265,8 +266,9 @@ struct AbortRecorder : behaviortree::IBTTaskExecutor {
     behaviortree::BTNodeStatus executeLog(const std::string&, behaviortree::LogLevel) override {
         return behaviortree::BTNodeStatus::Success;
     }
-    behaviortree::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const std::string&,
-                                                       const std::string&, behaviortree::Blackboard&, bool) override {
+    behaviortree::BTNodeStatus executeEnvironmentQuery(services::EntityHandle, const behaviortree::BTNode&,
+                                                       const behaviortree::EnvironmentQueryRequest&,
+                                                       behaviortree::Blackboard&, bool) override {
         return behaviortree::BTNodeStatus::Running;
     }
     behaviortree::BTNodeStatus executeLineOfSight(services::EntityHandle, const std::string&, float, float,

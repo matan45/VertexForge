@@ -8,8 +8,10 @@
 #include "../../services/data/ScriptTypes.hpp"
 #include "../asset/AssetRef.hpp"
 #include "../animator/SocketTypes.hpp"
+#include "../vfx/VFXParameterRegistry.hpp"
 #include "../types/AudioEffectTypes.hpp"
 #include "../types/AudioVariationTypes.hpp"
+#include "../behaviortree/BlackboardInitialValue.hpp"
 
 namespace components
 {
@@ -306,6 +308,10 @@ namespace components
         bool loop = true;
         uint8_t priority = 2; // 0=Critical, 1=High, 2=Normal, 3=Low
         bool cameraRelative = false;
+        // VK-1657: per-entity user parameters (registry names, VFXParameterRegistry.hpp). Saved with
+        // the scene / prefab / sector and applied to every instance spawned from this component
+        // (edit-mode preview, Play, shipped game); the .vfVFX itself is never modified.
+        std::vector<vfx::VFXParamOverride> overrides;
 
         uint32_t runtimeInstanceId = 0;
         bool isPlaying = false;
@@ -361,6 +367,9 @@ namespace components
         asset::AssetRef behaviorTreeRef;
         bool isInitialized = false;
         bool enabled = true;
+        // Per-entity blackboard start values (VK-1660), applied after the tree attaches at Edit->Play.
+        // Entity values are UUID + name (see BlackboardEntityRef). Serialized with the scene / prefab.
+        std::vector<behaviortree::BlackboardInitialValue> initialValues;
     };
 
     enum class ReverbZoneShape : uint8_t

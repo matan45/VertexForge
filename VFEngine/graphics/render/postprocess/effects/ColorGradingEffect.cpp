@@ -1,4 +1,5 @@
 #include "ColorGradingEffect.hpp"
+#include "LutReloadPolicy.hpp"
 #include "../../../core/Device.hpp"
 #include "../../../core/Shader.hpp"
 #include "../../../core/PipelineUtilities.hpp"
@@ -187,17 +188,8 @@ namespace render::postprocess
         enabled = cg.enabled;
 
         // Flag LUT path changes for deferred reload in preRecord
-        if (currentPrimaryPath != cg.primaryLutPath && !primaryPathPending)
-        {
-            pendingPrimaryPath = cg.primaryLutPath;
-            primaryPathPending = true;
-        }
-
-        if (currentSecondaryPath != cg.secondaryLutPath && !secondaryPathPending)
-        {
-            pendingSecondaryPath = cg.secondaryLutPath;
-            secondaryPathPending = true;
-        }
+        requestLut(currentPrimaryPath, pendingPrimaryPath, primaryPathPending, cg.primaryLutPath);
+        requestLut(currentSecondaryPath, pendingSecondaryPath, secondaryPathPending, cg.secondaryLutPath);
 
         // Update UBO
         if (paramsBufferMapped)

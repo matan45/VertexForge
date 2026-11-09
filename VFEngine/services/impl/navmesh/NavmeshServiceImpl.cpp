@@ -1,4 +1,5 @@
 #include "NavmeshServiceImpl.hpp"
+#include "../navigation/SceneGeometryCollector.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/BrushEvents.hpp"
@@ -7,10 +8,12 @@
 #include "../../events/project/ResourceEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/scene/EntityTransformEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/render/DebugDrawEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "scene/EntityRegistry.hpp"
+#include "scene/HierarchyMatrix.hpp"
 #include "components/Components.hpp"
 #include "navigation/NavmeshSerializer.hpp"
 #include "resource/ResourceManager.hpp"
@@ -18,17 +21,40 @@
 #include <asset/AssetRef.hpp>
 #include "threading/JobSystem.hpp"
 #include <cassert>
+#include <cmath>
+#include <exception>
 
 namespace services
 {
+    namespace
+    {
+        // The world geometry a navmesh bake's settings select (carve obstacles always bake).
+        SceneGeometrySources geometrySourcesFor(const types::NavmeshBakeSettings& settings)
+        {
+            SceneGeometrySources sources;
+            sources.terrain = settings.includeTerrain;
+            sources.staticMeshes = settings.includeStaticMeshes;
+            sources.colliders = settings.includeColliders;
+            sources.foliage = settings.includeFoliage;
+            sources.obstacles = true;
+            return sources;
+        }
+
+        bool isFinite(const glm::vec3& v)
+        {
+            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+        }
+    }
+
     NavmeshServiceImpl::NavmeshServiceImpl(INavmeshProvider* navmeshProvider)
         : navmeshProvider(navmeshProvider),
           tileManager(navmeshProvider, lastBakeSettings,
-                      [this](const navigation::NavmeshTileBounds& bounds,
-                             const types::NavmeshBakeSettings& settings,
-                             navigation::NavmeshInputGeometry& outGeometry)
+                      [](const navigation::NavmeshTileBounds& bounds,
+                         const types::NavmeshBakeSettings& settings,
+                         navigation::NavmeshInputGeometry& outGeometry)
                       {
-                          collectTileGeometry(bounds, settings, outGeometry);
+                          SceneGeometryCollector(geometrySourcesFor(settings))
+                              .collect(navigation::expandBoundsForOverlap(bounds, settings), outGeometry);
                       }),
           agentManager(navmeshProvider,
                        [this](const glm::vec3& pos)
@@ -283,6 +309,40 @@ namespace services
                 return result;
             });
 
+        // === Ticketed bake + status (VK-1660, NavmeshAuthoringEvents.hpp) ===
+
+        dispatcher.registerCommandHandler<events::navmesh::RequestNavmeshBakeCommand>(
+            [this](const events::navmesh::RequestNavmeshBakeCommand& cmd)
+            {
+                return requestBake(cmd.settings, cmd.bounds);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshBakeOutcomeQuery>(
+            [this](const events::navmesh::GetNavmeshBakeOutcomeQuery& query)
+            {
+                return getBakeOutcome(query.ticket);
+            });
+
+        dispatcher.registerQueryHandler<events::navmesh::GetNavmeshStatusQuery>(
+            [this](const events::navmesh::GetNavmeshStatusQuery&)
+            {
+                return getStatus();
+            });
+
+        // NavmeshAgentComponent data (VK-1660). PhysicsComponentService adds and removes the component;
+        // its data is read and written here because a write must also reach the agent's live crowd copy.
+        dispatcher.registerQueryHandler<events::scene::GetNavmeshAgentDataQuery>(
+            [this](const events::scene::GetNavmeshAgentDataQuery& query)
+            {
+                return agentManager.getAgentData(query.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::SetNavmeshAgentDataCommand>(
+            [this](const events::scene::SetNavmeshAgentDataCommand& cmd)
+            {
+                return agentManager.setAgentData(cmd.entity, cmd.data);
+            });
+
         // === Per-Tile Events (VK-739) ===
 
         dispatcher.registerCommandHandler<events::navmesh::BakeTileCommand>(
@@ -454,23 +514,91 @@ namespace services
 
     void NavmeshServiceImpl::bakeNavmesh(const types::NavmeshBakeSettings& settings)
     {
-        if (bakeFuture.valid())
-            return;
+        startSceneBake(settings, std::nullopt, 0);
+    }
 
-        lastBakeSettings = settings;
+    events::navmesh::NavmeshBakeTicket NavmeshServiceImpl::requestBake(
+        const types::NavmeshBakeSettings& settings, const std::optional<events::navmesh::NavmeshBakeBounds>& bounds)
+    {
+        events::navmesh::NavmeshBakeTicket result;
+        const uint64_t ticket = nextBakeTicket;
+        result.error = startSceneBake(settings, bounds, ticket);
+        if (result.error.empty())
+        {
+            ++nextBakeTicket;
+            result.accepted = true;
+            result.ticket = ticket;
+        }
+        return result;
+    }
+
+    std::string NavmeshServiceImpl::startSceneBake(const types::NavmeshBakeSettings& settings,
+                                                   const std::optional<events::navmesh::NavmeshBakeBounds>& bounds,
+                                                   uint64_t ticket)
+    {
+        auto refuse = [](std::string reason)
+        {
+            vfLogWarning("NavmeshService: navmesh bake not started: {}", reason);
+            return reason;
+        };
+
+        if (bakeFuture.valid())
+            return refuse("a navmesh bake is already running");
+        if (worldBaker->isRunning())
+            return refuse("a world navmesh bake is running");
+
+        const float tileWorldSize = settings.tileSize * settings.cellSize;
+        if (!(settings.cellSize > 0.0f) || !(settings.cellHeight > 0.0f) || settings.tileSize <= 0 ||
+            !std::isfinite(tileWorldSize))
+        {
+            return refuse("cellSize, cellHeight and tileSize must be positive");
+        }
 
         navigation::NavmeshInputGeometry geometry;
-        collectSceneGeometry(settings, geometry);
+        const SceneGeometryCollector collector(geometrySourcesFor(settings));
+        if (bounds)
+        {
+            const glm::vec3 boxMin = bounds->min;
+            const glm::vec3 boxMax = bounds->max;
+            if (!isFinite(boxMin) || !isFinite(boxMax) ||
+                !(boxMin.x < boxMax.x && boxMin.y < boxMax.y && boxMin.z < boxMax.z))
+            {
+                return refuse("the bake bounds are empty: min must be below max on every axis");
+            }
+
+            // Whole tiles: collect what every tile the box touches needs (plus each tile's border) and limit
+            // the navmesh to those tiles; on Y the box is a floor and a ceiling for the rasterized geometry.
+            navigation::NavmeshTileBounds tiles;
+            tiles.min = glm::vec3(std::floor(boxMin.x / tileWorldSize) * tileWorldSize, boxMin.y,
+                                  std::floor(boxMin.z / tileWorldSize) * tileWorldSize);
+            tiles.max = glm::vec3((std::floor(boxMax.x / tileWorldSize) + 1.0f) * tileWorldSize, boxMax.y,
+                                  (std::floor(boxMax.z / tileWorldSize) + 1.0f) * tileWorldSize);
+            collector.collect(navigation::expandBoundsForOverlap(tiles, settings), geometry);
+
+            if (!geometry.isEmpty())
+            {
+                geometry.boundsMin = glm::max(geometry.boundsMin, boxMin);
+                geometry.boundsMax = glm::min(geometry.boundsMax, boxMax);
+                if (geometry.boundsMin.x > geometry.boundsMax.x || geometry.boundsMin.y > geometry.boundsMax.y ||
+                    geometry.boundsMin.z > geometry.boundsMax.z)
+                {
+                    geometry = navigation::NavmeshInputGeometry{};
+                }
+            }
+        }
+        else
+        {
+            collector.collect(geometry);
+        }
 
         if (geometry.isEmpty())
         {
-            vfLogWarning("NavmeshService: No geometry collected for navmesh baking");
-            auto& dispatcher = ::events::EventDispatcher::instance();
+            const std::string message = bounds ? "No geometry inside the bake bounds" : "No geometry found in scene";
             events::navmesh::NavmeshBakeCompleteNotification notification;
             notification.success = false;
-            notification.message = "No geometry found in scene";
-            dispatcher.publish(notification);
-            return;
+            notification.message = message;
+            ::events::EventDispatcher::instance().publish(notification);
+            return refuse(message);
         }
 
         vfLogInfo("NavmeshService: Baking navmesh with {} vertices, {} triangles",
@@ -480,13 +608,22 @@ namespace services
         if (settings.autoGenerateDropLinks)
             autoGenerateDropLinks(settings, offMeshLinks);
 
-        auto areaModifiers = collectAllAreaModifiers();
+        auto areaModifiers = collectAllAreaModifiers(settings);
 
+        // The bake re-creates the crowd on a worker: release the agents (and the obstacles' phantom agents)
+        // from the current crowd now and keep new ones out until the bake is harvested (pollBakeCompletion),
+        // which sends the moves that were in progress again.
+        cleanupPhantomAgents();
+        agentManager.beginCrowdRebuild();
+
+        lastBakeSettings = settings;
+        runningBakeTicket = ticket;
         bakeFuture = threading::JobSystem::instance().submit(
             [this, geom = std::move(geometry), settings, links = std::move(offMeshLinks), mods = std::move(areaModifiers)]()
             {
                 return navmeshProvider->buildNavmesh(geom, settings, links, mods);
             }, threading::JobPriority::LOW);
+        return {};
     }
 
     types::NavmeshBakeProgress NavmeshServiceImpl::getBakeProgress() const
@@ -502,18 +639,139 @@ namespace services
         if (bakeFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
             return;
 
-        bool success = bakeFuture.get();
+        bool success = false;
+        std::string message;
+        try
+        {
+            success = bakeFuture.get();
+        }
+        catch (const std::exception& e)
+        {
+            message = e.what();
+        }
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
+        // The crowd the bake built is the live one: let agents back in and issue the moves set meanwhile.
+        agentManager.endCrowdRebuild();
+        finishSceneBake(success, message);
+    }
+
+    void NavmeshServiceImpl::finishSceneBake(bool success, const std::string& message)
+    {
+        const types::NavmeshBakeProgress progress = navmeshProvider->getBuildProgress();
+        std::string reason = message;
+        if (!success && reason.empty())
+        {
+            reason = (progress.status == types::NavmeshBakeStatus::Failed && !progress.currentStage.empty())
+                ? progress.currentStage
+                : std::string("Navmesh bake failed");
+        }
+
+        if (success)
+            unsavedBake = true;
+
+        if (runningBakeTicket != 0)
+        {
+            events::navmesh::NavmeshBakeOutcome outcome;
+            outcome.ticket = runningBakeTicket;
+            outcome.state = success ? events::navmesh::NavmeshBakeState::Succeeded
+                                    : events::navmesh::NavmeshBakeState::Failed;
+            outcome.progress = success ? 1.0f : progress.progress;
+            outcome.stage = progress.currentStage;
+            if (success)
+                outcome.stats = navmeshProvider->getNavmeshStats();
+            else
+                outcome.message = reason;
+
+            bakeOutcomes.push_back(std::move(outcome));
+            while (bakeOutcomes.size() > MAX_BAKE_OUTCOMES)
+                bakeOutcomes.pop_front();
+            runningBakeTicket = 0;
+        }
+
         events::navmesh::NavmeshBakeCompleteNotification notification;
         notification.success = success;
-        notification.message = success ? "Navmesh bake complete" : "Navmesh bake failed";
-        dispatcher.publish(notification);
+        notification.message = success ? "Navmesh bake complete" : reason;
+        ::events::EventDispatcher::instance().publish(notification);
 
         if (success)
             vfLogInfo("NavmeshService: Navmesh bake complete");
         else
-            vfLogError("NavmeshService: Navmesh bake failed");
+            vfLogError("NavmeshService: Navmesh bake failed: {}", reason);
+    }
+
+    void NavmeshServiceImpl::abandonRunningBake()
+    {
+        if (!bakeFuture.valid())
+            return;
+
+        // Its worker re-creates the navmesh and the crowd: let it finish before they are replaced.
+        try
+        {
+            (void)bakeFuture.get();
+        }
+        catch (const std::exception&)
+        {
+        }
+        finishSceneBake(false, "superseded by a navmesh clear or load");
+    }
+
+    void NavmeshServiceImpl::resetCrowdBookkeeping()
+    {
+        cleanupPhantomAgents();
+        agentManager.releaseAllAgents();
+    }
+
+    events::navmesh::NavmeshBakeOutcome NavmeshServiceImpl::getBakeOutcome(uint64_t ticket) const
+    {
+        events::navmesh::NavmeshBakeOutcome outcome;
+        outcome.ticket = ticket;
+        if (ticket == 0)
+            return outcome;
+
+        if (ticket == runningBakeTicket && bakeFuture.valid())
+        {
+            const types::NavmeshBakeProgress progress = navmeshProvider->getBuildProgress();
+            outcome.state = events::navmesh::NavmeshBakeState::Running;
+            outcome.progress = progress.progress;
+            outcome.stage = progress.currentStage;
+            return outcome;
+        }
+
+        for (const auto& finished : bakeOutcomes)
+        {
+            if (finished.ticket == ticket)
+                return finished;
+        }
+        return outcome;
+    }
+
+    events::navmesh::NavmeshStatus NavmeshServiceImpl::getStatus()
+    {
+        events::navmesh::NavmeshStatus status;
+        status.hasNavmesh = navmeshProvider->hasNavmesh();
+        status.bakeRunning = bakeFuture.valid() || worldBaker->isRunning();
+        status.stats = navmeshProvider->getNavmeshStats();
+        status.settings = lastBakeSettings;
+        status.indexPath = sceneNavmeshAssetPath();
+        status.unsavedChanges = unsavedBake;
+        status.streamingEnabled = tileManager.getStreamer().isEnabled();
+        return status;
+    }
+
+    std::string NavmeshServiceImpl::sceneNavmeshAssetPath() const
+    {
+        auto rootHandle = ::events::EventDispatcher::instance().query(::events::scene::GetRootEntityQuery{});
+        if (!rootHandle.isValid())
+            return {};
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto rootEntity = internal::fromHandle(rootHandle);
+        if (!registry.valid(rootEntity))
+            return {};
+        const auto* navmesh = registry.try_get<components::NavmeshComponent>(rootEntity);
+        if (!navmesh || !navmesh->navmeshRef.isValid())
+            return {};
+        return navmesh->navmeshRef.resolve();
     }
 
 
@@ -534,6 +792,7 @@ namespace services
         bool result = navigation::NavmeshSerializer::save(filePath, header, tiles);
         if (result)
         {
+            unsavedBake = false;
             attachNavmeshAssetToSceneRoot(filePath);
 
             events::resource::AssetSavedNotification notif;
@@ -568,11 +827,16 @@ namespace services
             return false;
         }
 
+        // deserializeNavmesh re-creates the crowd
+        abandonRunningBake();
+        resetCrowdBookkeeping();
+
         lastBakeSettings = header.settings;
         bool success = navmeshProvider->deserializeNavmesh(header, tiles);
 
         if (success)
         {
+            unsavedBake = false;
             auto& dispatcher = ::events::EventDispatcher::instance();
             events::navmesh::NavmeshBakeCompleteNotification notification;
             notification.success = true;
@@ -590,10 +854,11 @@ namespace services
 
     void NavmeshServiceImpl::clearNavmesh()
     {
-        cleanupPhantomAgents();
+        abandonRunningBake();
+        resetCrowdBookkeeping();
         navmeshProvider->clearNavmesh();
-        agentManager.clear();
         tileManager.clear();
+        unsavedBake = false;
         lastObstaclePositions.clear();
         lastModifierVolumePositions.clear();
 
@@ -604,9 +869,18 @@ namespace services
             registry.remove<components::NavmeshComponent>(entity);
         }
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
+        // The debug mesh lives in the editor viewport: the Runtime registers no handler.
         events::render::ClearNavmeshDebugMeshCommand clearCmd;
-        dispatcher.execute(clearCmd);
+        try
+        {
+            ::events::EventDispatcher::instance().execute(clearCmd);
+        }
+        catch (const std::exception& error)
+        {
+            const std::string noHandler = "No handler registered for command: " + std::string(clearCmd.getName());
+            if (noHandler != error.what())
+                vfLogWarning("NavmeshService: the navmesh debug mesh was not cleared: {}", error.what());
+        }
     }
 
 
@@ -695,8 +969,7 @@ namespace services
         // first-seen obstacle as a no-op, so an explicit carve here is required.
         if (!registry.all_of<components::TransformComponent>(e))
             return;
-        const auto& transform = registry.get<components::TransformComponent>(e);
-        glm::vec3 worldPos = transform.position + obstacle.offset;
+        glm::vec3 worldPos = scene::composeWorldPosition(registry, e) + obstacle.offset;
 
         if (obstacle.mode == components::NavmeshObstacleMode::Carve && navmeshProvider->hasNavmesh())
         {
@@ -739,13 +1012,37 @@ namespace services
         tileManager.processOnDemandGeneration();
         if (simulateAgents)
             agentManager.updatePositions(deltaTime);
-        drawOffMeshLinkDebug();
+
+        const bool debugVisible = navmeshDebugVisible();
+        if (debugVisible)
+            drawOffMeshLinkDebug();
         trackOffMeshLinkTransforms();
         trackObstacleTransforms();
-        drawObstacleDebug();
+        if (debugVisible)
+            drawObstacleDebug();
         trackModifierVolumeTransforms();
-        drawModifierVolumeDebug();
-        drawInvokerDebug();
+        if (debugVisible)
+        {
+            drawModifierVolumeDebug();
+            drawInvokerDebug();
+            drawRouteDebug();
+        }
+    }
+
+    bool NavmeshServiceImpl::navmeshDebugVisible()
+    {
+        if (debugToggleMissing)
+            return false;
+
+        try
+        {
+            return ::events::EventDispatcher::instance().query(events::render::GetShowNavmeshDebugQuery{});
+        }
+        catch (const std::exception&)
+        {
+            debugToggleMissing = true; // no overlay toggle in this binary (the Runtime registers none)
+            return false;
+        }
     }
 
     void NavmeshServiceImpl::gatherInvokerSources()
@@ -757,13 +1054,12 @@ namespace services
         for (auto entity : view)
         {
             auto& invoker = view.get<components::NavInvokerComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
 
             invoker.isActive = navmeshProvider->hasNavmesh();
 
             float unloadRadius = invoker.generationRadius * invoker.unloadRadiusMultiplier;
             sources.push_back({
-                transform.position,
+                scene::composeWorldPosition(registry, entity),
                 invoker.generationRadius * invoker.generationRadius,
                 unloadRadius * unloadRadius
             });
@@ -792,20 +1088,15 @@ namespace services
     void NavmeshServiceImpl::drawInvokerDebug()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
-        if (!showNavmesh)
-            return;
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavInvokerComponent, components::TransformComponent>();
 
         for (auto entity : view)
         {
             const auto& invoker = view.get<components::NavInvokerComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
 
             events::debugdraw::DrawSphereCommand sphereCmd;
-            sphereCmd.center = transform.position;
+            sphereCmd.center = scene::composeWorldPosition(registry, entity);
             sphereCmd.radius = invoker.generationRadius;
             sphereCmd.color = {0.2f, 0.6f, 1.0f, 0.4f}; // Blue for invoker range
             dispatcher.execute(sphereCmd);
@@ -831,6 +1122,7 @@ namespace services
         bool result = tileManager.saveNavmeshTiled(directory);
         if (result)
         {
+            unsavedBake = false;
             std::string indexPath = directory + "/index.vfNavIndex";
             attachNavmeshAssetToSceneRoot(indexPath);
 
@@ -843,9 +1135,14 @@ namespace services
 
     bool NavmeshServiceImpl::loadNavmeshTiled(const std::string& directory)
     {
+        // The tiled load re-creates the crowd
+        abandonRunningBake();
+        resetCrowdBookkeeping();
+
         bool success = tileManager.loadNavmeshTiled(directory, lastBakeSettings);
         if (success)
         {
+            unsavedBake = false;
             // Re-attach the asset ref so a manual load also links the navmesh
             // to the scene (e.g. after the scene was saved without it)
             attachNavmeshAssetToSceneRoot(directory + "/index.vfNavIndex");
@@ -861,20 +1158,16 @@ namespace services
     void NavmeshServiceImpl::drawOffMeshLinkDebug()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
-        if (!showNavmesh)
-            return;
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::OffMeshLinkComponent, components::TransformComponent>();
 
         for (auto entity : view)
         {
             const auto& link = view.get<components::OffMeshLinkComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
+            const glm::vec3 origin = scene::composeWorldPosition(registry, entity);
 
-            glm::vec3 worldStart = transform.position + link.startOffset;
-            glm::vec3 worldEnd = transform.position + link.endOffset;
+            glm::vec3 worldStart = origin + link.startOffset;
+            glm::vec3 worldEnd = origin + link.endOffset;
 
             // Color based on link type
             glm::vec4 lineColor;
@@ -937,20 +1230,20 @@ namespace services
 
         for (auto entity : view)
         {
-            const auto& transform = view.get<components::TransformComponent>(entity);
+            const glm::vec3 origin = scene::composeWorldPosition(registry, entity);
             uint64_t id = static_cast<uint64_t>(entity);
             liveIds.insert(id);
 
             auto it = lastOffMeshLinkPositions.find(id);
             if (it == lastOffMeshLinkPositions.end())
             {
-                lastOffMeshLinkPositions[id] = transform.position;
+                lastOffMeshLinkPositions[id] = origin;
             }
-            else if (it->second != transform.position)
+            else if (it->second != origin)
             {
                 const auto& link = view.get<components::OffMeshLinkComponent>(entity);
                 glm::vec3 oldStart = it->second + link.startOffset;
-                glm::vec3 newStart = transform.position + link.startOffset;
+                glm::vec3 newStart = origin + link.startOffset;
 
                 auto oldCoord = tileManager.worldToTileCoord(oldStart);
                 auto newCoord = tileManager.worldToTileCoord(newStart);
@@ -959,7 +1252,7 @@ namespace services
                 if (oldCoord != newCoord)
                     tileManager.markTileDirty(newCoord.x, newCoord.z);
 
-                it->second = transform.position;
+                it->second = origin;
             }
         }
 
@@ -979,6 +1272,11 @@ namespace services
     {
         if (!navmeshProvider->hasNavmesh())
             return;
+        // A scene bake is re-creating the crowd on a worker (VK-1660): a phantom agent added now would land
+        // in the old crowd and keep a stale index. startSceneBake released them; they re-register, and moved
+        // obstacles are caught, on the first pass after the bake is harvested.
+        if (bakeFuture.valid())
+            return;
 
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
@@ -995,11 +1293,10 @@ namespace services
             // sweep below drops any position recorded before they were disabled.
             if (!obstacle.enabled)
                 continue;
-            const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
             liveIds.insert(id);
 
-            glm::vec3 worldPos = transform.position + obstacle.offset;
+            glm::vec3 worldPos = scene::composeWorldPosition(registry, entity) + obstacle.offset;
 
             // Register avoidance-only phantom agents on first sight
             if (obstacle.mode == components::NavmeshObstacleMode::AvoidanceOnly && !obstacle.isRegistered)
@@ -1104,19 +1401,14 @@ namespace services
     void NavmeshServiceImpl::drawObstacleDebug()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
-        if (!showNavmesh)
-            return;
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshObstacleComponent, components::TransformComponent>();
 
         for (auto entity : view)
         {
             const auto& obstacle = view.get<components::NavmeshObstacleComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
 
-            glm::vec3 worldPos = transform.position + obstacle.offset;
+            glm::vec3 worldPos = scene::composeWorldPosition(registry, entity) + obstacle.offset;
 
             glm::vec4 color = (obstacle.mode == components::NavmeshObstacleMode::Carve)
                 ? glm::vec4{1.0f, 0.2f, 0.2f, 0.8f}   // Red for carving
@@ -1157,11 +1449,10 @@ namespace services
         for (auto entity : view)
         {
             const auto& volume = view.get<components::NavmeshModifierVolumeComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
             uint64_t id = static_cast<uint64_t>(entity);
             liveIds.insert(id);
 
-            glm::vec3 worldPos = transform.position + volume.offset;
+            glm::vec3 worldPos = scene::composeWorldPosition(registry, entity) + volume.offset;
 
             auto it = lastModifierVolumePositions.find(id);
             if (it == lastModifierVolumePositions.end())
@@ -1203,19 +1494,14 @@ namespace services
     void NavmeshServiceImpl::drawModifierVolumeDebug()
     {
         auto& dispatcher = ::events::EventDispatcher::instance();
-        bool showNavmesh = dispatcher.query(events::render::GetShowNavmeshDebugQuery{});
-        if (!showNavmesh)
-            return;
-
         auto& registry = scene::EntityRegistry::getRegistry();
         auto view = registry.view<components::NavmeshModifierVolumeComponent, components::TransformComponent>();
 
         for (auto entity : view)
         {
             const auto& volume = view.get<components::NavmeshModifierVolumeComponent>(entity);
-            const auto& transform = view.get<components::TransformComponent>(entity);
 
-            glm::vec3 worldPos = transform.position + volume.offset;
+            glm::vec3 worldPos = scene::composeWorldPosition(registry, entity) + volume.offset;
 
             // Cyan/teal color for modifier volumes
             glm::vec4 color{0.0f, 0.8f, 0.8f, 0.6f};
@@ -1235,6 +1521,57 @@ namespace services
                 sphereCmd.radius = volume.size.x;
                 sphereCmd.color = color;
                 dispatcher.execute(sphereCmd);
+            }
+        }
+    }
+
+    // === Patrol Routes (VK-1660) ===
+
+    void NavmeshServiceImpl::drawRouteDebug()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        auto& registry = scene::EntityRegistry::getRegistry();
+        auto view = registry.view<components::NavRouteComponent>();
+
+        const glm::vec4 pathColor{1.0f, 0.3f, 0.9f, 1.0f};  // magenta legs
+        const glm::vec4 firstColor{0.2f, 1.0f, 0.3f, 1.0f}; // green start marker
+
+        for (auto entity : view)
+        {
+            if (!view.get<components::NavRouteComponent>(entity).showPath)
+                continue;
+
+            // The markers in the order FollowRoute walks them: ChildrenComponent order.
+            const auto* children = registry.try_get<components::ChildrenComponent>(entity);
+            if (!children)
+                continue;
+
+            bool hasPrevious = false;
+            glm::vec3 previous{0.0f};
+            for (entt::entity marker : children->children)
+            {
+                if (!registry.valid(marker))
+                    continue;
+
+                const glm::vec3 point = scene::composeWorldPosition(registry, marker);
+
+                events::debugdraw::DrawSphereCommand markerCmd;
+                markerCmd.center = point;
+                markerCmd.radius = hasPrevious ? 0.2f : 0.35f;
+                markerCmd.color = hasPrevious ? pathColor : firstColor;
+                dispatcher.execute(markerCmd);
+
+                if (hasPrevious)
+                {
+                    events::debugdraw::DrawLineCommand legCmd;
+                    legCmd.start = previous;
+                    legCmd.end = point;
+                    legCmd.color = pathColor;
+                    dispatcher.execute(legCmd);
+                }
+
+                previous = point;
+                hasPrevious = true;
             }
         }
     }

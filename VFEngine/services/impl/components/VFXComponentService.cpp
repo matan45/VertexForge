@@ -72,6 +72,7 @@ namespace services {
         data.vfxRef = comp.vfxRef;
         data.autoPlay = comp.autoPlay;
         data.loop = comp.loop;
+        data.overrides = comp.overrides;
         return data;
     }
 
@@ -79,6 +80,20 @@ namespace services {
         auto& registry = scene::EntityRegistry::getRegistry();
         if (!internal::isValidHandle(entity, registry)) {
             return false;
+        }
+
+        // VK-1657: every override must be an exposed parameter with a valid value, at most once
+        // per name; anything else leaves the component untouched.
+        for (size_t i = 0; i < vfxData.overrides.size(); ++i) {
+            const vfx::VFXParamOverride& overrideValue = vfxData.overrides[i];
+            if (!vfx::isValidOverride(overrideValue)) {
+                return false;
+            }
+            for (size_t j = 0; j < i; ++j) {
+                if (vfxData.overrides[j].name == overrideValue.name) {
+                    return false;
+                }
+            }
         }
 
         scene::Entity sceneEntity(internal::fromHandle(entity));
@@ -90,6 +105,7 @@ namespace services {
         comp.vfxRef = vfxData.vfxRef;
         comp.autoPlay = vfxData.autoPlay;
         comp.loop = vfxData.loop;
+        comp.overrides = vfxData.overrides;
         return true;
     }
 

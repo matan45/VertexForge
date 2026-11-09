@@ -42,6 +42,8 @@ namespace windows::details
             ImGui::Indent(10.0f);
 
             ImGui::Text("Water Height: %.2f", data.waterHeight);
+            // VK-1658: isActive = the sea surface is drawn; a hidden ocean still supplies the look.
+            ImGui::Text("Surface: %s", data.isActive ? "Visible" : "Hidden (lakes keep this look)");
             ImGui::Text("Physics: %s", data.physicsEnabled ? "Enabled" : "Disabled");
             ImGui::Text("Sea State: Beaufort %.1f%s", data.currentBeaufort,
                         data.weatherDriven ? " (weather driven)" : "");

@@ -15,6 +15,7 @@
 #include "../../events/project/ApplicationEvents.hpp"
 #include "../../events/scene/SceneManagementEvents.hpp"
 #include "../../events/scene/StreamingZoneEvents.hpp"
+#include "../../events/scene/SceneSettingsEvents.hpp"
 #include "../../events/render/RenderEvents.hpp"
 #include "../../events/terrain/TerrainEvents.hpp"
 #include "../../events/terrain/OceanEvents.hpp"
@@ -24,13 +25,17 @@
 #include "../../events/render/AtmosphereEvents.hpp"
 #include "../../events/render/CloudEvents.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/volumetric/VolumetricNavEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
+#include "../../events/ui/UIAuthoringEvents.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <functional>
 #include <fstream>
 #include <filesystem>
+#include <stdexcept>
+#include <string_view>
 
 namespace services
 {
@@ -40,6 +45,85 @@ namespace services
     {
         nlohmann::json json;
     };
+
+    namespace
+    {
+        // VK-1659: UIListView item instances are engine-managed and never serialized, so an entity tree
+        // instantiated from a prefab or from JSON arrives with empty lists. Rebuild them from their templates
+        // right away (a scene load does the same on SceneLoadedNotification). Without a UI service (some
+        // tests) there is no handler and the lists stay empty, as before. Any other failure only leaves items
+        // unbuilt: the tree itself is complete, so the caller still gets its root.
+        void reconcileUIListViews(EntityHandle root)
+        {
+            events::ui::ReconcileUIListViewsCommand command;
+            command.root = root;
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("UIListView: the items of the lists under an instantiated entity were not all built: {}",
+                                 error.what());
+                }
+            }
+        }
+
+        // VK-1660: a new scene, or a scene read from disk, must not inherit the previous scene's navmesh; a loaded
+        // scene brings its own back in finishLoad (root NavmeshComponent). A Play -> Stop snapshot restore keeps it.
+        // Without a navmesh service (some tests) there is no handler.
+        void clearNavmeshForSceneChange()
+        {
+            events::navmesh::ClearNavmeshCommand command;
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("ScenePersistenceService: the previous scene's navmesh was not cleared: {}", error.what());
+                }
+            }
+        }
+
+        // VK-1660: the same for the volumetric navigation grids (keyed by volume UUID): a new scene or a disk load
+        // drops them, and finishLoad loads the ones the scene's VolumetricNavVolumes saved (bakedRef). A Play -> Stop
+        // snapshot restore keeps the loaded grids. Without a volumetric service (some tests) there is no handler.
+        template <typename Command>
+        void executeVolumetricNav(Command command, std::string_view what)
+        {
+            try
+            {
+                events::EventDispatcher::instance().execute(command);
+            }
+            catch (const std::exception& error)
+            {
+                const std::string noHandler = "No handler registered for command: " + std::string(command.getName());
+                if (noHandler != error.what())
+                {
+                    vfLogWarning("ScenePersistenceService: {}: {}", what, error.what());
+                }
+            }
+        }
+
+        void unloadVolumetricNavForSceneChange()
+        {
+            executeVolumetricNav(events::volumetric::UnloadVolumetricNavCommand{},
+                                 "the previous scene's volumetric navigation was not unloaded");
+        }
+
+        void loadSceneVolumetricVolumes()
+        {
+            executeVolumetricNav(events::volumetric::LoadSceneVolumetricVolumesCommand{},
+                                 "the scene's volumetric navigation volumes were not loaded");
+        }
+    }
 
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                                                      EntityStateService* entityStateService)
@@ -135,6 +219,15 @@ namespace services
             [this](const events::scene::SetRenderSettingsCommand& cmd)
             {
                 return setRenderSettings(cmd.settings);
+            });
+
+        // VK-1654: a scene load or Play->Stop snapshot restore is queued for update(), or an
+        // incremental load is still stepping. Additive loads don't count: they keep the current
+        // scene and its render settings.
+        dispatcher.registerQueryHandler<events::scene::IsSceneLoadPendingQuery>(
+            [this](const events::scene::IsSceneLoadPendingQuery&)
+            {
+                return pendingLoadPath.has_value() || incrementalActive || pendingSnapshotRestore;
             });
 
         // VK-1365: per-scene plugin enable overrides
@@ -368,6 +461,9 @@ namespace services
         events::terrain::TerrainDeletedNotification terrainNotif;
         dispatcher.publish(terrainNotif);
 
+        clearNavmeshForSceneChange();
+        unloadVolumetricNavForSceneChange();
+
         sceneGraph->clearScene();
 
         sceneGraph->setPhysicsSettings(types::PhysicsSettings::createDefault());
@@ -394,6 +490,12 @@ namespace services
         events::cloud::ApplyCloudSettingsCommand cloudCmd;
         cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
         dispatcher.execute(cloudCmd);
+
+        // VK-1654: settings this service does not apply itself (GI, Editor-only) follow the new scene.
+        events::scene::RenderSettingsChangedNotification settingsNotif;
+        settingsNotif.section = events::scene::RenderSettingsSection::All;
+        settingsNotif.sceneLoad = true;
+        dispatcher.publish(settingsNotif);
 
         if (entityStateService)
         {
@@ -531,6 +633,9 @@ namespace services
         events::terrain::TerrainDeletedNotification terrainNotif;
         dispatcher.publish(terrainNotif);
 
+        clearNavmeshForSceneChange();
+        unloadVolumetricNavForSceneChange();
+
         sceneGraph->clearScene();
 
         if (entityStateService)
@@ -653,6 +758,10 @@ namespace services
                 }
             }
 
+            // VK-1660: the volumetric navigation grids the scene's volumes saved (also on Play -> Stop: volumes whose
+            // grid is still loaded keep it).
+            loadSceneVolumetricVolumes();
+
             auto& registry = scene::EntityRegistry::getRegistry();
             auto meshView = registry.view<components::MeshComponent>();
             int meshCount = 0;
@@ -745,6 +854,13 @@ namespace services
             events::cloud::ApplyCloudSettingsCommand cloudCmd;
             cloudCmd.settings = sceneGraph->getRenderSettings().cloud;
             dispatcher.execute(cloudCmd);
+
+            // VK-1654: settings this service does not apply itself (GI, Editor-only) follow the
+            // loaded scene. Also covers the Play->Stop snapshot restore, which ends here too.
+            events::scene::RenderSettingsChangedNotification settingsNotif;
+            settingsNotif.section = events::scene::RenderSettingsSection::All;
+            settingsNotif.sceneLoad = true;
+            dispatcher.publish(settingsNotif);
 
             const auto& sceneInputMapping = sceneGraph->getInputMappingPath();
             if (sceneInputMapping.has_value() && !sceneInputMapping->empty())
@@ -839,6 +955,7 @@ namespace services
                 .sourcePrefabPath = filePath;
 
             acquireAndNotifyResources(*result);
+            reconcileUIListViews(handle);
 
             events::scene::PrefabInstantiatedNotification notification;
             notification.filePath = filePath;
@@ -947,7 +1064,9 @@ namespace services
 
         acquireAndNotifyResources(instantiated);
 
-        return internal::toHandle(instantiated.getHandle());
+        const EntityHandle handle = internal::toHandle(instantiated.getHandle());
+        reconcileUIListViews(handle);
+        return handle;
     }
 
     bool ScenePersistenceService::loadSceneAdditive(const std::string& scenePath, const std::string& sceneName)

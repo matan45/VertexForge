@@ -2,37 +2,23 @@
 
 namespace eqs
 {
-    OnNavMeshTest::OnNavMeshTest(float tolerance)
-        : tolerance(tolerance)
+    OnNavMeshTest::OnNavMeshTest(const Settings& settings)
+        : settings(settings)
     {
     }
 
-    void OnNavMeshTest::runTest(std::vector<EQSCandidate>& candidates,
-                                 const EQSContext& context,
-                                 const EQSProviderRefs& providers,
-                                 const EQSTestConfig& config)
+    bool OnNavMeshTest::evaluate(std::span<const EQSCandidate> candidates, const EQSContext& /*context*/,
+                                 const EQSProviderRefs& providers, std::span<float> metrics,
+                                 std::string& error) const
     {
         if (!providers.isPointOnNavmesh)
-            return;
-
-        for (auto& candidate : candidates)
         {
-            if (candidate.filtered)
-                continue;
-
-            bool onNavmesh = providers.isPointOnNavmesh(candidate.position, tolerance);
-
-            if (config.isFilter)
-            {
-                if (!onNavmesh)
-                {
-                    candidate.filtered = true;
-                }
-            }
-            else
-            {
-                candidate.totalScore = onNavmesh ? 1.0f : 0.0f;
-            }
+            error = "the OnNavMesh test needs the navmesh (isPointOnNavmesh is not available)";
+            return false;
         }
+
+        for (size_t i = 0; i < candidates.size(); ++i)
+            metrics[i] = providers.isPointOnNavmesh(candidates[i].position, settings.tolerance) ? 1.0f : 0.0f;
+        return true;
     }
 }

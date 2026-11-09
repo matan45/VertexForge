@@ -16,7 +16,9 @@ namespace plugin {
     // 100, so BeforeTonemap (95) runs on the linear HDR scene color and
     // AfterTonemap (130) runs on the display-referred (post-tonemap) result.
     // For finer control set PostProcessEffectDesc::customPriority (a non-zero
-    // value overrides the enum).
+    // value overrides the enum). The built-in FXAA (priority 275) smooths
+    // everything before it, so a sharpen meant to survive FXAA needs a
+    // customPriority above 275.
     enum class PostProcessOrder : uint32_t {
         BeforeTonemap = 0,
         AfterTonemap  = 1

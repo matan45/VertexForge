@@ -297,7 +297,7 @@ TEST_SUITE("ImporterRegistry")
         CHECK(registry.optionsForExtension("optfmt").empty());
     }
 
-    TEST_CASE("animation-only mesh import redirects output to .vfAnim")
+    TEST_CASE("mesh importer reports clips per written file instead of predicting an output")
     {
         import::builtin::ensureRegistered();
         auto* importer = import::ImporterRegistry::instance().importerFor("FBX");
@@ -308,13 +308,16 @@ TEST_SUITE("ImporterRegistry")
         context.fileName = "anim";
         context.fileType = "FBX";
 
-        // Default: standard mesh output and the format's asset type.
+        // Base defaults: the format's output name and asset type.
         CHECK(importer->deriveOutputFile(context).empty());
         CHECK(importer->deriveAssetType(context) == resource::AssetType::COUNT);
 
+        // animationOnly no longer predicts a single <file>.vfAnim: every <file>_<take>.vfAnim
+        // actually written is reported in context.outputFiles as Animation (VK-1656), and a
+        // file with no clip fails. End-to-end coverage lives in test_mesh_import.cpp.
         context.file.config.customOptions["animationOnly"] = true;
-        CHECK(importer->deriveOutputFile(context) == "anim.vfAnim");
-        CHECK(importer->deriveAssetType(context) == resource::AssetType::Animation);
+        CHECK(importer->deriveOutputFile(context).empty());
+        CHECK(importer->deriveAssetType(context) == resource::AssetType::COUNT);
 
         // The options surface in the import dialog for mesh extensions:
         // animationOnly (VK-194), extractEmbeddedTextures (VK-55), combined static

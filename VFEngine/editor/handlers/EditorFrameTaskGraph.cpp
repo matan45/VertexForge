@@ -3,6 +3,8 @@
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
+#include "impl/vfx/VFXRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXEditPreviewHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
 #include "core/PluginManager.hpp"
@@ -14,6 +16,7 @@
 #include "events/weather/WeatherEvents.hpp"
 #include "events/terrain/OceanEvents.hpp"
 #include "events/render/AtmosphereEvents.hpp"
+#include "events/vfx/VFXRuntimeEvents.hpp"
 
 #include <chrono>
 
@@ -78,6 +81,20 @@ namespace handlers
             }
         });
 
+        // VK-1660: harvest finished EQS queries before the behavior trees poll them. Ordered after
+        // Controllers and the main-pinned WorldSector task (it spawns / destroys entities). A throw in a
+        // frame task terminates the editor, so the update is guarded.
+        frameTaskGraph->addTask("EQS", [this]() {
+            if (eqsService) {
+                // Queued queries run only while gameplay runs (pause / step / scale, like the agents);
+                // the debug overlay counts down on raw dt in every mode.
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                bool simulate = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+                try { eqsService->update(dt, simulate); }
+                catch (const std::exception& e) { vfLogError("[EQS] update threw: {}", e.what()); }
+            }
+        });
+
         frameTaskGraph->addTask("BehaviorTrees", [this]() {
             if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && behaviorTreeService) {
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
@@ -85,15 +102,45 @@ namespace handlers
             }
         });
 
+        // VK-1657: the only VFX tick of the frame (Weather no longer ticks the provider itself).
         frameTaskGraph->addTask("VFX", [this]() {
-            if (editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive() && vfxPlayModeHandler) {
+            if (editorModeService && editorModeService->isPlayMode()) {
+                if (!engineTime::Timer::isGameTimeActive()) {
+                    return;
+                }
                 float dt = static_cast<float>(engineTime::Timer::getGameDeltaTime());
-                vfxPlayModeHandler->update(dt);
+                if (vfxPlayModeHandler) {
+                    vfxPlayModeHandler->update(dt);
+                }
                 // VK-1425: step running combos and drain queued animation-event triggers (after the
                 // per-instance handler so child Create/Play/SetTransform run before UpdateVFXRuntime).
                 if (vfxSequencePlayModeHandler) {
                     vfxSequencePlayModeHandler->update(dt);
                 }
+                if (vfxRuntimeService) {
+                    services::events::vfxruntime::UpdateVFXRuntimeCommand cmd;
+                    cmd.deltaTime = dt;
+                    events::EventDispatcher::instance().execute(cmd);
+                }
+                return;
+            }
+
+            // Edit mode, raw dt: previews and edit-mode weather animate at normal speed.
+            if (!vfxRuntimeService) {
+                return;
+            }
+            // VK-1657: destroy what Play left behind first. Deferred to here because a fatal-script
+            // Stop publishes Play->Edit after execute(), while the render thread is busy.
+            vfxRuntimeService->purgeTransientIfPending();
+            float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+            if (vfxEditPreviewHandler) {
+                vfxEditPreviewHandler->update(dt);
+            }
+            // Idle when nothing exists: the provider update also gathers colliders / terrain.
+            if (vfxRuntimeService->instanceCount() > 0) {
+                services::events::vfxruntime::UpdateVFXRuntimeCommand cmd;
+                cmd.deltaTime = dt;
+                events::EventDispatcher::instance().execute(cmd);
             }
         });
 
@@ -106,6 +153,18 @@ namespace handlers
                 float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
                 bool simulateAgents = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
                 navmeshService->update(dt, simulateAgents);
+            }
+        });
+
+        // VK-1660: volumetric navigation. Bakes are harvested in every mode on raw dt; flying agents move only
+        // while gameplay runs (like the navmesh agents). After Navmesh, so the behavior trees' destinations of
+        // this frame are in; before Transforms, which propagates the agents' moves. Guarded like EQS.
+        frameTaskGraph->addTask("Volumetric", [this]() {
+            if (volumetricNavService) {
+                float dt = static_cast<float>(engineTime::Timer::getDeltaTime());
+                bool simulate = editorModeService && editorModeService->isPlayMode() && engineTime::Timer::isGameTimeActive();
+                try { volumetricNavService->update(dt, simulate); }
+                catch (const std::exception& e) { vfLogError("[VolumetricNav] update threw: {}", e.what()); }
             }
         });
 
@@ -220,7 +279,16 @@ namespace handlers
         frameTaskGraph->addDependency("Controllers", "Scripts");
         frameTaskGraph->addDependency("BehaviorTrees", "Controllers");
         frameTaskGraph->addDependency("Navmesh", "BehaviorTrees");
+        frameTaskGraph->addDependency("Volumetric", "Navmesh");
+        frameTaskGraph->addDependency("EQS", "Controllers");
+        frameTaskGraph->addDependency("EQS", "WorldSector");
+        frameTaskGraph->addDependency("BehaviorTrees", "EQS");
         frameTaskGraph->addDependency("VFX", "Scripts");
+        // VK-1657: Weather creates/drives the precipitation instance the VFX tick then advances;
+        // WorldSector (main-pinned) and Plugins write EnTT / spawn effects the VFX task reads.
+        frameTaskGraph->addDependency("VFX", "Weather");
+        frameTaskGraph->addDependency("VFX", "WorldSector");
+        frameTaskGraph->addDependency("VFX", "Plugins");
 
         auto sceneGraphFn = bootstrap->getSceneGraphUpdateFn();
         frameTaskGraph->addTask("Transforms", [sceneGraphFn]() {
@@ -267,6 +335,7 @@ namespace handlers
         frameTaskGraph->addDependency("Transforms", "SunSync");
         frameTaskGraph->addDependency("Transforms", "BehaviorTrees");
         frameTaskGraph->addDependency("Transforms", "Navmesh");
+        frameTaskGraph->addDependency("Transforms", "Volumetric");
         frameTaskGraph->addDependency("Transforms", "VFX");
         frameTaskGraph->addDependency("Transforms", "WorldSector");
         frameTaskGraph->addDependency("Transforms", "AssetLifecycle");
@@ -275,6 +344,10 @@ namespace handlers
         frameTaskGraph->addDependency("AudioEmitters", "Transforms");
         frameTaskGraph->addDependency("LateScripts", "Transforms");
         frameTaskGraph->addDependency("ImGuiDraw", "LateScripts");
+        // VK-1658: the Ocean task (a worker) writes the OceanComponent and oceanConfig (sea-state
+        // transitions, weather). It must finish before ImGuiDraw, where the Ocean window and Ctrl+Z
+        // write the same state, and so before Render wakes the render thread, which reads it.
+        frameTaskGraph->addDependency("ImGuiDraw", "Ocean");
         frameTaskGraph->addDependency("Render", "ImGuiDraw");
 
         if (frameTaskGraph->compile()) {

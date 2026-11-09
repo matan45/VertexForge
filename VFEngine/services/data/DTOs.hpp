@@ -11,6 +11,7 @@
 #include <material/MaterialTypes.hpp>
 #include <components/DestructionComponents.hpp>
 #include <components/TextEffects.hpp>
+#include <vfx/VFXParameterRegistry.hpp>
 #include <glm/glm.hpp>
 #include <string>
 #include <vector>
@@ -374,11 +375,30 @@ namespace services
         types::PhysicsAnimationConfig config;
     };
 
+    // VK-1660: the editable NavmeshAgentComponent fields - the agent's shape, speed, stopping and
+    // avoidance. inCrowd is read-only: the agent is registered with the detour crowd (Play).
+    struct NavmeshAgentData
+    {
+        float radius = 0.25f;
+        float height = 2.0f;
+        float baseOffset = 0.0f;
+        float maxSpeed = 3.5f;
+        float maxAcceleration = 8.0f;
+        float turnSpeed = 0.0f;
+        float stoppingDistance = 0.1f;
+        int avoidanceQuality = 3;
+        bool rootMotionDriven = false;
+        float rootMotionSpeedScale = 1.0f;
+        bool inCrowd = false;
+    };
+
     struct VFXData
     {
         asset::AssetRef vfxRef; // .vfVFX asset
         bool autoPlay = true; // Auto-start when play mode begins
         bool loop = true; // Loop the VFX effect
+        // VK-1657: mirrors components::VFXComponent::overrides (per-entity user parameters).
+        std::vector<vfx::VFXParamOverride> overrides;
     };
 
     // Mirrors components::VFXSequenceTrigger (MediaComponents.hpp:240-245): one anim-event ->

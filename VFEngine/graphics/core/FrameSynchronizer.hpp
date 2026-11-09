@@ -10,13 +10,15 @@ namespace core
     /// Manages frame handoff between the main (game) thread and the render thread.
     ///
     /// ImGui requires sequential access (NewFrame/Render must not overlap), so
-    /// beginFrame() blocks until the render thread finishes. However, beginFrame()
-    /// is called INSIDE the ImGuiDraw task (not at the start of the frame), so
-    /// scene update tasks run in parallel with the render thread.
+    /// beginFrame() blocks until the render thread finishes. beginFrame() is called
+    /// at the TOP of MainLoop::run's iteration (VK-1428), before the frame callback,
+    /// so everything the callback does before its "Render" task calls endFrame() --
+    /// the editor's MCP drain, scene update, physics, scripts and ImGui -- runs with
+    /// the render thread idle.
     ///
     /// Timeline:
-    ///   Main:   [Scene+Physics+Scripts] [beginFrame:WAIT] [ImGui+signal]
-    ///   Render:        [OffScreen + Present]                      [OffScreen + Present]
+    ///   Main:   [beginFrame:WAIT] [MCP+Scene+Physics+Scripts+ImGui] [signal]
+    ///   Render:  ...Present]                                          [OffScreen + Present]
     class FrameSynchronizer
     {
     public:

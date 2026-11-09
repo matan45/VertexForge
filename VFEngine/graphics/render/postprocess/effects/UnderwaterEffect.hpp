@@ -38,6 +38,8 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::Underwater; }
         uint32_t getPriority() const override { return 55; }
+        // Screen-locked overlay DLSS would smear: runs after the upscale (still before the tonemap by priority).
+        bool isPreUpscale() const override { return false; }
 
     private:
         void loadShader();

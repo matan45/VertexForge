@@ -5,11 +5,14 @@
 #include "../../adapters/scripting/ScriptingAdapter.hpp"
 #include "../../adapters/physics/PhysicsAdapter.hpp"
 #include "../../adapters/navmesh/NavmeshAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/render/OffScreenAdapter.hpp"
 #include "../../adapters/render/EditorTextureAdapter.hpp"
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
+#include "../../adapters/animation/AnimationAuthoringAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
 #include "../../adapters/render/UILayerPreviewAdapter.hpp"
@@ -51,6 +54,10 @@ namespace core
             scriptingAdapter->cleanUp();
         }
 
+        // VK-1660: EQS queries use the physics and navmesh adapters, so EQS goes first.
+        eqsAdapter.reset();
+        volumetricNavAdapter.reset();
+
         if (physicsAdapter)
         {
             physicsAdapter->cleanUp();
@@ -72,6 +79,7 @@ namespace core
         uiLayerPreviewAdapter.reset();
         animationPreviewAdapter.reset();
         thumbnailRenderAdapter.reset();
+        animationAuthoringAdapter.reset(); // unregisters its handlers
         meshPreviewAdapter.reset();
         materialPreviewAdapter.reset();
         textureAdapter.reset();

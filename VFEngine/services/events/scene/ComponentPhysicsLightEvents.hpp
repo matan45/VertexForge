@@ -315,6 +315,42 @@ namespace events::scene {
         std::string_view getName() const override { return "RemoveNavmeshAgentComponent"; }
     };
 
+    // VK-1660: nullopt when the entity has no NavmeshAgentComponent.
+    struct GetNavmeshAgentDataQuery : IQuery<std::optional<services::NavmeshAgentData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetNavmeshAgentData"; }
+    };
+
+    // VK-1660: writes every field except inCrowd. Returns false for a missing component or a value the
+    // engine cannot use: radius or height <= 0, a negative speed, acceleration, turn speed, stopping
+    // distance or root-motion scale, or avoidanceQuality outside 0-3 (baseOffset may be negative).
+    // An agent in the crowd (Play) takes the new shape, speed and avoidance at once.
+    struct SetNavmeshAgentDataCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::NavmeshAgentData data;
+
+        std::string_view getName() const override { return "SetNavmeshAgentData"; }
+    };
+
+    // ============================================
+    // Nav Route Component Events (VK-1660)
+    // ============================================
+
+    // A patrol route: the entity's ordered children are its markers (FollowRoute). Add returns false
+    // for an invalid entity or one that already has the component; Remove when it has none.
+    struct AddNavRouteComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "AddNavRouteComponent"; }
+    };
+
+    struct RemoveNavRouteComponentCommand : ICommand<bool> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "RemoveNavRouteComponent"; }
+    };
+
     // ============================================
     // Off-Mesh Link Component Events
     // ============================================

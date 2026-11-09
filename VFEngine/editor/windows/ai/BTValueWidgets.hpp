@@ -141,13 +141,15 @@ namespace editor::windows::bt
     // Blackboard-key picker filtered by a type predicate, with a free-text fallback when no key of the
     // wanted type exists. Writes the chosen key into node.properties[prop]; returns true on change.
     // Shared by BTPropertyPanel's MoveTo / EnvironmentQuery / LineOfSight / Service drawers (VK-1457 dedup).
+    // allowNone (VK-1660): an optional key - the picker offers "(none)", which writes "".
     template <typename TypePredicate>
     inline bool drawKeyDropdown(behaviortree::BTNode& node,
                                 const behaviortree::BTGraph* graph,
                                 const char* label,
                                 const char* prop,
                                 const std::string& defaultKey,
-                                TypePredicate typeMatches)
+                                TypePredicate typeMatches,
+                                bool allowNone = false)
     {
         std::string current = defaultKey;
         auto it = node.properties.find(prop);
@@ -164,8 +166,14 @@ namespace editor::windows::bt
         bool changed = false;
         if (anyKeys)
         {
-            if (ImGui::BeginCombo(label, current.c_str()))
+            const char* preview = (allowNone && current.empty()) ? "(none)" : current.c_str();
+            if (ImGui::BeginCombo(label, preview))
             {
+                if (allowNone && ImGui::Selectable("(none)", current.empty()) && !current.empty())
+                {
+                    node.properties[prop] = std::string();
+                    changed = true;
+                }
                 for (const auto& keyDef : graph->blackboardKeys)
                 {
                     if (!typeMatches(keyDef.type)) continue;

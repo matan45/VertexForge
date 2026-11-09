@@ -285,6 +285,13 @@ namespace render::gpudriven
             vfLogWarning("GPUDrivenRenderer: Cannot init volumetric fog - lighting subsystems not ready");
             return;
         }
+        // VK-1654: the inject pass samples the sun's VSM clipmap (light shafts), so sets 4/5 are part of
+        // its pipeline layout and must exist.
+        if (!shadowSystem || !shadowSystem->getShadowDataLayout() || !shadowSystem->getShadowTextureLayout())
+        {
+            vfLogWarning("GPUDrivenRenderer: Cannot init volumetric fog - shadow system not ready");
+            return;
+        }
 
         if (volumetricPipeline)
         {

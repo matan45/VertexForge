@@ -9,6 +9,7 @@
 #include "memory/GpuAllocationStats.hpp"
 #include "threading/EditorTaskStats.hpp"
 #include "stats/GpuPassStats.hpp" // render::GpuPassStats tier-1 whole-frame GPU span
+#include "../mcp/EditorMcpHost.hpp"
 #include <imgui.h>
 #include <filesystem>
 
@@ -195,6 +196,12 @@ namespace windows
             separator();
             ImGui::Text("VRAM: %llu MB", static_cast<unsigned long long>(cachedVramMB));
 
+            if (mcpHost)
+            {
+                separator();
+                drawMcpStatus();
+            }
+
             // Scene name on the right
             std::string sceneLabel = currentSceneName.empty() ? "No Scene" : "Scene: " + currentSceneName;
             float textWidth = ImGui::CalcTextSize(sceneLabel.c_str()).x;
@@ -207,5 +214,51 @@ namespace windows
         }
         ImGui::End();
         ImGui::PopStyleVar();
+    }
+
+    void StatusBar::drawMcpStatus()
+    {
+        const mcp::McpStatus status = mcpHost->status();
+
+        switch (status.state)
+        {
+        case mcp::McpStatus::State::Listening:
+            if (status.clientName.empty())
+                ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.35f, 1.0f), "MCP :%u", static_cast<unsigned>(status.port));
+            else
+                ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.35f, 1.0f), "MCP :%u (%s)",
+                                   static_cast<unsigned>(status.port), status.clientName.c_str());
+            break;
+        case mcp::McpStatus::State::Error:
+            ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), "MCP error");
+            break;
+        case mcp::McpStatus::State::Off:
+        default:
+            ImGui::TextDisabled("MCP off");
+            break;
+        }
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("MCP server (AI agent control)");
+            ImGui::Separator();
+            if (status.state == mcp::McpStatus::State::Listening)
+                ImGui::Text("Endpoint: http://127.0.0.1:%u/mcp", static_cast<unsigned>(status.port));
+            else if (status.state == mcp::McpStatus::State::Error)
+                ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), "Error: %s", status.error.c_str());
+            else
+                ImGui::TextDisabled("Disabled. Enable it in Preferences > AI / MCP or with --mcp-port.");
+            if (mcpHost->isCommandLineOverride())
+                ImGui::TextDisabled("Configured from the command line");
+            ImGui::Text("Client: %s", status.clientName.empty() ? "(none)" : status.clientName.c_str());
+            ImGui::Text("Connections: %zu", status.connections);
+            ImGui::Text("Tools: %zu", status.toolCount);
+            ImGui::Text("Tool calls: %llu (%llu errors)",
+                        static_cast<unsigned long long>(status.toolCalls),
+                        static_cast<unsigned long long>(status.toolErrors));
+            ImGui::Text("Last tool: %s", status.lastTool.empty() ? "(none)" : status.lastTool.c_str());
+            ImGui::EndTooltip();
+        }
     }
 }

@@ -10,6 +10,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "scene/Entity.hpp"
 #include "components/Components.hpp"
+#include "ui/UIRectMath.hpp"
 #include "../../../services/events/EventDispatcher.hpp"
 #include "../../../services/events/render/DebugDrawEvents.hpp"
 #include <glm/gtc/matrix_transform.hpp>
@@ -407,29 +408,10 @@ namespace controllers::offscreen
             if (!registry.all_of<components::WorldTransformComponent>(canvasEntity)) continue;
 
             const auto& canvasWorldTransform = registry.get<components::WorldTransformComponent>(canvasEntity);
-            float canvasW = canvas->referenceWidth / canvas->pixelsPerUnit;
-            float canvasH = canvas->referenceHeight / canvas->pixelsPerUnit;
 
-            float anchorLeft = rectComp.anchorMin.x * canvas->referenceWidth;
-            float anchorRight = rectComp.anchorMax.x * canvas->referenceWidth;
-            float anchorBottom = rectComp.anchorMin.y * canvas->referenceHeight;
-            float anchorTop = rectComp.anchorMax.y * canvas->referenceHeight;
-
-            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-
-            float localCX = cx / canvas->referenceWidth - 0.5f;
-            float localCY = cy / canvas->referenceHeight - 0.5f;
-            float normW = w / canvas->referenceWidth;
-            float normH = h / canvas->referenceHeight;
-
-            glm::mat4 canvasScaled = canvasWorldTransform.worldMatrix
-                * glm::scale(glm::mat4(1.0f), glm::vec3(canvasW, canvasH, 1.0f));
-            glm::mat4 rectModel = canvasScaled
-                * glm::translate(glm::mat4(1.0f), glm::vec3(localCX, localCY, 0.002f))
-                * glm::scale(glm::mat4(1.0f), glm::vec3(normW, normH, 1.0f));
+            // VK-1659: the same pivot-correct quad the edit-mode images use, lifted to the outline layer.
+            glm::mat4 rectModel = utilities::ui::computeCanvasImageModelMatrix(
+                *canvas, canvasWorldTransform.worldMatrix, rectComp, 0.002f);
 
             drawList.push_back({rectModel});
         }

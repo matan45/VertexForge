@@ -298,7 +298,7 @@ namespace controllers
         // the frame-step / seek paths (which advance one animator, then re-resolve the rig).
         void resolveAttachmentsAndIK();
         // Builds a RetargetContext for a skeletal part from a .vfretarget map path. Mirrors
-        // RuntimeAnimatorSystem::buildEntityRetargetContext. nullptr if unavailable/empty.
+        // RuntimeAnimatorSystem::makeRetargetContext. nullptr if unavailable/empty.
         std::unique_ptr<animation::RetargetContext> buildRetargetForPart(const Part& part,
                                                                          const std::string& retargetPath);
 

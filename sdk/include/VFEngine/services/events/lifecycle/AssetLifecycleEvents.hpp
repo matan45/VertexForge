@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+// ::resource below: inside events::, a bare "resource" finds events::resource (ResourceEvents.hpp) when that
+// header was included first.
 namespace events::lifecycle {
 
 	// ============================================================
@@ -12,14 +14,14 @@ namespace events::lifecycle {
 
 	struct AssetReleaseReadyNotification : INotification {
 		std::string path;
-		resource::AssetType type{};
+		::resource::AssetType type{};
 
 		std::string_view getName() const override { return "AssetReleaseReady"; }
 	};
 
 	struct AssetAcquiredNotification : INotification {
 		std::string path;
-		resource::AssetType type{};
+		::resource::AssetType type{};
 		uint32_t newRefCount = 0;
 
 		std::string_view getName() const override { return "AssetAcquired"; }
@@ -27,7 +29,7 @@ namespace events::lifecycle {
 
 	struct AssetReleasedNotification : INotification {
 		std::string path;
-		resource::AssetType type{};
+		::resource::AssetType type{};
 		uint32_t newRefCount = 0;
 
 		std::string_view getName() const override { return "AssetReleased"; }
@@ -53,15 +55,15 @@ namespace events::lifecycle {
 	// QUERIES
 	// ============================================================
 
-	struct QueryAssetStatsQuery : ::events::IQuery<std::vector<resource::AssetEntry>> {
+	struct QueryAssetStatsQuery : ::events::IQuery<std::vector<::resource::AssetEntry>> {
 		std::string_view getName() const override { return "QueryAssetStats"; }
 	};
 
-	struct QueryPendingReleasesQuery : ::events::IQuery<std::vector<resource::AssetEntry>> {
+	struct QueryPendingReleasesQuery : ::events::IQuery<std::vector<::resource::AssetEntry>> {
 		std::string_view getName() const override { return "QueryPendingReleases"; }
 	};
 
-	struct QueryAssetEntryQuery : ::events::IQuery<resource::AssetEntry> {
+	struct QueryAssetEntryQuery : ::events::IQuery<::resource::AssetEntry> {
 		std::string path;
 
 		std::string_view getName() const override { return "QueryAssetEntry"; }

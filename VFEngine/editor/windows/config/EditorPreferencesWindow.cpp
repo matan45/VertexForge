@@ -20,7 +20,8 @@ namespace windows
         "Appearance",
         "Editor Shortcuts",
         "Debug",
-        "Window Layout"
+        "Window Layout",
+        "AI / MCP"
     };
 
     void EditorPreferencesWindow::show()
@@ -231,6 +232,7 @@ namespace windows
         case EditorShortcuts: drawEditorShortcutsSection(); break;
         case Debug:         drawDebugSection(); break;
         case WindowLayout:  drawWindowLayoutSection(); break;
+        case Mcp:           drawMcpSection(); break;
         default: break;
         }
     }

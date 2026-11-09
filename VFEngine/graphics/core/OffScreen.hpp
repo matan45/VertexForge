@@ -86,7 +86,8 @@ namespace core {
 		ExposureImage exposureImage;
 		bool upscaleResourcesCreated = false;
 
-		// Previous-frame depth copies for async compute motion vectors
+		// Previous-frame depth copies for the GPU VFX depth collision (VK-1502), created lazily when an emitter
+		// needs them. Not used by the motion vectors, which read the current frame's depth (VK-1662).
 		std::array<PrevFrameDepthImage, MAX_FRAMES_IN_FLIGHT> prevFrameDepth;
 		bool prevFrameDepthCreated = false;
 	};

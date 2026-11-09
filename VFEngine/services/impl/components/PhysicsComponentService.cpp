@@ -8,6 +8,8 @@
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include "../../events/physics/PhysicsAnimationEvents.hpp"
+#include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/volumetric/VolumetricNavEvents.hpp"
 
 namespace services
 {
@@ -654,7 +656,54 @@ namespace services
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::NavmeshAgentComponent>())
         {
+            // Leave the crowd first (VK-1660): a crowd agent without its component would keep driving the
+            // transform.
+            try
+            {
+                events::navmesh::RemoveAgentCommand removeCmd;
+                removeCmd.entity = entity;
+                events::EventDispatcher::instance().execute(removeCmd);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogDebug("PhysicsComponentService: navmesh agent not unregistered: {}", e.what());
+            }
+
             sceneEntity.removeComponent<components::NavmeshAgentComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::addNavRouteComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (!sceneEntity.hasComponent<components::NavRouteComponent>())
+        {
+            sceneEntity.addComponent<components::NavRouteComponent>();
+            return true;
+        }
+        return false;
+    }
+
+    bool PhysicsComponentService::removeNavRouteComponent(EntityHandle entity)
+    {
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!internal::isValidHandle(entity, registry))
+        {
+            return false;
+        }
+
+        scene::Entity sceneEntity(internal::fromHandle(entity));
+        if (sceneEntity.hasComponent<components::NavRouteComponent>())
+        {
+            sceneEntity.removeComponent<components::NavRouteComponent>();
             return true;
         }
         return false;
@@ -861,6 +910,19 @@ namespace services
             [this](const events::scene::RemoveNavmeshAgentComponentCommand& cmd)
             {
                 return removeNavmeshAgentComponent(cmd.entity);
+            });
+
+        // NavRoute component handlers (VK-1660)
+        dispatcher.registerCommandHandler<events::scene::AddNavRouteComponentCommand>(
+            [this](const events::scene::AddNavRouteComponentCommand& cmd)
+            {
+                return addNavRouteComponent(cmd.entity);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::RemoveNavRouteComponentCommand>(
+            [this](const events::scene::RemoveNavRouteComponentCommand& cmd)
+            {
+                return removeNavRouteComponent(cmd.entity);
             });
 
         // Off-Mesh Link component handlers
@@ -1264,6 +1326,19 @@ namespace services
         scene::Entity sceneEntity(internal::fromHandle(entity));
         if (sceneEntity.hasComponent<components::VolumetricAgentComponent>())
         {
+            // Stop the flight first (VK-1660), as the NavmeshAgent removal leaves the crowd; the agent manager
+            // forgets the agent on its next update, once the component is gone.
+            try
+            {
+                events::volumetric::StopVolumetricAgentCommand stopCmd;
+                stopCmd.entity = entity;
+                events::EventDispatcher::instance().execute(stopCmd);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogDebug("PhysicsComponentService: volumetric agent not stopped: {}", e.what());
+            }
+
             sceneEntity.removeComponent<components::VolumetricAgentComponent>();
             return true;
         }

@@ -629,7 +629,8 @@ namespace render
 
         // Ramp-up: only expose the real depth once both flight slots have been written by the DepthCopy
         // pass at least once, so the sim never samples an undefined-layout image (fallback is bound until
-        // then). Resets automatically when prevFrameDepth is torn down (resize / disable).
+        // then). Restarts while prevFrameDepth is absent and on every recreate (RenderPassHandler::recreate),
+        // which tears the copies down and lets render() rebuild them before this runs.
         if (offscreenResources.prevFrameDepthCreated)
         {
             if (prevFrameDepthReadyCounter <= core::MAX_FRAMES_IN_FLIGHT)

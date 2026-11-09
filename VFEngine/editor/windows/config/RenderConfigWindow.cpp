@@ -29,6 +29,14 @@ namespace windows
         settingsLoaded = false;
     }
 
+    void RenderConfigWindow::notifyRenderSettingsChanged()
+    {
+        if (!isDirty)
+        {
+            settingsLoaded = false;
+        }
+    }
+
     void RenderConfigWindow::markDirty()
     {
         isDirty = true;
@@ -44,7 +52,13 @@ namespace windows
             auto newPreset = static_cast<types::RenderPreset>(presetIdx);
             if (newPreset != types::RenderPreset::Custom)
             {
-                settings = types::RenderSettings::fromPreset(newPreset);
+                // VK-1654: a quality preset sets GI but not the environment sections — keep those.
+                auto preset = types::RenderSettings::fromPreset(newPreset);
+                preset.atmosphere = settings.atmosphere;
+                preset.cloud = settings.cloud;
+                preset.postProcess = settings.postProcess;
+                settings = preset;
+                giFromPreset = true;
                 isDirty = true;
             }
         }
@@ -157,14 +171,41 @@ namespace windows
             settings.terrain.textureScale = 0.1f;
         settingsLoaded = true;
         isDirty = false;
+        giFromPreset = false;
+    }
+
+    types::RenderSettings RenderConfigWindow::mergedForWrite() const
+    {
+        // VK-1654: atmosphere, clouds, post-process (incl. volumetric fog) and GI are owned by their
+        // own windows and the MCP environment tools, so every write takes them fresh from the scene
+        // instead of the copy this window loaded. GI comes from here only while a preset combo
+        // choice is still undelivered.
+        auto merged = settings;
+        const auto sceneSettings = events::EventDispatcher::instance().query(events::scene::GetRenderSettingsQuery{});
+        merged.atmosphere = sceneSettings.atmosphere;
+        merged.cloud = sceneSettings.cloud;
+        merged.postProcess = sceneSettings.postProcess;
+        if (!giFromPreset)
+        {
+            merged.gi = sceneSettings.gi;
+        }
+        return merged;
+    }
+
+    void RenderConfigWindow::writeSceneSettings()
+    {
+        events::scene::SetRenderSettingsCommand cmd;
+        cmd.settings = mergedForWrite();
+        events::EventDispatcher::instance().execute(cmd);
+
+        // The first write delivers the preset's GI; later writes take GI fresh from the scene.
+        giFromPreset = false;
     }
 
     void RenderConfigWindow::saveToScene()
     {
         auto& dispatcher = events::EventDispatcher::instance();
-        events::scene::SetRenderSettingsCommand cmd;
-        cmd.settings = settings;
-        dispatcher.execute(cmd);
+        writeSceneSettings();
 
         events::save::SetConfigIntCommand presetCmd;
         presetCmd.key = "renderPreset";
@@ -197,17 +238,23 @@ namespace windows
 
     void RenderConfigWindow::resetToDefaults()
     {
-        settings = types::RenderSettings::createDefault();
+        // VK-1654: like the preset combo, Reset Defaults leaves the sections other windows and the
+        // MCP environment tools own (writes take them fresh from the scene, GI included).
+        auto defaults = types::RenderSettings::createDefault();
+        defaults.atmosphere = settings.atmosphere;
+        defaults.cloud = settings.cloud;
+        defaults.postProcess = settings.postProcess;
+        defaults.gi = settings.gi;
+        settings = defaults;
         isDirty = true;
+        giFromPreset = false;
     }
 
     void RenderConfigWindow::applySettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
 
-        events::scene::SetRenderSettingsCommand sceneCmd;
-        sceneCmd.settings = settings;
-        dispatcher.execute(sceneCmd);
+        writeSceneSettings();
 
         events::render::ApplyShadowSettingsCommand shadowCmd;
         shadowCmd.settings = settings;

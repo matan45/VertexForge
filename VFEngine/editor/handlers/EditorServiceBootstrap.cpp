@@ -15,11 +15,15 @@
 #include "impl/physics/PhysicsServiceImpl.hpp"
 #include "impl/physics/PhysicsAnimationServiceImpl.hpp"
 #include "impl/navmesh/NavmeshServiceImpl.hpp"
+#include "impl/volumetric/VolumetricNavServiceImpl.hpp"
+#include "providers/physics/IPhysicsProvider.hpp"
 #include "impl/physics/PhysicsPlayModeHandler.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXEditPreviewHandler.hpp"
+#include "impl/vfx/VFXAssetSummaryService.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "impl/scene/TerrainService.hpp"
 #include "impl/scene/OceanService.hpp"
@@ -47,6 +51,9 @@
 #include "impl/render/GIServiceImpl.hpp"
 #include "impl/ai/BehaviorTreeServiceImpl.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/ai/BehaviorTreeAuthoringService.hpp"
+#include "impl/ai/EQSServiceImpl.hpp"
+#include "impl/ai/EQSAuthoringService.hpp"
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/lifecycle/AssetLifecycleServiceImpl.hpp"
 #include "impl/memory/CpuMemoryServiceImpl.hpp"
@@ -71,6 +78,10 @@
 #include "providers/vegetation/IGrassRenderProvider.hpp"
 #include "events/render/RenderEvents.hpp"
 #include "ExportHandler.hpp"
+#include "HeightmapGenerationHandler.hpp"
+#include "PluginComponentHandler.hpp"
+#include "PluginMcpToolHandler.hpp"
+#include "PluginPostProcessEffectHandler.hpp"
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
@@ -98,6 +109,10 @@ namespace handlers
         createAIServices();
         createWeatherServices();
         exportHandler = std::make_unique<handlers::ExportHandler>();
+        heightmapGenerationHandler = std::make_unique<handlers::HeightmapGenerationHandler>();
+        pluginComponentHandler = std::make_unique<handlers::PluginComponentHandler>();
+        pluginMcpToolHandler = std::make_unique<handlers::PluginMcpToolHandler>();
+        pluginPostProcessEffectHandler = std::make_unique<handlers::PluginPostProcessEffectHandler>();
         registerAllEventHandlers();
     }
 
@@ -214,6 +229,11 @@ namespace handlers
         if (auto* navmeshProvider = bootstrap->getNavmeshProvider())
             navmeshService = std::make_shared<services::NavmeshServiceImpl>(navmeshProvider);
 
+        // VK-1660: volumetric navigation was never constructed (its inspector threw every frame). Bakes voxelize
+        // a world-space snapshot of the scene geometry, so the service needs no physics access.
+        if (auto* volumetricProvider = bootstrap->getVolumetricNavProvider())
+            volumetricNavService = std::make_shared<services::VolumetricNavServiceImpl>(volumetricProvider);
+
         controllerService = std::make_shared<services::ControllerServiceImpl>(bootstrap->getPhysicsProvider());
 
         if (auto* ikProvider = bootstrap->getIKProvider())
@@ -224,6 +244,11 @@ namespace handlers
 
     void EditorHandler::createVFXServices()
     {
+        // VK-1657: authored .vfVFX / .vfVFXSequence summaries for the MCP VFX tools; reads files
+        // only, so it does not need the VFX runtime.
+        vfxAssetSummaryService = std::make_unique<services::VFXAssetSummaryService>();
+        vfxAssetSummaryService->registerEventHandlers();
+
         if (auto* vfxProvider = bootstrap->getVFXRuntimeProvider())
         {
             vfxRuntimeService = std::make_unique<services::VFXRuntimeServiceImpl>(vfxProvider);
@@ -237,6 +262,12 @@ namespace handlers
             vfxSequenceRuntimeService->registerEventHandlers();
             vfxSequencePlayModeHandler = std::make_unique<services::VFXSequencePlayModeHandler>();
             vfxSequencePlayModeHandler->subscribeToEvents();
+
+            // VK-1657: edit-mode preview of entities' VFX components (vfxeditpreview events),
+            // ticked by the editor VFX task through the same per-instance command API.
+            vfxEditPreviewHandler = std::make_unique<services::VFXEditPreviewHandler>();
+            vfxEditPreviewHandler->registerEventHandlers();
+            vfxEditPreviewHandler->subscribeToEvents();
         }
     }
 
@@ -336,6 +367,18 @@ namespace handlers
             behaviorTreePlayModeHandler->subscribeToEvents();
         }
 
+        // VK-1660: the validated .vfBehaviorTree write path of the MCP bt_* tools; reads files only.
+        behaviorTreeAuthoringService = std::make_unique<services::BehaviorTreeAuthoringService>();
+        behaviorTreeAuthoringService->registerEventHandlers();
+
+        // VK-1660: EQS was never constructed (an EnvironmentQuery node threw in Play).
+        if (auto* eqsProvider = bootstrap->getEQSProvider())
+            eqsService = std::make_shared<services::EQSServiceImpl>(eqsProvider);
+
+        // VK-1660: the validated .vfEQSQuery write path of the MCP eqs_* tools; reads files only.
+        eqsAuthoringService = std::make_unique<services::EQSAuthoringService>();
+        eqsAuthoringService->registerEventHandlers();
+
         runtimePickerService = std::make_shared<services::RuntimePickerServiceImpl>(
             bootstrap->getRuntimePickerProvider()
         );
@@ -364,6 +407,7 @@ namespace handlers
         physicsService->registerEventHandlers();
         if (physicsAnimationService) physicsAnimationService->registerEventHandlers();
         if (navmeshService) navmeshService->registerEventHandlers();
+        if (volumetricNavService) volumetricNavService->registerEventHandlers();
         projectService->registerEventHandlers();
         assetDatabaseService->registerEventHandlers();
         terrainService->registerEventHandlers();
@@ -381,6 +425,10 @@ namespace handlers
         controllerService->registerEventHandlers();
         if (ikComponentService) ikComponentService->registerEventHandlers();
         exportHandler->registerEventHandlers();
+        heightmapGenerationHandler->registerEventHandlers();
+        pluginComponentHandler->registerEventHandlers();
+        pluginMcpToolHandler->registerEventHandlers();
+        pluginPostProcessEffectHandler->registerEventHandlers();
         renderHookService->registerEventHandlers();
         customPipelineService->registerEventHandlers();
         postProcessEffectService->registerEventHandlers();
@@ -402,6 +450,7 @@ namespace handlers
         objectStreamingService->registerEventHandlers();
         giService->registerEventHandlers();
         behaviorTreeService->registerEventHandlers();
+        if (eqsService) eqsService->registerEventHandlers();
         runtimePickerService->registerEventHandlers();
         weatherService->registerEventHandlers();
         if (destructionService) destructionService->registerEventHandlers();

@@ -33,6 +33,7 @@ namespace services
                                const std::vector<std::string>& chainBoneNames,
                                const std::vector<animator::ik::JointConstraint>& constraints,
                                float weight, bool enabled);
+        bool setChains(EntityHandle entity, const std::vector<animator::ik::IKChainConfig>& chains);
 
         void setTarget(EntityHandle entity, const std::string& chainName,
                        const glm::vec3& position,

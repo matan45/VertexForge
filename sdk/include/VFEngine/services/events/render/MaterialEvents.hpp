@@ -75,6 +75,24 @@ namespace events::material {
         std::string_view getName() const override { return "ClearSubMeshMaterials"; }
     };
 
+    struct CreateMaterialAssetResult {
+        bool success = false;
+        std::string path;   // absolute path of the written .vfMat (set on success)
+        std::string error;  // set on failure
+    };
+
+    // Create a default (PBR Output only) .vfMat asset on disk and publish
+    // AssetSavedNotification. `directory` must be an existing folder; a relative
+    // one resolves against the process working directory (callers resolve
+    // project-relative paths first). The file is named
+    // "<name>.vfMat", or "<name>_<n>.vfMat" when that name is already taken.
+    struct CreateMaterialAssetCommand : ICommand<CreateMaterialAssetResult> {
+        std::string directory;
+        std::string name;
+
+        std::string_view getName() const override { return "CreateMaterialAsset"; }
+    };
+
     // ============================================
     // QUERIES - Read-only operations
     // ============================================

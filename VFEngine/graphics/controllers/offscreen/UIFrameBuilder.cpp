@@ -50,18 +50,14 @@ namespace controllers::offscreen
             float canvasW = canvas.referenceWidth / canvas.pixelsPerUnit;
             float canvasH = canvas.referenceHeight / canvas.pixelsPerUnit;
 
-            float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
-            float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
-            float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
-            float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
+            // VK-1659: the Play-mode rect at the reference resolution (canvas px, y up), so a label lands
+            // where Play draws it for any pivot.
+            const utilities::ui::CanvasRectYUp rect = utilities::ui::computeCanvasRectYUp(canvas, rectComp);
+            float w = rect.w;
+            float h = rect.h;
 
-            float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-            float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-            float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-            float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-
-            float tlX = cx - w * 0.5f;
-            float tlY = cy + h * 0.5f;
+            float tlX = rect.left;
+            float tlY = rect.bottom + rect.h;
             float localTLX = tlX / canvas.referenceWidth - 0.5f;
             float localTLY = tlY / canvas.referenceHeight - 0.5f;
 
@@ -510,18 +506,15 @@ namespace controllers::offscreen
             }
             else
             {
-                // Compute element pixel rect in canvas space
+                // Compute element pixel rect in canvas space (VK-1659: the Play-mode rect, any pivot).
                 const auto& canvas = *canvasInfo.canvas;
-                float anchorLeft = rectComp.anchorMin.x * canvas.referenceWidth;
-                float anchorRight = rectComp.anchorMax.x * canvas.referenceWidth;
-                float anchorBottom = rectComp.anchorMin.y * canvas.referenceHeight;
-                float anchorTop = rectComp.anchorMax.y * canvas.referenceHeight;
-                float w = (anchorRight - anchorLeft) + rectComp.sizeDelta.x;
-                float h = (anchorTop - anchorBottom) + rectComp.sizeDelta.y;
-                float cx = (anchorLeft + anchorRight) * 0.5f + rectComp.anchoredPosition.x;
-                float cy = (anchorBottom + anchorTop) * 0.5f + rectComp.anchoredPosition.y;
-                float elemLeft = cx - w * 0.5f;
-                float elemTop = cy - h * 0.5f;
+                const utilities::ui::CanvasRectYUp rect = utilities::ui::computeCanvasRectYUp(canvas, rectComp);
+                float w = rect.w;
+                float h = rect.h;
+                float elemLeft = rect.left;
+                // The y-up BOTTOM edge goes in as the slice generator's (y-down) "top", as before VK-1659; the
+                // top and bottom border patches may be swapped here (follow-up).
+                float elemTop = rect.bottom;
 
                 // Generate screen-space slice data, then convert to world-space model matrices
                 std::vector<render::ui::UIImageRenderData> sliceData;

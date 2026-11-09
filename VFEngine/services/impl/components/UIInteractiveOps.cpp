@@ -166,6 +166,8 @@ namespace services {
             labelComp.text = "Button";
             labelComp.horizontalAlignment = components::HorizontalAlignment::Center;
             labelComp.verticalAlignment = components::VerticalAlignment::Middle;
+            // VK-1659: dark text (#323232), readable on the default white button (the label default is white).
+            labelComp.color = glm::vec4(0.196f, 0.196f, 0.196f, 1.0f);
         }
 
         return true;

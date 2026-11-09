@@ -506,6 +506,12 @@ namespace resource
             [](const std::string& p) { return animator::AnimatorAsset::load(p); }, "animator");
     }
 
+    void ResourceManager::invalidateAnimatorCache(const asset::AssetRef& ref)
+    {
+        std::scoped_lock lock(cacheMutex);
+        animatorCache.erase(ref.getGUID());
+    }
+
     std::shared_ptr<retargeting::HumanoidRigData> ResourceManager::loadHumanoidRig(const asset::AssetRef& ref)
     {
         if (!ref.isValid()) return nullptr;

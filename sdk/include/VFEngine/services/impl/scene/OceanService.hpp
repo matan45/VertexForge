@@ -148,12 +148,29 @@ namespace services
         std::optional<OceanData> getOceanData(EntityHandle entity) const override;
         bool hasOceanComponent(EntityHandle entity) const override;
 
-        bool hasActiveOcean() const { return oceanEntity.isValid(); }
+        // VK-1658: the ocean SURFACE is visible - an ocean is tracked and its isActive is set. A hidden
+        // ocean still holds the scene's water look, its level, the sea state and the buoyancy tuning
+        // every water body uses, but draws no tiles, runs no FFT, floats and submerges nothing and
+        // answers no height queries outside the water bodies.
+        bool hasActiveOcean() const;
 
-        // VK-1607: is there ANY water to draw and submerge in - the ocean, or at least one water
-        // body. Every render-side gate that used to ask hasActiveOcean() asks this instead, so a
-        // scene with a lake and no ocean still renders, floats and goes underwater.
+        // VK-1607: is there ANY water to draw and submerge in - the visible ocean, or at least one
+        // active water body. Every render-side gate that used to ask hasActiveOcean() asks this
+        // instead, so a scene with a lake and no visible ocean still renders, floats and goes
+        // underwater.
         bool hasWaterToRender() const;
+
+        // VK-1658: the tracked ocean's whole component as one value (GetOceanStateQuery /
+        // SetOceanStateCommand). An invalid `entity` means the tracked ocean; any other entity is
+        // refused. setOceanState writes every field as given (callers validate) and re-derives the
+        // FFT config from it, which runs exactly while the surface is visible.
+        std::optional<OceanStateData> getOceanState(EntityHandle entity) const;
+        bool setOceanState(EntityHandle entity, const OceanStateData& state);
+
+        // VK-1658: the component <-> OceanStateData copies, exact inverses of each other. Public so the
+        // MCP range test can round-trip a state through a saved scene.
+        static OceanStateData stateFromComponent(const components::OceanComponent& comp);
+        static void applyState(components::OceanComponent& comp, const OceanStateData& state);
 
         // Every active body in the scene, resolved against its TransformComponent. Rebuilt on
         // demand rather than cached: the callers are once-per-frame (renderer, underwater post) or
@@ -250,6 +267,13 @@ namespace services
         // overloads go through it, so there is exactly one place to extend when a visual field
         // is added.
         static OceanVisualSettings visualSettingsFromComponent(const components::OceanComponent& comp);
+        // VK-1658: its inverse, shared by SetOceanVisualSettingsCommand and applyState.
+        static void applyVisualSettings(components::OceanComponent& comp, const OceanVisualSettings& settings);
+
+        // VK-1658: the tracked entity's OceanComponent, or nullptr when no ocean is tracked (or the
+        // tracked entity is gone or lost the component).
+        components::OceanComponent* trackedOceanComponent();
+        const components::OceanComponent* trackedOceanComponent() const;
 
         // Sea state helpers
         void applySeaState(const water::SeaState& state);

@@ -137,8 +137,8 @@ namespace controllers
                 part.animatorData = dataCache.loadAnimatorData(src.animatorPath);
                 if (part.animatorData)
                 {
-                    // Optional retarget: mirror RuntimeAnimatorSystem::buildEntityRetargetContext
-                    // (RuntimeAnimatorSystemInit.cpp:15-65) but driven by the desc's retargetPath
+                    // Optional retarget: mirror RuntimeAnimatorSystem::makeRetargetContext
+                    // (RuntimeAnimatorSystemInit.cpp) but driven by the desc's retargetPath
                     // (the .vfretarget map) instead of MeshComponent.retargetRef.
                     if (!src.retargetPath.empty())
                     {
@@ -324,7 +324,7 @@ namespace controllers
     std::unique_ptr<animation::RetargetContext> PrefabRigAssembly::buildRetargetForPart(
         const Part& part, const std::string& retargetPath)
     {
-        // Mirror RuntimeAnimatorSystem::buildEntityRetargetContext (RuntimeAnimatorSystemInit.cpp:30-64).
+        // Mirror RuntimeAnimatorSystem::makeRetargetContext (RuntimeAnimatorSystemInit.cpp).
         auto map = resource::ResourceManager::loadRetargetMap(asset::AssetRef::fromPath(retargetPath));
         if (!map)
         {
@@ -497,7 +497,9 @@ namespace controllers
             state.targetPosition = prefabrig::ikTargetFromSocket(targetPart.partWorld, grip);
             state.targetRotation = std::nullopt; // grip orientation not driven (matches script feed)
             state.isActive = true;
-            state.currentWeight = (i < chainConfigs.size()) ? chainConfigs[i].weight : 1.0f;
+            // Activation only, like the script feed (IKAdapter::setTarget): applyIK blends by
+            // config.weight * currentWeight, so copying the chain weight here would apply it twice.
+            state.currentWeight = 1.0f;
         }
 
         // --- 4. apply IK on each body part that owns chains -------------------------------

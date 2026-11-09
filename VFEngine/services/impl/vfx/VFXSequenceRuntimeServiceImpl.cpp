@@ -6,6 +6,7 @@
 #include "../../events/vfx/VFXEventNotifications.hpp"
 #include "../../events/physics/SocketEvents.hpp"
 #include "../../events/project/ResourceEvents.hpp"
+#include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/audio/AudioEvents.hpp" // VK-1496 — Sound-step fan-out (dispatched here only)
 #include "../../data/VFXOverrideApplier.hpp"
 #include "asset/AssetDatabase.hpp"
@@ -96,6 +97,11 @@ namespace services
         {
             ::events::EventDispatcher::instance().unsubscribe(particleEventToken);
             particleEventToken = {};
+        }
+        if (editorModeChangedToken.isValid())
+        {
+            ::events::EventDispatcher::instance().unsubscribe(editorModeChangedToken);
+            editorModeChangedToken = {};
         }
     }
 
@@ -221,6 +227,17 @@ namespace services
                 pendingParticleEvents.push_back(
                     PendingParticleEvent{n.eventType, n.position, n.velocity, n.color, n.size,
                                          n.parentInstanceId});
+            });
+
+        // VK-1657 — combos (component, animation-triggered and script-created) never outlive Play.
+        // Published on the main thread outside update()/triggerCue(), so `combos` is not iterated.
+        if (editorModeChangedToken.isValid())
+            dispatcher.unsubscribe(editorModeChangedToken);
+        editorModeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
+            [this](const ::events::editor::EditorModeChangedNotification& n)
+            {
+                if (n.previousMode == EditorMode::Play && n.currentMode == EditorMode::Edit)
+                    forgetAllCombos();
             });
     }
 
@@ -1568,5 +1585,17 @@ namespace services
         for (auto& [id, combo] : combos)
             destroyCombo(combo);
         combos.clear();
+    }
+
+    void VFXSequenceRuntimeServiceImpl::forgetAllCombos()
+    {
+        // No child destroy: see the header. nextComboId keeps counting so a forgotten id held by a
+        // caller can never alias a combo of the next Play session.
+        combos.clear();
+        pendingComboTeardowns.clear();
+
+        // Queued particle events of the forgotten children; later ones find no combo to route to.
+        std::lock_guard<std::mutex> lock(particleEventMutex);
+        pendingParticleEvents.clear();
     }
 }

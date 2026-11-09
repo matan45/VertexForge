@@ -1,14 +1,47 @@
 #include "BehaviorTreeServiceImpl.hpp"
+#include "BehaviorTreeInitialValues.hpp"
 #include "../../events/ai/BehaviorTreeEvents.hpp"
+#include "../../events/ai/BehaviorTreeComponentEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "scene/EntityRegistry.hpp"
 #include "../../data/EntityConversion.hpp"
 #include "components/Components.hpp"
+#include "asset/AssetDatabase.hpp"
+#include "asset/AssetRef.hpp"
+#include "print/Log.hpp"
+#include <algorithm>
 #include <cassert>
+#include <cctype>
+#include <filesystem>
+#include <optional>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace services
 {
+    namespace
+    {
+        // The asset reference of an existing .vfBehaviorTree (a project-relative path resolves against the
+        // project root); invalid for any other path. Checked first because AssetRef::fromPath registers
+        // (and writes a .vfmeta for) any path with a known asset extension, even a missing file.
+        asset::AssetRef behaviorTreeAssetRef(const std::string& path)
+        {
+            std::string extension = std::filesystem::path(path).extension().string();
+            std::ranges::transform(extension, extension.begin(),
+                                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (extension != ".vfbehaviortree")
+                return asset::AssetRef::invalid();
+
+            std::error_code ec;
+            const std::string resolved = asset::AssetDatabase::instance().resolveAssetPath(path);
+            if (!std::filesystem::is_regular_file(std::filesystem::path(resolved), ec))
+                return asset::AssetRef::invalid();
+            return asset::AssetRef::fromPath(path);
+        }
+    }
+
     BehaviorTreeServiceImpl::BehaviorTreeServiceImpl(IBehaviorTreeProvider* provider)
         : provider(provider)
     {
@@ -102,6 +135,13 @@ namespace services
                 return provider->getRuntimeSnapshot(query.entity);
             });
 
+        // VK-1660: on demand, without touching the editor debugger's debug target.
+        dispatcher.registerQueryHandler<::events::ai::GetBehaviorTreeRuntimeStateQuery>(
+            [this](const ::events::ai::GetBehaviorTreeRuntimeStateQuery& query)
+            {
+                return provider ? provider->getRuntimeState(query.entity) : behaviortree::BTRuntimeState{};
+            });
+
         // === Dynamic subtree (VK-1457) ===
         dispatcher.registerCommandHandler<events::ai::SetDynamicSubtreeCommand>(
             [this](const auto& cmd)
@@ -175,6 +215,52 @@ namespace services
                 if (!registry.all_of<components::BehaviorTreeComponent>(entity)) return false;
                 detachTree(cmd.entity);
                 registry.remove<components::BehaviorTreeComponent>(entity);
+                return true;
+            });
+
+        // === ECS Component data (VK-1660) ===
+        dispatcher.registerQueryHandler<::events::ai::GetBehaviorTreeComponentDataQuery>(
+            [](const ::events::ai::GetBehaviorTreeComponentDataQuery& query) -> std::optional<BehaviorTreeComponentData>
+            {
+                const auto& registry = scene::EntityRegistry::getRegistry();
+                if (!query.entity.isValid()) return std::nullopt;
+                const auto entity = internal::fromHandle(query.entity);
+                if (!registry.valid(entity)) return std::nullopt;
+                const auto* bt = registry.try_get<components::BehaviorTreeComponent>(entity);
+                if (!bt) return std::nullopt;
+                return makeBehaviorTreeComponentData(registry, *bt);
+            });
+
+        dispatcher.registerCommandHandler<::events::ai::SetBehaviorTreeComponentDataCommand>(
+            [](const ::events::ai::SetBehaviorTreeComponentDataCommand& cmd)
+            {
+                auto& registry = scene::EntityRegistry::getRegistry();
+                if (!internal::isValidHandle(cmd.entity, registry)) return false;
+                auto* bt = registry.try_get<components::BehaviorTreeComponent>(internal::fromHandle(cmd.entity));
+                if (!bt) return false;
+
+                // Refuse (changing nothing) a path that is not an existing behavior tree rather than
+                // silently storing no tree.
+                asset::AssetRef treeRef = asset::AssetRef::invalid();
+                if (!cmd.data.treePath.empty())
+                {
+                    treeRef = behaviorTreeAssetRef(cmd.data.treePath);
+                    if (!treeRef.isValid())
+                    {
+                        vfLogWarning("[BT] '{}' is not an existing behavior tree; the component was not changed",
+                                     cmd.data.treePath);
+                        return false;
+                    }
+                }
+
+                std::vector<behaviortree::BlackboardInitialValue> initialValues;
+                initialValues.reserve(cmd.data.initialValues.size());
+                for (const auto& value : cmd.data.initialValues)
+                    initialValues.push_back(makeStoredInitialValue(registry, value));
+
+                bt->behaviorTreeRef = std::move(treeRef);
+                bt->enabled = cmd.data.enabled;
+                bt->initialValues = std::move(initialValues);
                 return true;
             });
     }

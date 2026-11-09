@@ -25,11 +25,11 @@ namespace render::upscaling
         vk::ImageView colorView;
         vk::Image depthInput;         // Depth at render resolution
         vk::ImageView depthView;
-        vk::Image motionVectors;      // Screen-space velocity (R16G16_SFLOAT)
+        vk::Image motionVectors;      // previous - current, NDC, jitter-free (R16G16_SFLOAT, VK-1662)
         vk::ImageView motionView;
         vk::Image reactiveMask;       // Transparency/particle mask (R8_UNORM)
         vk::ImageView reactiveView;
-        vk::Image exposureImage;      // 1x1 R32_SFLOAT exposure value
+        vk::Image exposureImage;      // 1x1 R32_SFLOAT: the linear exposure the tonemapper applies (VK-1663)
         vk::ImageView exposureView;
         vk::Image output;             // Upscaled output at display resolution
         vk::ImageView outputView;
@@ -55,9 +55,8 @@ namespace render::upscaling
         vk::ImageView specularMotionVectorsView;
         vk::Extent2D renderExtent;
         vk::Extent2D displayExtent;
-        glm::vec2 jitterOffset{0.0f};
+        glm::vec2 jitterOffset{0.0f};   // render px the projection jitter moved the image by (+y down)
         float deltaTime = 0.016f;
-        float preExposure = 1.0f;
         bool resetAccumulation = false; // True on camera cuts / teleports
         VkFormat colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
         VkFormat depthFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -70,11 +69,12 @@ namespace render::upscaling
         VkFormat specularHitDistanceFormat = VK_FORMAT_R16_SFLOAT;
         VkFormat specularMotionVectorsFormat = VK_FORMAT_R16G16_SFLOAT;
 
-        // Camera data required by Streamline common constants
+        // Camera data required by Streamline common constants. The projections must NOT contain the TAA jitter
+        // (sl_consts.h: "All matrices ... must NOT contain temporal AA jitter offset"); it goes in jitterOffset.
         glm::mat4 viewMatrix{1.0f};
-        glm::mat4 projectionMatrix{1.0f};
+        glm::mat4 unjitteredProjection{1.0f};
         glm::mat4 prevViewMatrix{1.0f};
-        glm::mat4 prevProjectionMatrix{1.0f};
+        glm::mat4 prevUnjitteredProjection{1.0f};
         glm::vec3 cameraPosition{0.0f};
         float nearPlane = 0.1f;
         float farPlane = 1000.0f;

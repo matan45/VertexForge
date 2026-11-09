@@ -3,10 +3,22 @@
 #include "components/Components.hpp"
 #include "resource/MeshStreamHandle.hpp"
 #include "../../services/data/EntityConversion.hpp"
+#include "../../graphics/animation/RuntimeAnimatorSystem.hpp"
 #include "print/Log.hpp"
+#include <algorithm>
 
 namespace core
 {
+    namespace
+    {
+        // The edit-mode pose (rest pose + IK) is only re-evaluated when marked dirty, so every
+        // successful IK change must mark it or the viewport keeps the old pose until Play.
+        void markEditPreviewDirty()
+        {
+            animation::RuntimeAnimatorSystem::instance().markEditPreviewDirty();
+        }
+    }
+
     IKAdapter::IKAdapter() = default;
     IKAdapter::~IKAdapter() = default;
 
@@ -49,6 +61,7 @@ namespace core
             }
         }
 
+        markEditPreviewDirty();
         return true;
     }
 
@@ -62,6 +75,7 @@ namespace core
             return false;
 
         registry.remove<components::IKTargetComponent>(*resolved);
+        markEditPreviewDirty();
         return true;
     }
 
@@ -102,6 +116,7 @@ namespace core
         ikComp.isInitialized = false;
         ikComp.runtimeStates.clear();
 
+        markEditPreviewDirty();
         return true;
     }
 
@@ -127,6 +142,7 @@ namespace core
         if (idx < ikComp.runtimeStates.size())
             ikComp.runtimeStates.erase(ikComp.runtimeStates.begin() + idx);
 
+        markEditPreviewDirty();
         return true;
     }
 
@@ -155,14 +171,38 @@ namespace core
                 ikComp.chains[i].weight = weight;
                 ikComp.chains[i].enabled = enabled;
 
-                        if (i < ikComp.runtimeStates.size())
+                if (i < ikComp.runtimeStates.size())
                 {
                     ikComp.runtimeStates[i].resolvedTipIndex = -1;
                     ikComp.runtimeStates[i].resolvedBoneIndices.clear();
                 }
+
+                markEditPreviewDirty();
                 return;
             }
         }
+    }
+
+    bool IKAdapter::setChains(services::EntityHandle entity,
+                              const std::vector<animator::ik::IKChainConfig>& chains)
+    {
+        auto resolved = resolveEntity(entity);
+        if (!resolved) return false;
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+        if (!registry.all_of<components::IKTargetComponent>(*resolved))
+            return false;
+
+        auto& ikComp = registry.get<components::IKTargetComponent>(*resolved);
+        ikComp.chains = chains;
+
+        // Runtime states are index-parallel to the old chain list: drop them so every chain
+        // re-resolves its bones and starts without a target.
+        ikComp.runtimeStates.clear();
+        ikComp.isInitialized = false;
+
+        markEditPreviewDirty();
+        return true;
     }
 
     void IKAdapter::setTarget(services::EntityHandle entity, const std::string& chainName,
@@ -188,7 +228,11 @@ namespace core
                 ikComp.runtimeStates[i].targetPosition = position;
                 ikComp.runtimeStates[i].targetRotation = rotation;
                 ikComp.runtimeStates[i].isActive = true;
-                ikComp.runtimeStates[i].currentWeight = ikComp.chains[i].weight;
+                // Activation only: the solver blends by config.weight * currentWeight, so
+                // copying the chain weight here applied it twice (and a target set while
+                // the weight was 0 stayed off after the weight was raised).
+                ikComp.runtimeStates[i].currentWeight = 1.0f;
+                markEditPreviewDirty();
                 return;
             }
         }
@@ -213,6 +257,7 @@ namespace core
             if (chain.chainName == chainName)
             {
                 chain.weight = glm::clamp(weight, 0.0f, 1.0f);
+                markEditPreviewDirty();
                 return;
             }
         }
@@ -235,6 +280,7 @@ namespace core
             if (chain.chainName == chainName)
             {
                 chain.enabled = enabled;
+                markEditPreviewDirty();
                 return;
             }
         }

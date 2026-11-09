@@ -133,6 +133,13 @@ namespace services
             COLLECT_CASE(UIListView, UIListViewComponent);
             COLLECT_CASE(RenderTexture, RenderTextureComponent);
             COLLECT_CASE(Decal, DecalComponent);
+            COLLECT_CASE(SocketAttachment, SocketAttachmentComponent);
+            // VK-1660: bt_get's attachedTo, route_get and scripts' Entity.findWithComponent list these.
+            COLLECT_CASE(NavmeshAgent, NavmeshAgentComponent);
+            COLLECT_CASE(BehaviorTree, BehaviorTreeComponent);
+            COLLECT_CASE(NavRoute, NavRouteComponent);
+            COLLECT_CASE(VolumetricNavVolume, VolumetricNavVolumeComponent);
+            COLLECT_CASE(VolumetricAgent, VolumetricAgentComponent);
         default:
             break;
         }
@@ -207,6 +214,10 @@ namespace services
             HAS_CASE(Terrain, TerrainComponent);
             HAS_CASE(TerrainTile, TerrainTileComponent);
             HAS_CASE(NavmeshAgent, NavmeshAgentComponent);
+            HAS_CASE(BehaviorTree, BehaviorTreeComponent);
+            HAS_CASE(NavRoute, NavRouteComponent);
+            HAS_CASE(VolumetricNavVolume, VolumetricNavVolumeComponent);
+            HAS_CASE(VolumetricAgent, VolumetricAgentComponent);
         default:
             return false;
         }
@@ -269,6 +280,10 @@ namespace services
         CHECK_COMP(Terrain, TerrainComponent);
         CHECK_COMP(TerrainTile, TerrainTileComponent);
         CHECK_COMP(NavmeshAgent, NavmeshAgentComponent);
+        CHECK_COMP(BehaviorTree, BehaviorTreeComponent);
+        CHECK_COMP(NavRoute, NavRouteComponent);
+        CHECK_COMP(VolumetricNavVolume, VolumetricNavVolumeComponent);
+        CHECK_COMP(VolumetricAgent, VolumetricAgentComponent);
         // VK-1441 follow-up: include socket attachment so the prefab preview's structure signature
         // (PrefabSandboxController::sandboxStructureSignature) notices an Attach/Detach and rebuilds
         // the rig — otherwise a socket-attached part doesn't move in the preview until reopen.

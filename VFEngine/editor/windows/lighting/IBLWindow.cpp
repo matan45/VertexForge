@@ -53,6 +53,13 @@ namespace windows
                     iblTint[2] = iblData->tint.z;
                 }
             }
+            else if (!knobEditing)
+            {
+                // VK-1654: the IBL was removed outside this window (MCP ibl_set none, undo, IBLDrawer).
+                // Keeping the old path would let the next knob edit write that HDR back into the
+                // scene. Never mid-drag, for the same reason as the re-read above.
+                selectedIBLFile = "";
+            }
 
             // VK-1574: one-click set — choosing an HDR writes the component AND drives the renderer.
             if (ImGui::Button("Select"))

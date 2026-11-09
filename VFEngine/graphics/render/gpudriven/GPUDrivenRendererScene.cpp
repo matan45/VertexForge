@@ -913,8 +913,13 @@ namespace render::gpudriven
                 }
             }
 
+            // A mesh that uploads no pose this frame but keeps its allocation (animator removed,
+            // init failed, empty pose) goes back to its bind pose instead of freezing in the last
+            // one: the allocation stays bound because persistent mode bakes its offset into the
+            // object data. resetToBindPose is a no-op for a mesh without an allocation.
             if (!meshComp.animatorRef.isValid())
             {
+                boneMatrixManager->resetToBindPose(entity);
                 continue;
             }
 
@@ -925,6 +930,7 @@ namespace render::gpudriven
                 animator = animatorSystem.getAnimator(entity);
                 if (!animator)
                 {
+                    boneMatrixManager->resetToBindPose(entity);
                     continue;
                 }
             }
@@ -941,6 +947,7 @@ namespace render::gpudriven
                     : animator->getBoneMatrices();
             if (boneMatrices.empty())
             {
+                boneMatrixManager->resetToBindPose(entity);
                 continue;
             }
 

@@ -3,6 +3,7 @@
 #include <cctype>
 #include <filesystem>
 #include <ranges>
+#include <stdexcept>
 #include <variant>
 
 namespace import::builtin
@@ -188,19 +189,19 @@ namespace import::builtin
             };
         }
 
-        animationProcessor.loadFromFile(context.file, context.fileName, context.location, animProgress);
-    }
+        // One <file>_<take>.vfAnim per animation; each gets its own result and .vfmeta.
+        std::vector<std::string> writtenClips;
+        animationProcessor.loadFromFile(context.file, context.fileName, context.location, animProgress,
+                                        &writtenClips);
 
-    std::string MeshImporter::deriveOutputFile(const pipeline::ImportContext& context) const
-    {
-        if (isAnimationOnly(context))
-            return context.fileName + "." + FileExtension::animation;
-        return {};
-    }
+        // Nothing else is produced in animation-only mode, so no clip is a failed import
+        // (FileProcessingStage turns the exception into a failed result).
+        if (animationOnly && writtenClips.empty())
+            throw std::runtime_error("animation-only import wrote no .vfAnim: '" + context.file.path +
+                                     "' has no animations or could not be read");
 
-    resource::AssetType MeshImporter::deriveAssetType(const pipeline::ImportContext& context) const
-    {
-        return isAnimationOnly(context) ? resource::AssetType::Animation : resource::AssetType::COUNT;
+        for (auto& path : writtenClips)
+            context.outputFiles.push_back({std::move(path), resource::AssetType::Animation});
     }
 
     std::vector<ImportOptionDesc> MeshImporter::options() const

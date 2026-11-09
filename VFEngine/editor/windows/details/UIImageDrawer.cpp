@@ -5,40 +5,34 @@
 #include "events/ui/UIEvents.hpp"
 #include "nfd/FileDialog.hpp"
 #include "asset/AssetRef.hpp"
+#include "resource/VfImageHeader.hpp"
 #include "../../dragdrop/AssetDropTarget.hpp"
 #include "DrawerHelpers.hpp"
 #include <imgui.h>
 #include <fstream>
+#include <optional>
 
 namespace windows::details
 {
     namespace
     {
         // Assign a .vfImage to the component, reading the source dimensions
-        // from the file header (1 byte file type + 12 bytes version, then
-        // uint32 width, uint32 height).
+        // from the file header (resource::readVfImageSize, shared with the MCP UI tools).
         bool assignUIImageTexture(services::UIImageData& data, const std::string& path)
         {
-            std::ifstream file(path, std::ios::binary);
-            if (!file.good())
+            const std::optional<glm::uvec2> size = resource::readVfImageSize(path);
+            if (!size.has_value())
             {
-                vfLogError("Selected texture file does not exist or cannot be read: {}", path);
-                return false;
-            }
-
-            file.seekg(13, std::ios::beg);
-            uint32_t w = 0, h = 0;
-            file.read(reinterpret_cast<char*>(&w), sizeof(uint32_t));
-            file.read(reinterpret_cast<char*>(&h), sizeof(uint32_t));
-            if (!file.good())
-            {
-                vfLogWarning("Failed to read .vfImage header (file too short): {}", path);
+                if (!std::ifstream(path, std::ios::binary).good())
+                    vfLogError("Selected texture file does not exist or cannot be read: {}", path);
+                else
+                    vfLogWarning("Failed to read .vfImage header (file too short): {}", path);
                 return false;
             }
 
             data.textureRef = asset::AssetRef::fromPath(path);
-            data.sourceWidth = w;
-            data.sourceHeight = h;
+            data.sourceWidth = size->x;
+            data.sourceHeight = size->y;
             return true;
         }
     }

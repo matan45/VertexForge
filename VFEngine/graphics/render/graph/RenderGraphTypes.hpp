@@ -39,7 +39,9 @@ namespace render::graph
         Present,
         StorageRead,
         StorageWrite,
-        SampledComputeRead
+        SampledComputeRead,
+        SampledReadAnyShader,   // sampled by fragment AND compute shaders in one pass
+        DepthSampledComputeRead // depth sampled by a compute shader (read-only depth layout)
     };
 
     // Maps ResourceUsage to Vulkan synchronization2 types
@@ -98,6 +100,14 @@ namespace render::graph
             return {vk::PipelineStageFlagBits2::eComputeShader,
                     vk::AccessFlagBits2::eShaderSampledRead,
                     vk::ImageLayout::eShaderReadOnlyOptimal};
+        case ResourceUsage::SampledReadAnyShader:
+            return {vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderSampledRead,
+                    vk::ImageLayout::eShaderReadOnlyOptimal};
+        case ResourceUsage::DepthSampledComputeRead:
+            return {vk::PipelineStageFlagBits2::eComputeShader,
+                    vk::AccessFlagBits2::eShaderSampledRead,
+                    vk::ImageLayout::eDepthStencilReadOnlyOptimal};
         }
         return {};
     }

@@ -18,6 +18,12 @@
 //   int fireId = VFX::spawnAtLooping("effects/fire.vfVFX", x, y, z);
 //   VFX::setInstancePosition(fireId, x2, y2, z2);
 //   VFX::destroyInstance(fireId);
+//
+// Asset paths are relative to the project folder (absolute paths work too),
+// e.g. "assets/vfx/library/sparks.vfVFX". spawnAt / spawnAtLooping /
+// createChannel return 0 when the file does not exist or the effect is
+// disabled at the current quality tier. In the editor, every instance and
+// combo a script spawned is destroyed when Play stops.
 
 public class VFX {
     public constructor() {
@@ -185,7 +191,8 @@ public class VFX {
     // for unknown names. Names: spawnRate, lifetime, startSize, startSpeed,
     // stretchMultiplier, windStrength, gravityStrength, softParticleDistance,
     // lightingInfluence, collisionLifetimeLoss, coneSpread, renderMode,
-    // collisionEnabled (0/1)
+    // collisionEnabled (0/1), blendMode (0 alpha, 1 additive, 2 premultiplied,
+    // 3 multiply), sortOrder (draw order, -256..256; higher draws later)
     public static function setOverride(int instanceId, string name, float value): bool {
         return _native_vfx_setOverride(instanceId, name, value);
     }
@@ -196,9 +203,18 @@ public class VFX {
         return _native_vfx_setOverrideVec(instanceId, name, x, y, z);
     }
 
-    // Override the start color (RGBA) on a live instance - e.g. team tinting
+    // Override the start color (RGBA) on a live instance. An effect with a
+    // Color Over Lifetime gradient replaces this color every frame - use
+    // setOverrideTint to recolor those.
     public static function setOverrideColor(int instanceId, float r, float g, float b, float a): bool {
         return _native_vfx_setOverrideVec(instanceId, "startColor", r, g, b, a);
+    }
+
+    // Multiply every authored color of a live instance (start color and Color
+    // Over Lifetime gradient) by an RGBA tint, e.g. team tinting. 1,1,1,1 =
+    // as authored; components must be >= 0 (above 1 brightens).
+    public static function setOverrideTint(int instanceId, float r, float g, float b, float a): bool {
+        return _native_vfx_setOverrideVec(instanceId, "colorTint", r, g, b, a);
     }
 
     // ============================================

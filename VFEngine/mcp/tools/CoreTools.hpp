@@ -1,0 +1,69 @@
+#pragma once
+
+#include "../dispatch/MainThreadQueue.hpp"
+#include "../protocol/PromptRegistry.hpp"
+#include "../protocol/ResourceRegistry.hpp"
+#include "../protocol/ToolRegistry.hpp"
+
+#include <chrono>
+#include <functional>
+
+namespace mcp::tools
+{
+    // Shared by tool groups. Main-affinity tools run on the editor main thread
+    // already; Worker-affinity tools use runOnMain() for any EventDispatcher call.
+    struct ToolContext
+    {
+        MainThreadQueue& queue;
+
+        nlohmann::json runOnMain(std::function<nlohmann::json()> task,
+                                 std::chrono::milliseconds timeout = std::chrono::milliseconds(10000)) const
+        {
+            return queue.invoke(std::move(task), timeout);
+        }
+    };
+
+    // Every engine-facing tool group. Each lives in its own TU under tools/.
+    void registerEditorTools(ToolRegistry& registry, const ToolContext& context);     // editor_get_info, project_*
+    void registerSceneTools(ToolRegistry& registry, const ToolContext& context);      // scene_*
+    void registerEntityTools(ToolRegistry& registry, const ToolContext& context);     // entity_*
+    void registerComponentTools(ToolRegistry& registry, const ToolContext& context);  // component_*
+    void registerMaterialTools(ToolRegistry& registry, const ToolContext& context);   // material_*
+    void registerScriptTools(ToolRegistry& registry, const ToolContext& context);     // script_*, scripts_build
+    void registerAssetTools(ToolRegistry& registry, const ToolContext& context);      // assets_*
+    void registerPlayModeTools(ToolRegistry& registry, const ToolContext& context);   // play_*
+    void registerLogTools(ToolRegistry& registry, const ToolContext& context);        // logs_read
+    void registerUndoTools(ToolRegistry& registry, const ToolContext& context);       // undo, redo
+    void registerViewTools(ToolRegistry& registry, const ToolContext& context);       // viewport_screenshot (VK-1651)
+    void registerPluginComponentTools(ToolRegistry& registry, const ToolContext& context); // component_*_generic, component_list_types (VK-1651)
+    void registerExportTools(ToolRegistry& registry, const ToolContext& context);     // game_export, game_export_status (VK-1651)
+    void registerTerrainTools(ToolRegistry& registry, const ToolContext& context);    // terrain_* (VK-1653)
+    void registerEnvironmentTools(ToolRegistry& registry, const ToolContext& context); // environment_*, ibl_*, gi_*, fog_*, weather_* (VK-1654)
+    void registerRenderSettingsTools(ToolRegistry& registry, const ToolContext& context); // render_settings_*, postprocess_effect_* (VK-1655)
+    void registerAnimationTools(ToolRegistry& registry, const ToolContext& context);  // animation_* clips, state machine, preview, runtime state (VK-1656)
+    void registerAnimationIkTools(ToolRegistry& registry, const ToolContext& context); // animation_ik_* (VK-1656)
+    void registerAnimationSocketTools(ToolRegistry& registry, const ToolContext& context); // animation_*socket* (VK-1656)
+    void registerVFXTools(ToolRegistry& registry, const ToolContext& context);        // vfx_* (VK-1657)
+    void registerWaterTools(ToolRegistry& registry, const ToolContext& context);      // water_*, ocean_* (VK-1658)
+    void registerUITools(ToolRegistry& registry, const ToolContext& context);         // ui_* (VK-1659)
+    void registerBehaviorTreeTools(ToolRegistry& registry, const ToolContext& context); // bt_* (VK-1660)
+    void registerEQSTools(ToolRegistry& registry, const ToolContext& context);        // eqs_* (VK-1660)
+    void registerNavigationTools(ToolRegistry& registry, const ToolContext& context); // navmesh_*, route_* (VK-1660)
+    void registerVolumetricTools(ToolRegistry& registry, const ToolContext& context); // volumetric_* (VK-1660)
+
+    // Registers all of the above. Called once on the main thread before start().
+    void registerCoreTools(ToolRegistry& registry, MainThreadQueue& queue);
+
+    // VK-1652 (ResourceDefs.cpp): vf://scene/hierarchy, vf://logs, vf://scripts/{+path},
+    // vf://docs/components, vf://docs/mtype-api, vf://docs/mtype-api/{+module}; plus the two below.
+    void registerCoreResources(ResourceRegistry& registry, MainThreadQueue& queue);
+
+    // VK-1660 (BehaviorTreeDocs.cpp): vf://docs/bt - behavior trees, the node catalogue, EQS.
+    void registerBehaviorTreeResources(ResourceRegistry& registry, const ToolContext& context);
+    // VK-1660 (NavigationDocs.cpp): vf://docs/navigation - navmesh, agents, routes, volumetric volumes.
+    void registerNavigationResources(ResourceRegistry& registry, const ToolContext& context);
+
+    // VK-1652 (PromptDefs.cpp): create_platformer_template, create_top_down_template, create_hud,
+    // create_enemy_ai (VK-1660).
+    void registerCorePrompts(PromptRegistry& registry);
+}

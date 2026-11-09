@@ -26,8 +26,8 @@
 //     the socket reflects the *evaluated* rest pose (not raw bind pose).
 //
 // NOT covered here (no clean CPU harness — documented at bottom):
-//   RuntimeAnimatorSystem::updateEditModePreview() dirty-gating, which depends on
-//   the EnTT registry + EventDispatcher singletons and file-path skeleton loading.
+//   RuntimeAnimatorSystem::updateEditModePreview(deltaTime) dirty-gating, which depends
+//   on the EnTT registry singleton and file-path skeleton loading.
 // ============================================================
 
 namespace
@@ -288,15 +288,16 @@ TEST_SUITE("EditModeSocketPreview")
 // ------------------------------------------------------------
 // Manual / integration check (NOT unit-tested here):
 //
-// RuntimeAnimatorSystem::updateEditModePreview() dirty-gating
-// (graphics/animation/RuntimeAnimatorSystem.{hpp,cpp}) cannot be exercised on the
+// RuntimeAnimatorSystem::updateEditModePreview(deltaTime) dirty-gating
+// (graphics/animation/RuntimeAnimatorSystemPreview.cpp) cannot be exercised on the
 // CPU test path: RuntimeAnimatorSystem is a process singleton whose private
 // editPreviewDirty flag has no getter, and initialize()/syncWithRegistry()/
-// updateEditModePreview() depend on the global EnTT registry, the EventDispatcher
-// singleton, and file-path skeleton loading. There is no existing harness that
-// drives this singleton from a test. Verify manually in the Editor:
+// updateEditModePreview() depend on the global EnTT registry and file-path
+// skeleton loading. There is no existing harness that drives this singleton from
+// a test. Verify manually in the Editor:
 //   1. Place a skeletal mesh with sockets in edit mode (no Play) -> mesh renders
 //      in rest pose and socket attachments resolve to bone positions.
-//   2. Edit socket data / reload the sector / toggle editor mode -> the preview
-//      re-arms (editPreviewDirty=true) and updates once, then stays idle.
+//   2. Save socket data (SocketDataSaved -> AnimatorSystemController ->
+//      requestMeshReload) / edit the Mesh component / toggle editor mode -> the
+//      preview re-arms (editPreviewDirty=true) and updates once, then stays idle.
 // ------------------------------------------------------------

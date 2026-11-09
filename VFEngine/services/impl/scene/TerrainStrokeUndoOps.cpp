@@ -11,6 +11,8 @@
 #include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/editor/UndoRedoEvents.hpp"
 #include <memory>
+#include <string>
+#include <string_view>
 #include <utility>
 
 // VK-1615 sculpt / weight-paint / hole / ramp / surface-mask stroke undo.
@@ -41,7 +43,8 @@ namespace services
         }
     }
 
-    void TerrainService::beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication)
+    void TerrainService::beginStroke(uint64_t entityId, StrokeTool tool, bool isFirstApplication,
+                                     std::string_view label)
     {
         // isFirst auto-flush, borrowed from the mesh brush: a stroke whose Finalize never
         // arrived (viewport collapsed mid-drag, tool or entity switched) is pushed here
@@ -61,6 +64,9 @@ namespace services
             strokeEntityId = entityId;
             strokeTool = tool;
             strokeActive = true;
+            // VK-1653: only the call that OPENS a stroke names it, so a continuing dab can never
+            // relabel the entry it is adding to.
+            strokeLabel = label;
         }
     }
 
@@ -167,12 +173,13 @@ namespace services
         strokeMaskChannel = 0;
         strokeActive = false;
         strokeTool = StrokeTool::None;
+        strokeLabel.clear(); // VK-1653
     }
 
-    void TerrainService::finalizeTerrainStroke()
+    size_t TerrainService::finalizeTerrainStroke()
     {
         if (!strokeActive)
-            return;
+            return 0;
 
         // Cleared up front as a reentrancy guard: PushUndoableCommand dispatches
         // synchronously, and a handler that ends up calling back in here must not see an
@@ -185,6 +192,10 @@ namespace services
         strokeActive = false;
         const StrokeTool tool = strokeTool;
         strokeTool = StrokeTool::None;
+
+        // VK-1653: resolved now because every exit below goes through discardTerrainStroke, which
+        // clears the override. Empty means the stroke was opened unnamed, i.e. by an editor brush.
+        const std::string label = strokeLabel.empty() ? std::string(strokeLabelFor(tool)) : strokeLabel;
 
         // VK-1616: the hydraulic brush defers its collider rebuilds to the end of the stroke rather
         // than paying a synchronous, unbudgeted rebuild on every held frame. Drained here, before
@@ -201,7 +212,7 @@ namespace services
                 || surfaceMask->height != strokeMaskHeight)
             {
                 discardTerrainStroke();
-                return;
+                return 0;
             }
 
             const uint32_t rectWidth = strokeMaskDirty.maxX - strokeMaskDirty.minX + 1;
@@ -227,35 +238,38 @@ namespace services
             auto undoCmd = std::make_shared<SurfaceMaskStrokeUndoCommand>(
                 strokeMaskChannel, strokeMaskWidth, strokeMaskHeight,
                 strokeMaskDirty.minX, strokeMaskDirty.minZ, rectWidth, rectHeight,
-                std::move(before), std::move(after), strokeLabelFor(tool));
+                std::move(before), std::move(after), label);
 
+            // VK-1653: a mask entry is one texel rect, not tiles, so it reports 1 when pushed --
+            // enough for a caller to tell "an entry exists" from "nothing changed".
+            size_t pushed = 0;
             if (undoCmd->hasChanges())
             {
                 events::undoredo::PushUndoableCommand pushCmd;
                 pushCmd.command = undoCmd;
                 dispatcher.execute(pushCmd);
+                pushed = 1;
             }
 
             discardTerrainStroke();
-            return;
+            return pushed;
         }
 
         if (strokeBefore.empty())
         {
             discardTerrainStroke();
-            return;
+            return 0;
         }
 
         auto gridIt = terrainGrids.find(strokeEntityId);
         if (gridIt == terrainGrids.end())
         {
             discardTerrainStroke();
-            return;
+            return 0;
         }
         terrain::TerrainGrid* grid = gridIt->second.get();
 
-        auto undoCmd = std::make_shared<TerrainStrokeUndoCommand>(
-            strokeEntityId, strokeLabelFor(tool));
+        auto undoCmd = std::make_shared<TerrainStrokeUndoCommand>(strokeEntityId, label);
 
         for (auto& [coord, before] : strokeBefore)
         {
@@ -279,14 +293,17 @@ namespace services
                              *tile, baseAfter);
         }
 
+        size_t pushedTiles = 0;
         if (undoCmd->hasChanges())
         {
             events::undoredo::PushUndoableCommand pushCmd;
             pushCmd.command = undoCmd;
             dispatcher.execute(pushCmd);
+            pushedTiles = undoCmd->getTileCount();
         }
 
         discardTerrainStroke();
+        return pushedTiles;
     }
 
     void TerrainService::restoreStrokeState(

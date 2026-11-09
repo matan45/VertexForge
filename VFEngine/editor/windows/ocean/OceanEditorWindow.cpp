@@ -27,80 +27,65 @@ namespace windows
             return;
 
         hasOcean = true;
+        pullOceanState(false);
+    }
 
-        events::ocean::GetOceanDataQuery dataQuery;
-        dataQuery.entity = oceanEntity;
-        auto dataOpt = dispatcher.query(dataQuery);
+    // VK-1658: copies the engine's ocean into the window. With keepEdits a section holding unapplied
+    // edits keeps them and only the others follow the engine; without, every section is replaced and
+    // its edits are dropped. Visibility and the weather settings apply the moment they are toggled, so
+    // they always follow.
+    void OceanEditorWindow::pullOceanState(bool keepEdits)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
 
-        if (dataOpt.has_value())
+        events::ocean::GetOceanStateQuery stateQuery;
+        stateQuery.entity = oceanEntity;
+        if (const auto state = dispatcher.query(stateQuery); state.has_value())
         {
-            visualSettings.shallowColor = dataOpt->shallowColor;
-            visualSettings.deepColor = dataOpt->deepColor;
-            visualSettings.maxVisibleDepth = dataOpt->maxVisibleDepth;
-            visualSettings.fresnelPower = dataOpt->fresnelPower;
-            visualSettings.refractionStrength = dataOpt->refractionStrength;
-            visualSettings.refractionChromatic = dataOpt->refractionChromatic;
-            visualSettings.refractionDepthScale = dataOpt->refractionDepthScale;
-            visualSettings.causticStrength = dataOpt->causticStrength;
-            visualSettings.causticDepthFalloff = dataOpt->causticDepthFalloff;
-            visualSettings.shoreFoamRange = dataOpt->shoreFoamRange;
-            visualSettings.shoreFoamIntensity = dataOpt->shoreFoamIntensity;
-            visualSettings.shoreBreakingStrength = dataOpt->shoreBreakingStrength;
-            visualSettings.shoreWetRange = dataOpt->shoreWetRange;
-            // VK-1604
-            visualSettings.ssrEnabled = dataOpt->ssrEnabled;
-            visualSettings.ssrIntensity = dataOpt->ssrIntensity;
-            visualSettings.ssrMaxDistance = dataOpt->ssrMaxDistance;
-            visualSettings.ssrThickness = dataOpt->ssrThickness;
-            visualSettings.ssrMaxSteps = dataOpt->ssrMaxSteps;
-            visualSettings.ssrDebugView = dataOpt->ssrDebugView;
-            visualSettings.beerLambertEnabled = dataOpt->beerLambertEnabled;
-            visualSettings.absorptionCoeff = dataOpt->absorptionCoeff;
-            visualSettings.scatteringColor = dataOpt->scatteringColor;
-            visualSettings.scatterCoeff = dataOpt->scatterCoeff;
-            visualSettings.absorptionMaxDistance = dataOpt->absorptionMaxDistance;
-            visualSettings.hexTilingEnabled = dataOpt->hexTilingEnabled;
-            visualSettings.hexBandMask = dataOpt->hexBandMask;
-            visualSettings.hexCellScale = dataOpt->hexCellScale;
-            visualSettings.hexBlendContrast = dataOpt->hexBlendContrast;
-            // VK-1605
-            visualSettings.shoalingEnabled = dataOpt->shoalingEnabled;
-            visualSettings.shoalingStrength = dataOpt->shoalingStrength;
-            visualSettings.shoalingMinDepth = dataOpt->shoalingMinDepth;
-            visualSettings.shoalingWavelengthScale = dataOpt->shoalingWavelengthScale;
-            visualSettings.shoalingGamma = dataOpt->shoalingGamma;
-            visualSettings.shoreEdgeFadeStart = dataOpt->shoreEdgeFadeStart;
-            visualSettings.shoreWavesEnabled = dataOpt->shoreWavesEnabled;
-            visualSettings.shoreWaveAmplitude = dataOpt->shoreWaveAmplitude;
-            visualSettings.shoreWaveLength = dataOpt->shoreWaveLength;
-            visualSettings.shoreWaveSpeed = dataOpt->shoreWaveSpeed;
-            visualSettings.shoreWaveBreakDepth = dataOpt->shoreWaveBreakDepth;
-            visualSettings.shoreWaveBreakRange = dataOpt->shoreWaveBreakRange;
-            visualSettings.shoreWaveCrestFoam = dataOpt->shoreWaveCrestFoam;
-            visualSettings.shoreWaveCrestFoamThreshold = dataOpt->shoreWaveCrestFoamThreshold;
-            visualSettings.shoreWaveLean = dataOpt->shoreWaveLean;
-            // VK-1606
-            visualSettings.rippleSimEnabled = dataOpt->rippleSimEnabled;
-            visualSettings.ripplePatchSize = dataOpt->ripplePatchSize;
-            visualSettings.rippleWaveSpeed = dataOpt->rippleWaveSpeed;
-            visualSettings.rippleDamping = dataOpt->rippleDamping;
-            visualSettings.rippleHeightScale = dataOpt->rippleHeightScale;
-            visualSettings.rippleNormalScale = dataOpt->rippleNormalScale;
-            visualSettings.rippleFoamGain = dataOpt->rippleFoamGain;
-            visualSettings.rippleFoamScale = dataOpt->rippleFoamScale;
-            visualSettings.rippleFoamDecay = dataOpt->rippleFoamDecay;
-            visualSettings.rippleEdgeFadeStart = dataOpt->rippleEdgeFadeStart;
-            visualSettingsDirty = false;
-
-            physicsSettings.physicsEnabled = dataOpt->physicsEnabled;
-            physicsSettingsDirty = false;
-
-            weatherDriven = dataOpt->weatherDriven;
-            weatherResponse = dataOpt->weatherResponse;
+            if (!keepEdits || !visualSettingsDirty)
+            {
+                visualSettings = state->visual;
+                visualSettingsDirty = false;
+            }
+            // All four physics fields: reading back only physicsEnabled let an Apply write the
+            // window's default density, drag and buoyancy over the real ones.
+            if (!keepEdits || !physicsSettingsDirty)
+            {
+                physicsSettings = state->physics;
+                physicsSettingsDirty = false;
+            }
+            surfaceVisible = state->isActive;
+            weatherDriven = state->weatherDriven;
+            weatherResponse = state->weatherResponse;
         }
 
-        oceanConfig = dispatcher.query(events::ocean::GetOceanFFTConfigQuery{});
-        oceanConfigDirty = false;
+        if (!keepEdits || !oceanConfigDirty)
+        {
+            oceanConfig = dispatcher.query(events::ocean::GetOceanFFTConfigQuery{});
+            oceanConfigDirty = false;
+        }
+    }
+
+    // VK-1658: the ocean is also written by the MCP water tools, undo / redo, sea-state transitions
+    // and the weather, and none of them tell this window. It already queries the engine every frame
+    // (Info, water bodies, shore field), so it follows by polling: a different ocean (created, deleted,
+    // a scene load) drops every edit; otherwise each section without unapplied edits follows the engine.
+    void OceanEditorWindow::syncWithEngine()
+    {
+        const services::EntityHandle current =
+            events::EventDispatcher::instance().query(events::ocean::GetOceanEntityQuery{});
+
+        if (current.id != oceanEntity.id || current.isValid() != hasOcean)
+        {
+            visualSettingsDirty = false;
+            physicsSettingsDirty = false;
+            oceanConfigDirty = false;
+            refreshOceanState();
+            return;
+        }
+
+        if (hasOcean)
+            pullOceanState(true);
     }
 
     void OceanEditorWindow::draw()
@@ -109,6 +94,8 @@ namespace windows
         {
             return;
         }
+
+        syncWithEngine();
 
         ImGui::SetNextWindowSize(ImVec2(420, 500), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Ocean Editor", &visible))
@@ -271,6 +258,18 @@ namespace windows
     void OceanEditorWindow::drawSettingsSection()
     {
         bool anyDirty = false;
+
+        // VK-1658: applied at once, like Weather Driven - hiding keeps every setting below.
+        if (ImGui::Checkbox("Ocean surface visible", &surfaceVisible))
+            applySurfaceVisible();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Off hides the sea: no surface, FFT waves, caustics, wet shore, ocean buoyancy\n"
+                              "or underwater effect. Every setting below is kept, and lakes and pools keep\n"
+                              "using this look (they go flat - their waves are the ocean's FFT bands).\n"
+                              "Delete the ocean to drop the settings.");
+        if (!surfaceVisible)
+            ImGui::TextDisabled("Hidden - lakes and pools still use the settings below");
+        ImGui::Spacing();
 
         if (ImGui::CollapsingHeader("Visual Settings", ImGuiTreeNodeFlags_DefaultOpen))
         {
@@ -596,11 +595,13 @@ namespace windows
         anyDirty = visualSettingsDirty || physicsSettingsDirty;
 
         ImGui::Spacing();
+        ImGui::BeginDisabled(!anyDirty);
         if (ImGui::Button("Apply", ImVec2(100, 0)))
         {
             applyVisualSettings();
             applyPhysicsSettings();
         }
+        ImGui::EndDisabled();
         if (anyDirty)
         {
             ImGui::SameLine();
@@ -799,8 +800,10 @@ namespace windows
         }
 
         ImGui::Spacing();
+        ImGui::BeginDisabled(!oceanConfigDirty);
         if (ImGui::Button("Apply Ocean", ImVec2(100, 0)))
             applyOceanConfig();
+        ImGui::EndDisabled();
         if (oceanConfigDirty)
         {
             ImGui::SameLine();
@@ -867,6 +870,11 @@ namespace windows
 
     void OceanEditorWindow::applyOceanConfig()
     {
+        // VK-1658: unapplied band edits only. Without them the window would write back a config the
+        // sea state or the weather has since moved on from.
+        if (!hasOcean || !oceanConfigDirty)
+            return;
+
         events::ocean::SetOceanFFTConfigCommand cmd;
         cmd.config = oceanConfig;
         events::EventDispatcher::instance().execute(cmd);
@@ -895,6 +903,28 @@ namespace windows
         cmd.settings = physicsSettings;
         events::EventDispatcher::instance().execute(cmd);
         physicsSettingsDirty = false;
+    }
+
+    // VK-1658: read-modify-write of the engine's state, so only the visibility changes - unapplied
+    // edits in this window stay staged.
+    void OceanEditorWindow::applySurfaceVisible()
+    {
+        if (!hasOcean)
+            return;
+
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::ocean::GetOceanStateQuery stateQuery;
+        stateQuery.entity = oceanEntity;
+        const auto state = dispatcher.query(stateQuery);
+        if (!state.has_value())
+            return;
+
+        events::ocean::SetOceanStateCommand cmd;
+        cmd.entity = oceanEntity;
+        cmd.state = *state;
+        cmd.state.isActive = surfaceVisible;
+        dispatcher.execute(cmd);
     }
 
     void OceanEditorWindow::saveOcean()

@@ -1,0 +1,264 @@
+#include "EditorMcpHost.hpp"
+#include "EditorCameraTools.hpp"
+#include "tools/CoreTools.hpp"
+#include "events/editor/EditorSettingsEvents.hpp"
+#include "Import.hpp"
+#include "print/Log.hpp"
+#include <charconv>
+#include <exception>
+#include <string>
+#include <system_error>
+
+namespace editor
+{
+    EditorMcpHost::EditorMcpHost() = default;
+
+    EditorMcpHost::~EditorMcpHost()
+    {
+        shutdown();
+    }
+
+    std::optional<uint16_t> EditorMcpHost::parsePort(std::string_view text)
+    {
+        if (text.empty())
+            return std::nullopt;
+
+        int value = 0;
+        const char* last = text.data() + text.size();
+        auto [ptr, ec] = std::from_chars(text.data(), last, value);
+        if (ec != std::errc{} || ptr != last)
+            return std::nullopt;
+        if (value < minPort || value > maxPort)
+            return std::nullopt;
+        return static_cast<uint16_t>(value);
+    }
+
+    EditorMcpHost::Endpoint EditorMcpHost::fromSettings(const config::McpSettings& settings)
+    {
+        return Endpoint{settings.enabled, settings.port, settings.token};
+    }
+
+    std::string EditorMcpHost::buildInstructions()
+    {
+        return
+            "VertexForge Editor control server. Tools act on the live editor session.\n"
+            "Typical workflow: editor_get_info -> scene_get_hierarchy -> entity_create / "
+            "component_add / material_create to build the scene -> script_write (.mt files under "
+            "scripts/game) -> scripts_build (fix any reported errors, then build again) -> "
+            "script_attach -> play_start -> logs_read -> play_stop -> scene_save.\n"
+            "Conventions: entity ids are integers; vectors are [x, y, z]; rotations are Euler "
+            "angles in degrees; paths are relative to the project directory unless a tool says "
+            "otherwise. Always play_stop before editing the scene again, and scene_save to persist.\n"
+            "Resources: read vf://docs/mtype-api BEFORE writing any script (language rules, a verified "
+            "example, the core API; vf://docs/mtype-api/<module> for any other module). vf://docs/components "
+            "lists component fields, vf://scene/hierarchy the open scene, vf://logs the recent log, and "
+            "vf://scripts/<path> a script's source.\n"
+            "Terrain: units are metres, Y is up and the ground is the XZ plane (the tile grid is centred on the "
+            "origin); terrain tools take ground points as [x, z]. Flow: terrain_create -> "
+            "terrain_generate_heightmap (e.g. preset hills) -> terrain_sculpt (flatten a play area: falloff "
+            "constant, shape square) -> terrain_add_layer + terrain_paint_layer -> terrain_height_at (stand "
+            "entities on the ground) -> scene_save (it saves the terrain too). Each terrain_sculpt, "
+            "terrain_paint_layer and applied terrain_generate_heightmap is one undo step. Entity ids, terrain ids "
+            "included, change after scene_load and play_stop.\n"
+            "Environment: environment_get / environment_set (procedural sky, clouds, timeOfDay 0-24 h, sun), ibl_set "
+            "(HDR skybox or dynamic-sky lighting) + ibl_bake, gi_set (preset Off / Medium / High / Ultra), fog_set "
+            "(volumetric distance + height fog; light shafts where geometry shadows the sun, brightest toward the "
+            "sun with anisotropy 0.6-0.9) and weather_set (presets such as Fog). Updates are strict "
+            "(unknown keys or out-of-range values change nothing; the *_get tools list the ranges); each *_set is "
+            "one undo step, is saved by scene_save (weather is session-only) and is refused in Play mode. Check the "
+            "look with viewport_screenshot.\n"
+            "Look: render_settings_get / render_settings_set (tone mapping and exposure, bloom, color grading, SSAO, "
+            "vignette, film grain, depth of field and the other post-process effects, FXAA, the DLSS upscaler, MSAA and "
+            "shadow quality; nothing built-in renders until postProcess.enabled is true) and postprocess_effect_list "
+            "/ postprocess_effect_set for plugin effects. Same strict updates, one undo step per call; the plugin "
+            "effect toggles are session-only.\n"
+            "Effects: vfx_list_assets (the project's .vfVFX effects and combos; empty: copy the engine's "
+            "assets/vfx/library into the project, then assets_rescan) -> vfx_add_emitter {entity, effect} -> "
+            "vfx_set_params (size, color = a tint over the authored colours, spawnRate, lifetime, blendMode, sortOrder; "
+            "saved per entity) -> vfx_play (edit-mode preview; wait about the particle lifetime) -> "
+            "viewport_screenshot. vfx_add_emitter and vfx_set_params are one undo step each and are refused in Play "
+            "mode, where components play by themselves (autoPlay) and scripts use VFX::spawnAt.\n"
+            "Water: water_get (the ocean, the look all water shares and every lake / pool; its params, look and "
+            "bodies pass back unchanged) -> ocean_enable {enabled:true, levelAboveTerrain} (an infinite sea at one "
+            "level; enabled:false hides it but keeps its settings for the lakes, remove:true deletes it) -> "
+            "water_create_body {center:[x, z], halfExtents, level or levelAboveTerrain + terrainReference "
+            "lowest|center|rim} (axis-aligned rectangles only; no rivers, use a long narrow lake) -> ocean_set_params "
+            "(level, seaState 0-12 or windSpeed, windDirection, choppiness, bands, physics), water_set_params "
+            "(colour, opacity, foam, reflections, ...; shoreline and caustics are ocean-only) and water_set_body -> "
+            "viewport_screenshot. Each edit is one undo step, is saved by scene_save and is refused in Play mode.\n"
+            "UI: ui_create_canvas {name} -> ui_add_widget {type (ProgressBar, Label, Button, Checkbox, Slider, Image, "
+            "...), parent (the canvas or a widget), name, text, placement:{preset (topLeft, top, topRight, ..., "
+            "stretch), size, margin}} -> ui_set / ui_get (sections per type: ui_list_widget_types) -> a script (UI "
+            "section of vf://docs/mtype-api; widgets are found by unique name) -> script_attach -> play_start -> "
+            "viewport_screenshot {settleFrames:5} (Edit mode shows only a flat preview of the canvas) -> ui_click "
+            "(Play only: presses a button or toggles a checkbox like a mouse click) -> play_stop. Every element is "
+            "anchored to the whole canvas: placement handles that, and ui_set moves a widget's children with it. "
+            "ui_create_canvas, ui_add_widget, ui_set and ui_instantiate_prefab are one undo step each, are saved by "
+            "scene_save and are refused in Play mode.\n"
+            "AI: read vf://docs/bt first (vf://docs/navigation for the navmesh, routes and flying agents). "
+            "navmesh_bake (bakes the walkable surface and saves it) -> entity_create + component_add NavmeshAgent (at "
+            "the scene root) -> route_create (patrol waypoints) -> a ScriptTask script when the built-in nodes are not "
+            "enough (section 12 of vf://docs/mtype-api, then scripts_build) -> bt_create {path, tree} (a tree is an "
+            "asset: bt_get reads it, bt_set and bt_edit change the file, also in Play mode) -> bt_assign {entity, tree, "
+            "blackboard} -> scene_save -> play_start -> bt_debug_state {entity, sampleSeconds} (trees run only in Play "
+            "mode) -> play_stop. eqs_set_query / eqs_run author environment queries; volumetric_bake bakes a "
+            "VolumetricNavVolume for VolumetricAgent flyers. bt_assign, bt_unassign, route_create and route_set are one "
+            "undo step each and are refused in Play mode; tree edits, bakes and EQS queries are not undoable.\n"
+            "Prompts: create_platformer_template and create_top_down_template walk through building a "
+            "playable game; create_hud builds a HUD wired to a script; create_enemy_ai builds an enemy that "
+            "patrols, chases and attacks the player.";
+    }
+
+    void EditorMcpHost::init(const McpLaunchOptions& launchOptions)
+    {
+        if (service)
+            return;
+
+        mcp::McpServer::Info info;
+        info.instructions = buildInstructions();
+        service = std::make_unique<mcp::McpService>(std::move(info));
+        mcp::tools::registerCoreTools(service->registry(), service->mainThreadQueue());
+        if (editorCamera)
+            registerEditorCameraTools(service->registry(), editorCamera);
+        mcp::tools::registerCoreResources(service->resourceRegistry(), service->mainThreadQueue());
+        mcp::tools::registerCorePrompts(service->promptRegistry());
+        // Plugins are initialised before the host, so their tools are already registered.
+        service->enablePluginTools();
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        lastPreference = dispatcher.query(events::editor::GetEditorSettingsQuery{}).mcp;
+
+        Endpoint endpoint = fromSettings(lastPreference);
+        if (launchOptions.enable || launchOptions.port || launchOptions.token)
+        {
+            commandLineOverride = true;
+            // --mcp-token alone only replaces the token; --mcp / --mcp-port enable the server.
+            if (launchOptions.enable || launchOptions.port)
+                endpoint.enabled = true;
+            if (launchOptions.port)
+                endpoint.port = *launchOptions.port;
+            if (launchOptions.token)
+                endpoint.token = *launchOptions.token;
+        }
+
+        settingsSubscription = events::ScopedSubscription(
+            dispatcher.subscribe<events::editor::EditorSettingsChangedNotification>(
+                [this](const events::editor::EditorSettingsChangedNotification& n)
+                {
+                    onSettingsChanged(n.settings.mcp);
+                }));
+
+        // Not inside drain(), so starting synchronously is safe here.
+        applyEndpoint(endpoint);
+    }
+
+    void EditorMcpHost::onSettingsChanged(const config::McpSettings& settings)
+    {
+        // The notification fires for every preference change (theme, log level, ...).
+        // Only a change to the MCP section restarts the server or ends a command-line override.
+        const Endpoint preference = fromSettings(settings);
+        if (preference == fromSettings(lastPreference))
+            return;
+
+        lastPreference = settings;
+        commandLineOverride = false;
+        pending = preference;
+    }
+
+    void EditorMcpHost::drain()
+    {
+        if (!service)
+            return;
+
+        if (pending)
+        {
+            Endpoint endpoint = std::move(*pending);
+            pending.reset();
+            applyEndpoint(endpoint);
+        }
+
+        if (service->isRunning())
+            service->drain();
+    }
+
+    void EditorMcpHost::applyEndpoint(const Endpoint& endpoint)
+    {
+        if (!service)
+            return;
+
+        const bool running = service->isRunning();
+        if (running && endpoint == active)
+            return;
+
+        active = endpoint;
+        configError.clear();
+
+        if (!endpoint.enabled)
+        {
+            service->stop();
+            return;
+        }
+
+        if (endpoint.port < minPort || endpoint.port > maxPort)
+        {
+            service->stop();
+            configError = "Port " + std::to_string(endpoint.port) + " is outside " +
+                          std::to_string(minPort) + "-" + std::to_string(maxPort);
+            vfLogWarning("[MCP] not started: {}", configError);
+            return;
+        }
+
+        try
+        {
+            // start() stops a running server first and reports bind failures via status().
+            service->start(static_cast<uint16_t>(endpoint.port), endpoint.token);
+        }
+        catch (const std::exception& e)
+        {
+            configError = e.what();
+            vfLogError("[MCP] failed to start: {}", configError);
+        }
+    }
+
+    void EditorMcpHost::shutdown()
+    {
+        settingsSubscription.unsubscribe();
+        pending.reset();
+        if (service)
+        {
+            // An assets_import runs on a connection thread that stop() joins; ask
+            // the import pipeline to bail out so editor exit is not held hostage by
+            // a long agent import. (The editor is exiting, so cancelling a user
+            // import too is harmless - cleanUp() shuts Import down right after.)
+            controllers::Import::requestCancel();
+            service->stop();
+            service.reset();
+        }
+    }
+
+    mcp::McpStatus EditorMcpHost::status() const
+    {
+        mcp::McpStatus result;
+        if (service)
+            result = service->status();
+
+        if (result.state != mcp::McpStatus::State::Listening)
+        {
+            result.port = static_cast<uint16_t>(
+                (active.port >= 0 && active.port <= maxPort) ? active.port : 0);
+
+            // A disabled server is Off even if an earlier start attempt failed.
+            if (!active.enabled)
+            {
+                result.state = mcp::McpStatus::State::Off;
+                result.error.clear();
+            }
+            else if (!configError.empty())
+            {
+                result.state = mcp::McpStatus::State::Error;
+                result.error = configError;
+            }
+        }
+        return result;
+    }
+}

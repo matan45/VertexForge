@@ -384,6 +384,18 @@ namespace windows::details
                 ImGui::SetTooltip("Navigation mesh agent for pathfinding and crowd movement");
         }
 
+        if (!c.hasNavRoute && matchesFilter("Nav Route", filter))   // VK-1660
+        {
+            if (ImGui::Selectable("  Nav Route"))
+            {
+                events::scene::AddNavRouteComponentCommand cmd;
+                cmd.entity = handle;
+                dispatcher.execute(cmd);
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Patrol route: this entity's ordered children are the markers a FollowRoute task walks");
+        }
+
         if (!c.hasOffMeshLink && matchesFilter("Off-Mesh Link", filter))
         {
             if (ImGui::Selectable("  Off-Mesh Link"))

@@ -78,6 +78,15 @@ namespace events::ik
         std::string_view getName() const override { return "UpdateIKChainConfig"; }
     };
 
+    // VK-1656: replaces every chain of the entity's IKTargetComponent, in the given order.
+    // Runtime targets and resolved bones reset. False when the entity has no IK component.
+    struct SetIKChainsCommand : ::events::ICommand<bool>
+    {
+        ::services::EntityHandle entity;
+        std::vector<animator::ik::IKChainConfig> chains;
+        std::string_view getName() const override { return "SetIKChains"; }
+    };
+
     // === Queries ===
 
     struct GetIKChainNamesQuery : ::events::IQuery<std::vector<std::string>>

@@ -2,36 +2,33 @@
 
 namespace eqs
 {
-    GridGenerator::GridGenerator(int gridSize, float spacing)
-        : gridSize(gridSize)
-        , spacing(spacing)
+    GridGenerator::GridGenerator(const Settings& settings)
+        : settings(settings)
     {
     }
 
-    std::vector<EQSCandidate> GridGenerator::generate(const EQSContext& context,
-                                                       const EQSProviderRefs& providers)
+    bool GridGenerator::generate(const EQSContext& context, const EQSProviderRefs& /*providers*/,
+                                 std::vector<EQSCandidate>& out, std::string& error) const
     {
-        std::vector<EQSCandidate> candidates;
-        candidates.reserve(static_cast<size_t>(gridSize) * gridSize);
+        glm::vec3 center{0.0f};
+        if (!resolveContextPoint(context, settings.center, center, error, "the Grid generator"))
+            return false;
+        if (settings.size <= 0)
+            return true;
 
-        float halfExtent = (static_cast<float>(gridSize - 1) * spacing) * 0.5f;
-
-        for (int z = 0; z < gridSize; ++z)
+        out.reserve(out.size() + static_cast<size_t>(settings.size) * static_cast<size_t>(settings.size));
+        const float halfExtent = static_cast<float>(settings.size - 1) * settings.spacing * 0.5f;
+        for (int z = 0; z < settings.size; ++z)
         {
-            for (int x = 0; x < gridSize; ++x)
+            for (int x = 0; x < settings.size; ++x)
             {
                 EQSCandidate candidate;
-                candidate.position = context.querierPosition + glm::vec3(
-                    static_cast<float>(x) * spacing - halfExtent,
-                    0.0f,
-                    static_cast<float>(z) * spacing - halfExtent
-                );
-                candidate.totalScore = 0.0f;
-                candidate.filtered = false;
-                candidates.push_back(candidate);
+                candidate.position = center + glm::vec3(static_cast<float>(x) * settings.spacing - halfExtent,
+                                                        0.0f,
+                                                        static_cast<float>(z) * settings.spacing - halfExtent);
+                out.push_back(candidate);
             }
         }
-
-        return candidates;
+        return true;
     }
 }

@@ -123,6 +123,7 @@ namespace services
         std::unordered_map<VFXComboInstanceId, ComboInstance> combos;
         VFXComboInstanceId nextComboId = 1;
         ::events::SubscriptionToken assetSavedToken;
+        ::events::SubscriptionToken editorModeChangedToken; // VK-1657: Play->Edit -> forgetAllCombos()
 
         // VK-1496 — re-entrancy guard. A ScriptCue step publishes VFXComboCueFiredNotification
         // synchronously (ScriptVFXEventBridge -> mType onComboCue on the update thread). If that
@@ -265,5 +266,12 @@ namespace services
 
         // Destroy every combo and all child instances. Used on exit-play teardown.
         void destroyAll();
+
+        // VK-1657 — Play->Edit: drop every combo (and queued teardowns / particle events) WITHOUT
+        // dispatching child destroys. The children are transient renderer instances that the
+        // runtime service purges on the next edit-mode VFX tick; destroying them here would touch
+        // the renderer while a fatal-script Stop has the render thread busy. Combo ids are not
+        // reused, so a later destroy/stop of a forgotten id stays a no-op.
+        void forgetAllCombos();
     };
 }

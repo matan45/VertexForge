@@ -24,6 +24,9 @@ namespace core
         void updateTerrainHeightfield();
         void subscribeTerrainNotifications();
         void unsubscribeTerrainNotifications();
+        // VK-1657: drain pendingConfigInvalidations into the renderer's config cache. Called at the
+        // top of update(), createInstance() and createChannel(); the renderer must exist.
+        void applyPendingConfigInvalidations();
 
         bool terrainHeightfieldCached = false;
         uint32_t cachedMaxColliders = 32;
@@ -56,6 +59,7 @@ namespace core
         services::VFXInstanceId createChannel(const std::string& path, uint32_t particlesPerRequest) override;
         void emitToChannel(services::VFXInstanceId id, const services::VFXChannelEmitParams& params) override;
         void destroyInstance(services::VFXInstanceId id) override;
+        std::vector<services::VFXInstanceId> destroyTransientInstances() override; // VK-1657
 
         // Instance control
         void applyInstanceOverrides(services::VFXInstanceId id, const services::VFXEmitterOverrides& overrides) override;

@@ -95,7 +95,7 @@
         { "name": "enemyName", "type": "String", "default": "Enemy" },
         { "name": "aggroRange", "type": "Float", "default": 15.0 },
         { "name": "enemyVisible", "type": "Bool", "default": false },
-        { "name": "enemyId", "type": "Int", "default": 0 },
+        { "name": "enemyId", "type": "Int", "default": -1 },
         { "name": "enemyPos", "type": "Vec3", "default": [0.0, 0.0, 0.0] },
         { "name": "fleeDistance", "type": "Float", "default": 15.0 },
         { "name": "resourcePos", "type": "Vec3", "default": [10.0, 0.0, 10.0] },

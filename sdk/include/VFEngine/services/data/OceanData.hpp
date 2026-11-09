@@ -21,6 +21,8 @@ namespace services
         bool enabled = true;
         float foamPersistence = 0.85f;
         float foamDecay = 0.5f;
+
+        bool operator==(const OceanBandConfigData&) const = default;
     };
 
     struct OceanFFTConfigData
@@ -32,6 +34,8 @@ namespace services
         };
         float gravity = 9.81f;
         bool enabled = false;
+
+        bool operator==(const OceanFFTConfigData&) const = default;
     };
 
     struct OceanVisualSettings
@@ -101,6 +105,8 @@ namespace services
         float rippleFoamScale = 1.0f;
         float rippleFoamDecay = 1.5f;        // per-second foam decay
         float rippleEdgeFadeStart = 0.85f;   // patch-border fade start, 0..1
+
+        bool operator==(const OceanVisualSettings&) const = default;
     };
 
     // VK-1605: editor-facing status of the camera-following shore-depth bake. Surfaced in the
@@ -124,6 +130,8 @@ namespace services
         float drag = 0.5f;
         float buoyancyStrength = 2.0f;
         bool physicsEnabled = true;
+
+        bool operator==(const OceanPhysicsSettings&) const = default;
     };
 
     struct OceanCreationData
@@ -215,5 +223,27 @@ namespace services
         float currentBeaufort = 3.0f;
 
         OceanFFTConfigData oceanConfig;
+    };
+
+    // VK-1658: the whole OceanComponent as one value (GetOceanStateQuery / SetOceanStateCommand), so a
+    // caller can read it, change a few fields and write it back without resetting the rest. isActive
+    // = the ocean SURFACE is visible, and its FFT runs only then; a hidden ocean still holds the look,
+    // the level, the sea state and the buoyancy tuning every water body uses.
+    struct OceanStateData
+    {
+        float waterHeight = 0.0f;
+        bool isActive = true;
+
+        OceanVisualSettings visual;
+        OceanPhysicsSettings physics;
+
+        OceanBandConfigData bands[MAX_OCEAN_BANDS];   // swell, agitation, ripples
+        float gravity = 9.81f;
+
+        bool weatherDriven = false;
+        float weatherResponse = 1.0f;
+        float currentBeaufort = 3.0f;
+
+        bool operator==(const OceanStateData&) const = default;
     };
 }

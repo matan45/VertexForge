@@ -46,7 +46,8 @@ namespace services
         virtual void setSceneDepthImageView(vk::ImageView depthView) = 0;
 
         // VK-1502: depth-buffer collision. needsPrevFrameDepth() drives lazy creation of the last-frame
-        // depth copies (prevFrameDepth) even when upscaling is off. setPrevFrameDepth feeds the sim the depth
+        // depth copies (prevFrameDepth), with or without upscaling - VFX is their only consumer since VK-1662
+        // (the DLSS motion vectors read the current depth). setPrevFrameDepth feeds the sim the depth
         // views (one per frame-in-flight; empty => bind the fallback), which slot to sample this frame, and
         // whether depth collision is active (true only once the depth is populated and shader-readable).
         // Default-empty so existing test/plugin providers stay source-compatible.
@@ -182,5 +183,12 @@ namespace services
             uint8_t priority = 2;
         };
         virtual std::vector<InstanceDebugInfo> getInstanceDebugInfo() const { return {}; }
+
+        // VK-1657 — destroy every instance not created with VFXRuntimeParams::persistent (the
+        // effects scripts, plugins and combos spawned during Play) and return their ids. Run from
+        // the editor's first edit-mode VFX tick after Play->Edit, never from the mode notification
+        // itself (a fatal-script Stop publishes it while the render thread is busy). Non-pure so
+        // existing test providers stay source-compatible; the runtime adapter overrides it.
+        virtual std::vector<VFXInstanceId> destroyTransientInstances() { return {}; }
     };
 }

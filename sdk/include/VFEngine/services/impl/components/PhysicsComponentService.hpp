@@ -65,9 +65,14 @@ namespace services {
         std::optional<PhysicsAnimationComponentData> getPhysicsAnimationData(EntityHandle entity) const;
         bool setPhysicsAnimationData(EntityHandle entity, const PhysicsAnimationComponentData& data);
 
-        // NavmeshAgent Component Operations
+        // NavmeshAgent Component Operations (its data events are handled by NavmeshServiceImpl, which
+        // also pushes a write to the live crowd agent)
         bool addNavmeshAgentComponent(EntityHandle entity);
         bool removeNavmeshAgentComponent(EntityHandle entity);
+
+        // Nav Route Component Operations (VK-1660)
+        bool addNavRouteComponent(EntityHandle entity);
+        bool removeNavRouteComponent(EntityHandle entity);
 
         // Off-Mesh Link Component Operations
         bool addOffMeshLinkComponent(EntityHandle entity);

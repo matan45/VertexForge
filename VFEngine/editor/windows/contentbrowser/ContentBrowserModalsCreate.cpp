@@ -5,6 +5,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ResourceEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/render/MaterialEvents.hpp"
 #include <material/MaterialAsset.hpp>
 #include <material/ToonProfileManager.hpp>
 #include <asset/AssetMetadata.hpp>
@@ -67,24 +68,17 @@ namespace windows
             {
                 if (!newMaterialName.empty())
                 {
-                    std::string extension = ".vfMat";
-                    fs::path newMaterialPath = currentPath / (newMaterialName + extension);
-
-                    int counter = 1;
-                    while (fs::exists(newMaterialPath))
+                    events::material::CreateMaterialAssetCommand createCmd;
+                    createCmd.directory = StringUtil::wstringToUtf8(currentPath.wstring());
+                    createCmd.name = newMaterialName;
+                    auto created = events::EventDispatcher::instance().execute(createCmd);
+                    if (created.success)
                     {
-                        newMaterialPath = currentPath / (newMaterialName + "_" + std::to_string(counter) + extension);
-                        counter++;
-                    }
-
-                    std::string pathStr = StringUtil::wstringToUtf8(newMaterialPath.wstring());
-                    auto defaultMat = material::MaterialAsset::createDefault(newMaterialName);
-                    if (material::MaterialAsset::save(pathStr, defaultMat))
-                    {
-                        events::resource::AssetSavedNotification assetNotif;
-                        assetNotif.filePath = pathStr;
-                        events::EventDispatcher::instance().publish(assetNotif);
                         if (refreshCallback) refreshCallback();
+                    }
+                    else
+                    {
+                        vfLogError("Create material failed: {}", created.error);
                     }
                 }
                 ImGui::CloseCurrentPopup();

@@ -1,8 +1,12 @@
 #pragma once
 #include <entt/entt.hpp>
 #include "../../services/data/AnimatorDebugTypes.hpp"
+#include "../../services/data/AnimationAuthoringData.hpp"
+#include "../../services/events/EventDispatcher.hpp"
+#include <optional>
 #include <string>
 #include <cstdint>
+#include <vector>
 
 namespace controllers
 {
@@ -45,5 +49,17 @@ namespace controllers
         [[nodiscard]] float getLayerWeight(entt::entity entity, uint32_t layerIndex) const;
         [[nodiscard]] uint32_t getLayerCount(entt::entity entity) const;
         [[nodiscard]] std::string getLayerName(entt::entity entity, uint32_t layerIndex) const;
+
+        // Edit-mode preview (VK-1656): main thread, edit mode only (callers refuse Play).
+        services::AnimationEditPreviewResult startEditPreview(entt::entity entity,
+                                                              const services::AnimationEditPreviewRequest& request);
+        bool stopEditPreview(entt::entity entity);
+        bool stopAllEditPreviews();
+        [[nodiscard]] std::optional<services::AnimationEditPreviewStatus> getEditPreviewStatus(entt::entity entity) const;
+
+    private:
+        // Animation.dll links its own Services copy, so its EventDispatcher never receives the
+        // EXE's notifications: init() forwards them into RuntimeAnimatorSystem's request queue.
+        std::vector<events::ScopedSubscription> forwarders;
     };
 }

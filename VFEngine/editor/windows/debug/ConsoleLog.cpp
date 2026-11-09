@@ -23,7 +23,9 @@ namespace windows
         {
             std::lock_guard<std::mutex> lock(util::imguiConsoleBufferMutex);
             util::imguiConsoleBuffer.clear();
-            util::logSequenceCounter.store(0, std::memory_order_relaxed);
+            // logSequenceCounter is deliberately NOT reset: sequence numbers stay
+            // monotonic so MCP logs_read pollers (sinceSeq) never miss lines
+            // logged after a Clear (VK-1650).
             cachedBuffer.clear();
             filteredView.clear();
             selectedEntries.clear();

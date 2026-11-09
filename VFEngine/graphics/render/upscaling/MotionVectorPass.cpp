@@ -32,8 +32,11 @@ namespace render::upscaling
         allocateDescriptorSets();
         createComputePipeline();
 
+        // Set even without a pipeline (shader compile failure, already logged) so cleanup() releases what was
+        // created; isInitialized() then reports false and the Upscale pass falls back to a plain blit.
         initialized = true;
-        vfLogInfo("MotionVectorPass: Initialized");
+        if (computePipeline)
+            vfLogInfo("MotionVectorPass: Initialized");
     }
 
     void MotionVectorPass::cleanup()
@@ -156,24 +159,21 @@ namespace render::upscaling
 
     void MotionVectorPass::dispatch(vk::CommandBuffer cmd,
                                      vk::ImageView depthView,
-                                     vk::Image depthImage,
                                      vk::ImageView motionVectorStorageView,
                                      vk::Image motionVectorImage,
-                                     const glm::mat4& invViewProjection,
-                                     const glm::mat4& prevViewProjection,
+                                     const MotionVectorMatrices& matrices,
                                      uint32_t width, uint32_t height,
-                                     uint32_t frameIndex,
-                                     vk::ImageLayout depthLayout)
+                                     uint32_t frameIndex)
     {
-        if (!initialized) return;
+        if (!isInitialized()) return;
 
         uint32_t frame = frameIndex % core::MAX_FRAMES_IN_FLIGHT;
         paramsBuffer.setFrame(frame);
 
         // Update params UBO
         MotionVectorParams params{};
-        params.invViewProjection = invViewProjection;
-        params.prevViewProjection = prevViewProjection;
+        params.jitteredToCurrentClip = matrices.jitteredToCurrentClip;
+        params.jitteredToPreviousClip = matrices.jitteredToPreviousClip;
         params.screenParams = glm::vec4(
             static_cast<float>(width), static_cast<float>(height),
             1.0f / static_cast<float>(width), 1.0f / static_cast<float>(height));
@@ -185,7 +185,7 @@ namespace render::upscaling
         vk::DescriptorImageInfo depthInfo{};
         depthInfo.sampler = depthSampler;
         depthInfo.imageView = depthView;
-        depthInfo.imageLayout = depthLayout;
+        depthInfo.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
 
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = paramsBuffer.getBuffer();

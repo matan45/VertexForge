@@ -148,8 +148,10 @@ namespace windows::details
         ImGui::Spacing();
         ImGui::TextDisabled("Shoaling and breaking shore waves never apply to a body —\n"
                             "they are driven by the ocean's shore-depth field.");
+        ImGui::TextDisabled("Waves need the VISIBLE ocean: its FFT stops while the\n"
+                            "ocean is hidden, and the body goes flat.");
         ImGui::TextDisabled("Interactive ripples still apply, but need an ocean entity\n"
-                            "in the scene to supply their settings.");
+                            "(a hidden one is fine) to supply their settings.");
 
         return changed;
     }

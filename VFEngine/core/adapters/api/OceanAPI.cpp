@@ -70,16 +70,48 @@ namespace core::api
                     // IsPositionInOceanQuery already resolves bodies first and answers false when
                     // there is no water at that XZ at all, so the outer ocean loop is gone. The
                     // query samples the DISPLACED surface, so this still accounts for waves.
+                    //
+                    // VK-1658: ONE camera - the one the game renders through, picked the way
+                    // CameraComponentService::getPrimaryCamera does (the active primary camera, else
+                    // the first active one) - at its WORLD position. Testing every camera's local
+                    // position answered "underwater" for any minimap or render-texture camera, and
+                    // for a child camera judged the parent-relative offset instead of the camera.
+                    auto isEntityActive = [&registry](entt::entity entity)
+                    {
+                        const auto* name = registry.try_get<components::NameComponent>(entity);
+                        return name == nullptr || name->isActive;
+                    };
+
                     auto camView = registry.view<components::CameraComponent, components::TransformComponent>();
+                    std::optional<entt::entity> camera;
                     for (auto camEntity : camView)
                     {
-                        const auto& transform = camView.get<components::TransformComponent>(camEntity);
-                        events::ocean::IsPositionInOceanQuery query;
-                        query.position = transform.position;
-                        if (dispatcher.query(query))
-                            return value::Value(true);
+                        if (isEntityActive(camEntity) && camView.get<components::CameraComponent>(camEntity).isPrimary)
+                        {
+                            camera = camEntity;
+                            break;
+                        }
                     }
-                    return value::Value(false);
+                    if (!camera)
+                    {
+                        for (auto camEntity : camView)
+                        {
+                            if (isEntityActive(camEntity))
+                            {
+                                camera = camEntity;
+                                break;
+                            }
+                        }
+                    }
+                    if (!camera)
+                        return value::Value(false);
+
+                    events::ocean::IsPositionInOceanQuery query;
+                    if (const auto* world = registry.try_get<components::WorldTransformComponent>(*camera))
+                        query.position = glm::vec3(world->worldMatrix[3]);
+                    else
+                        query.position = camView.get<components::TransformComponent>(*camera).position;
+                    return value::Value(dispatcher.query(query));
                 }});
 
             // ocean.isEntityInWater(entityId) -> bool
@@ -182,6 +214,15 @@ namespace core::api
 
                     events::ocean::SetOceanPhysicsSettingsCommand cmd;
                     cmd.oceanEntity = services::EntityHandle{static_cast<uint64_t>(id)};
+
+                    // VK-1658: the handler writes physicsEnabled too, and the script API has no
+                    // argument for it - keep the ocean's own switch instead of the struct default
+                    // (true), which re-enabled ocean physics that the scene had turned off.
+                    events::ocean::GetOceanDataQuery dataQuery;
+                    dataQuery.entity = cmd.oceanEntity;
+                    if (auto current = dispatcher.query(dataQuery); current.has_value())
+                        cmd.settings.physicsEnabled = current->physicsEnabled;
+
                     cmd.settings.density = extractFloat(args[1]);
                     cmd.settings.drag = extractFloat(args[2]);
                     cmd.settings.buoyancyStrength = extractFloat(args[3]);
@@ -261,7 +302,19 @@ namespace core::api
                     events::ocean::SetOceanWeatherDrivenCommand cmd;
                     cmd.oceanEntity = services::EntityHandle{static_cast<uint64_t>(id)};
                     cmd.enabled = extractBool(args[1]);
-                    cmd.response = args.size() > 2 ? extractFloat(args[2]) : 1.0f;
+                    if (args.size() > 2)
+                    {
+                        cmd.response = extractFloat(args[2]);
+                    }
+                    else
+                    {
+                        // VK-1658: Ocean.mt passes only (id, enabled), so the response the scene
+                        // authored must survive - it used to be reset to 1.0 on every call.
+                        events::ocean::GetOceanDataQuery dataQuery;
+                        dataQuery.entity = cmd.oceanEntity;
+                        if (auto current = dispatcher.query(dataQuery); current.has_value())
+                            cmd.response = current->weatherResponse;
+                    }
                     dispatcher.execute(cmd);
 
                     return value::Value(std::monostate{});

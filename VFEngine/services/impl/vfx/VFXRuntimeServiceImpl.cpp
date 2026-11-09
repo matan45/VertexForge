@@ -1,19 +1,40 @@
+#include "print/Log.hpp"
 #include "VFXRuntimeServiceImpl.hpp"
 #include "../../providers/vfx/IVFXRuntimeProvider.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include "../../events/editor/EditorModeEvents.hpp"
 #include "../../events/vfx/VFXRuntimeEvents.hpp"
 #include "../../events/vfx/VFXSnapshotEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/scene/ComponentPhysicsLightEvents.hpp"
 #include "../../events/physics/SocketEvents.hpp"
+#include "asset/AssetDatabase.hpp"
+#include "resource/VirtualFileSystem.hpp"
 #include <vfx/VFXRuntimeDiagnostics.hpp>
 #include <algorithm>
+#include <exception>
+#include <vector>
 
 namespace services
 {
     VFXRuntimeServiceImpl::VFXRuntimeServiceImpl(IVFXRuntimeProvider* provider)
         : vfxProvider(provider)
     {
+    }
+
+    VFXRuntimeServiceImpl::~VFXRuntimeServiceImpl()
+    {
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        if (sceneLoadedToken.isValid())
+        {
+            dispatcher.unsubscribe(sceneLoadedToken);
+            sceneLoadedToken = {};
+        }
+        if (editorModeChangedToken.isValid())
+        {
+            dispatcher.unsubscribe(editorModeChangedToken);
+            editorModeChangedToken = {};
+        }
     }
 
     void VFXRuntimeServiceImpl::registerEventHandlers()
@@ -265,7 +286,9 @@ namespace services
                     vfxProvider->seekInstance(cmd.instanceId, cmd.emissionTime, cmd.spawnAccumulator);
             });
 
-        dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
+        if (sceneLoadedToken.isValid())
+            dispatcher.unsubscribe(sceneLoadedToken);
+        sceneLoadedToken = dispatcher.subscribe<::events::scene::SceneLoadedNotification>(
             [this](const ::events::scene::SceneLoadedNotification&)
             {
                 auto& disp = ::events::EventDispatcher::instance();
@@ -288,13 +311,68 @@ namespace services
                 tierCmd.tier = settings.vfxQualityTier;
                 disp.execute(tierCmd);
             });
+
+        // VK-1657 — everything scripts, plugins and combos spawned during Play outlives the
+        // session (nothing else destroys it). Only flag the purge here: purgeTransientIfPending()
+        // runs it from the next edit-mode VFX task, where touching the renderer is safe, or Edit->Play
+        // runs it first when Play starts again before that task (render thread idle there too).
+        if (editorModeChangedToken.isValid())
+            dispatcher.unsubscribe(editorModeChangedToken);
+        editorModeChangedToken = dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
+            [this](const ::events::editor::EditorModeChangedNotification& n)
+            {
+                if (n.previousMode == EditorMode::Play && n.currentMode == EditorMode::Edit)
+                    purgePending = true;
+                else if (n.previousMode == EditorMode::Edit && n.currentMode == EditorMode::Play &&
+                         purgePending.exchange(false))
+                    purgeTransientNow(); // Stop and Play in back-to-back frames: purge before Play entry
+            });
+    }
+
+    std::string VFXRuntimeServiceImpl::resolveEffectPath(const std::string& path)
+    {
+        // Checked on every spawn (not cached): an effect deleted or renamed since must still miss.
+        const std::string resolved = asset::AssetDatabase::instance().resolveAssetPath(path);
+        // VFS-aware so an exported game finds effects packed in its .vfpak.
+        bool found = false;
+        try
+        {
+            found = resource::VirtualFileSystem::instance().exists(resolved);
+        }
+        catch (const std::exception&)
+        {
+            // std::filesystem::exists throws on a malformed path: treat it as missing.
+        }
+
+        if (!found)
+        {
+            // Deduplicated like the combo warnings (VFXSequence): logged once, repeats bump a count.
+            std::string msg = "[VFXRuntime] effect '" + path + "' not found";
+            if (resolved != path)
+                msg += " (resolved to '" + resolved + "')";
+            msg += "; no instance created";
+            if (vfx::VFXRuntimeDiagnostics::instance().report("VFXRuntime", msg))
+                vfLogWarning("{}", msg);
+            return {};
+        }
+        return resolved;
     }
 
     VFXInstanceId VFXRuntimeServiceImpl::createInstance(const VFXRuntimeParams& params)
     {
         if (!vfxProvider)
             return 0;
-        return vfxProvider->createInstance(params);
+        // An empty path keeps the renderer's default effect.
+        if (params.vfxAssetPath.empty())
+            return vfxProvider->createInstance(params);
+
+        // VK-1657: project-relative paths (VFX.spawnAt, plugins) used to reach the renderer raw,
+        // and a miss silently became the default effect.
+        VFXRuntimeParams resolvedParams = params;
+        resolvedParams.vfxAssetPath = resolveEffectPath(params.vfxAssetPath);
+        if (resolvedParams.vfxAssetPath.empty())
+            return 0;
+        return vfxProvider->createInstance(resolvedParams);
     }
 
     VFXInstanceId VFXRuntimeServiceImpl::createChannel(const std::string& path,
@@ -302,7 +380,10 @@ namespace services
     {
         if (!vfxProvider || path.empty())
             return 0;
-        return vfxProvider->createChannel(path, particlesPerRequest);
+        const std::string resolved = resolveEffectPath(path);
+        if (resolved.empty())
+            return 0;
+        return vfxProvider->createChannel(resolved, particlesPerRequest);
     }
 
     void VFXRuntimeServiceImpl::emitToChannel(VFXInstanceId id,
@@ -404,6 +485,30 @@ namespace services
     bool VFXRuntimeServiceImpl::isInstancePlaying(VFXInstanceId id) const
     {
         return vfxProvider ? vfxProvider->isInstancePlaying(id) : false;
+    }
+
+    size_t VFXRuntimeServiceImpl::instanceCount() const
+    {
+        return vfxProvider ? vfxProvider->getInstanceCount() : 0;
+    }
+
+    void VFXRuntimeServiceImpl::purgeTransientIfPending()
+    {
+        if (purgePending.exchange(false))
+            purgeTransientNow();
+    }
+
+    void VFXRuntimeServiceImpl::purgeTransientNow()
+    {
+        if (!vfxProvider)
+            return;
+
+        const std::vector<VFXInstanceId> destroyed = vfxProvider->destroyTransientInstances();
+        for (VFXInstanceId id : destroyed)
+            socketAttachments.erase(id);
+
+        if (!destroyed.empty())
+            vfLogInfo("VFX: destroyed {} effect instance(s) left over from Play mode", destroyed.size());
     }
 
     VFXRuntimeServiceImpl::BudgetStats VFXRuntimeServiceImpl::getBudgetStats() const

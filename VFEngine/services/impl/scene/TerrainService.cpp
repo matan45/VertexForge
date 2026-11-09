@@ -15,6 +15,8 @@
 #include "../../events/terrain/HoleBrushEvents.hpp"
 #include "../../events/terrain/TerrainStrokeEvents.hpp"
 #include "../../events/terrain/TerrainRuntimeEditEvents.hpp"
+#include "../../events/terrain/TerrainAuthoringEvents.hpp"
+#include "../../events/terrain/TerrainMaterialAssetEvents.hpp"
 #include "../../events/project/SceneEvents.hpp"
 #include "../../events/physics/PhysicsEvents.hpp"
 #include <algorithm>
@@ -92,6 +94,18 @@ namespace services
         dispatcher.unregisterCommandHandler<events::terrainEdit::SetTerrainHolesCommand>();
         dispatcher.unregisterCommandHandler<events::terrainEdit::BeginTerrainEditBatchCommand>();
         dispatcher.unregisterCommandHandler<events::terrainEdit::FlushTerrainEditsCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainAuthoring::SculptTerrainStrokeCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainAuthoring::PaintTerrainLayerStrokeCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainAuthoring::ApplyHeightmapCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainAuthoring::SaveTerrainsCommand>();
+        dispatcher.unregisterQueryHandler<events::terrainAuthoring::ListTerrainsQuery>();
+        dispatcher.unregisterQueryHandler<events::terrainAuthoring::GetTerrainHeightsQuery>();
+        dispatcher.unregisterQueryHandler<events::terrainAuthoring::IsTerrainSaveLockedQuery>();
+        dispatcher.unregisterQueryHandler<events::terrainAuthoring::IsTerrainCreationPendingQuery>();
+        dispatcher.unregisterQueryHandler<events::terrainAuthoring::ProbeHeightmapQuery>();
+        dispatcher.unregisterCommandHandler<events::terrainMaterial::CreateTerrainMaterialAssetCommand>();
+        dispatcher.unregisterCommandHandler<events::terrainMaterial::EditTerrainMaterialLayerCommand>();
+        dispatcher.unregisterQueryHandler<events::terrainMaterial::GetTerrainMaterialInfoQuery>();
         dispatcher.unregisterCommandHandler<events::physics::AddTerrainColliderCommand>();
         dispatcher.unregisterCommandHandler<events::physics::RemoveTerrainColliderCommand>();
         dispatcher.unregisterQueryHandler<events::terrain::GetTerrainDataQuery>();

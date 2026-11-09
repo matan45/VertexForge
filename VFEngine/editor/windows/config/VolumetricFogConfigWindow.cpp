@@ -24,6 +24,14 @@ namespace windows
         }
     }
 
+    void VolumetricFogConfigWindow::notifyRenderSettingsChanged()
+    {
+        if (!isDirty)
+        {
+            settingsLoaded = false;
+        }
+    }
+
     void VolumetricFogConfigWindow::loadSettings()
     {
         auto& dispatcher = events::EventDispatcher::instance();
@@ -44,8 +52,11 @@ namespace windows
         settingsCmd.settings = fullSettings;
         dispatcher.execute(settingsCmd);
 
+        // VK-1654: the scene gets the fog block only. The live struct carries weather overrides
+        // (fog density/colour, rain droplets) and other windows' sections, none of which this
+        // window owns.
         auto renderSettings = dispatcher.query(events::scene::GetRenderSettingsQuery{});
-        renderSettings.postProcess = fullSettings;
+        renderSettings.postProcess.volumetricFog = settings;
         events::scene::SetRenderSettingsCommand sceneCmd;
         sceneCmd.settings = renderSettings;
         dispatcher.execute(sceneCmd);

@@ -85,6 +85,30 @@ namespace core
         crowd->updateAgentParameters(agentIndex, &params);
     }
 
+    bool NavmeshAdapter::updateCrowdAgentConfig(int agentIndex, const navigation::CrowdAgentConfig& config)
+    {
+        std::lock_guard lock(navMeshMutex);
+        if (!crowd)
+            return false;
+
+        const dtCrowdAgent* ag = crowd->getAgent(agentIndex);
+        if (!ag || !ag->active)
+            return false;
+
+        dtCrowdAgentParams params = ag->params;
+        params.radius = config.radius;
+        params.height = config.height;
+        params.maxSpeed = config.maxSpeed;
+        params.maxAcceleration = config.maxAcceleration;
+        // Derived from the radius exactly as addCrowdAgent does
+        params.collisionQueryRange = config.radius * COLLISION_QUERY_RANGE_MULT;
+        params.pathOptimizationRange = config.radius * PATH_OPT_RANGE_MULT;
+        params.obstacleAvoidanceType = static_cast<unsigned char>(
+            config.avoidanceQuality < OBSTACLE_AVOIDANCE_TYPE ? config.avoidanceQuality : OBSTACLE_AVOIDANCE_TYPE);
+        crowd->updateAgentParameters(agentIndex, &params);
+        return true;
+    }
+
     glm::vec3 NavmeshAdapter::getCrowdAgentPosition(int agentIndex) const
     {
         std::lock_guard lock(navMeshMutex);

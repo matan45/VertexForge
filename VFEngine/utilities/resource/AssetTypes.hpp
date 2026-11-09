@@ -53,6 +53,12 @@ namespace resource {
 		// sectors are addressed by coord, not GUID - it exists purely to tag scheduler
 		// requests so the profiler can group them. Append-only; persisted by name.
 		WorldSector = 28,
+		// EQS query template (VK-1660), `.vfEQSQuery` in the project's assets/eqs.
+		// Append-only; persisted by name, so the shifted COUNT stays safe.
+		EQSQuery = 29,
+		// Baked volumetric navigation volume (VK-1660), binary `.vfVolNav` referenced by a
+		// VolumetricNavVolumeComponent's bakedRef. Append-only; persisted by name.
+		VolumetricNav = 30,
 		COUNT
 	};
 
@@ -87,6 +93,8 @@ namespace resource {
 		case AssetType::ToonProfile:      return "ToonProfile";
 		case AssetType::ScatterProfile:   return "ScatterProfile";
 		case AssetType::WorldSector:      return "WorldSector";
+		case AssetType::EQSQuery:         return "EQSQuery";
+		case AssetType::VolumetricNav:    return "VolumetricNav";
 		default:                          return "Unknown";
 		}
 	}

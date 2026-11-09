@@ -716,9 +716,12 @@ namespace behaviortree
         case BTNodeType::MoveTo:
         {
             if (!executor) return BTNodeStatus::Failure;
-            std::string targetKey = getNodeProperty<std::string>(node, "targetKey", std::string("target"));
-            float arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", 0.5f);
-            return executor->executeMoveTo(ownerEntity, targetKey, arrivalDistance, blackboard, state.isFirstTick);
+            MoveToRequest request;
+            request.targetKey = getNodeProperty<std::string>(node, "targetKey", request.targetKey);
+            request.arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", request.arrivalDistance);
+            request.repathDistance = getNodeProperty<float>(node, "repathDistance", request.repathDistance);
+            request.stopOnArrival = getNodeProperty<bool>(node, "stopOnArrival", request.stopOnArrival);
+            return executor->executeMoveTo(ownerEntity, request, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::PlayAnimation:
@@ -758,9 +761,12 @@ namespace behaviortree
         case BTNodeType::EnvironmentQuery:
         {
             if (!executor) return BTNodeStatus::Failure;
-            std::string queryName = getNodeProperty<std::string>(node, "queryName", std::string{});
-            std::string resultKey = getNodeProperty<std::string>(node, "resultKey", std::string("eqsResult"));
-            return executor->executeEnvironmentQuery(ownerEntity, queryName, resultKey, blackboard, state.isFirstTick);
+            EnvironmentQueryRequest request;
+            request.queryName = getNodeProperty<std::string>(node, "queryName", request.queryName);
+            request.resultKey = getNodeProperty<std::string>(node, "resultKey", request.resultKey);
+            request.targetKey = getNodeProperty<std::string>(node, "targetKey", request.targetKey);
+            request.resultEntityKey = getNodeProperty<std::string>(node, "resultEntityKey", request.resultEntityKey);
+            return executor->executeEnvironmentQuery(ownerEntity, node, request, blackboard, state.isFirstTick);
         }
 
         case BTNodeType::LineOfSight:
@@ -775,6 +781,19 @@ namespace behaviortree
         case BTNodeType::DynamicSubTree:
         {
             return tickDynamicSubTree(node, dt, executor);
+        }
+
+        case BTNodeType::FollowRoute:
+        {
+            if (!executor) return BTNodeStatus::Failure;
+            FollowRouteRequest request;
+            request.routeKey = getNodeProperty<std::string>(node, "routeKey", request.routeKey);
+            request.mode = stringToRouteMode(getNodeProperty<std::string>(node, "mode", std::string("Loop")));
+            request.arrivalDistance = getNodeProperty<float>(node, "arrivalDistance", request.arrivalDistance);
+            request.dwell = getNodeProperty<float>(node, "dwell", request.dwell);
+            request.startAtNearest = getNodeProperty<bool>(node, "startAtNearest", request.startAtNearest);
+            request.legTimeout = getNodeProperty<float>(node, "legTimeout", request.legTimeout);
+            return executor->executeFollowRoute(ownerEntity, node, request, blackboard, dt, state.isFirstTick);
         }
 
         default:

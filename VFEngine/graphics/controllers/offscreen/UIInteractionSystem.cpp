@@ -1,6 +1,7 @@
 #include "UIInteractionSystem.hpp"
 #include "FramePreparationSystem.hpp"  // for FrameContext
 #include "UICommon.hpp"
+#include "ui/UICheckboxToggle.hpp"
 #include "asset/AssetRef.hpp"
 #include "../../render/RenderPassHandler.hpp"
 #include "../../render/ui/UIRenderTypes.hpp"
@@ -453,68 +454,21 @@ namespace controllers::offscreen
             {
                 newState = components::UICheckboxState::Hovered;
 
-                // Toggle on click release
+                // Toggle on click release. VK-1659: the rule (radio groups included) is shared with
+                // SimulateUIClickCommand; the callback publishes at the same points it always did.
                 if (ctx.leftMouseReleased)
                 {
-                    bool previousChecked = comp.isChecked;
-                    bool toggled = false;
-
-                    if (comp.groupName.empty())
-                    {
-                        // Independent checkbox: simply toggle
-                        comp.isChecked = !comp.isChecked;
-                        toggled = (comp.isChecked != previousChecked);
-                    }
-                    else
-                    {
-                        // Radio group logic
-                        if (comp.isChecked && !comp.allowUncheck)
+                    utilities::ui::applyCheckboxClick(registry, checkboxEntity,
+                        [&](entt::entity toggledEntity, bool newChecked, bool previousChecked)
                         {
-                            // Already checked, can't uncheck in strict radio mode
-                        }
-                        else if (!comp.isChecked)
-                        {
-                            // Check this one, uncheck all others in the same group
-                            comp.isChecked = true;
-                            toggled = true;
-
-                            for (auto otherEntity : checkboxView)
-                            {
-                                if (otherEntity == checkboxEntity)
-                                    continue;
-                                auto& otherComp = registry.get<components::UICheckboxComponent>(otherEntity);
-                                if (otherComp.groupName == comp.groupName && otherComp.isChecked)
-                                {
-                                    otherComp.isChecked = false;
-
-                                    auto [handle, name] = makeEntityPayload(registry, otherEntity);
-                                    events::ui::UICheckboxToggledNotification notif;
-                                    notif.entity = handle;
-                                    notif.entityName = std::move(name);
-                                    notif.newCheckedState = false;
-                                    notif.previousCheckedState = true;
-                                    dispatcher.publish(notif);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Radio group but allowUncheck is true: toggle off
-                            comp.isChecked = false;
-                            toggled = true;
-                        }
-                    }
-
-                    if (toggled)
-                    {
-                        auto [handle, name] = makeEntityPayload(registry, checkboxEntity);
-                        events::ui::UICheckboxToggledNotification notif;
-                        notif.entity = handle;
-                        notif.entityName = std::move(name);
-                        notif.newCheckedState = comp.isChecked;
-                        notif.previousCheckedState = previousChecked;
-                        dispatcher.publish(notif);
-                    }
+                            auto [handle, name] = makeEntityPayload(registry, toggledEntity);
+                            events::ui::UICheckboxToggledNotification notif;
+                            notif.entity = handle;
+                            notif.entityName = std::move(name);
+                            notif.newCheckedState = newChecked;
+                            notif.previousCheckedState = previousChecked;
+                            dispatcher.publish(notif);
+                        });
                 }
             }
 

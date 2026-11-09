@@ -3,7 +3,7 @@
 // Unlike collision callbacks, slider events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUISliderListener;
+//   import * from "../lib/engine/IUISliderListener.mt";
 //
 //   @Script
 //   public class VolumeController implements IUISliderListener {

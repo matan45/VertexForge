@@ -13,5 +13,6 @@ namespace windows::details
         bool drawHeader(bool& outRemove);
         bool drawVFXFilePath(services::VFXData& vfxData);
         bool drawSettings(services::VFXData& vfxData);
+        bool drawOverrides(services::VFXData& vfxData);
     };
 }

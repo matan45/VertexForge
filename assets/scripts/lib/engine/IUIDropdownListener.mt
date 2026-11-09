@@ -3,7 +3,7 @@
 // Unlike collision callbacks, dropdown events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUIDropdownListener;
+//   import * from "../lib/engine/IUIDropdownListener.mt";
 //
 //   @Script
 //   public class MenuController implements IUIDropdownListener {

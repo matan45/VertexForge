@@ -253,6 +253,15 @@ namespace services
                     offScreenProvider->applyAtmosphereSettings(cmd.settings);
             });
 
+        // VK-1654: weather applies the sky through the no-Sun variant. The runtime has no auto-"Sun",
+        // so both commands do the same here.
+        dispatcher.registerCommandHandler<events::atmosphere::ApplyAtmosphereSettingsNoSunCommand>(
+            [this](const events::atmosphere::ApplyAtmosphereSettingsNoSunCommand& cmd)
+            {
+                if (offScreenProvider)
+                    offScreenProvider->applyAtmosphereSettings(cmd.settings);
+            });
+
         dispatcher.registerQueryHandler<events::atmosphere::GetAtmosphereSettingsQuery>(
             [this](const events::atmosphere::GetAtmosphereSettingsQuery&)
             {

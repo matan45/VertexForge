@@ -235,50 +235,11 @@ namespace controllers
     void OffScreenController::applyPostProcessSettings(const postprocess::PostProcessSettings& settings)
     {
         currentPostProcessSettings = settings;
+        // Scene load applies before the GPU-driven renderer is initialized; render() retries.
+        hasPendingVolumetricFog = !applyVolumetricFogInternal(settings.volumetricFog);
 
         auto* renderHandler = offScreen->getRenderPassHandler();
         if (!renderHandler) return;
-
-        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
-
-        if (gpuRenderer && renderHandler->isGPUDrivenRendererInitialized())
-        {
-            if (settings.volumetricFog.enabled && !gpuRenderer->getVolumetricPipeline())
-            {
-                gpuRenderer->initVolumetricFog(settings.volumetricFog.quality);
-                activeVolumetricQuality = settings.volumetricFog.quality;
-            }
-            else if (settings.volumetricFog.enabled && gpuRenderer->getVolumetricPipeline()
-                     && settings.volumetricFog.quality != activeVolumetricQuality)
-            {
-                device.getLogicalDevice().waitIdle();
-                renderHandler->resetVolumetricFogComposite();
-                gpuRenderer->initVolumetricFog(settings.volumetricFog.quality);
-                activeVolumetricQuality = settings.volumetricFog.quality;
-            }
-
-            if (gpuRenderer->getVolumetricPipeline())
-            {
-                gpuRenderer->updateVolumetricSettings(settings.volumetricFog);
-                gpuRenderer->setVolumetricFogEnabled(settings.volumetricFog.enabled);
-
-                if (!renderHandler->getVolumetricFogComposite())
-                    renderHandler->initVolumetricFogComposite(gpuRenderer->getVolumetricPipeline());
-
-                auto* composite = renderHandler->getVolumetricFogComposite();
-                if (composite)
-                    composite->setIntensity(settings.volumetricFog.intensity);
-            }
-        }
-
-        if (cameraController)
-        {
-            // Enable jitter when DLSS upscaling is active (DLSS requires temporal jitter)
-            bool needsJitter = settings.enabled && settings.upscale.enabled;
-            cameraController->setTAAEnabled(needsJitter);
-            auto extent = swapChain.getSwapchainExtent();
-            cameraController->setViewportExtent(extent.width, extent.height);
-        }
 
         auto* pipeline = renderHandler->getPostProcessPipeline();
         if (pipeline)
@@ -365,6 +326,18 @@ namespace controllers
             upscaleManager->applyReflexSettings(effectiveReflex);
         }
 
+        // VK-1655: jitter follows the upscaler that actually runs (DLSS needs temporal jitter) rather than the
+        // requested setting, and is set after the block above so the viewport extent is the render extent it
+        // just applied.
+        if (cameraController)
+        {
+            cameraController->setTAAEnabled(upscaleManager && upscaleManager->isActive());
+            const auto renderExtent = swapChain.getSwapchainExtent();
+            const auto displayExtent = swapChain.getDisplayExtent();
+            cameraController->setJitterExtents(renderExtent.width, renderExtent.height,
+                                               displayExtent.width, displayExtent.height);
+        }
+
         // SSR
         if (settings.ssr.enabled)
         {
@@ -374,6 +347,52 @@ namespace controllers
         {
             renderHandler->resetSSR();
         }
+    }
+
+    void OffScreenController::retryPendingVolumetricFog()
+    {
+        if (!hasPendingVolumetricFog) return;
+        if (applyVolumetricFogInternal(currentPostProcessSettings.volumetricFog))
+            hasPendingVolumetricFog = false;
+    }
+
+    bool OffScreenController::applyVolumetricFogInternal(const postprocess::VolumetricFogSettings& fog)
+    {
+        auto* renderHandler = offScreen->getRenderPassHandler();
+        if (!renderHandler) return false;
+
+        auto* gpuRenderer = renderHandler->getGPUDrivenRenderer();
+        if (!gpuRenderer || !renderHandler->isGPUDrivenRendererInitialized()) return false;
+
+        if (fog.enabled && !gpuRenderer->getVolumetricPipeline())
+        {
+            gpuRenderer->initVolumetricFog(fog.quality);
+            activeVolumetricQuality = fog.quality;
+        }
+        else if (fog.enabled && gpuRenderer->getVolumetricPipeline()
+                 && fog.quality != activeVolumetricQuality)
+        {
+            device.getLogicalDevice().waitIdle();
+            renderHandler->resetVolumetricFogComposite();
+            gpuRenderer->initVolumetricFog(fog.quality);
+            activeVolumetricQuality = fog.quality;
+        }
+
+        if (gpuRenderer->getVolumetricPipeline())
+        {
+            gpuRenderer->updateVolumetricSettings(fog);
+            gpuRenderer->setVolumetricFogEnabled(fog.enabled);
+
+            if (!renderHandler->getVolumetricFogComposite())
+                renderHandler->initVolumetricFogComposite(gpuRenderer->getVolumetricPipeline());
+
+            auto* composite = renderHandler->getVolumetricFogComposite();
+            if (composite)
+                composite->setIntensity(fog.intensity);
+        }
+
+        // Past the gate a fog init failure is permanent (renderer init is one-shot); retrying would only spam its warning.
+        return true;
     }
 
     postprocess::PostProcessSettings OffScreenController::getPostProcessSettings() const

@@ -133,9 +133,11 @@ namespace core
 			destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
 		}
 		else if (oldLayout == eShaderReadOnlyOptimal && newLayout == eTransferDstOptimal) {
+			// Compute too: the post-process copy-back overwrites scene colour that auto-exposure's
+			// histogram and the reactive mask sampled in compute (write-after-read).
 			barrier.srcAccessMask = eShaderRead;
 			barrier.dstAccessMask = eTransferWrite;
-			sourceStage = vk::PipelineStageFlagBits::eFragmentShader;
+			sourceStage = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eComputeShader;
 			destinationStage = vk::PipelineStageFlagBits::eTransfer;
 		}
 		else if (oldLayout == eDepthStencilAttachmentOptimal && newLayout == eDepthStencilReadOnlyOptimal) {
@@ -175,9 +177,10 @@ namespace core
 			destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
 		}
 		else if (oldLayout == eGeneral && newLayout == eTransferSrcOptimal) {
-			barrier.srcAccessMask = eShaderWrite;
+			// Transfer too: the upscale output is written by DLSS (compute) or by the fallback blit.
+			barrier.srcAccessMask = eShaderWrite | eTransferWrite;
 			barrier.dstAccessMask = eTransferRead;
-			sourceStage = vk::PipelineStageFlagBits::eComputeShader;
+			sourceStage = vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer;
 			destinationStage = vk::PipelineStageFlagBits::eTransfer;
 		}
 		else if (oldLayout == eGeneral && newLayout == eTransferDstOptimal) {

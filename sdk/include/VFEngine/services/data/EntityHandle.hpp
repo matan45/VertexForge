@@ -79,6 +79,11 @@ namespace services {
         UIListView,
         Terrain,
         TerrainTile,
+        // VK-1660 (appended: values never renumber)
+        BehaviorTree,
+        NavRoute,
+        VolumetricNavVolume,
+        VolumetricAgent,
     };
 
 }

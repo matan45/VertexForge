@@ -12,8 +12,14 @@
 //   2 = OnCollision - particle collided with a scene collider or terrain
 //   3 = OnLifetimeThreshold - particle crossed the configured lifetime ratio
 //
-// Usage:
-//   import * from "Vec3f.mt";
+// Events reach EVERY script implementing this interface (filter on eventType /
+// entityId), and only for event types the emitter enables with "notify" or a
+// sub-effect. entityId is 0 for instances spawned with VFX::spawnAt.
+//
+// Usage (a script in scripts/game/):
+//   import * from "../lib/engine/IVFXEventListener.mt";
+//   import * from "../lib/engine/Log.mt";
+//   import * from "../lib/math/Vec3f.mt";
 //
 //   @Script
 //   public class VFXReactor implements IVFXEventListener {
@@ -25,7 +31,7 @@
 //       }
 //   }
 
-import * from "Vec3f.mt";
+import * from "../math/Vec3f.mt";
 
 interface IVFXEventListener {
     // Called when a VFX particle event fires

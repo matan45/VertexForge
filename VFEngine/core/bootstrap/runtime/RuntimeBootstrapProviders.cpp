@@ -15,6 +15,8 @@
 #include "../../adapters/render/DebugDrawAdapter.hpp"
 #include "../../adapters/terrain/TerrainRenderAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "../../adapters/render/PluginTextureAdapter.hpp"
 
@@ -103,6 +105,16 @@ namespace core
     services::IBehaviorTreeProvider* RuntimeBootstrap::getBehaviorTreeProvider()
     {
         return behaviorTreeAdapter.get();
+    }
+
+    services::IEQSProvider* RuntimeBootstrap::getEQSProvider()
+    {
+        return eqsAdapter.get();
+    }
+
+    services::IVolumetricNavProvider* RuntimeBootstrap::getVolumetricNavProvider()
+    {
+        return volumetricNavAdapter.get();
     }
 
     services::IRuntimePickerProvider* RuntimeBootstrap::getRuntimePickerProvider()

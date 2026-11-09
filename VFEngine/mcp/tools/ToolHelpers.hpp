@@ -1,0 +1,373 @@
+#pragma once
+
+#include "../protocol/ArgReader.hpp"
+#include "../protocol/ToolRegistry.hpp"
+
+#include "events/EventDispatcher.hpp"
+#include "events/scene/EntityTransformEvents.hpp"
+#include "events/terrain/OceanEvents.hpp"
+
+#include <concepts>
+#include <cstdint>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// Entity / transform helpers shared by the tool groups and by mcp/undo.
+// Main thread only: every function that dispatches assumes it runs inside a
+// Main-affinity handler or a runOnMain task.
+namespace mcp::tools
+{
+    // VK-1654: the summary is the first text block and the JSON follows as its own text block (MCP: a
+    // tool returning structuredContent should also return it serialised), so a client that shows only
+    // the content blocks still sees every field. Any thread.
+    inline ToolResult reply(nlohmann::json structured, std::string summary)
+    {
+        std::string json = structured.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
+        ToolResult result = ToolResult::ok(std::move(structured), std::move(summary));
+        result.extraContent.push_back({{"type", "text"}, {"text", std::move(json)}});
+        return result;
+    }
+
+    // A JSON-Schema object that rejects unknown properties. Any thread.
+    inline nlohmann::json closedObject(nlohmann::json properties, std::vector<std::string> required = {})
+    {
+        nlohmann::json out = schema::object(std::move(properties), std::move(required));
+        out["additionalProperties"] = false;
+        return out;
+    }
+
+    inline services::EntityHandle toHandle(uint32_t id)
+    {
+        services::EntityHandle handle;
+        handle.id = static_cast<uint64_t>(id);
+        return handle;
+    }
+
+    inline uint32_t toId(const services::EntityHandle& handle)
+    {
+        return static_cast<uint32_t>(handle.id);
+    }
+
+    inline nlohmann::json entityId(const services::EntityHandle& handle)
+    {
+        return handle.isValid() ? nlohmann::json(toId(handle)) : nlohmann::json(nullptr);
+    }
+
+    inline nlohmann::json entityId(const std::optional<services::EntityHandle>& handle)
+    {
+        return handle.has_value() ? entityId(*handle) : nlohmann::json(nullptr);
+    }
+
+    inline nlohmann::json transformToJson(const services::TransformData& transform)
+    {
+        return {
+            {"position", vec3ToJson(transform.position)},
+            {"rotation", vec3ToJson(transform.rotation)},
+            {"scale", vec3ToJson(transform.scale)}
+        };
+    }
+
+    inline std::optional<services::EntityData> findEntity(const services::EntityHandle& entity)
+    {
+        events::scene::GetEntityQuery query;
+        query.entity = entity;
+        return events::EventDispatcher::instance().query(query);
+    }
+
+    // Every entity argument is checked against the live registry first so the
+    // model gets "does not exist" instead of a silent no-op from the handler.
+    inline services::EntityData requireEntity(const ArgReader& reader, const char* name)
+    {
+        uint32_t id = reader.requireEntity(name);
+        auto data = findEntity(toHandle(id));
+        if (!data.has_value())
+        {
+            throw std::runtime_error("Entity " + std::to_string(id) + " (argument '" + name +
+                                     "') does not exist; use entity_find or scene_get_hierarchy");
+        }
+        return *data;
+    }
+
+    inline services::EntityHandle sceneRoot()
+    {
+        return events::EventDispatcher::instance().query(events::scene::GetRootEntityQuery{});
+    }
+
+    inline void rejectRoot(const services::EntityData& entity, const char* action)
+    {
+        if (entity.handle == sceneRoot())
+        {
+            throw std::runtime_error(std::string("Cannot ") + action + " the scene root entity");
+        }
+    }
+
+    // VK-1653. A terrain and its tile entities belong to the terrain service: the generic entity tools
+    // would leave a duplicate reloading the same .vfTerrain, or an entity_delete whose undo cannot
+    // bring the terrain back. The terrain_* tools own them.
+    inline bool isTerrainEntity(const services::EntityData& entity)
+    {
+        return entity.hasComponent(services::ComponentTypeId::Terrain) ||
+            entity.hasComponent(services::ComponentTypeId::TerrainTile);
+    }
+
+    // Throws when `entity` is a terrain or a terrain tile; `hint` says what to do instead.
+    inline void rejectTerrain(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        if (!isTerrainEntity(entity))
+        {
+            return;
+        }
+        const char* what = entity.hasComponent(services::ComponentTypeId::Terrain) ? "a terrain" : "a terrain tile";
+        throw std::runtime_error(std::string("Cannot ") + action + " entity " + std::to_string(toId(entity.handle)) +
+                                 " ('" + entity.name + "'): it is " + what + ". " + hint);
+    }
+
+    // The first live entity below `entity` (not `entity` itself) that satisfies `predicate`, or nullopt.
+    // Each id is visited once, so a corrupt hierarchy with a cycle still terminates.
+    template <std::predicate<const services::EntityData&> Predicate>
+    std::optional<services::EntityData> findInSubtree(const services::EntityData& entity, Predicate predicate)
+    {
+        std::vector<services::EntityHandle> pending = entity.children;
+        std::unordered_set<uint64_t> seen{entity.handle.id};
+        while (!pending.empty())
+        {
+            const services::EntityHandle handle = pending.back();
+            pending.pop_back();
+            if (!seen.insert(handle.id).second)
+            {
+                continue;
+            }
+            std::optional<services::EntityData> child = findEntity(handle);
+            if (!child.has_value())
+            {
+                continue;
+            }
+            if (predicate(*child))
+            {
+                return child;
+            }
+            pending.insert(pending.end(), child->children.begin(), child->children.end());
+        }
+        return std::nullopt;
+    }
+
+    // `predicate` holds for `entity` itself or for any entity below it.
+    template <std::predicate<const services::EntityData&> Predicate>
+    bool subtreeContains(const services::EntityData& entity, Predicate predicate)
+    {
+        return predicate(entity) || findInSubtree(entity, predicate).has_value();
+    }
+
+    // rejectTerrain over `entity` and every entity below it.
+    inline void rejectTerrainSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        rejectTerrain(entity, action, hint);
+
+        if (const std::optional<services::EntityData> terrain = findInSubtree(entity, isTerrainEntity))
+        {
+            throw std::runtime_error(std::string("Cannot ") + action + " entity " +
+                                     std::to_string(toId(entity.handle)) + " ('" + entity.name +
+                                     "'): it contains terrain entity " + std::to_string(toId(terrain->handle)) +
+                                     " ('" + terrain->name + "'). " + hint);
+        }
+    }
+
+    // VK-1658. The ocean is the singleton OceanService tracks by entity id: a prefab snapshot carries no
+    // ocean, so an entity_delete undo would bring back a plain entity, and a duplicate would be a second
+    // ocean nothing tracks. The ocean_* tools own it. Water bodies are ordinary entities, but they are
+    // placed by their LOCAL transform and ignore the entity active flag (OceanService::collectWaterBodies).
+    // Both checks read false when no ocean service is registered (tool tests without water handlers).
+    inline bool isOceanEntity(const services::EntityData& entity)
+    {
+        events::ocean::HasOceanComponentQuery query;
+        query.entity = entity.handle;
+        try
+        {
+            return events::EventDispatcher::instance().query(query);
+        }
+        catch (const std::runtime_error&)
+        {
+            return false;
+        }
+    }
+
+    inline bool isWaterBodyEntity(const services::EntityData& entity)
+    {
+        events::ocean::HasWaterBodyComponentQuery query;
+        query.entity = entity.handle;
+        try
+        {
+            return events::EventDispatcher::instance().query(query);
+        }
+        catch (const std::runtime_error&)
+        {
+            return false;
+        }
+    }
+
+    // `entity` or an entity below it is a water body.
+    inline bool subtreeHasWaterBody(const services::EntityData& entity)
+    {
+        return subtreeContains(entity, isWaterBodyEntity);
+    }
+
+    // Throws when `entity` is the ocean; `hint` says what to do instead.
+    inline void rejectOcean(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        if (!isOceanEntity(entity))
+        {
+            return;
+        }
+        throw std::runtime_error(std::string("Cannot ") + action + " entity " + std::to_string(toId(entity.handle)) +
+                                 " ('" + entity.name + "'): it is the ocean. " + hint);
+    }
+
+    // rejectOcean over `entity` and every entity below it.
+    inline void rejectOceanSubtree(const services::EntityData& entity, const char* action, const char* hint)
+    {
+        rejectOcean(entity, action, hint);
+
+        if (const std::optional<services::EntityData> ocean = findInSubtree(entity, isOceanEntity))
+        {
+            throw std::runtime_error(std::string("Cannot ") + action + " entity " +
+                                     std::to_string(toId(entity.handle)) + " ('" + entity.name +
+                                     "'): it contains ocean entity " + std::to_string(toId(ocean->handle)) +
+                                     " ('" + ocean->name + "'). " + hint);
+        }
+    }
+
+    inline nlohmann::json entitySummary(const services::EntityData& entity)
+    {
+        nlohmann::json children = nlohmann::json::array();
+        for (const services::EntityHandle& child : entity.children)
+        {
+            children.push_back(entityId(child));
+        }
+        return {
+            {"id", entityId(entity.handle)},
+            {"name", entity.name},
+            {"active", entity.isActive},
+            {"effectivelyActive", entity.isEffectivelyActive},
+            {"parent", entityId(entity.parent)},
+            {"children", std::move(children)},
+            {"transform", transformToJson(entity.localTransform)},
+            {"worldTransform", transformToJson(entity.worldTransform)}
+        };
+    }
+
+    // Index of `child` among `parent`'s children; nullopt when the parent is gone or
+    // the child is not under it.
+    inline std::optional<int> childIndex(const services::EntityHandle& parent, const services::EntityHandle& child)
+    {
+        auto data = findEntity(parent);
+        if (!data.has_value())
+        {
+            return std::nullopt;
+        }
+        for (std::size_t i = 0; i < data->children.size(); ++i)
+        {
+            if (data->children[i] == child)
+            {
+                return static_cast<int>(i);
+            }
+        }
+        return std::nullopt;
+    }
+
+    struct TransformEdit
+    {
+        services::TransformData before;
+        services::TransformData after;
+    };
+
+    // Overlays the provided position / rotationEuler / scale onto the current
+    // local transform and writes it back. Returns the transform before and after.
+    inline TransformEdit applyTransform(const ArgReader& reader, const services::EntityHandle& entity)
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        events::scene::GetTransformQuery query;
+        query.entity = entity;
+        auto current = dispatcher.query(query);
+        if (!current.has_value())
+        {
+            throw std::runtime_error("Entity " + std::to_string(toId(entity)) + " has no transform");
+        }
+
+        TransformEdit edit{*current, *current};
+        if (auto position = reader.optVec3("position"))
+        {
+            edit.after.position = *position;
+        }
+        if (auto rotation = reader.optVec3("rotationEuler"))
+        {
+            edit.after.rotation = *rotation;  // TransformData stores Euler degrees
+        }
+        if (auto scale = reader.optVec3("scale"))
+        {
+            edit.after.scale = *scale;
+        }
+
+        events::scene::SetTransformCommand command;
+        command.entity = entity;
+        command.transform = edit.after;
+        dispatcher.execute(command);
+        return edit;
+    }
+
+    inline bool hasTransformArgs(const ArgReader& reader)
+    {
+        return reader.has("position") || reader.has("rotationEuler") || reader.has("scale");
+    }
+
+    inline nlohmann::json transformProperties()
+    {
+        return {
+            {"position", schema::vec3("Local position [x,y,z] relative to the parent")},
+            {"rotationEuler", schema::vec3("Local rotation as Euler angles in DEGREES [pitch(x), yaw(y), roll(z)]")},
+            {"scale", schema::vec3("Local scale [x,y,z]")}
+        };
+    }
+
+    // ------------------------------------------------------------------
+    // Curated (built-in) component bindings - defined in ComponentTools.cpp so
+    // the generic tools and mcp/undo reuse the same JSON mapping.
+    // ------------------------------------------------------------------
+
+    struct BuiltinComponentInfo
+    {
+        std::string name;
+        std::string fieldHelp;
+    };
+
+    std::vector<BuiltinComponentInfo> builtinComponentTypes();
+
+    // All of these throw std::runtime_error for an unknown type name. get/patch
+    // return nullopt when the entity lacks the component; patch throws ArgError for
+    // an unknown or mistyped field and std::runtime_error when the engine rejects it.
+    // patch drops the type's read-only fields (VK-1656), so a full get() result replays.
+    bool addBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
+    bool removeBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
+    std::optional<nlohmann::json> getBuiltinComponent(const std::string& type, const services::EntityHandle& entity);
+    std::optional<nlohmann::json> patchBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
+                                                        const nlohmann::json& patch);
+    // VK-1657: patch for the undo commands, which replay get() snapshots: the binding's restore when it has
+    // one (it accepts every value the engine stores), else patch.
+    std::optional<nlohmann::json> restoreBuiltinComponent(const std::string& type, const services::EntityHandle& entity,
+                                                          const nlohmann::json& snapshot);
+
+    // VK-1656: for a type stored in fields of another built-in component (the Animator, in the Mesh), that
+    // component's name and the current values of those fields as a partial patch of it; nullopt for a
+    // component of its own or when the entity lacks the host. Read before and after adding the type, the
+    // two snapshots undo the add exactly (a BuiltinComponentPatchUndo of the host).
+    struct BuiltinHostFields
+    {
+        std::string type;
+        nlohmann::json fields;
+    };
+    std::optional<BuiltinHostFields> builtinHostFields(const std::string& type, const services::EntityHandle& entity);
+}

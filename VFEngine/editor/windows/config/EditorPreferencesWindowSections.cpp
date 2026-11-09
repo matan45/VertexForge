@@ -1,15 +1,63 @@
 #include "EditorPreferencesWindow.hpp"
 #include "SettingsTooltip.hpp"
 #include "../../handlers/EditorLayoutManager.hpp"
+#include "../../mcp/EditorMcpHost.hpp"
 #include "events/EventDispatcher.hpp"
 #include "events/editor/EditorKeybindingEvents.hpp"
 #include "string/StringUtil.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <random>
+#include <string>
 
 namespace windows
 {
+    namespace
+    {
+        // 128 random bits as 32 lowercase hex characters. std::random_device is the
+        // OS CSPRNG on MSVC.
+        std::string generateMcpToken()
+        {
+            constexpr char hex[] = "0123456789abcdef";
+            std::random_device rd;
+            std::string token;
+            token.reserve(32);
+            for (int i = 0; i < 4; ++i)
+            {
+                uint32_t bits = rd();
+                for (int n = 0; n < 8; ++n)
+                {
+                    token.push_back(hex[bits & 0xF]);
+                    bits >>= 4;
+                }
+            }
+            return token;
+        }
+
+        std::string claudeCodeMcpCommand(const config::McpSettings& mcp)
+        {
+            std::string command = "claude mcp add --transport http vertexforge http://127.0.0.1:" +
+                                  std::to_string(mcp.port) + "/mcp";
+            if (!mcp.token.empty())
+                command += " --header \"Authorization: Bearer " + mcp.token + "\"";
+            return command;
+        }
+
+        // Edits a std::string through a fixed ImGui buffer (same pattern as the search bar).
+        bool inputString(const char* label, std::string& value, ImGuiInputTextFlags flags = 0)
+        {
+            char buffer[256];
+            std::strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
+            buffer[sizeof(buffer) - 1] = '\0';
+            if (!ImGui::InputText(label, buffer, sizeof(buffer), flags))
+                return false;
+            value = buffer;
+            return true;
+        }
+    }
+
     // ============================================
     // Appearance
     // ============================================
@@ -571,6 +619,99 @@ namespace windows
     }
 
     // ============================================
+    // AI / MCP (VK-1650)
+    // ============================================
+
+    void EditorPreferencesWindow::drawMcpStatusLine()
+    {
+        if (!mcpHost)
+        {
+            ImGui::TextDisabled("Status: unavailable");
+            return;
+        }
+
+        const mcp::McpStatus status = mcpHost->status();
+        switch (status.state)
+        {
+        case mcp::McpStatus::State::Listening:
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.35f, 1.0f), "Status: listening on http://127.0.0.1:%u/mcp",
+                               static_cast<unsigned>(status.port));
+            ImGui::Text("Client: %s  |  Tool calls: %llu (%llu errors)  |  Last tool: %s",
+                        status.clientName.empty() ? "(none)" : status.clientName.c_str(),
+                        static_cast<unsigned long long>(status.toolCalls),
+                        static_cast<unsigned long long>(status.toolErrors),
+                        status.lastTool.empty() ? "(none)" : status.lastTool.c_str());
+            break;
+        case mcp::McpStatus::State::Error:
+            ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), "Status: error - %s", status.error.c_str());
+            break;
+        case mcp::McpStatus::State::Off:
+        default:
+            ImGui::TextDisabled("Status: off");
+            break;
+        }
+
+        if (mcpHost->isCommandLineOverride())
+            ImGui::TextDisabled("Started from command-line flags; applying a change here takes over.");
+    }
+
+    void EditorPreferencesWindow::drawMcpSection()
+    {
+        ImGui::TextWrapped("Lets an AI agent (e.g. Claude Code) drive the editor through the Model Context "
+                           "Protocol. The server listens on 127.0.0.1 only. Changes take effect on Apply.");
+        ImGui::Spacing();
+
+        drawMcpStatusLine();
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Checkbox("Enable MCP Server", &settings.mcp.enabled))
+            markDirty();
+        drawSettingTooltip("Start the MCP server with the editor. Also enabled for one session by "
+                           "--mcp or --mcp-port <port>");
+
+        int port = settings.mcp.port;
+        if (ImGui::InputInt("Port", &port, 1, 100))
+        {
+            settings.mcp.port = std::clamp(port, static_cast<int>(editor::EditorMcpHost::minPort),
+                                           static_cast<int>(editor::EditorMcpHost::maxPort));
+            markDirty();
+        }
+        drawSettingTooltip("Loopback TCP port of the HTTP endpoint (1024-65535). Default 7878");
+
+        const ImGuiInputTextFlags tokenFlags = showMcpToken ? 0 : ImGuiInputTextFlags_Password;
+        if (inputString("Token", settings.mcp.token, tokenFlags))
+            markDirty();
+        drawSettingTooltip("Optional bearer token. When set, clients must send "
+                           "\"Authorization: Bearer <token>\". Empty = no token required");
+        if (ImGui::Button("Generate Token"))
+        {
+            settings.mcp.token = generateMcpToken();
+            markDirty();
+        }
+        drawSettingTooltip("Replace the token with 32 random hex characters");
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Token"))
+        {
+            settings.mcp.token.clear();
+            markDirty();
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Show Token", &showMcpToken);
+
+        ImGui::Spacing();
+        if (ImGui::Button("Copy Claude Code command"))
+            ImGui::SetClipboardText(claudeCodeMcpCommand(settings.mcp).c_str());
+        drawSettingTooltip("Copies the \"claude mcp add\" command for the port and token above");
+        if (isDirty)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(Apply first so the running server matches)");
+        }
+    }
+
+    // ============================================
     // Settings Registry (for search)
     // ============================================
 
@@ -688,5 +829,10 @@ namespace windows
                 drawSettingTooltip("RAM ceiling for undo and redo snapshots. Terrain sculpt/paint strokes "
                                    "snapshot whole tile arrays, so this is the effective limit. 0 = unlimited");
             }});
+
+        // AI / MCP
+        settingsRegistry.push_back({"MCP Server", "AI agent control over the Model Context Protocol",
+            {"mcp", "ai", "agent", "claude", "server", "port", "token"}, Mcp,
+            [this]() { drawMcpSection(); }});
     }
 }

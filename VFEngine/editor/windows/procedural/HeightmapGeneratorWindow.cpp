@@ -4,10 +4,12 @@
 #include <imgui.h>
 #include "asset/AssetMetadataSerializer.hpp"
 #include "asset/AssetMetadata.hpp"
+#include "generator/HeightmapPresets.hpp"
 #include <random>
 #include <chrono>
 #include <filesystem>
 #include <ctime>
+#include <vector>
 
 namespace windows
 {
@@ -71,18 +73,16 @@ namespace windows
 
     void HeightmapGeneratorWindow::drawParameterControls()
     {
-        // Presets
-        const char* presets[] = {
-            "Custom",
-            "Flat Hills",
-            "Rolling Plains",
-            "Mountains",
-            "Sharp Peaks",
-            "Deep Valleys",
-            "Plateaus",
-            "Islands"
-        };
-        if (ImGui::Combo("Preset", &presetIndex, presets, 8))
+        // Presets: "Custom", then ProceduralGen's preset table in order (VK-1653: shared with the
+        // MCP heightmap tool)
+        static const std::vector<const char*> presets = []
+        {
+            std::vector<const char*> names = { "Custom" };
+            for (const auto& preset : procedural::heightmapPresets())
+                names.push_back(preset.displayName);
+            return names;
+        }();
+        if (ImGui::Combo("Preset", &presetIndex, presets.data(), static_cast<int>(presets.size())))
         {
             if (presetIndex != 0)
             {
@@ -408,106 +408,18 @@ namespace windows
 
     void HeightmapGeneratorWindow::applyPreset(int preset)
     {
-        // Reset post-processing
-        params.domainWarp.enabled = false;
-        params.invert = false;
-        params.terracing = false;
-        params.terraceSteps = 8;
+        // VK-1653: the values live in ProceduralGen's preset table. Combo entry 0 is "Custom",
+        // so entry N is table row N - 1.
+        const auto presets = procedural::heightmapPresets();
+        if (preset < 1 || preset > static_cast<int>(presets.size()))
+            return;
 
-        switch (preset)
-        {
-        case 1: // Flat Hills — gentle rolling terrain
-            noiseTypeIndex = 1;  // Simplex
-            fractalTypeIndex = 1; // FBM
-            params.octaves = 4;
-            params.frequency = 0.002f;
-            params.amplitude = 0.6f;
-            params.lacunarity = 2.0f;
-            params.persistence = 0.35f;
-            params.heightExponent = 0.7f;
-            break;
+        procedural::applyHeightmapPreset(presets[static_cast<size_t>(preset - 1)].preset, params);
 
-        case 2: // Rolling Plains — wide open terrain with mild variation
-            noiseTypeIndex = 0;  // Perlin
-            fractalTypeIndex = 1; // FBM
-            params.octaves = 6;
-            params.frequency = 0.003f;
-            params.amplitude = 0.8f;
-            params.lacunarity = 2.2f;
-            params.persistence = 0.4f;
-            params.heightExponent = 0.6f;
-            params.domainWarp.enabled = true;
-            params.domainWarp.amplitude = 30.0f;
-            params.domainWarp.frequency = 0.003f;
-            break;
-
-        case 3: // Mountains — dramatic terrain with peaks
-            noiseTypeIndex = 1;  // Simplex
-            fractalTypeIndex = 2; // Ridged
-            params.octaves = 8;
-            params.frequency = 0.004f;
-            params.amplitude = 1.0f;
-            params.lacunarity = 2.2f;
-            params.persistence = 0.5f;
-            params.heightExponent = 1.4f;
-            params.domainWarp.enabled = true;
-            params.domainWarp.amplitude = 60.0f;
-            params.domainWarp.frequency = 0.004f;
-            break;
-
-        case 4: // Sharp Peaks — aggressive jagged mountains
-            noiseTypeIndex = 0;  // Perlin
-            fractalTypeIndex = 2; // Ridged
-            params.octaves = 10;
-            params.frequency = 0.006f;
-            params.amplitude = 1.0f;
-            params.lacunarity = 2.5f;
-            params.persistence = 0.55f;
-            params.heightExponent = 2.0f;
-            break;
-
-        case 5: // Deep Valleys — inverted ridged for canyon-like terrain
-            noiseTypeIndex = 1;  // Simplex
-            fractalTypeIndex = 2; // Ridged
-            params.octaves = 8;
-            params.frequency = 0.004f;
-            params.amplitude = 1.0f;
-            params.lacunarity = 2.0f;
-            params.persistence = 0.5f;
-            params.heightExponent = 1.5f;
-            params.invert = true;
-            params.domainWarp.enabled = true;
-            params.domainWarp.amplitude = 40.0f;
-            params.domainWarp.frequency = 0.003f;
-            break;
-
-        case 6: // Plateaus — flat-topped mesa terrain
-            noiseTypeIndex = 0;  // Perlin
-            fractalTypeIndex = 1; // FBM
-            params.octaves = 5;
-            params.frequency = 0.003f;
-            params.amplitude = 0.8f;
-            params.lacunarity = 2.0f;
-            params.persistence = 0.45f;
-            params.heightExponent = 0.4f;
-            params.terracing = true;
-            params.terraceSteps = 6;
-            break;
-
-        case 7: // Islands — smooth rounded landmasses with low areas
-            noiseTypeIndex = 1;  // Simplex
-            fractalTypeIndex = 3; // Billowy
-            params.octaves = 6;
-            params.frequency = 0.003f;
-            params.amplitude = 0.9f;
-            params.lacunarity = 2.0f;
-            params.persistence = 0.4f;
-            params.heightExponent = 1.8f;
-            params.domainWarp.enabled = true;
-            params.domainWarp.amplitude = 50.0f;
-            params.domainWarp.frequency = 0.002f;
-            break;
-        }
+        // syncParamsFromUI() rebuilds noiseType/fractalType from the combo indices, so the
+        // preset's choice has to land in them too (combo index == enum value).
+        noiseTypeIndex = static_cast<int>(params.noiseType);
+        fractalTypeIndex = static_cast<int>(params.fractalType);
     }
 
     void HeightmapGeneratorWindow::syncParamsFromUI()

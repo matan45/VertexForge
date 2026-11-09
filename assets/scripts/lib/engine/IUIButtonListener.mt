@@ -3,7 +3,7 @@
 // Unlike collision callbacks, button events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUIButtonListener;
+//   import * from "../lib/engine/IUIButtonListener.mt";
 //
 //   @Script
 //   public class MenuController implements IUIButtonListener {

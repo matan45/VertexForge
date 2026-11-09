@@ -125,6 +125,11 @@ namespace render::postprocess
             vk::ImageLayout::eDepthStencilReadOnlyOptimal,
             depthAspectMask);
 
+        core::ImageUtilities::transitionImageLayout(commandBuffer, intermediateImage,
+            intermediateImageLayout, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageAspectFlagBits::eColor);
+        intermediateImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
         auto colorAttach = core::colorDontCare(intermediateImageView);
 
         core::DynamicRenderingInfo dynInfo{};
@@ -164,6 +169,7 @@ namespace render::postprocess
         core::ImageUtilities::transitionImageLayout(commandBuffer, intermediateImage,
             vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::ImageAspectFlagBits::eColor);
+        intermediateImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,
             offscreenResources.depthImage.depthImage,
@@ -228,6 +234,7 @@ namespace render::postprocess
         req.properties = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
         core::ImageUtilities::createImage(req, intermediateImage, intermediateAllocation, device.getMemoryManager());
+        intermediateImageLayout = vk::ImageLayout::eUndefined;
 
         core::ImageViewInfoRequest viewReq(dev, intermediateImage);
         viewReq.format = vk::Format::eR8G8B8A8Unorm;
@@ -480,6 +487,7 @@ namespace render::postprocess
         if (intermediateImageView) { dev.destroyImageView(intermediateImageView); intermediateImageView = nullptr; }
         if (intermediateImage) { dev.destroyImage(intermediateImage); intermediateImage = nullptr; }
         if (intermediateAllocation.isValid()) { device.getMemoryManager().free(intermediateAllocation); intermediateAllocation = {}; }
+        intermediateImageLayout = vk::ImageLayout::eUndefined;
     }
 
     void EdgeDetectionEffect::cleanupPipelines()

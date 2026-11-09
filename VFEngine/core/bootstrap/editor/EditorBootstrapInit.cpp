@@ -7,6 +7,7 @@
 #include "../../adapters/render/MaterialPreviewAdapter.hpp"
 #include "../../adapters/render/MeshPreviewAdapter.hpp"
 #include "../../adapters/render/ThumbnailRenderAdapter.hpp"
+#include "../../adapters/animation/AnimationAuthoringAdapter.hpp"
 #include "../../adapters/animation/AnimationPreviewAdapter.hpp"
 #include "../../adapters/render/PrefabRigPreviewAdapter.hpp"
 #include "../../adapters/render/UILayerPreviewAdapter.hpp"
@@ -38,6 +39,8 @@
 #include "../../adapters/render/ObjectStreamingAdapter.hpp"
 #include "../../adapters/render/GIAdapter.hpp"
 #include "../../adapters/ai/BehaviorTreeAdapter.hpp"
+#include "../../adapters/ai/EQSAdapter.hpp"
+#include "../../adapters/volumetric/VolumetricNavAdapter.hpp"
 #include "../../adapters/input/RuntimePickerAdapter.hpp"
 #include "types/PhysicsTypes.hpp"
 
@@ -61,6 +64,7 @@ namespace core
         materialPreviewAdapter = std::make_unique<MaterialPreviewAdapter>();
         meshPreviewAdapter = std::make_unique<MeshPreviewAdapter>();
         thumbnailRenderAdapter = std::make_unique<ThumbnailRenderAdapter>();
+        animationAuthoringAdapter = std::make_unique<AnimationAuthoringAdapter>();
         animationPreviewAdapter = std::make_unique<AnimationPreviewAdapter>();
         prefabRigPreviewAdapter = std::make_unique<PrefabRigPreviewAdapter>();
         uiLayerPreviewAdapter = std::make_unique<UILayerPreviewAdapter>();
@@ -92,6 +96,10 @@ namespace core
         objectStreamingAdapter = std::make_unique<adapters::ObjectStreamingAdapter>();
         giAdapter = std::make_unique<adapters::GIAdapter>();
         behaviorTreeAdapter = std::make_unique<BehaviorTreeAdapter>(scriptingAdapter.get());
+        // VK-1660: EQS and volumetric navigation existed but were never constructed, so an EQS node or
+        // a volume inspector dispatched to a missing handler, and that throw terminated the editor.
+        eqsAdapter = std::make_unique<EQSAdapter>(physicsAdapter.get(), navmeshAdapter.get());
+        volumetricNavAdapter = std::make_unique<VolumetricNavAdapter>();
         runtimePickerAdapter = std::make_unique<RuntimePickerAdapter>();
 
         offScreen->init();
@@ -107,6 +115,7 @@ namespace core
         physicsAdapter->init();
         navmeshAdapter->init();
         thumbnailRenderAdapter->init(); // registers Content Browser thumbnail render handlers
+        animationAuthoringAdapter->init(); // registers the MCP animation authoring handlers (VK-1656)
 
         // Wire VFX runtime provider to offscreen renderer
         offScreenAdapter->setVFXRuntimeProvider(vfxRuntimeAdapter.get());

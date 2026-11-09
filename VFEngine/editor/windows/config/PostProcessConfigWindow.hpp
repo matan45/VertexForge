@@ -13,6 +13,7 @@ namespace windows
 
         void drawToneMappingSection();
         void drawUpscaleSection();
+        void drawFXAASection();
         void drawBloomSection();
         void drawVignetteSection();
         void drawChromaticAberrationSection();
@@ -31,5 +32,6 @@ namespace windows
         void draw();
         void show();
         void notifySceneLoaded();
+        void notifyRenderSettingsChanged();
     };
 }

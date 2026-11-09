@@ -29,4 +29,27 @@ namespace render::atmosphere
         const float pitch = std::atan2(L.y, -L.z);                  // rotation.x
         return glm::vec3(glm::degrees(pitch), glm::degrees(yaw), 0.0f);
     }
+
+    // VK-1654: the inverse — the sun azimuth/elevation (degrees; x = azimuth in [0, 360),
+    // y = elevation in [-90, 90]) that a directional light with these Euler angles points away
+    // from. Rx(x) * Ry(y) * Rz(z) applied to (0,0,-1) gives the light-travel direction
+    // L = (-sin y, cos y * sin x, -cos y * cos x); roll never moves -Z. The sun is at -L.
+    // directionalLightEulerForSun(az, el) round-trips through this for any elevation strictly
+    // between -90 and 90 (at the poles the azimuth is undefined and comes back as 0).
+    [[nodiscard]] inline glm::vec2 sunAnglesFromDirectionalLightEuler(const glm::vec3& eulerDeg)
+    {
+        const float pitch = glm::radians(eulerDeg.x);
+        const float yaw = glm::radians(eulerDeg.y);
+        const glm::vec3 dirToSun(std::sin(yaw), -std::cos(yaw) * std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+
+        const float elevation = glm::degrees(std::asin(glm::clamp(dirToSun.y, -1.0f, 1.0f)));
+        float azimuth = glm::degrees(std::atan2(dirToSun.x, dirToSun.z));
+        if (azimuth < 0.0f)
+            azimuth += 360.0f;
+        if (azimuth >= 360.0f) // a tiny negative angle + 360 can round up to exactly 360
+            azimuth -= 360.0f;
+        if (azimuth == 0.0f)
+            azimuth = 0.0f; // fold -0 (atan2 of a -0 yaw) into +0
+        return glm::vec2(azimuth, elevation);
+    }
 }

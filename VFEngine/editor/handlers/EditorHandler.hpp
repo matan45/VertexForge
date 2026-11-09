@@ -3,6 +3,7 @@
 #include <string>
 #include <atomic>
 #include "WindowImguiHandler.hpp"
+#include "../mcp/EditorMcpHost.hpp"
 #include "events/EventDispatcher.hpp"
 
 #include "interfaces/project/ISceneService.hpp"
@@ -52,6 +53,8 @@
 #include "interfaces/render/IObjectStreamingService.hpp"
 #include "interfaces/render/IGIService.hpp"
 #include "interfaces/ai/IBehaviorTreeService.hpp"
+#include "interfaces/ai/IEQSService.hpp"
+#include "interfaces/volumetric/IVolumetricNavService.hpp"
 #include "interfaces/input/IRuntimePickerService.hpp"
 #include "interfaces/weather/IWeatherService.hpp"
 #include "interfaces/destruction/IDestructionService.hpp"
@@ -84,8 +87,12 @@ namespace services {
 	class VFXRuntimeServiceImpl;
 	class VFXSequencePlayModeHandler;
 	class VFXSequenceRuntimeServiceImpl;
+	class VFXEditPreviewHandler;
+	class VFXAssetSummaryService;
 	class RenderTexturePlayModeHandler;
 	class BehaviorTreePlayModeHandler;
+	class BehaviorTreeAuthoringService;
+	class EQSAuthoringService;
 	class EditorRenderServiceImpl;
 	class SaveService;
 	class ConfigService;
@@ -95,6 +102,10 @@ namespace services {
 
 namespace handlers {
 	class ExportHandler;
+	class HeightmapGenerationHandler;
+	class PluginComponentHandler;
+	class PluginMcpToolHandler;
+	class PluginPostProcessEffectHandler;
 }
 
 namespace handlers {
@@ -134,6 +145,7 @@ namespace handlers {
 		std::shared_ptr<services::ISplineTerrainService> splineTerrainService;
 		std::shared_ptr<services::IPhysicsAnimationService> physicsAnimationService;
 		std::shared_ptr<services::INavmeshService> navmeshService;
+		std::shared_ptr<services::IVolumetricNavService> volumetricNavService; // VK-1660
 		std::unique_ptr<core::audio::AudioSceneUpdater> audioSceneUpdater;
 		// VK-1505: editor reverb-zone tracking. Declared AFTER audioSceneUpdater so it is
 		// destroyed FIRST (unsubscribes before the updater it captures is torn down).
@@ -146,6 +158,8 @@ namespace handlers {
 		std::unique_ptr<services::VFXRuntimeServiceImpl> vfxRuntimeService;
 		std::unique_ptr<services::VFXSequencePlayModeHandler> vfxSequencePlayModeHandler;
 		std::unique_ptr<services::VFXSequenceRuntimeServiceImpl> vfxSequenceRuntimeService;
+		std::unique_ptr<services::VFXEditPreviewHandler> vfxEditPreviewHandler;   // VK-1657: MCP vfx_play / vfx_stop
+		std::unique_ptr<services::VFXAssetSummaryService> vfxAssetSummaryService; // VK-1657: MCP effect / combo summaries
 		std::shared_ptr<services::IRenderTextureService> renderTextureService;
 		std::unique_ptr<services::RenderTexturePlayModeHandler> renderTexturePlayModeHandler;
 		std::shared_ptr<services::IControllerService> controllerService;
@@ -173,11 +187,19 @@ namespace handlers {
 		std::shared_ptr<services::IGIService> giService;
 		std::shared_ptr<services::IBehaviorTreeService> behaviorTreeService;
 		std::unique_ptr<services::BehaviorTreePlayModeHandler> behaviorTreePlayModeHandler;
+		std::unique_ptr<services::BehaviorTreeAuthoringService> behaviorTreeAuthoringService; // VK-1660: MCP bt_* asset load/save
+		// VK-1660: reset AFTER behaviorTreeService - stopping trees dispatches CancelEQSQueryCommand.
+		std::shared_ptr<services::IEQSService> eqsService;
+		std::unique_ptr<services::EQSAuthoringService> eqsAuthoringService; // VK-1660: MCP eqs_* template load/save
 		std::shared_ptr<services::IRuntimePickerService> runtimePickerService;
 		std::shared_ptr<services::IWeatherService> weatherService;
 		std::shared_ptr<services::IDestructionService> destructionService;
 
 		std::unique_ptr<handlers::ExportHandler> exportHandler;
+		std::unique_ptr<handlers::HeightmapGenerationHandler> heightmapGenerationHandler; // VK-1653: MCP heightmap jobs
+		std::unique_ptr<handlers::PluginComponentHandler> pluginComponentHandler;
+		std::unique_ptr<handlers::PluginMcpToolHandler> pluginMcpToolHandler;
+		std::unique_ptr<handlers::PluginPostProcessEffectHandler> pluginPostProcessEffectHandler; // VK-1655: MCP plugin effect list/toggle
 
 		std::unique_ptr<services::SaveService> saveService;
 		std::unique_ptr<services::ConfigService> configService;
@@ -199,6 +221,11 @@ namespace handlers {
 		// are not catchable here and still route to the crash handler.
 		std::atomic<bool> playFatalErrorRequested{false};
 
+		// VK-1650: MCP server for AI agent control. Declared LAST so it is destroyed
+		// first; cleanUp() also shuts it down before any service it dispatches to.
+		editor::McpLaunchOptions mcpLaunchOptions;
+		std::unique_ptr<editor::EditorMcpHost> mcpHost;
+
 	public:
 		explicit EditorHandler();
 		~EditorHandler();
@@ -208,6 +235,9 @@ namespace handlers {
 		void cleanUp();
 
 		bool loadProject(const std::string& projectPath);
+
+		// Command-line MCP flags (--mcp, --mcp-port, --mcp-token). Call before init().
+		void setMcpLaunchOptions(const editor::McpLaunchOptions& options) { mcpLaunchOptions = options; }
 
 	private:
 		void initializeServices();

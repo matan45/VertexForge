@@ -89,6 +89,24 @@ namespace core
         {
             crowd->init(crowdCapacity, agentRadius * CROWD_MAX_AGENT_RADIUS_MULT, navMesh);
 
+            // Obstacle-avoidance presets for NavmeshAgentComponent::avoidanceQuality 0-3 (VK-1660).
+            // dtCrowd::init gives every slot the same setup; slot 3 keeps it (the default quality), slots
+            // 0-2 sample fewer candidate velocities - cheaper, less smooth - as in the Recast demo.
+            if (const dtObstacleAvoidanceParams* best = crowd->getObstacleAvoidanceParams(OBSTACLE_AVOIDANCE_TYPE))
+            {
+                constexpr unsigned char adaptiveDivs[OBSTACLE_AVOIDANCE_TYPE] = {5, 5, 7};
+                constexpr unsigned char adaptiveRings[OBSTACLE_AVOIDANCE_TYPE] = {2, 2, 2};
+                constexpr unsigned char adaptiveDepth[OBSTACLE_AVOIDANCE_TYPE] = {1, 2, 3};
+                for (int quality = 0; quality < OBSTACLE_AVOIDANCE_TYPE; ++quality)
+                {
+                    dtObstacleAvoidanceParams params = *best;
+                    params.adaptiveDivs = adaptiveDivs[quality];
+                    params.adaptiveRings = adaptiveRings[quality];
+                    params.adaptiveDepth = adaptiveDepth[quality];
+                    crowd->setObstacleAvoidanceParams(quality, &params);
+                }
+            }
+
             // Configure default filter (slot 0) with global area costs
             dtQueryFilter* defaultFilter = crowd->getEditableFilter(0);
             if (defaultFilter)
@@ -259,6 +277,33 @@ namespace core
     {
         destroyNavMesh();
         updateProgress(types::NavmeshBakeStatus::Idle, 0.0f, "");
+    }
+
+    navigation::NavmeshStats NavmeshAdapter::getNavmeshStats() const
+    {
+        std::lock_guard lock(navMeshMutex);
+        navigation::NavmeshStats stats;
+        if (!navMesh)
+            return stats;
+
+        const dtNavMesh* mesh = navMesh;
+        for (int i = 0; i < mesh->getMaxTiles(); ++i)
+        {
+            const dtMeshTile* tile = mesh->getTile(i);
+            if (!tile || !tile->header)
+                continue;
+
+            const dtMeshHeader* header = tile->header;
+            const glm::vec3 tileMin(header->bmin[0], header->bmin[1], header->bmin[2]);
+            const glm::vec3 tileMax(header->bmax[0], header->bmax[1], header->bmax[2]);
+            stats.boundsMin = stats.tileCount == 0 ? tileMin : glm::min(stats.boundsMin, tileMin);
+            stats.boundsMax = stats.tileCount == 0 ? tileMax : glm::max(stats.boundsMax, tileMax);
+
+            ++stats.tileCount;
+            stats.polyCount += header->polyCount - header->offMeshConCount; // walkable polygons only
+            stats.vertexCount += header->vertCount;
+        }
+        return stats;
     }
 
     // === Tiled Navmesh ===

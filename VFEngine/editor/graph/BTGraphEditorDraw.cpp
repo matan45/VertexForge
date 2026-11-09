@@ -192,6 +192,22 @@ namespace editor::graph
                 ImGui::Text("Key: %s", std::get<std::string>(it->second).c_str());
             break;
         }
+        case BTNodeType::FollowRoute:
+        {
+            auto keyIt = node.properties.find("routeKey");
+            if (keyIt != node.properties.end() && std::holds_alternative<std::string>(keyIt->second))
+                ImGui::Text("Route: %s", std::get<std::string>(keyIt->second).c_str());
+            auto modeIt = node.properties.find("mode");
+            if (modeIt != node.properties.end() && std::holds_alternative<std::string>(modeIt->second))
+                ImGui::Text("Mode: %s", std::get<std::string>(modeIt->second).c_str());
+            float dwell = 0.0f;
+            auto dwellIt = node.properties.find("dwell");
+            if (dwellIt != node.properties.end() && std::holds_alternative<float>(dwellIt->second))
+                dwell = std::get<float>(dwellIt->second);
+            if (dwell > 0.0f)
+                ImGui::Text("Dwell: %.1fs", dwell);
+            break;
+        }
         case BTNodeType::PlayAnimation:
         {
             auto it = node.properties.find("stateName");

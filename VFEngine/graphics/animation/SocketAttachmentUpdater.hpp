@@ -26,6 +26,10 @@ namespace animation
         void update();
         const std::vector<glm::mat4>* getCachedSocketTransforms(entt::entity entity) const;
 
+        // A missing socket is reported once per attached entity; a mesh reload (sockets saved)
+        // calls this so a socket that is still missing afterwards is reported again.
+        void resetMissingSocketWarnings();
+
     private:
         void buildSocketTransformCache();
         void resolveAttachmentParent(entt::entity attachedEntity);
@@ -41,6 +45,7 @@ namespace animation
         std::unordered_map<entt::entity, std::vector<glm::mat4>> socketTransformCache;
         std::unordered_set<entt::entity> resolvedThisFrame;
         std::unordered_set<entt::entity> inProgress;
+        std::unordered_set<entt::entity> missingSocketWarned;
     };
 #pragma warning(pop)
 }

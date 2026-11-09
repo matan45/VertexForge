@@ -1,4 +1,5 @@
 #include "BTGraphEditor.hpp"
+#include "../../utilities/behaviortree/BehaviorTreeNodeCatalog.hpp"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -18,7 +19,7 @@ namespace editor::graph
             BTNodeType type;
         };
 
-        constexpr std::array<NodePaletteEntry, 22> kNodePaletteEntries = {{
+        constexpr std::array<NodePaletteEntry, 23> kNodePaletteEntries = {{
             // Composites
             {"Composites", "Sequence", BTNodeType::Sequence},
             {"Composites", "Selector", BTNodeType::Selector},
@@ -35,6 +36,7 @@ namespace editor::graph
             {"Tasks", "Wait", BTNodeType::Wait},
             {"Tasks", "Log", BTNodeType::Log},
             {"Tasks", "Move To", BTNodeType::MoveTo},
+            {"Tasks", "Follow Route", BTNodeType::FollowRoute},
             {"Tasks", "Play Animation", BTNodeType::PlayAnimation},
             {"Tasks", "Set Blackboard Value", BTNodeType::SetBlackboardValue},
             {"Tasks", "Check Blackboard Value", BTNodeType::CheckBlackboardValue},
@@ -327,6 +329,7 @@ namespace editor::graph
                 if (ImGui::MenuItem("Wait")) createNode(BTNodeType::Wait, newNodePosition);
                 if (ImGui::MenuItem("Log")) createNode(BTNodeType::Log, newNodePosition);
                 if (ImGui::MenuItem("Move To")) createNode(BTNodeType::MoveTo, newNodePosition);
+                if (ImGui::MenuItem("Follow Route")) createNode(BTNodeType::FollowRoute, newNodePosition);
                 if (ImGui::MenuItem("Play Animation")) createNode(BTNodeType::PlayAnimation, newNodePosition);
                 if (ImGui::MenuItem("Set Blackboard Value")) createNode(BTNodeType::SetBlackboardValue, newNodePosition);
                 if (ImGui::MenuItem("Check Blackboard Value")) createNode(BTNodeType::CheckBlackboardValue, newNodePosition);
@@ -358,79 +361,9 @@ namespace editor::graph
         node.type = type;
         node.name = nodeTypeToString(type);
         node.position = glm::vec2(position.x, position.y);
-
-        switch (type)
-        {
-        case BTNodeType::Wait:
-            node.properties["duration"] = 1.0f;
-            break;
-        case BTNodeType::Log:
-            node.properties["message"] = std::string("Hello");
-            node.properties["level"] = std::string("Info");
-            break;
-        case BTNodeType::MoveTo:
-            node.properties["targetKey"] = std::string("target");
-            node.properties["arrivalDistance"] = 0.5f;
-            break;
-        case BTNodeType::PlayAnimation:
-            node.properties["stateName"] = std::string("");
-            node.properties["waitForCompletion"] = false;
-            break;
-        case BTNodeType::Parallel:
-            node.properties["policy"] = std::string("RequireAll");
-            break;
-        case BTNodeType::Repeater:
-            node.properties["repeatCount"] = 3;
-            break;
-        case BTNodeType::Cooldown:
-            node.properties["cooldownTime"] = 1.0f;
-            break;
-        case BTNodeType::TimeLimit:
-            node.properties["timeLimit"] = 5.0f;
-            break;
-        case BTNodeType::SetBlackboardValue:
-            node.properties["key"] = std::string("");
-            node.properties["value"] = 0.0f;
-            break;
-        case BTNodeType::CheckBlackboardValue:
-            node.properties["key"] = std::string("");
-            node.properties["compareOp"] = std::string("==");
-            node.properties["compareValue"] = 0.0f;
-            break;
-        case BTNodeType::BlackboardCondition:
-            node.properties["key"] = std::string("");
-            node.properties["compareOp"] = std::string("==");
-            node.properties["compareValue"] = 0.0f;
-            node.properties["abortMode"] = std::string("None");
-            break;
-        case BTNodeType::EnvironmentQuery:
-            node.properties["queryName"] = std::string("");
-            node.properties["resultKey"] = std::string("eqsResult");
-            break;
-        case BTNodeType::SubTree:
-            node.properties["treePath"] = std::string("");
-            break;
-        case BTNodeType::DynamicSubTree:
-            node.properties["selectionKey"] = std::string("");
-            node.properties["injectionTag"] = std::string("");
-            node.properties["defaultTreePath"] = std::string("");
-            break;
-        case BTNodeType::LineOfSight:
-            node.properties["targetKey"] = std::string("target");
-            node.properties["maxDistance"] = 50.0f;
-            node.properties["eyeOffset"] = 1.6f;
-            break;
-        case BTNodeType::Service:
-            node.properties["interval"] = 0.5f;
-            node.properties["randomDeviation"] = 0.0f;
-            node.properties["runOnActivation"] = false;
-            node.properties["serviceType"] = std::string("EQSRefresh");
-            node.properties["queryName"] = std::string("");
-            node.properties["resultKey"] = std::string("eqsResult");
-            break;
-        default:
-            break;
-        }
+        // VK-1660: every parameter starts at its catalogue seed (a Service as EQSRefresh, the editor's
+        // historical default), so editor-made nodes carry what the MCP tools and vf://docs/bt describe.
+        node.properties = catalog::defaultProperties(type);
 
         currentGraph->nodes.push_back(std::move(node));
 

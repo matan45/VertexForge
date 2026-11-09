@@ -324,6 +324,13 @@ namespace render
 
     void RenderPassHandler::recreate()
     {
+        // VK-1502/VK-1662: OffScreenViewPort::recreate just destroyed the last-frame depth copies, and render()
+        // recreates them lazily BEFORE updateVFXPrevFrameDepth could ever see them missing - so restart the VFX
+        // depth-collision warm-up here. The fallback then stays bound until the DepthCopy pass has written both new
+        // slots (never sampling an UNDEFINED-layout image), and the switch back to the real views forces the
+        // descriptor rewrite even if the driver reused the destroyed views' handle values.
+        prevFrameDepthReadyCounter = 0;
+
         if (meshPipelineInitialized)
         {
             meshPipeline->recreate();

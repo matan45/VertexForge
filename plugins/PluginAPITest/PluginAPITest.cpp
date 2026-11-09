@@ -9,6 +9,8 @@
 #include <map>
 #include <cstring>
 #include <cmath>
+#include <cstdint>
+#include <utility>
 
 enum class ElementType : int { Fire = 0, Water, Earth, Wind };
 
@@ -145,7 +147,71 @@ public:
             initCustomPipelineTest();
         }
 
+        // ================================================================
+        // VK-1652: MCP tool - the agent calls it as "pluginapitest_echo"
+        // ================================================================
+        if (ctx->hasCapability(std::string(plugin::capability::editor)))
+        {
+            registerEchoMcpTool();
+        }
+
         return true;
+    }
+
+    void registerEchoMcpTool()
+    {
+        plugin::PluginMcpToolDesc tool;
+        tool.name = "echo";
+        tool.title = "Plugin API test echo";
+        tool.description = "Echoes `text` (repeated `repeat` times, space-separated) and reports the live "
+                           "entity count read through PluginContext::getRegistry().";
+        tool.inputSchema = nlohmann::json{
+            {"type", "object"},
+            {"properties", {
+                {"text", {{"type", "string"}, {"description", "Text to echo"}}},
+                {"repeat", {{"type", "integer"}, {"minimum", 1}, {"maximum", 10},
+                            {"description", "How many times to repeat the text (default 1)"}}}
+            }},
+            {"required", nlohmann::json::array({"text"})}
+        };
+        tool.readOnly = true;
+        tool.handler = [this](const nlohmann::json& args) -> plugin::PluginMcpToolResult {
+            if (!args.is_object() || !args.contains("text") || !args["text"].is_string())
+            {
+                return plugin::PluginMcpToolResult::error("'text' is required and must be a string");
+            }
+            int64_t repeat = 1;
+            if (args.contains("repeat"))
+            {
+                const auto& value = args["repeat"];
+                if (!value.is_number_integer() || value.get<int64_t>() < 1 || value.get<int64_t>() > 10)
+                {
+                    return plugin::PluginMcpToolResult::error("'repeat' must be an integer in [1, 10]");
+                }
+                repeat = value.get<int64_t>();
+            }
+
+            const std::string text = args["text"].get<std::string>();
+            std::string echo;
+            for (int64_t i = 0; i < repeat; ++i)
+            {
+                if (i > 0) echo += ' ';
+                echo += text;
+            }
+
+            // Live entities = the in-use part of the registry's entity storage.
+            const auto entityCount = ctx->getRegistry().storage<entt::entity>().free_list();
+            return plugin::PluginMcpToolResult::ok(nlohmann::json{
+                {"echo", echo},
+                {"plugin", "PluginAPITest"},
+                {"entityCount", entityCount}
+            });
+        };
+
+        if (!ctx->registerMcpTool(std::move(tool)))
+        {
+            ctx->logError("[MCP] Failed to register the echo tool");
+        }
     }
 
     void initCustomPipelineTest()

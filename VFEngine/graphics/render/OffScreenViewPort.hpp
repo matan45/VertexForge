@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/OffScreen.hpp"
+#include "ViewportReadback.hpp"
 #include "terrain/TerrainHitResult.hpp"
 #include <glm/glm.hpp>
 #include <vector>
@@ -60,6 +61,9 @@ namespace render
         uint32_t drFramesOver = 0;
         uint32_t drFramesUnder = 0;
 
+        // VK-1651: one-shot CPU copy of the final viewport image (MCP screenshot).
+        ViewportReadback viewportReadback;
+
         inline static std::mutex pendingRenderWaitsMutex;
         inline static std::vector<PendingRenderWait> pendingRenderWaits;
 
@@ -97,6 +101,11 @@ namespace render
         // offscreen targets in place and blanks ImGui for one frame (RenderManager one-frame skip,
         // the same contract as a window resize).
         void setDynamicResolutionSettings(const types::DynamicResolutionSettings& s);
+
+        // VK-1651: thread-safe (main thread). The copy is recorded by render() once the
+        // request has settled and completes when that frame's fence is next waited.
+        uint64_t requestViewportReadback(uint32_t settleFrames) { return viewportReadback.request(settleFrames); }
+        services::ViewportReadbackResult takeViewportReadback(uint64_t ticket) { return viewportReadback.take(ticket); }
 
         static void addPendingRenderWait(PendingRenderWait wait);
 

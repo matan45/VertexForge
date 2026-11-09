@@ -1,8 +1,8 @@
 #include "RetargetContext.hpp"
+#include "retargeting/RetargetBoneMapping.hpp"
 
 #include <glm/gtc/quaternion.hpp>
 #include <optional>
-#include <unordered_map>
 
 namespace animation
 {
@@ -60,40 +60,26 @@ namespace animation
         const size_t boneCount = targetSkeleton.bones.size();
         ctx.perTargetBone.assign(boneCount, RetargetBone{});
 
-        // Fast target-bone-name -> binding lookup.
-        std::unordered_map<std::string, const retargeting::HumanoidBoneBinding*> targetByName;
-        targetByName.reserve(targetRig.bindings.size());
-        for (const auto& b : targetRig.bindings)
-            targetByName[b.boneName] = &b;
+        const retargeting::RetargetBoneMapping mapping(sourceRig, targetRig, map);
 
         for (size_t t = 0; t < boneCount; ++t)
         {
             RetargetBone rb; // default: unmapped -> target bind
 
-            const auto itT = targetByName.find(targetSkeleton.bones[t].name);
-            if (itT == targetByName.end())
+            // No target binding, role disabled by an override, or no source bone for the
+            // role -> hold bind.
+            const auto match = mapping.match(targetSkeleton.bones[t].name);
+            if (!match)
             {
                 ctx.perTargetBone[t] = rb;
                 continue;
             }
 
-            const HumanoidBoneRole role = itT->second->role;
-
-            if (const auto* ov = map.findOverride(role); ov && !ov->enabled)
-            {
-                ctx.perTargetBone[t] = rb; // role disabled -> hold bind
-                continue;
-            }
-
-            const auto* srcBinding = sourceRig.find(role);
-            if (!srcBinding)
-            {
-                ctx.perTargetBone[t] = rb; // source has no bone for this role -> hold bind
-                continue;
-            }
+            const HumanoidBoneRole role = match->target->role;
+            const auto* srcBinding = match->source;
 
             const glm::quat qs = glm::normalize(srcBinding->referenceLocalRotation);
-            const glm::quat qt = glm::normalize(itT->second->referenceLocalRotation);
+            const glm::quat qt = glm::normalize(match->target->referenceLocalRotation);
 
             rb.mapped = true;
             rb.sourceBoneName = srcBinding->boneName;
@@ -102,7 +88,7 @@ namespace animation
 
             // Hips always retarget translation; other roles opt in via the binding
             // flag or a per-role override (VK-910).
-            bool wantsTranslation = rb.isRoot || itT->second->retargetTranslation;
+            bool wantsTranslation = rb.isRoot || match->target->retargetTranslation;
             if (const auto* ov = map.findOverride(role); ov && ov->overrideTranslation)
                 wantsTranslation = true;
             rb.retargetTranslation = wantsTranslation;

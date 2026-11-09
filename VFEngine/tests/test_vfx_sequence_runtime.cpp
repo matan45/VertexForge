@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include <impl/vfx/VFXPlayModeHandler.hpp>
 #include <impl/vfx/VFXSequencePlayModeHandler.hpp>
@@ -219,6 +220,45 @@ namespace
 
 TEST_SUITE("VFXSequenceRuntimeFoundation")
 {
+    // VK-1657: combos never outlive Play. Play->Edit forgets every combo (script-created ones
+    // included) WITHOUT dispatching child destroys: the children are transient renderer instances the
+    // runtime service purges on the next edit-mode VFX tick, where touching the renderer is safe.
+    TEST_CASE("Play->Edit forgets every combo without destroying its children")
+    {
+        asset::AssetDatabase::instance().clear();
+        MockVFXRuntime mock;
+        mock.install();
+        auto runtimeCleanup = makeScopeExit(unregisterVFXRuntimeHandlers);
+
+        const auto ref = makeResolvingRef(0xA201, "assets/vfx/forget.vfVFX");
+        const std::string sequencePath = saveSequence("Forget.vfVFXSequence", singleStepSequence(ref));
+
+        services::VFXSequenceRuntimeServiceImpl svc;
+        svc.registerEventHandlers();
+        auto sequenceCleanup = makeScopeExit(unregisterVFXSequenceHandlers);
+
+        const auto combo = svc.createCombo(sequencePath, glm::mat4(1.0f), 0, false);
+        REQUIRE(combo != 0);
+        svc.playCombo(combo);
+        svc.update(0.1f);
+        REQUIRE(mock.createPaths.size() == 1); // the step's child instance
+        REQUIRE(mock.live.size() == 1);
+        CHECK(svc.isComboPlaying(combo));
+
+        ::events::editor::EditorModeChangedNotification stop;
+        stop.previousMode = EditorMode::Play;
+        stop.currentMode = EditorMode::Edit;
+        ::events::EventDispatcher::instance().publish(stop);
+
+        CHECK_FALSE(svc.isComboPlaying(combo)); // forgotten
+        CHECK(mock.live.size() == 1);           // no child destroy dispatched
+        CHECK_NOTHROW(svc.destroyCombo(combo)); // an unknown id stays a no-op
+        CHECK(mock.live.size() == 1);
+
+        svc.update(0.1f); // nothing comes back
+        CHECK(mock.createPaths.size() == 1);
+    }
+
     TEST_CASE("dispatcher-registered sequence runtime creates and plays a combo")
     {
         asset::AssetDatabase::instance().clear();

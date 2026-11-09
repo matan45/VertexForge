@@ -4,43 +4,33 @@
 
 namespace eqs
 {
-    RingGenerator::RingGenerator(float radius, int pointCount,
-                                  int numRings, float ringSpacing)
-        : radius(radius)
-        , pointCount(pointCount)
-        , numRings(numRings)
-        , ringSpacing(ringSpacing)
+    RingGenerator::RingGenerator(const Settings& settings)
+        : settings(settings)
     {
     }
 
-    std::vector<EQSCandidate> RingGenerator::generate(const EQSContext& context,
-                                                       const EQSProviderRefs& providers)
+    bool RingGenerator::generate(const EQSContext& context, const EQSProviderRefs& /*providers*/,
+                                 std::vector<EQSCandidate>& out, std::string& error) const
     {
-        std::vector<EQSCandidate> candidates;
-        candidates.reserve(static_cast<size_t>(pointCount) * numRings);
+        glm::vec3 center{0.0f};
+        if (!resolveContextPoint(context, settings.center, center, error, "the Ring generator"))
+            return false;
+        if (settings.pointCount <= 0 || settings.ringCount <= 0)
+            return true;
 
-        float angleStep = glm::two_pi<float>() / static_cast<float>(pointCount);
-
-        for (int ring = 0; ring < numRings; ++ring)
+        out.reserve(out.size() + static_cast<size_t>(settings.pointCount) * static_cast<size_t>(settings.ringCount));
+        const float angleStep = glm::two_pi<float>() / static_cast<float>(settings.pointCount);
+        for (int ring = 0; ring < settings.ringCount; ++ring)
         {
-            float currentRadius = radius + static_cast<float>(ring) * ringSpacing;
-
-            for (int i = 0; i < pointCount; ++i)
+            const float radius = settings.radius + static_cast<float>(ring) * settings.ringSpacing;
+            for (int i = 0; i < settings.pointCount; ++i)
             {
-                float angle = static_cast<float>(i) * angleStep;
-
+                const float angle = static_cast<float>(i) * angleStep;
                 EQSCandidate candidate;
-                candidate.position = context.querierPosition + glm::vec3(
-                    std::cos(angle) * currentRadius,
-                    0.0f,
-                    std::sin(angle) * currentRadius
-                );
-                candidate.totalScore = 0.0f;
-                candidate.filtered = false;
-                candidates.push_back(candidate);
+                candidate.position = center + glm::vec3(std::cos(angle) * radius, 0.0f, std::sin(angle) * radius);
+                out.push_back(candidate);
             }
         }
-
-        return candidates;
+        return true;
     }
 }

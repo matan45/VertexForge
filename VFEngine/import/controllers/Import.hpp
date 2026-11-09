@@ -27,6 +27,9 @@ namespace controllers
         std::string fileName;
         std::string outputPath;
         std::string fileType;
+        // Type of the asset at outputPath (one source file can emit meshes, textures and
+        // animation clips). COUNT for failed results and formats without a .vfmeta type.
+        resource::AssetType assetType = resource::AssetType::COUNT;
         bool success = false;
         std::string errorMessage;
     };
@@ -52,6 +55,12 @@ namespace controllers
     public:
         static ImportResult importFiles(const std::vector<importConfig::ImportFiles>& paths,
                                         ImportProgressCallback progressCallback = nullptr);
+        // Same as importFiles, but writes into an explicit folder instead of the
+        // process-wide location (which tracks the content browser). Used by the
+        // MCP server so agent imports never redirect the user's next import.
+        static ImportResult importFilesInto(const std::vector<importConfig::ImportFiles>& paths,
+                                            std::string_view targetLocation,
+                                            ImportProgressCallback progressCallback = nullptr);
         static void setLocation(std::string_view newLocation);
         static void initialize();
         static void shutdown();

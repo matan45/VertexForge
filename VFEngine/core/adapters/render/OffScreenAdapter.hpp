@@ -38,6 +38,9 @@ namespace core
         void* render() override;
         void* render(const std::function<void()>& preRenderCallback) override;
 
+        uint64_t requestViewportReadback(uint32_t settleFrames) override;
+        services::ViewportReadbackResult takeViewportReadback(uint64_t ticket) override;
+
         void iblSet(std::string_view iblPath) override;
         void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) override;
         void iblSetParams(float intensity, float rotationDeg, const glm::vec3& tint) override; // VK-1574

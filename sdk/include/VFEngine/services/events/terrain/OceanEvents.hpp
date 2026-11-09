@@ -121,6 +121,24 @@ namespace events::ocean
         std::string_view getName() const override { return "HasOceanComponent"; }
     };
 
+    // VK-1658: the tracked ocean's whole component as one value. An invalid `entity` means the
+    // tracked ocean; nullopt when there is no ocean or `entity` is not the one OceanService tracks.
+    struct GetOceanStateQuery : IQuery<std::optional<services::OceanStateData>> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetOceanState"; }
+    };
+
+    // VK-1658: writes every field of the tracked ocean exactly as given - no clamping, the caller
+    // validates - and re-derives the FFT config from it (the FFT runs only while isActive). An invalid
+    // `entity` means the tracked ocean. False when there is no ocean or `entity` is another entity.
+    struct SetOceanStateCommand : ICommand<bool> {
+        services::EntityHandle entity;
+        services::OceanStateData state;
+
+        std::string_view getName() const override { return "SetOceanState"; }
+    };
+
     struct GetOceanFFTConfigQuery : IQuery<services::OceanFFTConfigData> {
         std::string_view getName() const override { return "GetOceanFFTConfig"; }
     };
@@ -227,8 +245,9 @@ namespace events::ocean
         std::string_view getName() const override { return "HasWaterBodyComponent"; }
     };
 
-    // Every active body in the scene, for the editor's list. The renderer does NOT go through this:
-    // it pulls water::WaterBodyDesc straight off IOceanRenderProvider once per frame.
+    // Every body in the scene, active or not (WaterBodyComponentData::isActive tells them apart), for
+    // the editor's list. The renderer does NOT go through this: it pulls the active bodies as
+    // water::WaterBodyDesc straight off IOceanRenderProvider once per frame.
     struct GetWaterBodiesQuery : IQuery<std::vector<services::WaterBodyEntry>> {
         std::string_view getName() const override { return "GetWaterBodies"; }
     };

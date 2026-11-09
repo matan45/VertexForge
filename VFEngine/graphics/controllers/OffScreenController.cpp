@@ -3,6 +3,7 @@
 #include "../render/gpudriven/brush/BrushComputePipeline.hpp"
 #include "../render/gpudriven/brush/HydraulicErosionPipeline.hpp"
 #include "../core/VulkanContext.hpp"
+#include "../core/SwapChain.hpp"
 #include "../core/AsyncComputeManager.hpp"
 #include "../core/ThreadCommandPoolManager.hpp"
 #include "../render/OffScreenViewPort.hpp"
@@ -328,6 +329,13 @@ namespace controllers
                                                const glm::mat4& view, const glm::mat4& projection,
                                                const glm::vec3& cameraPos, float time)
     {
+        // VK-1655: keep the jitter in render pixels across resizes / render-extent changes, which do not
+        // re-apply the post-process settings (where the extent was otherwise only set). VK-1662: the display
+        // extent picks the Halton phase count.
+        const auto renderExtent = swapChain.getSwapchainExtent();
+        const auto displayExtent = swapChain.getDisplayExtent();
+        cameraController->setJitterExtents(renderExtent.width, renderExtent.height,
+                                           displayExtent.width, displayExtent.height);
         cameraController->updateCamera(cameraId, view, projection, cameraPos, time);
     }
 
@@ -384,12 +392,16 @@ namespace controllers
     void* OffScreenController::render()
     {
         retryPendingRenderSettings();
+        retryPendingGISettings();
+        retryPendingVolumetricFog();
         return offScreen->render();
     }
 
     void* OffScreenController::render(const std::function<void()>& preRenderCallback)
     {
         retryPendingRenderSettings();
+        retryPendingGISettings();
+        retryPendingVolumetricFog();
         return offScreen->render(preRenderCallback);
     }
 
@@ -397,5 +409,15 @@ namespace controllers
     {
         vk::Image img = offScreen->getColorImage(imageIndex);
         return static_cast<VkImage>(img);
+    }
+
+    uint64_t OffScreenController::requestViewportReadback(uint32_t settleFrames)
+    {
+        return offScreen->requestViewportReadback(settleFrames);
+    }
+
+    services::ViewportReadbackResult OffScreenController::takeViewportReadback(uint64_t ticket)
+    {
+        return offScreen->takeViewportReadback(ticket);
     }
 }

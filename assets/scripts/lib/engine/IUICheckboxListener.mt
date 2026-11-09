@@ -3,7 +3,7 @@
 // Unlike collision callbacks, checkbox events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUICheckboxListener;
+//   import * from "../lib/engine/IUICheckboxListener.mt";
 //
 //   @Script
 //   public class SettingsController implements IUICheckboxListener {

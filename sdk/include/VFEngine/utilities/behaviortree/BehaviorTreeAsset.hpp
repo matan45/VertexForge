@@ -18,8 +18,19 @@ namespace behaviortree
         using TreeLoader = std::function<std::optional<BehaviorTreeData>(const std::string& path)>;
 
         static std::optional<BehaviorTreeData> load(std::string_view path);
+        // Writes atomically (VK-1660): a sibling "<path>.tmp" is written and flushed, then renamed
+        // over the target, so a failed write never leaves a truncated tree behind.
         static bool save(std::string_view path, const BehaviorTreeData& data);
+        // The exact text save() writes (VK-1660: the authoring service hashes it).
+        static std::string serialize(const BehaviorTreeData& data);
+        // Parses .vfBehaviorTree JSON text with the same rules as load(); nullopt on invalid JSON or a
+        // non-object root. Load warnings are logged like load().
+        static std::optional<BehaviorTreeData> parse(std::string_view text);
         static bool exists(std::string_view path);
+        // One spelling per tree file (VK-1660): absolute (a project-relative path resolves against the
+        // project root), forward slashes, lexically normal. The runtime adapter keys its cache, dependencies
+        // and reloads by it; compare tree paths through it.
+        static std::string canonicalPath(std::string_view path);
         static BehaviorTreeData createDefault(const std::string& name = "New Behavior Tree");
 
         // Inline every SubTree node by splicing the referenced graph in with

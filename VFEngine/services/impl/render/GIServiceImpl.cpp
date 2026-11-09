@@ -1,7 +1,11 @@
 #include "GIServiceImpl.hpp"
 #include "../../events/EventDispatcher.hpp"
 #include "../../events/render/GIEvents.hpp"
+#include "../../events/scene/ComponentPhysicsLightEvents.hpp"
+#include "../../events/scene/SceneSettingsEvents.hpp"
 #include "../../providers/render/IGIProvider.hpp"
+#include "print/Log.hpp"
+#include <exception>
 
 namespace services
 {
@@ -10,7 +14,13 @@ namespace services
     {
     }
 
-    GIServiceImpl::~GIServiceImpl() = default;
+    GIServiceImpl::~GIServiceImpl()
+    {
+        if (renderSettingsChangedToken.isValid())
+        {
+            ::events::EventDispatcher::instance().unsubscribe(renderSettingsChangedToken);
+        }
+    }
 
     void GIServiceImpl::registerEventHandlers()
     {
@@ -77,6 +87,34 @@ namespace services
             [this](const events::render::gi::IsGIEnabledQuery&) -> bool
             {
                 return provider->isGIEnabled();
+            }
+        );
+
+        // VK-1654: ScenePersistenceService re-applies post-process, atmosphere and clouds on a scene
+        // load / new scene / Play->Stop restore, but not GI (this service is registered by the Editor
+        // only). Apply the scene's GI here. The debug views are session state, not scene data, so
+        // the live flags are kept.
+        renderSettingsChangedToken = dispatcher.subscribe<events::scene::RenderSettingsChangedNotification>(
+            [this](const events::scene::RenderSettingsChangedNotification& n)
+            {
+                if (!n.sceneLoad || !provider)
+                    return;
+
+                // EventDispatcher::publish swallows subscriber exceptions without a log; report a
+                // failed apply here so a scene that loads without its GI is diagnosable.
+                try
+                {
+                    auto gi = ::events::EventDispatcher::instance().query(events::scene::GetRenderSettingsQuery{}).gi;
+                    const auto live = provider->getGISettings();
+                    gi.showProbes = live.showProbes;
+                    gi.showCascadeBounds = live.showCascadeBounds;
+                    gi.showProbeValidity = live.showProbeValidity;
+                    provider->applyGISettings(gi);
+                }
+                catch (const std::exception& e)
+                {
+                    vfLogWarning("[GI] Applying the scene's GI settings failed: {}", e.what());
+                }
             }
         );
     }

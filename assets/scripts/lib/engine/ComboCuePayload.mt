@@ -12,7 +12,7 @@
 //       if (p.hasPosition) { spawnHit(p.position()); }
 //   }
 
-import * from "Vec3f.mt";
+import * from "../math/Vec3f.mt";
 
 public class ComboCuePayload {
     public bool hasPosition = false;

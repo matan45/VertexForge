@@ -40,6 +40,8 @@ namespace render::postprocess
         vk::Image intermediateImage;
         core::VulkanAllocation intermediateAllocation;
         vk::ImageView intermediateImageView;
+        // VK-1655: Undefined when created, ShaderReadOnly after a frame; moved to an attachment before rendering.
+        vk::ImageLayout intermediateImageLayout = vk::ImageLayout::eUndefined;
         vk::ImageView depthOnlyImageView;
 
         std::shared_ptr<core::Shader> edgeShader;

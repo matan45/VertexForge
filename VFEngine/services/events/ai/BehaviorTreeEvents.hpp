@@ -104,6 +104,14 @@ namespace events::ai {
         std::string_view getName() const override { return "GetTreeRuntimeSnapshot"; }
     };
 
+    // VK-1660: the entity's live runtime (attached = false outside Play or without a tree), built on
+    // demand from IBehaviorTreeProvider::getRuntimeState. Never changes the editor's debug target.
+    struct GetBehaviorTreeRuntimeStateQuery : IQuery<behaviortree::BTRuntimeState> {
+        services::EntityHandle entity;
+
+        std::string_view getName() const override { return "GetBehaviorTreeRuntimeState"; }
+    };
+
     // === Dynamic subtree (VK-1457) ===
 
     // Bind an injection tag to a tree path for one entity's DynamicSubTree nodes; empty path clears it.

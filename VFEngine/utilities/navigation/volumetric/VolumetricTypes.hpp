@@ -1,10 +1,10 @@
 #pragma once
 #include <glm/glm.hpp>
-#include <vector>
-#include <string>
 #include <cstdint>
 #include <functional>
 
+// Volumetric (3D) navigation for flying agents (rewritten for VK-1660): each VolumetricNavVolume entity bakes
+// an axis-aligned voxel grid (VoxelGrid) - navigable or blocked per voxel - that the pathfinder searches.
 namespace volumetric
 {
     struct VoxelCoord
@@ -13,15 +13,7 @@ namespace volumetric
         int32_t y = 0;
         int32_t z = 0;
 
-        bool operator==(const VoxelCoord& other) const
-        {
-            return x == other.x && y == other.y && z == other.z;
-        }
-
-        bool operator!=(const VoxelCoord& other) const
-        {
-            return !(*this == other);
-        }
+        bool operator==(const VoxelCoord& other) const = default;
     };
 
     struct VoxelCoordHash
@@ -35,46 +27,15 @@ namespace volumetric
         }
     };
 
-    struct VolumePath
+    struct VolumetricBakeSettings
     {
-        std::vector<glm::vec3> waypoints;
-        bool isPartial = false;
-        bool isValid = false;
+        float voxelSize = 1.0f;     // voxel edge length (m)
+        float clearance = 0.5f;     // free space kept around blocked geometry (the largest agent radius)
+        uint8_t connectivity = 26;  // 6 = face neighbours only, 26 = faces, edges and corners
 
-        glm::vec3 getBestPosition() const
-        {
-            if (waypoints.empty())
-            {
-                return glm::vec3(0.0f);
-            }
-            return waypoints.back();
-        }
-
-        bool hasResults() const
-        {
-            return !waypoints.empty();
-        }
+        bool operator==(const VolumetricBakeSettings&) const = default;
     };
 
-    enum class VolumetricBakeStatus : uint8_t
-    {
-        Idle,
-        Voxelizing,
-        BuildingOctree,
-        Complete,
-        Failed
-    };
-
-    struct VolumetricBakeProgress
-    {
-        VolumetricBakeStatus status = VolumetricBakeStatus::Idle;
-        float progress = 0.0f;
-        std::string currentStage;
-    };
-
-    enum class VoxelConnectivity : uint8_t
-    {
-        Six = 6,
-        TwentySix = 26
-    };
+    // The largest grid a volume may bake (16 MB at one byte per voxel).
+    inline constexpr int64_t kMaxVoxels = int64_t(1) << 24;
 }

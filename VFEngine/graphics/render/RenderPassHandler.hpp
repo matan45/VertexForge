@@ -213,8 +213,11 @@ namespace render
         std::unique_ptr<upscaling::MotionVectorPass> motionVectorPass;
         std::unique_ptr<upscaling::ReactiveMaskPass> reactiveMaskPass;
         // Set when the opaque-only scene color was copied this frame (consumed
-        // by executeUpscalePass to generate the reactive mask)
+        // by generateReactiveMask to generate the reactive mask)
         mutable bool preTransparencyCaptured = false;
+        // Set by generateReactiveMask when it wrote this frame's reactive mask
+        // (read by executeUpscaleGraphManaged to tag it for the upscaler)
+        bool reactiveMaskReady = false;
         bool upscaleFirstFrame = true;
 
         std::unique_ptr<decal::DecalPipeline> decalPipeline;
@@ -253,12 +256,10 @@ namespace render
 
         bool debugRendererInitialized = false;
         glm::mat4 currentView{1.0f};
-        glm::mat4 currentProjection{1.0f};
+        glm::mat4 currentProjection{1.0f};        // JITTERED while the upscaler runs: what every pass rasterises with
         glm::mat4 unjitteredProjection{1.0f};
         glm::mat4 prevView{1.0f};
-        glm::mat4 prevProjection{1.0f};
-        glm::mat4 prevPrevView{1.0f};
-        glm::mat4 prevPrevProjection{1.0f};
+        glm::mat4 prevUnjitteredProjection{1.0f}; // VK-1662: motion vectors + Streamline constants only
         glm::vec2 currentJitterOffset{0.0f};
         uint32_t taaFrameIndex = 0;
 
@@ -509,8 +510,10 @@ namespace render
         void updateNavmeshDebugMesh(const std::vector<glm::vec3>& vertices, const std::vector<uint32_t>& indices);
         void clearNavmeshDebugMesh();
 
-        void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& projection);
-        void setUnjitteredProjection(const glm::mat4& proj) { unjitteredProjection = proj; }
+        // Rotates the camera history once per frame (VK-1662): the previous view + unjittered projection feed the
+        // motion vectors and the Streamline constants; jitteredProjection becomes currentProjection.
+        void setDebugCameraMatrices(const glm::mat4& view, const glm::mat4& jitteredProjection,
+                                    const glm::mat4& projectionWithoutJitter);
         const glm::mat4& getUnjitteredProjection() const { return unjitteredProjection; }
         void setTAAJitterData(const glm::vec2& jitter, uint32_t frameIndex) { currentJitterOffset = jitter; taaFrameIndex = frameIndex; }
         bool isDebugRendererInitialized() const { return debugRendererInitialized; }
@@ -532,8 +535,9 @@ namespace render
         uint32_t getLastSceneSecondaryCount() const { return lastSceneSecondaryCount; }
 
         // Record all async-eligible compute work into the given command buffer
-        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT, motion vectors)
-        void recordAsyncCompute(vk::CommandBuffer asyncCmd, uint32_t frameIndex) const;
+        // (light culling, grass, GI, atmosphere, clouds, VFX, ocean FFT). Motion vectors are NOT async: they need
+        // this frame's depth, so the Upscale pass builds them on the graphics queue (VK-1662).
+        void recordAsyncCompute(vk::CommandBuffer asyncCmd) const;
 
         void setDeletionQueue(core::DeferredDeletionQueue* queue);
         void setGPUDrivenCameraData(const glm::vec3& cameraPos, float nearPlane, float farPlane, float time = 0.0f);
@@ -633,7 +637,6 @@ namespace render
 
         postprocess::PostProcessPipeline* getPostProcessPipeline() const { return postProcessPipeline.get(); }
         const glm::mat4& getPrevView() const { return prevView; }
-        const glm::mat4& getPrevProjection() const { return prevProjection; }
         void resetUpscaleFirstFrame() { upscaleFirstFrame = true; }
 
         plugin::RenderHookHandle registerRenderHook(plugin::RenderPassHookPoint hookPoint,
@@ -704,7 +707,7 @@ namespace render
         void draw(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
         // VK-1502: true when a VFX emitter has depth-buffer collision enabled, so the OffScreenViewPort
-        // knows to create the last-frame depth copies (prevFrameDepth) even when upscaling is off.
+        // knows to create the last-frame depth copies (prevFrameDepth). VFX is their only consumer (VK-1662).
         bool vfxNeedsPrevFrameDepth() const;
 
         // VK-1502: feed the VFX sim the last-frame depth views + which slot to sample this frame. Called
@@ -729,6 +732,9 @@ namespace render
         void executeOcclusionPasses(const vk::CommandBuffer& commandBuffer) const;
         void dispatchTerrainRaycast(const vk::CommandBuffer& commandBuffer) const;
         void executePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
+        // VK-1655: builds the upscaler's reactive mask at the start of the PreUpscalePostProcess pass, before
+        // the pre-upscale effects overwrite the scene colour it diffs. Sets reactiveMaskReady.
+        void generateReactiveMask(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex);
         void executePreUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void executePostUpscalePostProcess(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex) const;
         void updateSunScreenPosition() const;

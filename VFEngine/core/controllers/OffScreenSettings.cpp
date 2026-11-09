@@ -171,21 +171,6 @@ namespace controllers {
 		return offScreenController->getGIDebugStats();
 	}
 
-	void OffScreen::setGIShowProbes(bool show)
-	{
-		offScreenController->setGIShowProbes(show);
-	}
-
-	void OffScreen::setGIShowCascadeBounds(bool show)
-	{
-		offScreenController->setGIShowCascadeBounds(show);
-	}
-
-	void OffScreen::setGIShowProbeValidity(bool show)
-	{
-		offScreenController->setGIShowProbeValidity(show);
-	}
-
 	void OffScreen::setLightStreamingConfig(const render::lighting::LightStreamingConfig& config)
 	{
 		offScreenController->setLightStreamingConfig(config);

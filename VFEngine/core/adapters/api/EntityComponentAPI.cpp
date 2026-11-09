@@ -88,8 +88,12 @@ namespace core::api
                 {services::ComponentTypeId::SocketAttachment, makeAddFn<events::socket::AddSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeAddFn<events::socket::AddSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeAddFn<events::scene::AddNavmeshAgentComponentCommand>()},
+                {services::ComponentTypeId::NavRoute, makeAddFn<events::scene::AddNavRouteComponentCommand>()},
                 {services::ComponentTypeId::Controller, makeAddFn<events::scene::AddControllerComponentCommand>()},
                 {services::ComponentTypeId::Decal, makeAddFn<events::scene::AddDecalComponentCommand>()},
+                {services::ComponentTypeId::BehaviorTree, makeAddFn<events::scene::AddBehaviorTreeComponentCommand>()},
+                {services::ComponentTypeId::VolumetricNavVolume, makeAddFn<events::scene::AddVolumetricNavVolumeComponentCommand>()},
+                {services::ComponentTypeId::VolumetricAgent, makeAddFn<events::scene::AddVolumetricAgentComponentCommand>()},
             };
             return map;
         }
@@ -126,8 +130,12 @@ namespace core::api
                 {services::ComponentTypeId::SocketAttachment, makeRemoveFn<events::socket::RemoveSocketAttachmentComponentCommand>()},
                 {services::ComponentTypeId::SocketOverride, makeRemoveFn<events::socket::RemoveSocketOverrideComponentCommand>()},
                 {services::ComponentTypeId::NavmeshAgent, makeRemoveFn<events::scene::RemoveNavmeshAgentComponentCommand>()},
+                {services::ComponentTypeId::NavRoute, makeRemoveFn<events::scene::RemoveNavRouteComponentCommand>()},
                 {services::ComponentTypeId::Controller, makeRemoveFn<events::scene::RemoveControllerComponentCommand>()},
                 {services::ComponentTypeId::Decal, makeRemoveFn<events::scene::RemoveDecalComponentCommand>()},
+                {services::ComponentTypeId::BehaviorTree, makeRemoveFn<events::scene::RemoveBehaviorTreeComponentCommand>()},
+                {services::ComponentTypeId::VolumetricNavVolume, makeRemoveFn<events::scene::RemoveVolumetricNavVolumeComponentCommand>()},
+                {services::ComponentTypeId::VolumetricAgent, makeRemoveFn<events::scene::RemoveVolumetricAgentComponentCommand>()},
             };
             return map;
         }

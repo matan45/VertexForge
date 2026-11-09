@@ -1,6 +1,10 @@
 #include "print/Log.hpp"
 #include "EditorHandler.hpp"
 #include "ExportHandler.hpp"
+#include "HeightmapGenerationHandler.hpp"
+#include "PluginComponentHandler.hpp"
+#include "PluginMcpToolHandler.hpp"
+#include "PluginPostProcessEffectHandler.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
@@ -11,9 +15,13 @@
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/render/RenderTexturePlayModeHandler.hpp"
 #include "impl/ai/BehaviorTreePlayModeHandler.hpp"
+#include "impl/ai/BehaviorTreeAuthoringService.hpp"
+#include "impl/ai/EQSAuthoringService.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
 #include "impl/vfx/VFXSequenceRuntimeServiceImpl.hpp"
+#include "impl/vfx/VFXEditPreviewHandler.hpp"
+#include "impl/vfx/VFXAssetSummaryService.hpp"
 #include "impl/render/EditorRenderServiceImpl.hpp"
 #include "../../core/audio/AudioSceneUpdater.hpp"
 #include "impl/threading/FrameTaskGraph.hpp"
@@ -81,6 +89,21 @@ namespace handlers
 
         bootstrap->setFrameCallback([this]()
         {
+            // VK-1650 / VK-1653: MCP tool calls run FIRST, on the main thread, with no graph
+            // task in flight AND the render thread idle. MainLoop::run called
+            // renderController->beginFrame() before this callback, which waits for the
+            // previous frame's render to finish, and the render thread is not woken again
+            // until this frame's "Render" task calls FrameSynchronizer::endFrame(). After
+            // execute() it is NOT idle: the render thread is then walking the scene and the
+            // terrain grids (getRawVisibleTiles streams tiles, regenerates meshes and drains
+            // runtime terrain edits), so a tool that mutated EnTT or a terrain from there
+            // raced it. Corollary: a Main-affinity tool must never wait for a rendered frame
+            // -- nothing renders until this callback returns.
+            if (mcpHost)
+            {
+                mcpHost->drain();
+            }
+
             frameTaskGraph->execute();
 
             // Phase 4c: execute() blocks until every task (including the worker that
@@ -141,7 +164,13 @@ namespace handlers
         setupEventSubscriptions();
 
         editor::SplashScreen::instance().setStatus("Setting up UI...");
-        windowImguiHandler->init();
+        // Created before the UI so the status bar and preferences window can hold it;
+        // started after, once every service and plugin the tools dispatch to is up.
+        mcpHost = std::make_unique<editor::EditorMcpHost>();
+        windowImguiHandler->init(mcpHost.get());
+
+        editor::SplashScreen::instance().setStatus("Starting MCP server...");
+        mcpHost->init(mcpLaunchOptions);
     }
 
     void EditorHandler::run() const
@@ -151,6 +180,13 @@ namespace handlers
 
     void EditorHandler::cleanUp()
     {
+        // VK-1650: first, so no tool call runs against services being torn down.
+        // Pending calls fail with "shutting down".
+        if (mcpHost)
+        {
+            mcpHost->shutdown();
+        }
+
         bootstrap->stopRenderThread();
 
         if (frameTaskGraph) {
@@ -163,8 +199,12 @@ namespace handlers
         // down while their vtables still exist.
         controllers::Import::shutdown();
 
+        pluginComponentHandler.reset();
+        pluginMcpToolHandler.reset();
+        pluginPostProcessEffectHandler.reset();
         pluginManager.reset();
         exportHandler.reset();
+        heightmapGenerationHandler.reset(); // waits for a running heightmap job
         cleanupEventSubscriptions();
         windowImguiHandler->cleanUp();
 
@@ -178,10 +218,14 @@ namespace handlers
         physicsService.reset();
         physicsAnimationService.reset();
         navmeshService.reset();
+        volumetricNavService.reset();
         physicsPlayModeHandler.reset();
         oceanService.reset();
         vfxPlayModeHandler.reset();
         renderTexturePlayModeHandler.reset();
+        // VK-1657: before the runtime service whose vfxruntime handlers the preview dispatches to.
+        vfxEditPreviewHandler.reset();
+        vfxAssetSummaryService.reset();
         vfxRuntimeService.reset();
         controllerService.reset();
         ikComponentService.reset();
@@ -200,8 +244,11 @@ namespace handlers
         meshBrushModeService.reset();
         lightStreamingService.reset();
         giService.reset();
+        behaviorTreeAuthoringService.reset(); // stateless; its saves dispatch to the BT service below
+        eqsAuthoringService.reset(); // stateless; its saves notify the EQS service below
         behaviorTreePlayModeHandler.reset();
         behaviorTreeService.reset();
+        eqsService.reset(); // after the BT service: stopping trees cancels EQS queries
         audioService.reset();
         scriptingService.reset();
         terrainRaycastService.reset();

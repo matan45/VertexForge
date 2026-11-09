@@ -20,6 +20,7 @@ namespace services {
         registerTooltipHandlers(dispatcher);
         registerWindowHandlers(dispatcher);
         registerListViewHandlers(dispatcher);
+        registerAuthoringHandlers(dispatcher);
     }
 
 }

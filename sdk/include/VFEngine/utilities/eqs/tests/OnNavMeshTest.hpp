@@ -4,20 +4,24 @@
 
 namespace eqs
 {
+    // Metric: 1 when the candidate lies on the navmesh (within `tolerance`), else 0.
     class OnNavMeshTest : public IEQSTest
     {
     public:
-        // Tolerance for navmesh point query (vertical search extent)
-        explicit OnNavMeshTest(float tolerance = 2.0f);
+        struct Settings
+        {
+            float tolerance = 2.0f;
+        };
 
-        void runTest(std::vector<EQSCandidate>& candidates,
-                     const EQSContext& context,
-                     const EQSProviderRefs& providers,
-                     const EQSTestConfig& config) override;
+        explicit OnNavMeshTest(const Settings& settings);
 
-        std::string getName() const override { return "OnNavMeshTest"; }
+        bool evaluate(std::span<const EQSCandidate> candidates, const EQSContext& context,
+                      const EQSProviderRefs& providers, std::span<float> metrics,
+                      std::string& error) const override;
+
+        std::string getName() const override { return "OnNavMesh"; }
 
     private:
-        float tolerance;
+        Settings settings;
     };
 }

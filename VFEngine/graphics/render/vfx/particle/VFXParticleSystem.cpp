@@ -285,15 +285,18 @@ namespace render::vfx
             return;
         }
 
+        // VK-1657: the per-instance colour tint multiplies the authored start colour (GPU: toGPUConfig).
+        const glm::vec4 startColor = config.startColor * config.colorTint;
+
         particle->active = true;
         particle->lifetime = 0.0f;
         particle->maxLifetime = config.lifetime;
         particle->size = config.startSize;
-        particle->color = config.startColor;
+        particle->color = startColor;
         particle->rotation = 0.0f;
         particle->glowIntensity = 0.0f; // mirror GPU spawn (vfx_particle_sim.glsl): clear stale glow on pooled reuse
 
-        particle->initialColor = config.startColor;
+        particle->initialColor = startColor;
         particle->initialSize = config.startSize;
         particle->initialSpeed = config.startSpeed;
 
@@ -327,7 +330,7 @@ namespace render::vfx
         particle->angularVelocity = config.angularVelocityVariance *
             ::vfx::vfxVarianceSigned(spawnSeed, ::vfx::VarianceStream::AngularVelocity);
         particle->velocity = direction * particle->initialSpeed;
-        particle->color = config.startColor;
+        particle->color = startColor;
         particle->color.r *= particle->colorValueMult;
         particle->color.g *= particle->colorValueMult;
         particle->color.b *= particle->colorValueMult;
@@ -387,7 +390,8 @@ namespace render::vfx
             if (lifetimeRatio > fadeStart)
             {
                 float fadeProgress = (lifetimeRatio - fadeStart) / (1.0f - fadeStart);
-                particle.color.a = config.startColor.a * particle.alphaMult * (1.0f - fadeProgress);
+                // VK-1657: tinted alpha, like the GPU fade off its tinted startColor.a.
+                particle.color.a = config.startColor.a * config.colorTint.a * particle.alphaMult * (1.0f - fadeProgress);
             }
         }
 
@@ -485,7 +489,7 @@ namespace render::vfx
 
     void VFXParticleSystem::applyModifier(VFXParticle& particle, const ::vfx::ColorOverLifetimeConfig& mod, float t, float /*deltaTime*/)
     {
-        particle.color = mod.gradient.evaluate(t);
+        particle.color = mod.gradient.evaluate(t) * config.colorTint; // VK-1657: GPU tints the gradient / LUT
         particle.color.r *= particle.colorValueMult;
         particle.color.g *= particle.colorValueMult;
         particle.color.b *= particle.colorValueMult;

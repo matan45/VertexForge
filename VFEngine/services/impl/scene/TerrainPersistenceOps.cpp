@@ -16,9 +16,64 @@
 #include <asset/AssetRef.hpp>
 #include "threading/JobSystem.hpp"
 #include <algorithm>
+#include <cctype>
+#include <exception>
+#include <filesystem>
+#include <format>
+#include <optional>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace services
 {
+    namespace
+    {
+        // VK-1653. Runs `fn` when the scope is left by any path, including an exception unwinding
+        // through it. File-local like VFXSequenceRuntimeServiceImpl's: the codebase has no shared
+        // scope guard.
+        template <typename F>
+        struct ScopeExit
+        {
+            F fn;
+            explicit ScopeExit(F&& f) : fn(std::move(f)) {}
+            ~ScopeExit() { fn(); }
+            ScopeExit(const ScopeExit&) = delete;
+            ScopeExit& operator=(const ScopeExit&) = delete;
+        };
+
+        // VK-1653. Lexical identity of a terrain path: normalised, forward slashes, and case-folded
+        // on Windows, whose file systems are case-insensitive.
+        std::string terrainPathKey(const std::string& path)
+        {
+            std::string key = std::filesystem::path(path).lexically_normal().generic_string();
+            while (key.size() > 1 && key.back() == '/')
+                key.pop_back();
+#ifdef _WIN32
+            std::transform(key.begin(), key.end(), key.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
+            return key;
+        }
+
+        // VK-1653. True when both paths name the same file. equivalent() is authoritative when both
+        // exist -- it sees through case, separator style and links. When either does not exist it
+        // reports an error, and the lexical key is all there is to compare.
+        bool isSameTerrainFile(const std::string& a, const std::string& b)
+        {
+            if (a.empty() || b.empty())
+                return false;
+
+            std::error_code ec;
+            const bool same = std::filesystem::equivalent(a, b, ec);
+            if (!ec)
+                return same;
+
+            return terrainPathKey(a) == terrainPathKey(b);
+        }
+    }
+
     bool TerrainService::prepareSave(uint64_t terrainEntityId)
     {
         auto gridIt = terrainGrids.find(terrainEntityId);
@@ -307,6 +362,208 @@ namespace services
             savedNotification.path = parked.path;
             events::EventDispatcher::instance().publish(savedNotification);
         }
+    }
+
+    // VK-1653. The editor's lock -> prepare -> save -> flush -> unlock sequence (TerrainDrawer::startSave
+    // and pollSaveResult), run synchronously on the main thread so MCP scene_save can persist terrain
+    // and then serialize the scene in one call.
+    std::vector<TerrainSaveOutcome> TerrainService::saveTerrains(const std::vector<TerrainSaveRequest>& requests)
+    {
+        std::vector<TerrainSaveOutcome> outcomes(requests.size());
+        for (size_t i = 0; i < requests.size(); ++i)
+        {
+            outcomes[i].terrainEntity = requests[i].terrainEntity;
+            outcomes[i].path = requests[i].path;
+        }
+
+        // exchange, not load-then-store. TerrainDrawer and TerrainCreationWindow hold this flag from
+        // their prepare until their poll, with the write running on a worker in between, and the
+        // async load holds it too: taking it atomically turns "another save is mid-flight" into a
+        // refusal instead of a second writer on the same grid. A refused call never touches the
+        // flag, so it cannot release a lock it does not own.
+        if (saveInProgress.exchange(true, std::memory_order_acq_rel))
+        {
+            for (auto& outcome : outcomes)
+                outcome.error = "a terrain save or load is already in progress";
+            return outcomes;
+        }
+
+        // Flush THEN unlock, on every path including an exception -- the order
+        // TerrainDrawer::pollSaveResult uses. Every save below parks its TerrainComponent update
+        // (savePath, saveDirty, terrainRef, bounds) rather than applying it, and the caller reads
+        // those right after this returns: a scene serialized next resolves terrainRef/savePath to
+        // know what to reload. Flushing under the lock keeps the save and the bookkeeping that marks
+        // the terrain clean one indivisible step.
+        ScopeExit unlockAfterFlush([this]()
+        {
+            try
+            {
+                flushSaveResults();
+            }
+            catch (...)
+            {
+                vfLogError("TerrainService: applying terrain save results failed; releasing the save lock anyway");
+            }
+            saveInProgress.store(false, std::memory_order_release);
+        });
+
+        auto& registry = scene::EntityRegistry::getRegistry();
+
+        // Claimed by requests that passed validation, so a duplicate is refused rather than written
+        // twice. First claim wins; a later request reports the conflict.
+        std::vector<uint64_t> claimedTerrains;
+        std::vector<std::string> claimedPaths;
+
+        for (size_t i = 0; i < requests.size(); ++i)
+        {
+            const TerrainSaveRequest& request = requests[i];
+            TerrainSaveOutcome& outcome = outcomes[i];
+
+            try
+            {
+                // Unlike the authoring commands, an invalid id does not mean "the only terrain": a
+                // save request that names nothing is a caller bug, not a shorthand.
+                if (!request.terrainEntity.isValid())
+                {
+                    outcome.error = "the save request names no terrain";
+                    continue;
+                }
+
+                // Same resolution as the authoring commands: a tile id saves its terrain, and an
+                // empty shell or a non-terrain is refused with the reason.
+                EntityHandle terrainHandle;
+                std::string resolveError;
+                if (!resolveAuthoringGrid(request.terrainEntity, terrainHandle, resolveError))
+                {
+                    outcome.error = resolveError;
+                    continue;
+                }
+                outcome.terrainEntity = terrainHandle;
+                const uint64_t terrainId = terrainHandle.id;
+
+                const std::string& path = request.path;
+                if (path.empty())
+                {
+                    outcome.error = std::format("no path given for terrain {}", terrainId);
+                    continue;
+                }
+
+                const std::filesystem::path target(path);
+                if (!target.is_absolute())
+                {
+                    outcome.error = std::format("{} is not an absolute path", path);
+                    continue;
+                }
+
+                std::string extension = target.extension().string();
+                std::transform(extension.begin(), extension.end(), extension.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (extension != ".vfterrain")
+                {
+                    outcome.error = std::format("{} is not a .vfTerrain path", path);
+                    continue;
+                }
+
+                if (std::find(claimedTerrains.begin(), claimedTerrains.end(), terrainId) != claimedTerrains.end())
+                {
+                    outcome.error = std::format("terrain {} appears more than once in this save", terrainId);
+                    continue;
+                }
+
+                if (std::any_of(claimedPaths.begin(), claimedPaths.end(),
+                                [&path](const std::string& claimed) { return isSameTerrainFile(claimed, path); }))
+                {
+                    outcome.error = std::format("{} is the target of another terrain in this save", path);
+                    continue;
+                }
+
+                // Another live terrain's file: its savePath (what a scene reload reads) or the file
+                // its tile cache streams from. Writing over either loses that terrain.
+                std::optional<uint64_t> owner;
+                for (const auto& [otherId, otherGrid] : terrainGrids)
+                {
+                    if (otherId == terrainId || !otherGrid)
+                        continue;
+
+                    std::string otherSavePath;
+                    const entt::entity otherEnt = internal::fromHandle(EntityHandle{otherId});
+                    if (registry.valid(otherEnt) && registry.all_of<components::TerrainComponent>(otherEnt))
+                        otherSavePath = registry.get<components::TerrainComponent>(otherEnt).savePath;
+
+                    const auto otherCacheIt = fileCaches.find(otherId);
+                    const std::string otherCachePath = (otherCacheIt != fileCaches.end() && otherCacheIt->second)
+                        ? otherCacheIt->second->getFilePath()
+                        : std::string{};
+
+                    if (isSameTerrainFile(otherSavePath, path) || isSameTerrainFile(otherCachePath, path))
+                    {
+                        owner = otherId;
+                        break;
+                    }
+                }
+                if (owner)
+                {
+                    outcome.error = std::format("{} belongs to terrain {}", path, *owner);
+                    continue;
+                }
+
+                claimedTerrains.push_back(terrainId);
+                claimedPaths.push_back(path);
+
+                std::error_code directoryError;
+                std::filesystem::create_directories(target.parent_path(), directoryError);
+                if (directoryError)
+                {
+                    outcome.error = std::format("could not create the folder for {}: {}", path,
+                                                directoryError.message());
+                    continue;
+                }
+
+                // Incremental ONLY into the terrain's own file. An incremental save patches tile
+                // records in place at offsets taken from THIS terrain's cached index, so aimed at any
+                // other existing file it would splice this terrain's tiles into that file's layout.
+                // TerrainDrawer::startSave goes incremental whenever the target merely exists, which is
+                // exactly that corruption on a Save As over another .vfTerrain -- not copied here.
+                const auto cacheIt = fileCaches.find(terrainId);
+                const std::string ownFile = (cacheIt != fileCaches.end() && cacheIt->second)
+                    ? cacheIt->second->getFilePath()
+                    : std::string{};
+                std::error_code existsError;
+                const bool incremental = std::filesystem::exists(target, existsError) &&
+                                         isSameTerrainFile(ownFile, path);
+
+                // prepareSaveIncremental falls back to prepareSave by itself whenever the file layout
+                // forces a full rewrite, and saveTerrainIncremental then takes the matching full path,
+                // so `incremental` records the path chosen here rather than the bytes that moved.
+                const bool prepared = incremental ? prepareSaveIncremental(terrainId) : prepareSave(terrainId);
+                if (!prepared)
+                {
+                    outcome.error = std::format("could not prepare terrain {} for saving (see the log)", terrainId);
+                    continue;
+                }
+
+                const bool saved = incremental ? saveTerrainIncremental(terrainId, path)
+                                               : saveTerrain(terrainId, path);
+                if (!saved)
+                {
+                    outcome.error = std::format("writing {} failed (see the log)", path);
+                    continue;
+                }
+
+                outcome.success = true;
+                outcome.incremental = incremental;
+            }
+            catch (const std::exception& e)
+            {
+                outcome.error = std::format("saving {} failed: {}", request.path, e.what());
+            }
+            catch (...)
+            {
+                outcome.error = std::format("saving {} failed", request.path);
+            }
+        }
+
+        return outcomes;
     }
 
     // VK-1646. Every outcome below keeps the terrain itself loadable — the flattened VFTR is

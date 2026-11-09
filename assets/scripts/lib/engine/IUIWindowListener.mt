@@ -3,7 +3,7 @@
 // Window events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUIWindowListener;
+//   import * from "../lib/engine/IUIWindowListener.mt";
 //
 //   @Script
 //   public class PauseMenuController implements IUIWindowListener {

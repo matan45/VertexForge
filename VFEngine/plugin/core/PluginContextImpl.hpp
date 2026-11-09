@@ -31,6 +31,16 @@ namespace plugin {
         // MetaComponentBridges (PluginComponentAPI::storedBridges) whose std::functions are
         // instantiated in the plugin DLLs; that cache MUST be cleared before the DLLs unload.
         using ScriptBindingClearer = std::function<void()>;
+        // VK-1409: a post-process effect + the plugin's requested enabled state, so a
+        // per-scene reactivate restores intent (rather than blindly re-enabling).
+        // VK-1655: public, with the desc's debugName and resolved chain priority, for
+        // the editor's effect listing (getManagedPostProcessEffects).
+        struct ManagedPostProcessEffect {
+            plugin::PostProcessEffectHandle handle;
+            bool requestedEnabled;
+            std::string debugName;
+            uint32_t priority;
+        };
 
     private:
         std::string pluginName;
@@ -47,9 +57,6 @@ namespace plugin {
         std::vector<uint32_t> registeredAssetTypeHandles;
         std::vector<plugin::CustomPipelineHandle> managedCustomPipelines;
         std::vector<plugin::CustomMeshHandle> managedCustomMeshes;
-        // VK-1409: post-process effects + the plugin's requested enabled state, so a
-        // per-scene reactivate restores intent (rather than blindly re-enabling).
-        struct ManagedPostProcessEffect { plugin::PostProcessEffectHandle handle; bool requestedEnabled; };
         std::vector<ManagedPostProcessEffect> managedPostProcessEffects;
         std::vector<plugin::PluginTextureHandle> managedTextures;
         plugin::PluginTextureHandle boundWorldMaskTexture;
@@ -89,6 +96,8 @@ namespace plugin {
         events::SubscriptionToken managedSubscribe(events::SubscriptionToken token) override;
         void registerEditorWindow(std::shared_ptr<controllers::imguiHandler::ImguiWindow> window,
                                   const std::string& title) override;
+        bool registerMcpTool(PluginMcpToolDesc tool) override;
+        void unregisterMcpTool(const std::string& name) override;
         void registerImportStage(std::unique_ptr<pipeline::PipelineStage> stage) override;
         void registerAssetImporter(std::unique_ptr<import::AssetImporter> importer) override;
         PluginAssetTypeHandle registerAssetType(const PluginAssetTypeDesc& desc) override;
@@ -245,6 +254,9 @@ namespace plugin {
         std::vector<std::unique_ptr<import::AssetImporter>> takeAssetImporters();
 
         const std::string& getPluginName() const { return pluginName; }
+
+        // VK-1655: read by the editor's PluginPostProcessEffectHandler (MCP list/toggle).
+        const std::vector<ManagedPostProcessEffect>& getManagedPostProcessEffects() const { return managedPostProcessEffects; }
     };
 
 }

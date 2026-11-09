@@ -1054,7 +1054,9 @@ namespace core::api
         //   spawnRate, lifetime, startSize, startSpeed, stretchMultiplier,
         //   windStrength, gravityStrength, softParticleDistance,
         //   lightingInfluence, collisionLifetimeLoss, coneSpread,
-        //   renderMode (int), collisionEnabled (0/1)
+        //   renderMode (int), collisionEnabled (0/1),
+        //   blendMode (0 alpha, 1 additive, 2 premultiplied, 3 multiply),
+        //   sortOrder (int, clamped to [-256, 256]) (VK-1657)
         interpreter->registerNativeFunction("_native_vfx_setOverride",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 3)
@@ -1086,6 +1088,8 @@ namespace core::api
         // Vector runtime overrides by name. Supported names:
         //   emitDirection, windDirection, gravityDirection, shapeDimensions (vec3)
         //   startColor (vec4, w defaults to 1)
+        //   colorTint (vec4 >= 0, w defaults to 1; multiplies start colour AND
+        //   colour-over-lifetime, unlike startColor) (VK-1657)
         interpreter->registerNativeFunction("_native_vfx_setOverrideVec",
             {nullptr, [](void*, environment::NativeContext&, std::span<const value::Value> args) -> value::Value{
                 if (args.size() < 5)

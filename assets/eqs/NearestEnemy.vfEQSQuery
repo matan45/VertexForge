@@ -1,0 +1,30 @@
+{
+    "description": "The nearest entity named Enemy within 25 m.",
+    "generator": {
+        "params": {
+            "center": "querier",
+            "includeInactive": false,
+            "match": "exact",
+            "maxCount": 64,
+            "name": "Enemy",
+            "radius": 25.0
+        },
+        "type": "Entities"
+    },
+    "maxResults": 1,
+    "tests": [
+        {
+            "params": {
+                "horizontal": true,
+                "to": "querier"
+            },
+            "score": {
+                "combine": "Multiply",
+                "mode": "InverseLinear",
+                "weight": 1.0
+            },
+            "type": "Distance"
+        }
+    ],
+    "version": 1
+}

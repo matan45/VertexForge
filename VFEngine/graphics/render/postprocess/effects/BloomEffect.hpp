@@ -19,6 +19,9 @@ namespace render::postprocess
         vk::DescriptorSet descriptorSet;
         uint32_t width;
         uint32_t height;
+        // VK-1655: per level - a frame renders only min(passes, mipCount) levels, so the others can still be
+        // Undefined when the passes setting grows.
+        vk::ImageLayout layout = vk::ImageLayout::eUndefined;
     };
 
     class BloomEffect : public PostProcessEffect
@@ -52,7 +55,6 @@ namespace render::postprocess
         uint32_t currentPasses = 5;
 
         vk::Extent2D currentExtent{};
-        bool mipLayoutsInitialized = false;
 
     public:
         explicit BloomEffect(core::Device& device);
@@ -71,6 +73,8 @@ namespace render::postprocess
 
         ::postprocess::EffectType getType() const override { return ::postprocess::EffectType::Bloom; }
         uint32_t getPriority() const override { return 150; }
+        // LDR effect that runs after the tonemap (priority 150, 8-bit mip chain), so it belongs after the upscale.
+        bool isPreUpscale() const override { return false; }
 
     private:
         void createSampler();

@@ -306,7 +306,7 @@ TEST_CASE("ikTargetFromSocket is the grip socket world origin")
 TEST_CASE("IK feed drives applyIK: tip moves toward the socket-derived target")
 {
     // The assembly's update() steps 3+4: compute a world target from a grip socket, populate
-    // a runtime state (isActive, currentWeight=chain.weight), then applyIK on the body.
+    // a runtime state (isActive, currentWeight=1: applyIK blends by chain.weight), then applyIK on the body.
     resource::SkeletonData skeleton = makeArmSkeleton();
     std::vector<glm::mat4> boneMatrices = makeArmBoneMatrices();
     const glm::vec3 originalTip = translationOf(boneMatrices[2]); // (0,2,0)
@@ -328,7 +328,7 @@ TEST_CASE("IK feed drives applyIK: tip moves toward the socket-derived target")
     state.targetPosition = ikTargetFromSocket(targetPartWorld, grip);
     state.targetRotation = std::nullopt;
     state.isActive = true;
-    state.currentWeight = chain.weight; // == chain.weight, matching update() step 3
+    state.currentWeight = 1.0f; // activation only, matching update() step 3
     state.resolvedTipIndex = -1;
 
     CHECK(state.targetPosition.x == doctest::Approx(1.0f));

@@ -9,6 +9,7 @@
 #include "../render/vfx/particle/VFXEmitterPool.hpp"
 #include "../render/vfx/particle/VFXParticleSystem.hpp"
 #include "../render/vfx/lut/VFXLUTBaker.hpp"
+#include "../render/vfx/compute/VFXColorTint.hpp"
 #include "../render/mesh/MeshGPUCache.hpp"
 #include "../core/RenderManager.hpp"
 #include "vfx/VFXModifierTypes.hpp"
@@ -431,6 +432,7 @@ namespace controllers
             if (instance.config.hasRibbonTailGradient)
                 ribbonLutInputs.tailGradient = &instance.config.ribbonTailGradient;
             auto lutResult = render::vfx::VFXLUTBaker::bake(instance.config.modifiers, ribbonLutInputs);
+            render::vfx::tintLUTColor(lutResult, instance.config.colorTint); // VK-1657: re-baked every frame
             if (lutResult.lutFlags != 0)
             {
                 gpuBufferManager->updateEmitterLUT(instance.gpuEmitterIndex, lutResult.data);
@@ -559,6 +561,9 @@ namespace controllers
                 }
             }, modifier);
         }
+
+        // VK-1657: the per-instance colour tint over the spawn colour and the over-lifetime endpoints.
+        render::vfx::applyColorTint(gpuConfig, cpuConfig.colorTint);
 
         gpuConfig.gravityDir = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
         gpuConfig.windDir = glm::vec4(0.0f);

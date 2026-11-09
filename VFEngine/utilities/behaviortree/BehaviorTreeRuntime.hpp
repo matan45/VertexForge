@@ -43,14 +43,42 @@ namespace behaviortree
         bool result = false;
     };
 
+    // MoveTo parameters (VK-1660), read from the node's properties by tickTask.
+    struct MoveToRequest
+    {
+        std::string targetKey = "target"; // Vec3, Entity, or Int (entity id, -1 = none) key
+        float arrivalDistance = 0.5f;     // succeeds within this distance of the target (m)
+        float repathDistance = 1.0f;      // re-issue the destination once the target moved this far (0 = never)
+        bool stopOnArrival = true;        // stop the agent when the task succeeds
+    };
+
+    // EnvironmentQuery parameters (VK-1660), read from the node's properties by tickTask.
+    struct EnvironmentQueryRequest
+    {
+        std::string queryName;              // EQS template (assets/eqs/<Name>.vfEQSQuery)
+        std::string resultKey = "eqsResult"; // Vec3 key: the best candidate's position
+        std::string targetKey;              // optional Entity / Vec3 / Int key: the query's target ("" = none)
+        std::string resultEntityKey;        // optional Entity / Int key: the best candidate's entity ("" = unused)
+    };
+
+    // FollowRoute parameters (VK-1660), read from the node's properties by tickTask.
+    struct FollowRouteRequest
+    {
+        std::string routeKey = "route";  // Entity (or Int entity id) key holding the route container
+        RouteMode mode = RouteMode::Loop;
+        float arrivalDistance = 1.0f;    // a marker counts as reached within this distance (m)
+        float dwell = 0.0f;              // seconds to wait at each marker
+        bool startAtNearest = true;      // begin at the nearest marker instead of the first
+        float legTimeout = 30.0f;        // seconds per leg before the task fails (0 = never)
+    };
+
     class IBTTaskExecutor
     {
     public:
         virtual ~IBTTaskExecutor() = default;
 
         virtual BTNodeStatus executeMoveTo(services::EntityHandle entity,
-                                           const std::string& targetKey,
-                                           float arrivalDistance,
+                                           const MoveToRequest& request,
                                            Blackboard& blackboard,
                                            bool isFirstTick) = 0;
 
@@ -66,10 +94,11 @@ namespace behaviortree
 
         virtual BTNodeStatus executeLog(const std::string& message, LogLevel level) = 0;
 
+        // `node` identifies the query in flight (an entity may run several EnvironmentQuery nodes).
         virtual BTNodeStatus executeEnvironmentQuery(
             services::EntityHandle entity,
-            const std::string& queryName,
-            const std::string& resultKey,
+            const BTNode& node,
+            const EnvironmentQueryRequest& request,
             Blackboard& blackboard,
             bool isFirstTick) = 0;
 
@@ -111,6 +140,24 @@ namespace behaviortree
             (void)entity;
             (void)node;
             (void)blackboard;
+        }
+
+        // Built-in patrol (VK-1660). Non-pure so existing executors/mocks keep compiling; an executor
+        // without route support fails the task.
+        virtual BTNodeStatus executeFollowRoute(services::EntityHandle entity,
+                                                const BTNode& node,
+                                                const FollowRouteRequest& request,
+                                                Blackboard& blackboard,
+                                                float deltaTime,
+                                                bool isFirstTick)
+        {
+            (void)entity;
+            (void)node;
+            (void)request;
+            (void)blackboard;
+            (void)deltaTime;
+            (void)isFirstTick;
+            return BTNodeStatus::Failure;
         }
     };
 

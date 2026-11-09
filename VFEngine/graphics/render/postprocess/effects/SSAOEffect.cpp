@@ -145,6 +145,11 @@ namespace render::postprocess
 
         // Pass 1: SSAO calculation
         {
+            core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoRawImage,
+                ssaoRawImageLayout, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            ssaoRawImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
             auto colorAttach = core::colorDontCare(ssaoRawImageView);
 
             core::DynamicRenderingInfo dynInfo{};
@@ -169,10 +174,16 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoRawImage,
                 vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            ssaoRawImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         }
 
         // Pass 2: Bilateral blur
         {
+            core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoBlurredImage,
+                ssaoBlurredImageLayout, vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageAspectFlagBits::eColor);
+            ssaoBlurredImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
             auto colorAttach = core::colorDontCare(ssaoBlurredImageView);
 
             core::DynamicRenderingInfo dynInfo{};
@@ -203,6 +214,7 @@ namespace render::postprocess
             core::ImageUtilities::transitionImageLayout(commandBuffer, ssaoBlurredImage,
                 vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 vk::ImageAspectFlagBits::eColor);
+            ssaoBlurredImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
         }
 
         core::ImageUtilities::transitionImageLayout(commandBuffer,

@@ -1,17 +1,29 @@
 #pragma once
 
 #include "../IEQSTest.hpp"
+#include "../EQSContextPoint.hpp"
 
 namespace eqs
 {
+    // Metric: metres from the candidate to the querier or the target (XZ when `horizontal`).
     class DistanceTest : public IEQSTest
     {
     public:
-        void runTest(std::vector<EQSCandidate>& candidates,
-                     const EQSContext& context,
-                     const EQSProviderRefs& providers,
-                     const EQSTestConfig& config) override;
+        struct Settings
+        {
+            EQSContextPoint to = EQSContextPoint::Querier;
+            bool horizontal = true; // ignore height, like the behavior tree's TargetDistance service
+        };
 
-        std::string getName() const override { return "DistanceTest"; }
+        explicit DistanceTest(const Settings& settings);
+
+        bool evaluate(std::span<const EQSCandidate> candidates, const EQSContext& context,
+                      const EQSProviderRefs& providers, std::span<float> metrics,
+                      std::string& error) const override;
+
+        std::string getName() const override { return "Distance"; }
+
+    private:
+        Settings settings;
     };
 }

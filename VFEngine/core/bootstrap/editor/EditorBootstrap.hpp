@@ -38,6 +38,8 @@ namespace services
     class IObjectStreamingProvider;
     class IGIProvider;
     class IBehaviorTreeProvider;
+    class IEQSProvider;
+    class IVolumetricNavProvider;
     class IRuntimePickerProvider;
 }
 
@@ -70,6 +72,7 @@ namespace core
     class MaterialPreviewAdapter;
     class MeshPreviewAdapter;
     class ThumbnailRenderAdapter;
+    class AnimationAuthoringAdapter;
     class AnimationPreviewAdapter;
     class PrefabRigPreviewAdapter;
     class UILayerPreviewAdapter;
@@ -105,6 +108,8 @@ namespace core
         class GIAdapter;
     }
     class BehaviorTreeAdapter;
+    class EQSAdapter;
+    class VolumetricNavAdapter;
     class RuntimePickerAdapter;
 
     class EditorBootstrap
@@ -118,6 +123,7 @@ namespace core
         std::unique_ptr<MaterialPreviewAdapter> materialPreviewAdapter;
         std::unique_ptr<MeshPreviewAdapter> meshPreviewAdapter;
         std::unique_ptr<ThumbnailRenderAdapter> thumbnailRenderAdapter;
+        std::unique_ptr<AnimationAuthoringAdapter> animationAuthoringAdapter;
         std::unique_ptr<AnimationPreviewAdapter> animationPreviewAdapter;
         std::unique_ptr<PrefabRigPreviewAdapter> prefabRigPreviewAdapter;
         std::unique_ptr<UILayerPreviewAdapter> uiLayerPreviewAdapter;
@@ -149,6 +155,8 @@ namespace core
         std::unique_ptr<adapters::ObjectStreamingAdapter> objectStreamingAdapter;
         std::unique_ptr<adapters::GIAdapter> giAdapter;
         std::unique_ptr<BehaviorTreeAdapter> behaviorTreeAdapter;
+        std::unique_ptr<EQSAdapter> eqsAdapter;                   // VK-1660: was never constructed
+        std::unique_ptr<VolumetricNavAdapter> volumetricNavAdapter; // VK-1660: was never constructed
         std::unique_ptr<RuntimePickerAdapter> runtimePickerAdapter;
 
     public:
@@ -234,6 +242,10 @@ namespace core
         services::IGIProvider* getGIProvider();
 
         services::IBehaviorTreeProvider* getBehaviorTreeProvider();
+
+        services::IEQSProvider* getEQSProvider();
+
+        services::IVolumetricNavProvider* getVolumetricNavProvider();
 
         services::IRuntimePickerProvider* getRuntimePickerProvider();
 

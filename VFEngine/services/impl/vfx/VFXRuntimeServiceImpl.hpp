@@ -1,9 +1,13 @@
 #pragma once
 #include "../../data/VFXTypes.hpp"
 #include "../../data/EntityHandle.hpp"
+#include "../../events/EventTypes.hpp"
 #include <vfx/VFXScalability.hpp>
+#include <atomic>
+#include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace services
 {
@@ -30,11 +34,25 @@ namespace services
         };
         std::unordered_map<VFXInstanceId, SocketAttachment> socketAttachments;
 
+        ::events::SubscriptionToken sceneLoadedToken;
+        ::events::SubscriptionToken editorModeChangedToken;
+
+        // VK-1657 — set by Play->Edit, consumed by purgeTransientIfPending() or, when Play starts
+        // again before that ran, by the Edit->Play handler (a purge must never be skipped into the next
+        // Play session). Never acted on in the Play->Edit notification: a fatal-script Stop publishes
+        // it while the render thread is busy. Edit->Play is only dispatched from the MCP drain or the
+        // toolbar, with the render thread idle.
+        std::atomic<bool> purgePending{false};
+
         void updateSocketAttachments();
+        void purgeTransientNow();
+        // VK-1657 — resolves a project-relative path against the AssetDatabase root (absolute
+        // paths pass through). "" when the file does not exist; that is warned once.
+        std::string resolveEffectPath(const std::string& path);
 
     public:
         explicit VFXRuntimeServiceImpl(IVFXRuntimeProvider* provider);
-        ~VFXRuntimeServiceImpl() = default;
+        ~VFXRuntimeServiceImpl();
 
         void registerEventHandlers();
 
@@ -52,6 +70,16 @@ namespace services
         void update(float deltaTime);
 
         bool isInstancePlaying(VFXInstanceId id) const;
+
+        // VK-1657 — live renderer instances (0 without a provider). The editor skips the edit-mode
+        // VFX tick while it is 0.
+        size_t instanceCount() const;
+
+        // VK-1657 — after Play->Edit, destroys every instance not created with
+        // VFXRuntimeParams::persistent (what scripts, plugins and combos spawned during Play) and
+        // drops their socket attachments. Called at the start of the editor's edit-mode VFX task;
+        // a no-op unless a purge is pending.
+        void purgeTransientIfPending();
 
         struct BudgetStats
         {

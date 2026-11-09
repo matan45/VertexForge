@@ -15,6 +15,11 @@ public class Blackboard {
         _native_bt_setBlackboardInt(entityId, key, value);
     }
 
+    // Store an entity in an Entity key (e.g. "target"); a negative targetId (-1) clears the key.
+    public static function setEntity(int entityId, string key, int targetId): void {
+        _native_bt_setBlackboardEntity(entityId, key, targetId);
+    }
+
     public static function setBool(int entityId, string key, bool value): void {
         _native_bt_setBlackboardBool(entityId, key, value);
     }
@@ -35,6 +40,11 @@ public class Blackboard {
 
     public static function getInt(int entityId, string key): int {
         return _native_bt_getBlackboardInt(entityId, key);
+    }
+
+    // The entity an Entity key holds, or -1 when it is unset (or there is no such Entity key).
+    public static function getEntity(int entityId, string key): int {
+        return _native_bt_getBlackboardEntity(entityId, key);
     }
 
     public static function getBool(int entityId, string key): bool {

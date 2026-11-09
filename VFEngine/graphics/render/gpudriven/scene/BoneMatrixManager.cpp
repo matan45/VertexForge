@@ -335,6 +335,32 @@ namespace render::gpudriven
             cpuBoneMatrices[offset + i] = matrices[i];
         }
 
+        data.atBindPose = false;
+        markDirty(entity, data);
+    }
+
+    void BoneMatrixManager::resetToBindPose(entt::entity entity)
+    {
+        auto it = allocations.find(entity);
+        if (it == allocations.end())
+        {
+            return;
+        }
+
+        // Once per pose loss: the identity palette stays in place until a pose is uploaded again.
+        AnimatedObjectBoneData& data = it->second;
+        if (data.atBindPose)
+        {
+            return;
+        }
+
+        std::fill_n(cpuBoneMatrices.begin() + data.boneMatrixOffset, data.boneCount, glm::mat4(1.0f));
+        data.atBindPose = true;
+        markDirty(entity, data);
+    }
+
+    void BoneMatrixManager::markDirty(entt::entity entity, AnimatedObjectBoneData& data)
+    {
         if (!data.dirty)
         {
             data.dirty = true;

@@ -5,6 +5,7 @@
 #include "events/project/SceneEvents.hpp"
 #include "events/project/ApplicationEvents.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
+#include "events/scene/SceneSettingsEvents.hpp"
 #include <imgui.h>
 
 namespace windows
@@ -79,6 +80,7 @@ namespace windows
         dispatcher.unsubscribe(openUILayerBuilderToken);
         dispatcher.unsubscribe(openToonProfileEditorToken);
         dispatcher.unsubscribe(settingsChangedToken);
+        dispatcher.unsubscribe(renderSettingsChangedToken);
     }
 
     void MainImguiWindow::subscribeToEvents()
@@ -105,6 +107,22 @@ namespace windows
                 giConfigWindow.notifySceneLoaded();
                 lightStreamingDebugWindow.notifySceneLoaded();
                 pluginManagerWindow.notifySceneLoaded();
+            });
+
+        // VK-1654: the MCP environment tools (and their undo) edit the scene's render settings
+        // outside these windows. A window with unapplied edits keeps them. Scene loads are handled
+        // by SceneLoadedNotification above (and may be published off this thread).
+        renderSettingsChangedToken = dispatcher.subscribe<events::scene::RenderSettingsChangedNotification>(
+            [this](const events::scene::RenderSettingsChangedNotification& n)
+            {
+                if (n.sceneLoad)
+                    return;
+                atmosphereConfigWindow.notifyRenderSettingsChanged();
+                cloudConfigWindow.notifyRenderSettingsChanged();
+                volumetricFogConfigWindow.notifyRenderSettingsChanged();
+                giConfigWindow.notifyRenderSettingsChanged();
+                postProcessConfigWindow.notifyRenderSettingsChanged();
+                renderConfigWindow.notifyRenderSettingsChanged();
             });
 
         openImportDialogToken = dispatcher.subscribe<events::application::OpenImportDialogNotification>(

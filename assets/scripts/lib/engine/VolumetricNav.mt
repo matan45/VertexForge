@@ -4,16 +4,24 @@
 // Usage examples:
 //   int self = Entity::self();
 //   VolumetricNav::setDestination(self, new Vec3f(10.0, 20.0, 5.0));
+//   if (VolumetricNav::getAgentState(self) == VolumetricNav::ARRIVED) { ... }
 //   VolumetricNav::stopAgent(self);
 //   Vec3f[] path = VolumetricNav::findPath3D(new Vec3f(0.0, 5.0, 0.0), new Vec3f(10.0, 20.0, 5.0));
 //   bool nav = VolumetricNav::isPointNavigable(new Vec3f(5.0, 10.0, 3.0));
 //
-// Note: Entities must have a VolumetricAgent component and a baked VolumetricNavVolume
-// must exist in the scene for pathfinding to work.
+// Setup: add a VolumetricNavVolume to an entity, bake it in the editor (its details panel saves the
+// bake to a .vfVolNav) and save the scene; give each flyer a VolumetricAgent component.
+// Agents only move during Play. findPath3D returns an empty array when there is no path.
 
 import * from "../math/Vec3f.mt";
 
 public class VolumetricNav {
+
+    // Agent state constants (getAgentState)
+    public static int IDLE = 0;
+    public static int MOVING = 1;
+    public static int ARRIVED = 2;
+    public static int FAILED = 3;
 
     public constructor() {
     }
@@ -55,5 +63,11 @@ public class VolumetricNav {
     // Stop a VolumetricAgent from moving
     public static function stopAgent(int entityId): void {
         _native_volumetric_stopAgent(entityId);
+    }
+
+    // The agent's movement state: IDLE, MOVING, ARRIVED or FAILED (no path, or stuck)
+    // Returns -1 if the entity has no VolumetricAgent component
+    public static function getAgentState(int entityId): int {
+        return _native_volumetric_getAgentState(entityId);
     }
 }

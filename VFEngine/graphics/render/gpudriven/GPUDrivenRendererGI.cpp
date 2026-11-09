@@ -1,6 +1,7 @@
 #include "GPUDrivenRenderer.hpp"
 #include "SelectionMaskPipeline.hpp"
 #include "../occlusion/DepthPrepass.hpp"
+#include "../gi/GIRebuildPolicy.hpp"
 // VK-1443: full manager types (forward-declared in GPUDrivenRenderer.hpp) needed here
 // because this TU dispatches GI probe + RT shadow work and defines upsampleLayeredRTShadow.
 #include "../gi/ProbeTracePipeline.hpp"
@@ -330,9 +331,7 @@ namespace render::gpudriven
 
     void GPUDrivenRenderer::applyGISettings(const gi::GISettings& settings)
     {
-        bool needsReinit = (settings.quality != cachedGISettings.quality) ||
-                           (settings.enabled != cachedGISettings.enabled) ||
-                           (settings.probeSpacing != cachedGISettings.probeSpacing);
+        bool needsReinit = gi::giSettingsRequireRebuild(cachedGISettings, settings);
 
         cachedGISettings = settings;
 

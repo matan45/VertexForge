@@ -1,4 +1,5 @@
 #include <doctest.h>
+#include <ostream> // doctest stringifies std::string_view through operator<<
 
 #include <impl/vfx/VFXSequencePlayModeHandler.hpp>
 #include <impl/vfx/VFXPlayModeHandler.hpp>
@@ -27,6 +28,7 @@
 #include <entt/entt.hpp>
 #include <algorithm>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -285,5 +287,98 @@ TEST_SUITE("VFXPrefabPlayMode")
 
         handler.unsubscribeFromEvents();
         scene::EntityRegistry::getRegistry().destroy(entity.getHandle());
+    }
+
+    // VK-1657: a component's per-entity overrides reach every instance it spawns, between the create
+    // and the first Play (like a combo child), and an instance without overrides gets no apply.
+    TEST_CASE("VFX: component overrides are applied after create and before play")
+    {
+        asset::AssetDatabase::instance().clear();
+        auto& dispatcher = ::events::EventDispatcher::instance();
+
+        std::vector<std::string> calls;
+        std::vector<std::pair<services::VFXInstanceId, services::VFXEmitterOverrides>> applied;
+        services::VFXInstanceId nextId = 800;
+
+        dispatcher.registerCommandHandler<services::events::vfxruntime::CreateVFXInstanceCommand>(
+            [&](const services::events::vfxruntime::CreateVFXInstanceCommand&) -> services::VFXInstanceId
+            { services::VFXInstanceId id = nextId++; calls.push_back("create:" + std::to_string(id)); return id; });
+        dispatcher.registerCommandHandler<services::events::vfxruntime::ApplyVFXInstanceOverridesCommand>(
+            [&](const services::events::vfxruntime::ApplyVFXInstanceOverridesCommand& c)
+            { applied.emplace_back(c.instanceId, c.overrides); calls.push_back("apply:" + std::to_string(c.instanceId)); });
+        dispatcher.registerCommandHandler<services::events::vfxruntime::PlayVFXInstanceCommand>(
+            [&](const services::events::vfxruntime::PlayVFXInstanceCommand& c) { calls.push_back("play:" + std::to_string(c.instanceId)); });
+        dispatcher.registerCommandHandler<services::events::vfxruntime::DestroyVFXInstanceCommand>(
+            [&](const services::events::vfxruntime::DestroyVFXInstanceCommand&) {});
+        dispatcher.registerCommandHandler<services::events::vfxruntime::UpdateVFXRuntimeCommand>(
+            [&](const services::events::vfxruntime::UpdateVFXRuntimeCommand&) {});
+        auto cleanupHandlers = makeScopeExit([&dispatcher]
+        {
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::CreateVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::ApplyVFXInstanceOverridesCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::PlayVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::DestroyVFXInstanceCommand>();
+            dispatcher.unregisterCommandHandler<services::events::vfxruntime::UpdateVFXRuntimeCommand>();
+        });
+
+        StubVFXProvider provider;
+        services::VFXPlayModeHandler handler(&provider);
+        handler.subscribeToEvents();
+        enterPlay();
+
+        const auto vfxRef = asset::AssetRef::fromGUID(
+            asset::AssetDatabase::instance().registerAsset("tests/vfx_overrides.vfvfx", resource::AssetType::VFX));
+
+        scene::Entity tinted("VFXOverridesRoot");
+        auto& tintedVfx = tinted.addComponent<components::VFXComponent>();
+        tintedVfx.autoPlay = true;
+        tintedVfx.vfxRef = vfxRef;
+        tintedVfx.overrides = {{"startSize", 1.6f}, {"colorTint", glm::vec4(1.0f, 0.6f, 0.25f, 1.0f)}};
+        tinted.addComponent<components::WorldTransformComponent>();
+
+        scene::Entity plain("VFXNoOverridesRoot");
+        auto& plainVfx = plain.addComponent<components::VFXComponent>();
+        plainVfx.autoPlay = true;
+        plainVfx.vfxRef = vfxRef;
+        plain.addComponent<components::WorldTransformComponent>();
+
+        for (scene::Entity* root : {&tinted, &plain})
+        {
+            ::events::scene::PrefabInstantiatedNotification n;
+            n.rootEntity = services::internal::toHandle(root->getHandle());
+            dispatcher.publish(n);
+        }
+        handler.update(0.016f);
+
+        const services::VFXInstanceId tintedId = tinted.getComponent<components::VFXComponent>().runtimeInstanceId;
+        const services::VFXInstanceId plainId = plain.getComponent<components::VFXComponent>().runtimeInstanceId;
+        REQUIRE(tintedId != 0u);
+        REQUIRE(plainId != 0u);
+
+        const auto position = [&calls](const std::string& call)
+        {
+            return std::find(calls.begin(), calls.end(), call) - calls.begin();
+        };
+        const std::string createTinted = "create:" + std::to_string(tintedId);
+        const std::string applyTinted = "apply:" + std::to_string(tintedId);
+        const std::string playTinted = "play:" + std::to_string(tintedId);
+        REQUIRE(std::count(calls.begin(), calls.end(), applyTinted) == 1);
+        CHECK(position(createTinted) < position(applyTinted));
+        CHECK(position(applyTinted) < position(playTinted));
+
+        const auto tintedApply = std::find_if(applied.begin(), applied.end(),
+            [tintedId](const auto& entry) { return entry.first == tintedId; });
+        REQUIRE(tintedApply != applied.end());
+        REQUIRE(tintedApply->second.startSize.has_value());
+        CHECK(*tintedApply->second.startSize == doctest::Approx(1.6f));
+        REQUIRE(tintedApply->second.colorTint.has_value());
+        CHECK(tintedApply->second.colorTint->z == doctest::Approx(0.25f));
+
+        CHECK(std::count(calls.begin(), calls.end(), "apply:" + std::to_string(plainId)) == 0);
+        CHECK(std::count(calls.begin(), calls.end(), "play:" + std::to_string(plainId)) == 1);
+
+        handler.unsubscribeFromEvents();
+        scene::EntityRegistry::getRegistry().destroy(tinted.getHandle());
+        scene::EntityRegistry::getRegistry().destroy(plain.getHandle());
     }
 }

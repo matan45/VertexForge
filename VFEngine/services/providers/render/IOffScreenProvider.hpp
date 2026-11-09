@@ -12,6 +12,7 @@
 #include "types/RenderSettings.hpp"
 #include "stats/FrameDrawStats.hpp" // render::DrawCategory / FrameDrawStats::kCount
 #include "../../data/EntityHandle.hpp"
+#include "../../data/ViewportReadbackTypes.hpp"
 
 namespace services {
 
@@ -219,6 +220,12 @@ namespace services {
 
         virtual void* render() = 0;
         virtual void* render(const std::function<void()>& preRenderCallback) = 0;
+
+        // VK-1651: CPU readback of the final viewport image. Both are thread-safe. The
+        // request is recorded after settleFrames more renders and completes once that
+        // frame's fence is waited; take() then hands the pixels over once per ticket.
+        virtual uint64_t requestViewportReadback(uint32_t settleFrames) = 0;
+        virtual ViewportReadbackResult takeViewportReadback(uint64_t ticket) = 0;
 
         virtual void iblSet(std::string_view iblPath) = 0;
         virtual void iblSetCameraMatrices(const glm::mat4& view, const glm::mat4& projection) = 0;

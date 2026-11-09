@@ -1,6 +1,8 @@
 #pragma once
 #include "EntityHandle.hpp"
+#include <cstddef>
 #include <string>
+#include <vector>
 
 namespace services {
 
@@ -31,6 +33,16 @@ namespace services {
         std::string scriptPath;
     };
     
+    // Outcome of BuildScriptsCommand / IScriptingProvider::buildScripts. errors are
+    // mType ProjectBuilder messages ("<sourceFile>: <diagnostic>") — the builder only
+    // reports strings, so there is no per-error file/line/column to carry.
+    struct ScriptBuildResult {
+        bool success = true;
+        size_t filesCompiled = 0;
+        size_t filesFailed = 0;
+        std::vector<std::string> errors;
+    };
+
     struct ScriptError {
         enum class Type {
             Compile,    // Syntax or type error during compilation

@@ -23,18 +23,21 @@ namespace core
     void DebugDrawAdapter::drawLine(const glm::vec3& start, const glm::vec3& end, const glm::vec4& color)
     {
         if (!enabled) return;
+        std::lock_guard lock(mutex);
         addLine(start, end, color);
     }
 
     void DebugDrawAdapter::drawRay(const glm::vec3& origin, const glm::vec3& direction, float length, const glm::vec4& color)
     {
         if (!enabled) return;
+        std::lock_guard lock(mutex);
         addLine(origin, origin + direction * length, color);
     }
 
     void DebugDrawAdapter::drawBox(const glm::vec3& center, const glm::vec3& halfExtents, const glm::vec4& color)
     {
         if (!enabled) return;
+        std::lock_guard lock(mutex);
 
         const glm::vec3 h = halfExtents;
         // 8 corners
@@ -70,6 +73,7 @@ namespace core
     void DebugDrawAdapter::drawSphere(const glm::vec3& center, float radius, const glm::vec4& color)
     {
         if (!enabled) return;
+        std::lock_guard lock(mutex);
 
         constexpr int segments = 32;
         constexpr float step = glm::two_pi<float>() / static_cast<float>(segments);
@@ -95,6 +99,7 @@ namespace core
 
     render::mesh::ImmediateDebugDrawList DebugDrawAdapter::consumeDrawList()
     {
+        std::lock_guard lock(mutex);
         render::mesh::ImmediateDebugDrawList result = std::move(drawList);
         drawList = render::mesh::ImmediateDebugDrawList{};
         budgetWarned = false;

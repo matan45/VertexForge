@@ -3,7 +3,7 @@
 // Text input events are broadcast to ALL scripts implementing this interface
 //
 // Usage:
-//   import engine::IUITextInputListener;
+//   import * from "../lib/engine/IUITextInputListener.mt";
 //
 //   @Script
 //   public class FormController implements IUITextInputListener {

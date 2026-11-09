@@ -24,13 +24,17 @@ namespace services
     public:
         virtual ~IOceanRenderProvider() = default;
 
+        // VK-1658: the ocean SURFACE is visible (OceanComponent::isActive). A hidden ocean still
+        // provides getOceanVisualSettings, getBaseWaterHeight and the band config below - it is the
+        // scene's water look for every lake and pool - but gets no tiles and submerges nothing, and
+        // its FFT is stopped (isOceanFFTEnabled follows isActive).
         virtual bool hasActiveOcean() const = 0;
 
-        // VK-1607: is there ANY water this frame - the ocean, or at least one active water body.
-        // Every render-side gate that used to ask hasActiveOcean() asks this instead, so a scene
-        // whose only water is a lake still gets its water pass, its refraction copy and its
-        // underwater post-process. hasActiveOcean() survives for the things that genuinely need an
-        // OceanComponent (the FFT config, the ripple sim's parameters).
+        // VK-1607: is there ANY water this frame - the visible ocean, or at least one active water
+        // body. Every render-side gate that used to ask hasActiveOcean() asks this instead, so a
+        // scene whose only water is a lake still gets its water pass, its refraction copy and its
+        // underwater post-process. hasActiveOcean() survives for the ocean's own surface (its tiles
+        // and its share of the submersion test).
         virtual bool hasWaterToRender() const = 0;
 
         // Every active water body, resolved to plain rectangles. Returned by value once per frame,

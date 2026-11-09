@@ -76,6 +76,8 @@ namespace core
             return 0;
         }
 
+        applyPendingConfigInvalidations(); // VK-1657
+
         controllers::VFXRuntimeParams controllerParams;
         controllerParams.vfxAssetPath = params.vfxAssetPath;
         controllerParams.worldTransform = params.worldTransform;
@@ -86,6 +88,7 @@ namespace core
         controllerParams.autoDestroy = params.autoDestroy;
         controllerParams.seed = params.seed;
         controllerParams.poolable = params.poolable;
+        controllerParams.persistent = params.persistent;
 
         return renderer->createInstance(controllerParams);
     }
@@ -98,6 +101,8 @@ namespace core
             vfLogWarning("VFXRuntimeAdapter::createChannel called before init");
             return 0;
         }
+
+        applyPendingConfigInvalidations(); // VK-1657
 
         return renderer->createChannel(path, particlesPerRequest);
     }
@@ -118,6 +123,14 @@ namespace core
         {
             renderer->destroyInstance(id);
         }
+    }
+
+    std::vector<services::VFXInstanceId> VFXRuntimeAdapter::destroyTransientInstances()
+    {
+        if (!renderer)
+            return {};
+
+        return renderer->destroyTransientInstances();
     }
 
     void VFXRuntimeAdapter::applyInstanceOverrides(services::VFXInstanceId id, const services::VFXEmitterOverrides& overrides)
@@ -147,6 +160,9 @@ namespace core
             ctrlOverrides.collisionLifetimeLoss = overrides.collisionLifetimeLoss;
             ctrlOverrides.shapeDimensions = overrides.shapeDimensions;
             ctrlOverrides.coneSpread = overrides.coneSpread;
+            ctrlOverrides.blendMode = overrides.blendMode;
+            ctrlOverrides.sortOrder = overrides.sortOrder;
+            ctrlOverrides.colorTint = overrides.colorTint;
             renderer->applyInstanceOverrides(id, ctrlOverrides);
         }
     }
@@ -192,27 +208,34 @@ namespace core
     {
         if (renderer)
         {
-            // VK-1453: apply config-cache invalidations queued from AssetSaved on the
-            // update thread (the notification is delivered on the publishing thread).
-            std::vector<std::string> invalidations;
-            {
-                std::lock_guard<std::mutex> lock(configInvalidationMutex);
-                invalidations.swap(pendingConfigInvalidations);
-            }
-            for (const auto& path : invalidations)
-            {
-                // VK-1460: the config cache is keyed by the spawn path (vfxRef.resolve() =
-                // canonical getPath(guid)), but AssetSaved carries the editor's raw save
-                // path. Canonicalize to the same form (resolveAssetPath is idempotent) so
-                // the erase actually matches — otherwise edited effects keep rendering the
-                // stale config until the scene is reloaded.
-                renderer->invalidateConfigCache(
-                    asset::AssetDatabase::instance().resolveAssetPath(path));
-            }
+            applyPendingConfigInvalidations();
 
             updateSceneColliders();
             updateTerrainHeightfield();
             renderer->update(deltaTime);
+        }
+    }
+
+    void VFXRuntimeAdapter::applyPendingConfigInvalidations()
+    {
+        // VK-1453: apply config-cache invalidations queued from AssetSaved on the
+        // update thread (the notification is delivered on the publishing thread).
+        // VK-1657: also drained before every create — the editor ticks VFX only while
+        // instances exist, and entering Play creates them before the first tick.
+        std::vector<std::string> invalidations;
+        {
+            std::lock_guard<std::mutex> lock(configInvalidationMutex);
+            invalidations.swap(pendingConfigInvalidations);
+        }
+        for (const auto& path : invalidations)
+        {
+            // VK-1460: the config cache is keyed by the spawn path (vfxRef.resolve() =
+            // canonical getPath(guid)), but AssetSaved carries the editor's raw save
+            // path. Canonicalize to the same form (resolveAssetPath is idempotent) so
+            // the erase actually matches — otherwise edited effects keep rendering the
+            // stale config until the scene is reloaded.
+            renderer->invalidateConfigCache(
+                asset::AssetDatabase::instance().resolveAssetPath(path));
         }
     }
 

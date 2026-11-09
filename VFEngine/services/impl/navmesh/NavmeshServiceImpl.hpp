@@ -3,12 +3,17 @@
 #include "../../interfaces/navmesh/INavmeshService.hpp"
 #include "../../providers/navmesh/INavmeshProvider.hpp"
 #include "../../events/navmesh/NavmeshEvents.hpp"
+#include "../../events/navmesh/NavmeshAuthoringEvents.hpp"
 #include "../../events/EventTypes.hpp"
 #include "NavmeshTileManager.hpp"
 #include "NavmeshAgentManager.hpp"
 #include "NavmeshWorldBaker.hpp"
+#include <cstdint>
+#include <deque>
 #include <future>
 #include <memory>
+#include <optional>
+#include <string>
 #include <unordered_set>
 
 namespace services
@@ -20,10 +25,23 @@ namespace services
         types::NavmeshBakeSettings lastBakeSettings;
         std::future<bool> bakeFuture;
 
+        // VK-1660 ticketed bakes (RequestNavmeshBakeCommand). runningBakeTicket is the ticket of the bake
+        // bakeFuture tracks (0 for a BakeNavmeshCommand bake); bakeOutcomes keeps the most recent finished
+        // ones, oldest first.
+        uint64_t nextBakeTicket = 1;
+        uint64_t runningBakeTicket = 0;
+        std::deque<::events::navmesh::NavmeshBakeOutcome> bakeOutcomes;
+        static constexpr size_t MAX_BAKE_OUTCOMES = 8;
+        // A bake finished since the navmesh was last saved, loaded or cleared.
+        bool unsavedBake = false;
+
         NavmeshTileManager tileManager;
         NavmeshAgentManager agentManager;
         std::unique_ptr<NavmeshWorldBaker> worldBaker;
         bool playModeActive = false;
+        // The debug-overlay toggle (GetShowNavmeshDebugQuery) has an editor-only handler; once a query
+        // finds none (the Runtime), the overlay stays off instead of throwing every frame.
+        bool debugToggleMissing = false;
 
         // Bumped on every tile load/unload/update — scripts poll this to detect
         // stale cached paths (see GetNavmeshTileVersionQuery)
@@ -62,29 +80,30 @@ namespace services
         void getNavmeshDebugMesh(std::vector<glm::vec3>& outVertices,
                                  std::vector<uint32_t>& outIndices) const override;
 
-    private:
-        void pollBakeCompletion();
-        void attachNavmeshAssetToSceneRoot(const std::string& assetPath);
+        // === Tool support (VK-1660, events in NavmeshAuthoringEvents.hpp) ===
+        ::events::navmesh::NavmeshBakeTicket requestBake(const types::NavmeshBakeSettings& settings,
+                                                         const std::optional<::events::navmesh::NavmeshBakeBounds>& bounds);
+        ::events::navmesh::NavmeshBakeOutcome getBakeOutcome(uint64_t ticket) const;
+        ::events::navmesh::NavmeshStatus getStatus();
 
-        void collectSceneGeometry(const types::NavmeshBakeSettings& settings,
-                                  navigation::NavmeshInputGeometry& outGeometry);
-        void collectTileGeometry(const navigation::NavmeshTileBounds& bounds,
-                                 const types::NavmeshBakeSettings& settings,
-                                 navigation::NavmeshInputGeometry& outGeometry);
-        void collectTerrainGeometry(navigation::NavmeshInputGeometry& outGeometry);
-        void collectTerrainGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
-                                              navigation::NavmeshInputGeometry& outGeometry);
-        void collectStaticMeshGeometry(navigation::NavmeshInputGeometry& outGeometry);
-        void collectStaticMeshGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
-                                                 navigation::NavmeshInputGeometry& outGeometry);
-        void collectColliderGeometry(navigation::NavmeshInputGeometry& outGeometry);
-        void collectColliderGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
-                                               navigation::NavmeshInputGeometry& outGeometry);
-        // VK-1584: nav-contributing packed foliage. Loads each opted-in type's coarse (LOD3) mesh
-        // ONCE, then transform-appends it across that type's instances within the bounds.
-        void collectFoliageGeometry(navigation::NavmeshInputGeometry& outGeometry);
-        void collectFoliageGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
-                                              navigation::NavmeshInputGeometry& outGeometry);
+    private:
+        // Starts an asynchronous scene bake (ticket 0 = untracked); returns why it did not start ("" = started).
+        std::string startSceneBake(const types::NavmeshBakeSettings& settings,
+                                   const std::optional<::events::navmesh::NavmeshBakeBounds>& bounds,
+                                   uint64_t ticket);
+        void pollBakeCompletion();
+        // Records the running bake's outcome (when it has a ticket) and publishes NavmeshBakeCompleteNotification.
+        void finishSceneBake(bool success, const std::string& message);
+        // A navmesh clear or load replaces whatever a running scene bake builds: wait for it, report it failed.
+        void abandonRunningBake();
+        // Every load and clear re-creates (or destroys) the detour crowd: drop the crowd agents first so no
+        // stale crowd index is read back as a position. Agents re-register on their next destination. (A
+        // bake uses agentManager.beginCrowdRebuild instead, which also keeps the moves in progress.)
+        void resetCrowdBookkeeping();
+        bool navmeshDebugVisible();
+        void attachNavmeshAssetToSceneRoot(const std::string& assetPath);
+        std::string sceneNavmeshAssetPath() const;
+
         navigation::OffMeshConnectionsMap collectAllOffMeshLinks(const types::NavmeshBakeSettings& settings);
         navigation::NavmeshOffMeshConnections collectOffMeshLinksForTile(const navigation::NavmeshTileBounds& bounds,
                                                                          const types::NavmeshBakeSettings& settings);
@@ -96,19 +115,19 @@ namespace services
                                     navigation::OffMeshConnectionsMap& outMap);
 
         // Obstacle support
-        void collectObstacleGeometry(navigation::NavmeshInputGeometry& outGeometry);
-        void collectObstacleGeometryForBounds(const navigation::NavmeshTileBounds& bounds,
-                                               navigation::NavmeshInputGeometry& outGeometry);
         void trackObstacleTransforms();
         void drawObstacleDebug();
         void cleanupPhantomAgents();
         void setObstacleActive(EntityHandle entity, bool active);
 
         // Area modifier volume support
-        navigation::AreaModifiersMap collectAllAreaModifiers();
+        navigation::AreaModifiersMap collectAllAreaModifiers(const types::NavmeshBakeSettings& settings);
         std::vector<navigation::NavmeshAreaModifier> collectAreaModifiersForTile(const navigation::NavmeshTileBounds& bounds);
         void trackModifierVolumeTransforms();
         void drawModifierVolumeDebug();
+
+        // Patrol routes (VK-1660): each NavRouteComponent's ordered children, while navmesh debug drawing is on
+        void drawRouteDebug();
 
         // Track entity positions for dirty tile marking
         std::unordered_map<uint64_t, glm::vec3> lastOffMeshLinkPositions;

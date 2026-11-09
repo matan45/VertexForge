@@ -19,6 +19,7 @@
 #include "vfx/VFXRuntimeDiagnostics.hpp"
 #include "vfx/VFXChannelMath.hpp"
 #include "vfx/VFXSortOrder.hpp"
+#include "vfx/VFXParameterRegistry.hpp" // VK-1657: blendMode / sortOrder override ranges
 #include "print/Log.hpp"
 #include <algorithm>
 #include <array>
@@ -66,6 +67,36 @@ namespace controllers
             }
         }
         gpuMeshPipeline->setEmitterMaterial(emitterIndex, resolved);
+    }
+
+    void VFXSceneRenderer::pushEmitterRenderingConfig(const VFXRuntimeInstance& instance)
+    {
+        if (!instance.gpuDriven)
+        {
+            return;
+        }
+
+        const auto& config = instance.config;
+        const uint32_t slot = instance.gpuEmitterIndex;
+        const glm::vec3 glowColor = ::vfx::VFXModifierConfigLoader::getGlowColorFromChain(config.modifiers);
+
+        if (gpuRenderPipeline)
+        {
+            gpuRenderPipeline->setEmitterRenderingConfig(slot, config.alphaClipThreshold, config.blendMode,
+                                                          glowColor, config.sortOrder);
+        }
+
+        if (gpuMeshPipeline && instance.pipelineRenderMode == render::vfx::VFXRenderMode::MeshParticle)
+        {
+            gpuMeshPipeline->setEmitterRenderingConfig(slot, config.alphaClipThreshold, config.blendMode,
+                                                        glowColor, config.sortOrder);
+        }
+
+        if (gpuRibbonPipeline && instance.pipelineRenderMode == render::vfx::VFXRenderMode::Ribbon)
+        {
+            gpuRibbonPipeline->setEmitterRenderingConfig(slot, config.alphaClipThreshold, config.blendMode,
+                                                          glowColor, config.sortOrder);
+        }
     }
 
     void VFXSceneRenderer::init(vk::Format colorFormat, vk::Format depthFormat)
@@ -209,6 +240,7 @@ namespace controllers
             instance.cameraRelative = params.cameraRelative;
             instance.autoDestroy = params.autoDestroy;
             instance.poolable = params.poolable;
+            instance.persistent = params.persistent;
             instance.assetPath = params.vfxAssetPath;
             instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
 
@@ -246,6 +278,8 @@ namespace controllers
             emitterIndexToInstanceId[instances[id].gpuEmitterIndex] = id;
         }
         const auto& storedConfig = instances[id].config;
+        // VK-1657: the per-slot pipeline entries below are set up for this render mode.
+        instances[id].pipelineRenderMode = storedConfig.renderMode;
         if (!storedConfig.texturePath.empty() && cpuPipeline)
         {
             cpuPipeline->setTexture(storedConfig.texturePath);
@@ -272,11 +306,6 @@ namespace controllers
         if (gpuRenderPipeline && instances[id].gpuDriven)
         {
             gpuRenderPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
-            gpuRenderPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
-                                                          storedConfig.alphaClipThreshold,
-                                                          storedConfig.blendMode,
-                                                          glowColor,
-                                                          storedConfig.sortOrder);
             gpuRenderPipeline->setEmitterRenderMode(instances[id].gpuEmitterIndex,
                                                       static_cast<uint32_t>(storedConfig.renderMode));
             gpuRenderPipeline->setEmitterDistortionEnabled(instances[id].gpuEmitterIndex,
@@ -289,23 +318,17 @@ namespace controllers
             gpuMeshPipeline->setEmitterMesh(instances[id].gpuEmitterIndex, storedConfig.meshPath);
             gpuMeshPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
             applyMeshMaterial(instances[id].gpuEmitterIndex, storedConfig.materialPath); // VK-1526
-            gpuMeshPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
-                                                        storedConfig.alphaClipThreshold,
-                                                        storedConfig.blendMode,
-                                                        glowColor,
-                                                        storedConfig.sortOrder);
         }
 
         if (gpuRibbonPipeline && instances[id].gpuDriven &&
             storedConfig.renderMode == render::vfx::VFXRenderMode::Ribbon)
         {
             gpuRibbonPipeline->setEmitterTexture(instances[id].gpuEmitterIndex, storedConfig.texturePath);
-            gpuRibbonPipeline->setEmitterRenderingConfig(instances[id].gpuEmitterIndex,
-                                                          storedConfig.alphaClipThreshold,
-                                                          storedConfig.blendMode,
-                                                          glowColor,
-                                                          storedConfig.sortOrder);
         }
+
+        // VK-1657: alpha clip / blend / glow / sort for the same slots (independent per-slot field
+        // writes, so setting them after the texture/mesh/material is equivalent).
+        pushEmitterRenderingConfig(instances[id]);
 
         if (storedConfig.distortionEnabled)
         {
@@ -341,11 +364,13 @@ namespace controllers
             bool inheritVelocity = false;
         };
         std::vector<PendingChild> pending;
+        bool parentPersistent = false; // VK-1657
         {
             auto it = instances.find(parentId);
             if (it == instances.end() || it->second.channelListener)
                 return;
 
+            parentPersistent = it->second.persistent;
             const auto& events = it->second.config.events;
             const vfx::VFXEventType eligible[2] = {vfx::VFXEventType::OnDeath, vfx::VFXEventType::OnCollision};
             for (vfx::VFXEventType type : eligible)
@@ -416,6 +441,11 @@ namespace controllers
 
             if (!listener.gpuFastPathChild)
                 continue; // region pool exhausted -> CPU fallback for this event
+
+            // VK-1657: the listener (shared by path) becomes persistent once a persistent parent feeds
+            // its region, so the Play->Edit purge never releases a region a surviving parent writes.
+            if (parentPersistent)
+                listener.persistent = true;
 
             const uint32_t packedHalf = vfx::child::packHalf(
                 listener.gpuChildRegion, child.inheritColor, child.inheritSize, child.inheritVelocity);
@@ -512,6 +542,7 @@ namespace controllers
         instance.config = std::move(config);
         instance.config.spawnRate = 0.0f;
         instance.config.bursts.clear();
+        instance.pipelineRenderMode = instance.config.renderMode; // VK-1657: per-slot entries set up below
         instance.worldTransform = glm::mat4(1.0f);
         instance.prevWorldTransform = glm::mat4(1.0f);
         instance.loop = true;
@@ -761,6 +792,7 @@ namespace controllers
         instance.cameraRelative = params.cameraRelative;
         instance.autoDestroy = params.autoDestroy;
         instance.poolable = params.poolable;
+        instance.persistent = params.persistent;
         instance.assetPath = params.vfxAssetPath;
         instance.seed = pickInstanceSeed(params.seed);
         instance.injectedEmitterVelocity = params.injectedEmitterVelocity;
@@ -1003,6 +1035,29 @@ namespace controllers
         }
     }
 
+    std::vector<VFXInstanceId> VFXSceneRenderer::destroyTransientInstances()
+    {
+        // VK-1657: collect first, destroyInstance erases from the map. A parent's destroy also takes
+        // its sub-emitters (non-persistent like it), so some collected ids are already gone when
+        // reached; destroyInstance ignores those. Dormant records belong to the pool, not to a
+        // creator, so they go too and the pool is emptied (its entries would all be stale).
+        std::vector<VFXInstanceId> transientIds;
+        transientIds.reserve(instances.size());
+        for (const auto& [id, instance] : instances)
+        {
+            if (!instance.persistent || instance.dormant)
+                transientIds.push_back(id);
+        }
+
+        for (VFXInstanceId id : transientIds)
+        {
+            destroyInstance(id);
+        }
+        instancePool.clear();
+
+        return transientIds;
+    }
+
     void VFXSceneRenderer::applyInstanceOverrides(VFXInstanceId id, const VFXEmitterOverrides& overrides)
     {
         auto it = instances.find(id);
@@ -1096,6 +1151,34 @@ namespace controllers
 
         if (overrides.coneSpread.has_value())
             config.coneSpread = overrides.coneSpread.value();
+
+        // VK-1657: blend mode and sort order also live in the pipelines' per-slot config (read when the
+        // draws are recorded), so either one is re-pushed there. CPU-simulated instances still draw with
+        // the CPU pipeline's one global flipbook blend (createInstance); their sortOrder is per instance.
+        bool renderingConfigChanged = false;
+        if (overrides.blendMode.has_value())
+        {
+            config.blendMode = static_cast<::vfx::VFXBlendMode>(
+                std::clamp(overrides.blendMode.value(), 0, ::vfx::kBlendModeCount - 1));
+            renderingConfigChanged = true;
+        }
+        if (overrides.sortOrder.has_value())
+        {
+            config.sortOrder = std::clamp(overrides.sortOrder.value(), ::vfx::kMinSortOrder, ::vfx::kMaxSortOrder);
+            renderingConfigChanged = true;
+        }
+        if (renderingConfigChanged)
+            pushEmitterRenderingConfig(it->second);
+
+        // VK-1657: assigned, never accumulated, so re-applying the same overrides is idempotent. Folded
+        // into the colours when the GPU config / LUT are rebuilt each frame (VFXColorTint.hpp).
+        if (overrides.colorTint.has_value())
+            config.colorTint = glm::max(overrides.colorTint.value(), glm::vec4(0.0f));
+
+        // VK-1657: a CPU-fallback instance simulates from its particle system's own config copy, which
+        // never saw the overrides before.
+        if (it->second.particleSystem)
+            it->second.particleSystem->setEmitterConfig(config);
     }
 
     void VFXSceneRenderer::setInstanceTransform(VFXInstanceId id, const glm::mat4& worldTransform)
@@ -1361,7 +1444,7 @@ namespace controllers
 
             VFXProxyLight light;
             light.position = glm::vec3(instance.worldTransform[3]);
-            light.color = glm::vec3(instance.config.startColor);
+            light.color = glm::vec3(instance.config.startColor) * glm::vec3(instance.config.colorTint); // VK-1657
             light.intensity = instance.config.lightEmissionIntensity;
             light.radius = instance.config.lightEmissionRadius;
 

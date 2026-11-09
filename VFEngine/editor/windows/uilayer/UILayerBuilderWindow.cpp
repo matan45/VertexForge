@@ -21,6 +21,7 @@
 #include "scene/EntityRegistry.hpp"
 #include "data/EntityConversion.hpp"
 #include "ui/UICompoundValidation.hpp"
+#include "ui/UIRectLayout.hpp" // VK-1659: compound parts are placed inside their root's rect
 
 #include <imgui.h>
 #include <IconsFontAwesome6.h>
@@ -470,12 +471,13 @@ namespace windows
             rectCmd.entity = created;
             Dispatcher::instance().execute(rectCmd);
 
-            // Seed a sensible default rect: a centered 200x60 box anchored at the center.
+            // Seed a sensible default rect: a centered 200x60 box anchored at the center. Tabs get
+            // 400x300: assembleCompound places the 36 px tab bar and the panes below it inside this rect.
             services::UIRectData rect;
             rect.anchorMin = glm::vec2(0.5f, 0.5f);
             rect.anchorMax = glm::vec2(0.5f, 0.5f);
             rect.pivot = glm::vec2(0.5f, 0.5f);
-            rect.sizeDelta = glm::vec2(200.0f, 60.0f);
+            rect.sizeDelta = type == WidgetType::Tabs ? glm::vec2(400.0f, 300.0f) : glm::vec2(200.0f, 60.0f);
             rect.anchoredPosition = glm::vec2(0.0f, 0.0f);
             events::ui::SetUIRectDataCommand setRect;
             setRect.entity = created;
@@ -594,6 +596,18 @@ namespace windows
         if (!root.isValid()) return;
         auto& d = Dispatcher::instance();
 
+        // VK-1659: UI anchors are fractions of the whole canvas, never of the parent, so a part given
+        // its own anchors lands against the canvas edges. Parts are placed inside the root's current rect
+        // instead: placeInside gives them the root's anchor terms, so they stay put inside it at any
+        // resolution (addWidget seeded that rect before calling here).
+        services::UIRectData rootRect;
+        {
+            events::ui::GetUIRectDataQuery q; q.entity = root;
+            if (auto r = d.query(q)) rootRect = *r;
+        }
+        const utilities::ui::AffineRect rootEdges =
+            utilities::ui::affineRectOf(utilities::ui::toRectLayout(rootRect));
+
         // Small CQRS builders (mirror addWidget's create + seed-rect pattern). Each child inherits
         // the sandbox preview tag through the registry hierarchy, so no per-child tagging is needed.
         auto createChild = [&](services::EntityHandle parent, const char* childName) -> services::EntityHandle
@@ -609,12 +623,17 @@ namespace windows
             }
             return h;
         };
-        auto setRect = [&](services::EntityHandle e, glm::vec2 aMin, glm::vec2 aMax,
-                           glm::vec2 pivot, glm::vec2 size, glm::vec2 pos)
+        // Places `e` inside the root's rect (pivot 0.5; sizes and margins in reference px).
+        auto placeRect = [&](services::EntityHandle e, utilities::ui::HAlign hAlign, utilities::ui::VAlign vAlign,
+                             glm::vec2 size, float marginLeft)
         {
+            utilities::ui::Placement placement;
+            placement.h = hAlign;
+            placement.v = vAlign;
+            placement.size = size;
+            placement.margin = glm::vec4(marginLeft, 0.0f, 0.0f, 0.0f);
             services::UIRectData r;
-            r.anchorMin = aMin; r.anchorMax = aMax; r.pivot = pivot;
-            r.sizeDelta = size; r.anchoredPosition = pos;
+            utilities::ui::applyRectLayout(r, utilities::ui::placeInside(rootEdges, placement));
             events::ui::SetUIRectDataCommand s; s.entity = e; s.rectData = r;
             d.execute(s);
         };
@@ -624,12 +643,15 @@ namespace windows
             services::UIImageData img; img.colorTint = tint;
             events::ui::SetUIImageDataCommand s; s.entity = e; s.imageData = img; d.execute(s);
         };
-        auto addLabel = [&](services::EntityHandle e, const std::string& text, uint8_t hAlign, uint8_t vAlign)
+        auto addLabel = [&](services::EntityHandle e, const std::string& text, uint8_t hAlign, uint8_t vAlign,
+                            glm::vec4 color)
         {
             events::ui::AddUILabelComponentCommand a; a.entity = e; d.execute(a);
             services::UILabelData lab; lab.text = text; lab.horizontalAlignment = hAlign; lab.verticalAlignment = vAlign;
+            lab.color = color;
             events::ui::SetUILabelDataCommand s; s.entity = e; s.labelData = lab; d.execute(s);
         };
+        const glm::vec4 kWhite(1.0f, 1.0f, 1.0f, 1.0f);
 
         switch (type)
         {
@@ -642,14 +664,16 @@ namespace windows
             services::EntityHandle check = createChild(root, "Check");
             if (check.isValid())
             {
-                setRect(check, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {26.0f, 26.0f}, {6.0f, 0.0f});
+                placeRect(check, utilities::ui::HAlign::Left, utilities::ui::VAlign::Middle, {26.0f, 26.0f}, 6.0f);
                 addImage(check, glm::vec4(0.30f, 0.70f, 1.0f, 1.0f));
             }
             services::EntityHandle label = createChild(root, "Label");
             if (label.isValid())
             {
-                setRect(label, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {150.0f, 40.0f}, {40.0f, 0.0f});
-                addLabel(label, "Checkbox", 0 /*Left*/, 1 /*Middle*/);
+                placeRect(label, utilities::ui::HAlign::Left, utilities::ui::VAlign::Middle, {150.0f, 40.0f}, 40.0f);
+                // Dark text: the label now sits on the root's box, which the checkbox state colours
+                // (unchecked = white) paint every frame.
+                addLabel(label, "Checkbox", 0 /*Left*/, 1 /*Middle*/, glm::vec4(0.196f, 0.196f, 0.196f, 1.0f));
             }
 
             services::UICheckboxData cb;
@@ -660,16 +684,11 @@ namespace windows
         }
         case WidgetType::Dropdown:
         {
-            // Root already has UIDropdown; add a header image + a "Value" label, and seed options
-            // so the (preview-expanded) list is non-empty.
+            // Root already has UIDropdown plus the header image and the "Select..." label that adding
+            // it auto-creates; tint the header and seed options so the (preview-expanded) list is
+            // non-empty. VK-1659: no "Value" child label — a selection is written into the ROOT's own
+            // label (UIInteractionSystemDropdown), so a child label could only show stale text.
             addImage(root, glm::vec4(0.25f, 0.25f, 0.25f, 1.0f));
-
-            services::EntityHandle value = createChild(root, "Value");
-            if (value.isValid())
-            {
-                setRect(value, {0.0f, 0.5f}, {0.0f, 0.5f}, {0.0f, 0.5f}, {180.0f, 40.0f}, {10.0f, 0.0f});
-                addLabel(value, "Select...", 0 /*Left*/, 1 /*Middle*/);
-            }
 
             services::UIDropdownData dd;
             dd.options = { {"Option 1", {}}, {"Option 2", {}}, {"Option 3", {}} };
@@ -699,8 +718,8 @@ namespace windows
             services::EntityHandle label = createChild(root, "Label");
             if (label.isValid())
             {
-                setRect(label, {0.0f, 0.0f}, {1.0f, 1.0f}, {0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f});
-                addLabel(label, "Hover me", 1 /*Center*/, 1 /*Middle*/);
+                placeRect(label, utilities::ui::HAlign::Stretch, utilities::ui::VAlign::Stretch, {0.0f, 0.0f}, 0.0f);
+                addLabel(label, "Hover me", 1 /*Center*/, 1 /*Middle*/, kWhite);
             }
 
             services::UITooltipData tip;

@@ -24,6 +24,7 @@ namespace windows
     public:
         void show() { visible = true; settingsLoaded = false; }
         void notifySceneLoaded() { settingsLoaded = false; isDirty = false; }
+        void notifyRenderSettingsChanged() { if (!isDirty) settingsLoaded = false; }
         void draw();
         void drawContent();
         bool isVisible() const { return visible; }

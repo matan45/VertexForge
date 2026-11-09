@@ -49,6 +49,8 @@ namespace services
         params.loop = true;
         params.priority = VFXEmitterPriority::High;
         params.cameraRelative = true;
+        // VK-1657: this controller destroys its own instance; the Play->Edit purge must not.
+        params.persistent = true;
 
         instanceId = vfxProvider->createInstance(params);
         vfxProvider->playInstance(instanceId);

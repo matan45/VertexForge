@@ -3,7 +3,7 @@
 // Unlike slider events, progress bar has no drag or hover events (non-interactive)
 //
 // Usage:
-//   import engine::IUIProgressBarListener;
+//   import * from "../lib/engine/IUIProgressBarListener.mt";
 //
 //   @Script
 //   public class LoadingScreen implements IUIProgressBarListener {

@@ -95,6 +95,10 @@ namespace resource {
 		// atlas. Only drops this manager's entry — a graphics-side TextFontCache
 		// entry already handed out is unaffected.
 		static void invalidateFontCache(const asset::AssetRef& ref);
+		// VK-1656: a saved .vfAnimator keeps its GUID, so its entry must go for the next
+		// loadAnimator to read the new file. The cache is per binary: only the calling
+		// module's entry is dropped (RuntimeAnimatorSystem calls it inside Animation.dll).
+		static void invalidateAnimatorCache(const asset::AssetRef& ref);
 
 		static void init();
 		static void cleanUp();

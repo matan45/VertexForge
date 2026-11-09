@@ -173,6 +173,10 @@ namespace core::api
         if (type == "NavmeshAgent") return services::ComponentTypeId::NavmeshAgent;
         if (type == "Controller") return services::ComponentTypeId::Controller;
         if (type == "Decal") return services::ComponentTypeId::Decal;
+        if (type == "BehaviorTree") return services::ComponentTypeId::BehaviorTree;
+        if (type == "NavRoute") return services::ComponentTypeId::NavRoute;
+        if (type == "VolumetricNavVolume") return services::ComponentTypeId::VolumetricNavVolume;
+        if (type == "VolumetricAgent") return services::ComponentTypeId::VolumetricAgent;
         vfLogError("[Script] Unknown component type: '{}'", type);
         return std::nullopt;
     }
@@ -226,6 +230,10 @@ namespace core::api
         case services::ComponentTypeId::NavmeshAgent: return "NavmeshAgent";
         case services::ComponentTypeId::Controller: return "Controller";
         case services::ComponentTypeId::Decal: return "Decal";
+        case services::ComponentTypeId::BehaviorTree: return "BehaviorTree";
+        case services::ComponentTypeId::NavRoute: return "NavRoute";
+        case services::ComponentTypeId::VolumetricNavVolume: return "VolumetricNavVolume";
+        case services::ComponentTypeId::VolumetricAgent: return "VolumetricAgent";
         default: return "Unknown";
         }
     }

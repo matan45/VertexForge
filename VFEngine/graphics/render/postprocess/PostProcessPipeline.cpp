@@ -11,6 +11,7 @@
 #include "effects/ColorGradingEffect.hpp"
 #include "effects/UnderwaterEffect.hpp"
 #include "effects/RainDropletsEffect.hpp"
+#include "effects/FXAAEffect.hpp"
 #include "effects/PluginPostProcessEffect.hpp"
 #include "../../core/Device.hpp"
 #include "../../core/SwapChain.hpp"
@@ -66,9 +67,27 @@ namespace render::postprocess
             [](const auto& e) { return e->isEnabled(); });
     }
 
+    float PostProcessPipeline::getTonemapExposure() const
+    {
+        // Without an active tonemap nothing applies an exposure, auto-exposure's included. "Active" is the same
+        // filter executePostUpscale / execute use (enabled AND initialized), so the DLSS exposure texel (VK-1663)
+        // never claims an exposure that a not-yet-initialized tonemap does not apply.
+        const bool toneMappingActive = std::any_of(effects.begin(), effects.end(),
+            [](const auto& e)
+            {
+                return e->getType() == ::postprocess::EffectType::ToneMapping && e->isEnabled() && e->isInitialized();
+            });
+        if (!toneMappingActive)
+            return 1.0f;
+        return autoExposureOverride.value_or(lastToneMapping.exposure);
+    }
+
     void PostProcessPipeline::execute(const vk::CommandBuffer& commandBuffer, uint32_t imageIndex)
     {
+        currentImageIndex = imageIndex;
         drainPendingOps();
+        // Before the early returns: a frame without auto-exposure must not keep last frame's value.
+        autoExposureOverride.reset();
 
         if (!hasEnabledEffects())
             return;
@@ -90,8 +109,6 @@ namespace render::postprocess
         vk::DescriptorSet currentInputDescSet = sceneDescriptorSets[imageIndex];
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
-
-        autoExposureOverride.reset();
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
@@ -174,7 +191,10 @@ namespace render::postprocess
     void PostProcessPipeline::executePreUpscale(const vk::CommandBuffer& commandBuffer,
                                                   uint32_t imageIndex)
     {
+        currentImageIndex = imageIndex;
         drainPendingOps();
+        // Before the early returns: executePostUpscale and the upscaler's exposure read this frame's value.
+        autoExposureOverride.reset();
 
         if (!hasEnabledEffects())
             return;
@@ -197,8 +217,6 @@ namespace render::postprocess
         vk::DescriptorSet currentInputDescSet = sceneDescriptorSets[imageIndex];
         PingPongTarget* currentOutput = &targetA;
         bool outputIsA = true;
-
-        autoExposureOverride.reset();
 
         for (size_t i = 0; i < activeEffects.size(); ++i)
         {
@@ -276,6 +294,7 @@ namespace render::postprocess
                                                   uint32_t imageIndex,
                                                   vk::Image sourceImage, vk::ImageView sourceView)
     {
+        currentImageIndex = imageIndex;
         drainPendingOps();
 
         if (!initialized)
@@ -443,18 +462,22 @@ namespace render::postprocess
         createDescriptorPool();
         createDescriptorSets();
 
-        auto renderExtent = swapChain.getSwapchainExtent();
-        auto displayExtent = swapChain.getDisplayExtent();
         for (auto& effect : effects)
         {
             if (!effect->isInitialized())
             {
-                auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
-                effect->init(sceneColorFormat, ext);
+                effect->init(sceneColorFormat, effectExtent(*effect));
             }
         }
 
         initialized = true;
+    }
+
+    vk::Extent2D PostProcessPipeline::effectExtent(const PostProcessEffect& effect) const
+    {
+        auto* upscaleManager = device.getUpscaleManager();
+        const bool upscaling = upscaleManager && upscaleManager->isActive();
+        return upscaling && !effect.isPreUpscale() ? swapChain.getDisplayExtent() : swapChain.getSwapchainExtent();
     }
 
     void PostProcessPipeline::createSampler()
@@ -611,8 +634,7 @@ namespace render::postprocess
 
         if (initialized && !ptr->isInitialized())
         {
-            auto ext = ptr->isPreUpscale() ? swapChain.getSwapchainExtent() : swapChain.getDisplayExtent();
-            ptr->init(sceneColorFormat, ext);
+            ptr->init(sceneColorFormat, effectExtent(*ptr));
         }
     }
 
@@ -743,9 +765,7 @@ namespace render::postprocess
                 sortEffects();
                 if (initialized && !ptr->isInitialized())
                 {
-                    auto ext = ptr->isPreUpscale() ? swapChain.getSwapchainExtent()
-                                                   : swapChain.getDisplayExtent();
-                    ptr->init(sceneColorFormat, ext);
+                    ptr->init(sceneColorFormat, effectExtent(*ptr));
                 }
                 break;
             }
@@ -854,13 +874,26 @@ namespace render::postprocess
         syncEffect(::postprocess::EffectType::RainDroplets, settings.rainDroplets.enabled,
             [this]() { return std::make_unique<RainDropletsEffect>(device, *this); });
 
+        syncEffect(::postprocess::EffectType::FXAA, settings.fxaa.enabled,
+            [this]() { return std::make_unique<FXAAEffect>(device); });
+
         updateSettings(settings);
     }
 
     void PostProcessPipeline::sortEffects()
     {
-        std::sort(effects.begin(), effects.end(),
-            [](const auto& a, const auto& b) { return a->getPriority() < b->getPriority(); });
+        // VK-1655: deterministic. At equal priority a built-in effect runs before a plugin effect (a plugin
+        // customPriority of 100 runs after the tonemap, as the MCP effect list reports), and effects of equal
+        // rank keep their registration order instead of whatever an unstable sort leaves.
+        std::stable_sort(effects.begin(), effects.end(),
+            [](const auto& a, const auto& b)
+            {
+                if (a->getPriority() != b->getPriority())
+                    return a->getPriority() < b->getPriority();
+                const bool aPlugin = a->getType() == ::postprocess::EffectType::PluginCustom;
+                const bool bPlugin = b->getType() == ::postprocess::EffectType::PluginCustom;
+                return !aPlugin && bPlugin;
+            });
     }
 
     void PostProcessPipeline::recreate()
@@ -885,14 +918,11 @@ namespace render::postprocess
         createDescriptorPool();
         createDescriptorSets();
 
-        auto renderExtent = swapChain.getSwapchainExtent();
-        auto displayExtent = swapChain.getDisplayExtent();
         for (auto& effect : effects)
         {
             if (effect->isInitialized())
             {
-                auto ext = effect->isPreUpscale() ? renderExtent : displayExtent;
-                effect->recreate(sceneColorFormat, ext);
+                effect->recreate(sceneColorFormat, effectExtent(*effect));
             }
         }
     }
@@ -960,6 +990,8 @@ namespace render::postprocess
                 device.getMemoryManager().free(target.allocation);
                 target.allocation = {};
             }
+            // A recreated image starts in eUndefined; a stale layout here would be the first barrier's oldLayout.
+            target.currentLayout = vk::ImageLayout::eUndefined;
         };
 
         destroyTarget(targetA);

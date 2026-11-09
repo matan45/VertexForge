@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/EntityHandle.hpp"
 #include "../../data/DTOs.hpp"
+#include "../../data/UIAuthoringData.hpp"
 #include "../../events/EventTypes.hpp"
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
@@ -206,6 +207,16 @@ namespace services {
         std::optional<std::string> getCanvasThemePath(EntityHandle entity) const;
         int reapplyUITheme(std::optional<EntityHandle> canvas);
 
+        // VK-1659 UI authoring (MCP P10; UIAuthoringOps.cpp)
+        // A left click on a button / checkbox (or a labelToggle checkbox's label) after the runtime hit-test checks.
+        UIClickResult simulateUIClick(EntityHandle entity);
+        // Rebuilds the items of every list view in `root`'s subtree (items are never serialized); returns how many.
+        int reconcileUIListViewsInSubtree(entt::entity root);
+        bool isUIListItem(EntityHandle entity) const;
+        UICompoundStatusData getUICompoundStatus(EntityHandle entity) const;
+        // The entity or an ancestor carries UIPreviewTagComponent (a UI Layer Builder sandbox).
+        bool isInUIPreviewSandbox(EntityHandle entity) const;
+
     private:
         int applyCanvasTheme(entt::entity canvasEntity);
         void destroyUIListInstances(entt::entity listEntity);
@@ -224,6 +235,7 @@ namespace services {
         void registerTooltipHandlers(events::EventDispatcher& dispatcher);
         void registerWindowHandlers(events::EventDispatcher& dispatcher);
         void registerListViewHandlers(events::EventDispatcher& dispatcher);
+        void registerAuthoringHandlers(events::EventDispatcher& dispatcher);
     };
 
 }

@@ -26,8 +26,12 @@ namespace controllers::offscreen
         uint32_t taaFrameIndex = 0;
         glm::mat4 unjitteredProjection{1.0f};
         glm::vec2 currentJitterOffset{0.0f};
-        uint32_t viewportWidth = 1920;
-        uint32_t viewportHeight = 1080;
+        // VK-1662: the jitter is measured in RENDER pixels (the upscaler's input); the display extent only picks
+        // the Halton phase count (JitterSequence::phaseCount).
+        uint32_t renderWidth = 1920;
+        uint32_t renderHeight = 1080;
+        uint32_t displayWidth = 1920;
+        uint32_t displayHeight = 1080;
     public:
         explicit CameraController(render::RenderPassHandler& renderHandler);
 
@@ -50,7 +54,13 @@ namespace controllers::offscreen
         float getCurrentNearPlane() const { return currentNearPlane; }
 
         void setTAAEnabled(bool enabled) { taaEnabled = enabled; if (!enabled) taaFrameIndex = 0; }
-        void setViewportExtent(uint32_t width, uint32_t height) { viewportWidth = width; viewportHeight = height; }
+        void setJitterExtents(uint32_t renderW, uint32_t renderH, uint32_t displayW, uint32_t displayH)
+        {
+            renderWidth = renderW;
+            renderHeight = renderH;
+            displayWidth = displayW;
+            displayHeight = displayH;
+        }
         const glm::mat4& getUnjitteredProjection() const { return unjitteredProjection; }
         uint32_t getTAAFrameIndex() const { return taaFrameIndex; }
         const glm::vec2& getCurrentJitterOffset() const { return currentJitterOffset; }

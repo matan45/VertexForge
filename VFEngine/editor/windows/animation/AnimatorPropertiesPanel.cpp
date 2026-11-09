@@ -416,12 +416,15 @@ namespace windows::animation
         }
     }
 
-    void AnimatorPropertiesPanel::drawAddParameterPopup(animator::AnimatorData* animatorData,
+    void AnimatorPropertiesPanel::drawAddParameterPopup(animator::AnimatorGraph* graph,
                                                          bool& showAddParameterPopup,
                                                          std::string& newParameterName,
                                                          animator::AnimatorParameterType& newParameterType,
                                                          bool& isDirty)
     {
+        if (!graph)
+            return;
+
         if (showAddParameterPopup)
         {
             ImGui::OpenPopup("Add Parameter");
@@ -468,7 +471,7 @@ namespace windows::animation
                     break;
                 }
 
-                animatorData->graph.parameters.push_back(std::move(param));
+                graph->parameters.push_back(std::move(param));
                 newParameterName.clear();
                 isDirty = true;
                 ImGui::CloseCurrentPopup();

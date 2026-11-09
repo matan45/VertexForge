@@ -84,6 +84,27 @@ namespace navigation
         float hitDistance = 0.0f;
     };
 
+    // Counts and world bounds of the current navmesh (VK-1660; all zero without one).
+    struct NavmeshStats
+    {
+        int tileCount = 0;
+        int polyCount = 0;
+        int vertexCount = 0;
+        glm::vec3 boundsMin{0.0f};
+        glm::vec3 boundsMax{0.0f};
+    };
+
+    // One crowd agent's shape, speed and avoidance, re-applied live by
+    // INavmeshProvider::updateCrowdAgentConfig (VK-1660).
+    struct CrowdAgentConfig
+    {
+        float radius = 0.25f;
+        float height = 2.0f;
+        float maxSpeed = 3.5f;
+        float maxAcceleration = 8.0f;
+        uint8_t avoidanceQuality = 3; // 0-3: the crowd's obstacle-avoidance preset (3 = best)
+    };
+
     constexpr uint32_t NAVMESH_FILE_MAGIC = 0x564E4D53; // "VNMS"
     constexpr uint32_t NAVMESH_FILE_VERSION = 1;
     // Version 3: added off-mesh link + obstacle fields to NavmeshBakeSettings

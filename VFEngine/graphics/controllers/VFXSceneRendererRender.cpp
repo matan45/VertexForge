@@ -219,6 +219,7 @@ namespace controllers
             const vfx::VFXEventTypeConfig typeConfig = parentInstance.config.events.types[eventType];
             const uint32_t parentSeed = parentInstance.seed;
             const uint32_t parentEntityId = parentInstance.entityId;
+            const bool parentPersistent = parentInstance.persistent; // VK-1657
 
             if (!typeConfig.enabled)
                 continue;
@@ -254,6 +255,8 @@ namespace controllers
                 subParams.worldTransform = glm::translate(glm::mat4(1.0f),
                     glm::vec3(event.position.x, event.position.y, event.position.z));
                 subParams.loop = false;
+                // VK-1657: a persistent parent keeps its sub-effects through the Play->Edit purge.
+                subParams.persistent = parentPersistent;
                 if (typeConfig.inheritVelocityScale > 0.0f)
                 {
                     subParams.injectedEmitterVelocity =

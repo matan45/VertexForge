@@ -242,6 +242,43 @@ namespace terrain
         return false;
     }
 
+    void TerrainQuadtree::refitTile(const TileCoord& coord)
+    {
+        if (rootIndex == 0)
+            return;
+
+        refitRecursive(rootIndex, coord);
+    }
+
+    // Same descent as removeRecursive, refitting on the way back up so every ancestor of the node
+    // holding the tile ends up with exact Y bounds. Nothing here allocates, so `node` stays valid
+    // across the recursive call.
+    bool TerrainQuadtree::refitRecursive(uint32_t nodeIdx, const TileCoord& coord)
+    {
+        const auto& node = nodePool[nodeIdx];
+
+        for (const auto* tile : node.tiles)
+        {
+            if (tile->coord == coord)
+            {
+                refitYBounds(nodeIdx);
+                return true;
+            }
+        }
+
+        if (!node.isLeaf())
+        {
+            const int q = getQuadrant(node, coord.x, coord.z);
+            if (q >= 0 && node.children[q] != 0 && refitRecursive(node.children[q], coord))
+            {
+                refitYBounds(nodeIdx);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void TerrainQuadtree::refitYBounds(uint32_t nodeIdx)
     {
         auto& node = nodePool[nodeIdx];
