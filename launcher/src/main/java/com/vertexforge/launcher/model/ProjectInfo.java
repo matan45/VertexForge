@@ -26,8 +26,4 @@ public record ProjectInfo(
     public ProjectInfo withLastOpened(Instant newLastOpened) {
         return new ProjectInfo(this.name, this.path, newLastOpened);
     }
-
-    public static ProjectInfo create(String name, Path path) {
-        return new ProjectInfo(name, path, Instant.now());
-    }
 }

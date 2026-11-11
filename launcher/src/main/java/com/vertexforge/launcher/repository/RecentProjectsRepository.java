@@ -7,6 +7,7 @@ import com.vertexforge.launcher.model.ProjectInfo;
 import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.model.RecentProjectsData;
 import com.vertexforge.launcher.model.RecentProjectsData.ProjectData;
+import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.ProjectValidator;
 
 import java.io.IOException;
@@ -16,21 +17,20 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Objects;
 
 public class RecentProjectsRepository {
 
-    private static final String CONFIG_DIR = ".vertexforge";
-    private static final String FILE_NAME = "recent-projects.json";
+    /** The store's file name inside the launcher's settings folder. */
+    public static final String FILE_NAME = "recent-projects.json";
 
     private final Gson gson;
     private final Path storagePath;
+    private final LauncherLog log;
 
-    public RecentProjectsRepository() {
-        this(getDefaultStoragePath());
-    }
-
-    public RecentProjectsRepository(Path storagePath) {
-        this.storagePath = storagePath;
+    public RecentProjectsRepository(Path storagePath, LauncherLog log) {
+        this.storagePath = Objects.requireNonNull(storagePath, "storagePath");
+        this.log = Objects.requireNonNull(log, "log");
         this.gson = createGson();
     }
 
@@ -50,10 +50,10 @@ public class RecentProjectsRepository {
             return fromData(data);
 
         } catch (IOException e) {
-            System.err.println("Failed to read recent projects file: " + e.getMessage());
+            log.warn("Failed to read recent projects file: " + e.getMessage());
             return new RecentProjects();
         } catch (JsonSyntaxException e) {
-            System.err.println("Invalid JSON in recent projects file: " + e.getMessage());
+            log.warn("Invalid JSON in recent projects file: " + e.getMessage());
             return new RecentProjects();
         }
     }
@@ -67,13 +67,8 @@ public class RecentProjectsRepository {
             Files.writeString(storagePath, json);
 
         } catch (IOException e) {
-            System.err.println("Failed to save recent projects: " + e.getMessage());
+            log.warn("Failed to save recent projects: " + e.getMessage());
         }
-    }
-
-    private static Path getDefaultStoragePath() {
-        String userHome = System.getProperty("user.home");
-        return Paths.get(userHome, CONFIG_DIR, FILE_NAME);
     }
 
     private Gson createGson() {
@@ -135,6 +130,11 @@ public class RecentProjectsRepository {
         }
 
         for (ProjectData pd : data.projects()) {
+            // A "null" element in the projects array used to throw here and stop the launcher from opening.
+            if (pd == null) {
+                log.warn("Skipping an empty entry in the recent projects file");
+                continue;
+            }
             try {
                 if (pd.name() == null || pd.path() == null || pd.lastOpened() == null) {
                     continue;
@@ -144,7 +144,7 @@ public class RecentProjectsRepository {
 
                 // Security: Validate path to prevent path traversal attacks
                 if (!isPathSafe(path)) {
-                    System.err.println("Skipping unsafe path: " + pd.path());
+                    log.warn("Skipping unsafe path: " + pd.path());
                     continue;
                 }
 
@@ -158,9 +158,9 @@ public class RecentProjectsRepository {
                 projects.add(projectInfo);
 
             } catch (DateTimeParseException e) {
-                System.err.println("Invalid timestamp for project '" + pd.name() + "': " + pd.lastOpened());
+                log.warn("Invalid timestamp for project '" + pd.name() + "': " + pd.lastOpened());
             } catch (IllegalArgumentException e) {
-                System.err.println("Invalid project data: " + e.getMessage());
+                log.warn("Invalid project data: " + e.getMessage());
             }
         }
 

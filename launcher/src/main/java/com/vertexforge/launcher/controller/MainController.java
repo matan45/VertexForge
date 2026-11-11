@@ -3,10 +3,7 @@ package com.vertexforge.launcher.controller;
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectInfo;
-import com.vertexforge.launcher.model.RecentProjects;
-import com.vertexforge.launcher.repository.RecentProjectsRepository;
-import com.vertexforge.launcher.service.EditorLauncher;
-import com.vertexforge.launcher.service.ProjectCreator;
+import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -30,12 +27,18 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import java.net.URL;
 import java.util.ResourceBundle;
 
 
+/**
+ * The main window. All project logic lives in {@link ProjectHub}; this class only turns it into UI.
+ * It is created by {@code MainView}'s controller factory, never by FXMLLoader's default constructor lookup.
+ */
 public class MainController implements Initializable {
 
     @FXML
@@ -60,8 +63,11 @@ public class MainController implements Initializable {
     private Button openProjectButton;
 
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
-    private final RecentProjectsRepository repository = new RecentProjectsRepository();
-    private final EditorLauncher editorLauncher = new EditorLauncher();
+    private final ProjectHub hub;
+
+    public MainController(ProjectHub hub) {
+        this.hub = Objects.requireNonNull(hub, "hub");
+    }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
@@ -143,9 +149,7 @@ public class MainController implements Initializable {
         }
 
         // Remove from repository
-        RecentProjects recentProjects = repository.load();
-        recentProjects.remove(selected.getProjectPath());
-        repository.save(recentProjects);
+        hub.removeProject(selected.getProjectPath());
 
         // Refresh UI
         loadProjects();
@@ -161,14 +165,14 @@ public class MainController implements Initializable {
     }
 
     private void loadProjects() {
-        RecentProjects recentProjects = repository.load();
+        List<ProjectInfo> projects = hub.listProjects();
         projectsList.clear();
 
-        if (recentProjects.isEmpty()) {
+        if (projects.isEmpty()) {
             showEmptyState(true);
         } else {
             showEmptyState(false);
-            for (ProjectInfo project : recentProjects.getAll()) {
+            for (ProjectInfo project : projects) {
                 projectsList.add(new ProjectViewModel(project));
             }
         }
@@ -188,7 +192,7 @@ public class MainController implements Initializable {
         }
 
         // Find editor executable
-        var editorPathOpt = editorLauncher.findEditorExecutable();
+        var editorPathOpt = hub.findEditor();
         if (editorPathOpt.isEmpty()) {
             showErrorDialog("Editor Not Found",
                     "Could not find the editor executable.\n" +
@@ -201,7 +205,7 @@ public class MainController implements Initializable {
         setLaunchingState(true);
 
         // Launch editor asynchronously on a background thread
-        editorLauncher.launchAsync(editorPathOpt.get(), selected.getProjectPath())
+        hub.launchEditor(editorPathOpt.get(), selected.getProjectPath())
                 .thenAccept(result -> Platform.runLater(() -> {
                     if (!result.success()) {
                         setLaunchingState(false);
@@ -210,9 +214,7 @@ public class MainController implements Initializable {
                     }
 
                     // Update last opened timestamp
-                    RecentProjects recentProjects = repository.load();
-                    recentProjects.touch(selected.getProjectPath());
-                    repository.save(recentProjects);
+                    hub.markOpened(selected.getProjectPath());
 
                     // Minimize launcher after successful launch
                     Stage stage = (Stage) projectsTable.getScene().getWindow();
@@ -241,40 +243,34 @@ public class MainController implements Initializable {
 
     @FXML
     private void onRefreshProjects() {
-        // Load fresh data from repository
-        RecentProjects recentProjects = repository.load();
-
-        // Count invalid projects
-        int invalidCount = recentProjects.countInvalid();
-
-        if (invalidCount > 0) {
-            // Show confirmation dialog
-            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.initOwner(projectsTable.getScene().getWindow());
-            alert.setTitle("Invalid Projects Found");
-            alert.setHeaderText(invalidCount + " project(s) have invalid paths");
-            alert.setContentText(
-                "The project files no longer exist or cannot be accessed.\n\n" +
-                "Would you like to remove them from the list?"
-            );
-
-            ButtonType removeButton = new ButtonType("Remove Invalid");
-            ButtonType keepButton = new ButtonType("Keep All");
-            alert.getButtonTypes().setAll(removeButton, keepButton, ButtonType.CANCEL);
-
-            Optional<ButtonType> result = alert.showAndWait();
-
-            if (result.isPresent() && result.get() == removeButton) {
-                recentProjects.removeInvalid();
-                repository.save(recentProjects);
-            }
-        }
+        // Load fresh data, count invalid projects and remove them if the user confirms
+        hub.refreshInvalid(this::confirmRemoveInvalid);
 
         // Refresh validity of displayed items and reload
         for (ProjectViewModel vm : projectsList) {
             vm.refreshValidity();
         }
         loadProjects();
+    }
+
+    /** Asks whether to drop the projects whose file is missing; {@code true} means remove them. */
+    private boolean confirmRemoveInvalid(int invalidCount) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.initOwner(projectsTable.getScene().getWindow());
+        alert.setTitle("Invalid Projects Found");
+        alert.setHeaderText(invalidCount + " project(s) have invalid paths");
+        alert.setContentText(
+            "The project files no longer exist or cannot be accessed.\n\n" +
+            "Would you like to remove them from the list?"
+        );
+
+        ButtonType removeButton = new ButtonType("Remove Invalid");
+        ButtonType keepButton = new ButtonType("Keep All");
+        alert.getButtonTypes().setAll(removeButton, keepButton, ButtonType.CANCEL);
+
+        Optional<ButtonType> result = alert.showAndWait();
+
+        return result.isPresent() && result.get() == removeButton;
     }
 
     @FXML
@@ -289,9 +285,8 @@ public class MainController implements Initializable {
             return; // User cancelled
         }
 
-        // Create project
-        ProjectCreator creator = new ProjectCreator();
-        ProjectCreationResult result = creator.createProject(
+        // Create project (on success the hub also adds it to the recent projects)
+        ProjectCreationResult result = hub.createProject(
                 params.get().name(),
                 params.get().location()
         );
@@ -301,16 +296,6 @@ public class MainController implements Initializable {
                     "Failed to create project: " + result.errorMessage());
             return;
         }
-
-        // Add to recent projects
-        ProjectInfo newProject = ProjectInfo.create(
-                params.get().name(),
-                result.projectPath()
-        );
-
-        RecentProjects recentProjects = repository.load();
-        recentProjects.add(newProject);
-        repository.save(recentProjects);
 
         // Refresh UI
         loadProjects();

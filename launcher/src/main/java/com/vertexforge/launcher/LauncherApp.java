@@ -1,8 +1,11 @@
 package com.vertexforge.launcher;
 
+import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.ui.MainView;
 import com.vertexforge.launcher.util.GlobalExceptionHandler;
+import com.vertexforge.launcher.util.LauncherLog;
 import javafx.application.Application;
-import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
@@ -10,7 +13,6 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 
 
 public class LauncherApp extends Application {
@@ -18,8 +20,11 @@ public class LauncherApp extends Application {
     private static final String APP_TITLE = "VertexForge Launcher";
     private static final int MIN_WIDTH = 800;
     private static final int MIN_HEIGHT = 600;
-    private static final int DEFAULT_WIDTH = 1024;
-    private static final int DEFAULT_HEIGHT = 768;
+
+    private LauncherEnvironment environment;
+    private LauncherLog log;
+    /** The main window once it is showing; the owner of every error dialog. */
+    private volatile Stage mainStage;
 
     public static void main(String[] args) {
         launch(args);
@@ -27,22 +32,17 @@ public class LauncherApp extends Application {
 
     @Override
     public void init() {
-        GlobalExceptionHandler.install();
+        environment = LauncherEnvironment.system();
+        log = LauncherLog.forConfigDir(environment.configDir(), environment.clock());
+        GlobalExceptionHandler.install(log, () -> mainStage);
     }
 
     @Override
     public void start(Stage primaryStage) {
         try {
-            FXMLLoader loader = new FXMLLoader(getClass().getResource("/fxml/main.fxml"));
-            Parent root = loader.load();
-
-            Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
-
-            URL stylesheetUrl = getClass().getResource("/css/styles.css");
-            if (stylesheetUrl == null) {
-                throw new IOException("Stylesheet not found: /css/styles.css");
-            }
-            scene.getStylesheets().add(stylesheetUrl.toExternalForm());
+            ProjectHub hub = ProjectHub.create(environment, log);
+            Parent root = MainView.load(hub);
+            Scene scene = MainView.createScene(root);
 
             primaryStage.setTitle(APP_TITLE);
             primaryStage.setMinWidth(MIN_WIDTH);
@@ -52,9 +52,13 @@ public class LauncherApp extends Application {
             loadApplicationIcon(primaryStage);
 
             primaryStage.show();
+            mainStage = primaryStage;
 
         } catch (IOException e) {
+            // No main window exists yet, so this is the one error dialog without an owner.
+            GlobalExceptionHandler.logException(e);
             GlobalExceptionHandler.showErrorDialog(
+                    null,
                     "Failed to Load Application",
                     "The launcher failed to initialize properly.",
                     e
@@ -75,7 +79,7 @@ public class LauncherApp extends Application {
         } catch (Exception e) {
             // Icon loading failure is not critical, just log it
             // Catches IOException, IllegalArgumentException (invalid image), etc.
-            System.err.println("Warning: Failed to load application icon: " + e.getMessage());
+            log.warn("Warning: Failed to load application icon: " + e.getMessage());
         }
     }
 

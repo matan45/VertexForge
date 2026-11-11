@@ -93,15 +93,17 @@ function vfPackageRelease()
    print("  sdk: " .. n .. " files")
 
    -- 6. Java launcher → self-contained jpackage app-image (bundled JRE).
-   --    Needs Maven + JDK 25 on PATH; the panteleyev plugin goal is jpackage:jpackage.
-   print("  Building launcher (mvn package jpackage:jpackage) ...")
-   local ok = os.execute('mvn -f launcher/pom.xml clean package jpackage:jpackage')
+   --    Needs JDK 25 on PATH or in JAVA_HOME; the Maven wrapper (launcher/mvnw.cmd) downloads the
+   --    pinned Maven on first use. `package` also runs the launcher's unit tests (VK-1677), so a red
+   --    test means no app image. The panteleyev plugin goal is jpackage:jpackage.
+   print("  Building launcher (mvnw clean package jpackage:jpackage) ...")
+   local ok = os.execute('cd launcher && mvnw.cmd -B clean package jpackage:jpackage')
    local appImage = "launcher/target/dist/VertexForge Launcher"
    if ok and os.isdir(appImage) then
       n = copyTree(appImage, "**", dist .. "/VertexForge Launcher")
       print("  launcher app-image: " .. n .. " files")
    else
-      print("  WARNING: launcher app-image not produced (is Maven/JDK 25 on PATH?).")
+      print("  WARNING: launcher app-image not produced (is JDK 25 on PATH or JAVA_HOME? did a launcher test fail?).")
       print("           Native bundle is complete; re-run after building " .. appImage .. "/.")
    end
 

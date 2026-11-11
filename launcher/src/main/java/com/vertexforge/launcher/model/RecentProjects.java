@@ -39,7 +39,7 @@ public class RecentProjects {
         return this;
     }
 
-    public void touch(Path path) {
+    public void touch(Path path, Instant openedAt) {
         ProjectInfo existing = projectsByPath.get(path);
         if (existing == null) {
             return;
@@ -47,7 +47,7 @@ public class RecentProjects {
 
         // Remove and re-add with new timestamp to update ordering
         projectsByPath.remove(path);
-        ProjectInfo updated = existing.withLastOpened(Instant.now());
+        ProjectInfo updated = existing.withLastOpened(openedAt);
         projectsByPath.put(path, updated);
 
     }

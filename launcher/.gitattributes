@@ -1,0 +1,3 @@
+# The POSIX wrapper must keep LF endings; the Windows one CRLF (VK-1677).
+mvnw text eol=lf
+*.cmd text eol=crlf

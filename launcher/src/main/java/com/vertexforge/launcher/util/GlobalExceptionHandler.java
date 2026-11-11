@@ -6,38 +6,40 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 
-import java.io.FileWriter;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 
 public final class GlobalExceptionHandler {
 
-    private static final String LOG_FILE_NAME = "launcher-error.log";
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static volatile LauncherLog log;
 
     private GlobalExceptionHandler() {
         // Utility class - prevent instantiation
     }
 
 
-    public static void install() {
+    /**
+     * Logs every uncaught exception to {@code launcherLog} and shows it in a dialog owned by the main window
+     * ({@code mainWindow} returns {@code null} until the window exists).
+     */
+    public static void install(LauncherLog launcherLog, Supplier<Window> mainWindow) {
+        log = Objects.requireNonNull(launcherLog, "launcherLog");
+        Objects.requireNonNull(mainWindow, "mainWindow");
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logException(throwable);
 
-            // Show error dialog on JavaFX Application Thread
+            // Show error dialog on JavaFX Application Thread (the owner is read there too)
             if (Platform.isFxApplicationThread()) {
-                showErrorDialog("Unexpected Error", "An unexpected error occurred.", throwable);
+                showErrorDialog(mainWindow.get(), "Unexpected Error", "An unexpected error occurred.", throwable);
             } else {
                 Platform.runLater(() ->
-                        showErrorDialog("Unexpected Error", "An unexpected error occurred.", throwable)
+                        showErrorDialog(mainWindow.get(), "Unexpected Error", "An unexpected error occurred.", throwable)
                 );
             }
         });
@@ -45,23 +47,25 @@ public final class GlobalExceptionHandler {
 
 
     public static void logException(Throwable throwable) {
-        Path logPath = getLogFilePath();
-
-        try (PrintWriter writer = new PrintWriter(new FileWriter(logPath.toFile(), true))) {
-            writer.println("=".repeat(80));
-            writer.println("Timestamp: " + LocalDateTime.now().format(DATE_FORMAT));
-            writer.println("Thread: " + Thread.currentThread().getName());
-            writer.println("-".repeat(80));
-            throwable.printStackTrace(writer);
-            writer.println();
-        } catch (IOException e) {
-            System.err.println("Failed to write to error log: " + e.getMessage());
+        LauncherLog current = log;
+        if (current != null) {
+            current.error(throwable);
+        } else {
+            // Not installed (e.g. a failure before init): the console is all there is.
             throwable.printStackTrace();
         }
     }
 
-    public static void showErrorDialog(String title, String header, Throwable throwable) {
+    /**
+     * Shows {@code throwable} in an error dialog. {@code owner} is the main window, or {@code null} before it
+     * exists; a hidden or minimized owner is skipped, since a dialog owned by a minimized window can stay out of
+     * sight (the launcher minimizes itself after opening the editor).
+     */
+    public static void showErrorDialog(Window owner, String title, String header, Throwable throwable) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
+        if (isUsableOwner(owner)) {
+            alert.initOwner(owner);
+        }
         alert.setTitle(title);
         alert.setHeaderText(header);
         alert.setContentText(throwable.getMessage());
@@ -100,14 +104,10 @@ public final class GlobalExceptionHandler {
         });
     }
 
-    private static Path getLogFilePath() {
-        String userHome = System.getProperty("user.home");
-        Path logDir = Paths.get(userHome, ".vertexforge");
-        try {
-            Files.createDirectories(logDir);
-        } catch (IOException e) {
-            System.err.println("Failed to create log directory: " + e.getMessage());
+    private static boolean isUsableOwner(Window owner) {
+        if (owner == null || !owner.isShowing()) {
+            return false;
         }
-        return logDir.resolve(LOG_FILE_NAME);
+        return !(owner instanceof Stage stage && stage.isIconified());
     }
 }

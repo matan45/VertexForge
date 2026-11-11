@@ -3,31 +3,37 @@ package com.vertexforge.launcher.service;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.vertexforge.launcher.model.ProjectCreationResult;
+import com.vertexforge.launcher.util.LauncherLog;
+import com.vertexforge.launcher.util.ZipExtractor;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.Objects;
 
 
 public class ProjectCreator {
 
     // Packed from assets/scripts/lib at build time (pom.xml, pack-script-lib).
-    private static final String LIBRARY_ZIP_RESOURCE = "/templates/script-library.zip";
-    private static final String SCENE_TEMPLATE_RESOURCE = "/templates/Main.vfScene";
+    public static final String LIBRARY_ZIP_RESOURCE = "/templates/script-library.zip";
+    public static final String SCENE_TEMPLATE_RESOURCE = "/templates/Main.vfScene";
     private static final String ENGINE_VERSION = "VertexForge 1.0.0";
 
     private final Gson gson;
+    private final Clock clock;
+    private final LauncherLog log;
 
-    public ProjectCreator() {
+    public ProjectCreator(Clock clock, LauncherLog log) {
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.log = Objects.requireNonNull(log, "log");
         this.gson = new GsonBuilder()
                 .setPrettyPrinting()
                 .create();
@@ -106,7 +112,7 @@ public class ProjectCreator {
         projectConfig.put("startupScene", "scenes/Main.vfScene");
         projectConfig.put("exeIconPath", "");
         projectConfig.put("engineVersion", ENGINE_VERSION);
-        projectConfig.put("lastModified", formatTimestamp(Instant.now()));
+        projectConfig.put("lastModified", formatTimestamp(clock.instant()));
 
         String json = gson.toJson(projectConfig);
         Files.writeString(projectFile, json);
@@ -190,32 +196,11 @@ public class ProjectCreator {
         try (InputStream resourceStream = getClass().getResourceAsStream(LIBRARY_ZIP_RESOURCE)) {
             if (resourceStream == null) {
                 throw new IOException("Script library " + LIBRARY_ZIP_RESOURCE + " is missing from the launcher. "
-                        + "It is packed from assets/scripts/lib at build time: rebuild with 'mvn -f launcher/pom.xml package'.");
+                        + "It is packed from assets/scripts/lib at build time: rebuild the launcher with "
+                        + "'mvnw package' in launcher/ (see launcher/build.txt).");
             }
 
-            try (ZipInputStream zipIn = new ZipInputStream(resourceStream)) {
-                ZipEntry entry;
-                while ((entry = zipIn.getNextEntry()) != null) {
-                    try {
-                        Path targetPath = libDir.resolve(entry.getName());
-
-                        // Security: Prevent zip slip attack
-                        if (!targetPath.normalize().startsWith(libDir.normalize())) {
-                            throw new IOException("Invalid zip entry: " + entry.getName());
-                        }
-
-                        if (entry.isDirectory()) {
-                            Files.createDirectories(targetPath);
-                        } else {
-                            // Ensure parent directory exists
-                            Files.createDirectories(targetPath.getParent());
-                            Files.copy(zipIn, targetPath);
-                        }
-                    } finally {
-                        zipIn.closeEntry();
-                    }
-                }
-            }
+            ZipExtractor.extract(resourceStream, libDir);
         }
     }
 
@@ -229,13 +214,13 @@ public class ProjectCreator {
                                 try {
                                     Files.delete(path);
                                 } catch (IOException e) {
-                                    System.err.println("Warning: Could not delete " + path + ": " + e.getMessage());
+                                    log.warn("Warning: Could not delete " + path + ": " + e.getMessage());
                                 }
                             });
                 }
             }
         } catch (IOException e) {
-            System.err.println("Warning: Failed to cleanup partial project: " + e.getMessage());
+            log.warn("Warning: Failed to cleanup partial project: " + e.getMessage());
         }
     }
 

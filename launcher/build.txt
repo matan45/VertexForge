@@ -1,5 +1,14 @@
-mvn clean package
-mvn jpackage:jpackage
+Build (from launcher/, with JDK 25 on PATH or in JAVA_HOME; the wrapper downloads Maven itself):
+mvnw.cmd verify                  (compile, unit tests, shaded jar)
+mvnw.cmd jpackage:jpackage       (app image in target/dist/VertexForge Launcher/)
 
 Note: package packs ../assets/scripts/lib into templates/script-library.zip, so build from the full repo checkout.
-IntelliJ: delegate build/run to Maven, or run "mvn process-resources" before launching, or project creation fails.
+IntelliJ: delegate build/run to Maven, or run "mvnw.cmd process-resources" before launching, or project creation fails.
+
+Self-test (CI runs this on the packaged image; exit code 0 = pass, 1 = fail):
+"target/dist/VertexForge Launcher/VertexForge Launcher.exe" --self-test --self-test-report=self-test.txt
+The packaged exe has no console, so read the report file; without --self-test-report it shows nothing.
+From the jar: java -jar target/VertexForgeLauncher.jar --self-test (prints SELF-TEST PASS or the failure).
+
+Known issue: jpackage leaves the generated exe read-only, so "mvnw.cmd clean" fails after a jpackage run.
+Clear the read-only flag on target/dist/VertexForge Launcher/VertexForge Launcher.exe first.

@@ -27,7 +27,7 @@ VertexForge is a modular game engine framework built in C++ using modern technol
 - **Vulkan SDK** installed, with the `VULKAN_SDK` environment variable set to its installation path.
 - **CMake** on your `PATH` (used by `build_dependencies.bat` to build Assimp, OpenAL, FreeType, libogg, and libvorbis).
 - **Premake5** on your `PATH` (used by `premake.bat` to generate the Visual Studio solution).
-- *(Only required to package a release)* **Apache Maven** and **JDK 25** on your `PATH` — used to build the Java launcher app-image. See [Packaging a Release Distribution](#packaging-a-release-distribution).
+- *(Only required to package a release)* **JDK 25** on your `PATH` or in `JAVA_HOME` — used to build the Java launcher app-image. Maven itself comes from the launcher's Maven wrapper (`launcher/mvnw.cmd`). See [Packaging a Release Distribution](#packaging-a-release-distribution).
 
 ### Steps
 1. Clone the repository with submodules:
@@ -72,7 +72,7 @@ To produce a single, ready-to-ship folder containing everything needed to distri
 
 ### Prerequisites
 - The Release binaries must already be built.
-- **Apache Maven** and **JDK 25** on your `PATH` (to build the launcher app-image). If either is missing, the native bundle is still produced and the launcher step is skipped with a warning.
+- **JDK 25** on your `PATH` or in `JAVA_HOME` (to build the launcher app-image). The Maven wrapper (`launcher/mvnw.cmd`) downloads the pinned Maven version on first use, and the build runs the launcher's unit tests. If the JDK is missing or a launcher test fails, the native bundle is still produced and the launcher step is skipped with a warning.
 
 ### Steps
 1. Build the engine in Release:
