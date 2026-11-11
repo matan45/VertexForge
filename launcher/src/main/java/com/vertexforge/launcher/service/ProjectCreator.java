@@ -20,7 +20,8 @@ import java.util.zip.ZipInputStream;
 
 public class ProjectCreator {
 
-    private static final String LIZ_ZIP_RESOURCE = "/templates/lib.zip";
+    // Packed from assets/scripts/lib at build time (pom.xml, pack-script-lib).
+    private static final String LIBRARY_ZIP_RESOURCE = "/templates/script-library.zip";
     private static final String SCENE_TEMPLATE_RESOURCE = "/templates/Main.vfScene";
     private static final String ENGINE_VERSION = "VertexForge 1.0.0";
 
@@ -186,26 +187,17 @@ public class ProjectCreator {
 
 
     private void extractLibrary(Path libDir) throws IOException {
-        try (InputStream resourceStream = getClass().getResourceAsStream(LIZ_ZIP_RESOURCE)) {
+        try (InputStream resourceStream = getClass().getResourceAsStream(LIBRARY_ZIP_RESOURCE)) {
             if (resourceStream == null) {
-                throw new IOException("Library resource not found: " + LIZ_ZIP_RESOURCE);
+                throw new IOException("Script library " + LIBRARY_ZIP_RESOURCE + " is missing from the launcher. "
+                        + "It is packed from assets/scripts/lib at build time: rebuild with 'mvn -f launcher/pom.xml package'.");
             }
 
             try (ZipInputStream zipIn = new ZipInputStream(resourceStream)) {
                 ZipEntry entry;
                 while ((entry = zipIn.getNextEntry()) != null) {
                     try {
-                        String entryName = entry.getName();
-
-                        // Strip leading "lib/" if present (zip already contains lib folder)
-                        if (entryName.startsWith("lib/")) {
-                            entryName = entryName.substring(4);
-                            if (entryName.isEmpty()) {
-                                continue; // Skip the lib directory entry itself
-                            }
-                        }
-
-                        Path targetPath = libDir.resolve(entryName);
+                        Path targetPath = libDir.resolve(entry.getName());
 
                         // Security: Prevent zip slip attack
                         if (!targetPath.normalize().startsWith(libDir.normalize())) {

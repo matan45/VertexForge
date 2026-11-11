@@ -1,2 +1,5 @@
-mvn clean package 
+mvn clean package
 mvn jpackage:jpackage
+
+Note: package packs ../assets/scripts/lib into templates/script-library.zip, so build from the full repo checkout.
+IntelliJ: delegate build/run to Maven, or run "mvn process-resources" before launching, or project creation fails.

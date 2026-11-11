@@ -23,6 +23,7 @@
         <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
         <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
         <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
+        <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
 
         <gson.version>2.13.0</gson.version>
     </properties>
@@ -70,6 +71,37 @@
         <finalName>VertexForgeLauncher</finalName>
 
         <plugins>
+            <!--
+                Packs ../assets/scripts/lib byte for byte into templates/script-library.zip (VK-1676),
+                which ProjectCreator extracts into every new project's scripts/lib.
+                The launcher build therefore needs the full repo checkout.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>${maven-antrun-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>pack-script-lib</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete file="${project.build.outputDirectory}/templates/script-library.zip"/>
+                                <!-- filesonly: with no directory entries, whenempty fails unless at least one file is packed. -->
+                                <zip destfile="${project.build.outputDirectory}/templates/script-library.zip"
+                                     filesonly="true" whenempty="fail" encoding="UTF-8">
+                                    <fileset dir="${project.basedir}/../assets/scripts/lib"
+                                             erroronmissingdir="true" defaultexcludes="no"/>
+                                </zip>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
