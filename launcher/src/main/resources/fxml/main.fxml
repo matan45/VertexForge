@@ -14,6 +14,7 @@
     Main layout for VertexForge Launcher.
 
     Structure:
+    - Top: Banners (damaged or read-only recent-projects list, failed saves - VK-1678)
     - Center: Projects list (TableView - VK-154)
     - Right: Sidebar with action buttons (Create Project, Refresh)
     - Bottom: Open Project button
@@ -23,6 +24,11 @@
             fx:controller="com.vertexforge.launcher.controller.MainController"
             fx:id="rootPane"
             styleClass="root-pane">
+
+    <!-- Banners (Top): hidden while empty -->
+    <top>
+        <VBox fx:id="bannerBox" styleClass="banner-box" visible="false" managed="false"/>
+    </top>
 
     <!-- Sidebar (Right) -->
     <right>
@@ -37,7 +43,8 @@
                 <padding>
                     <Insets top="20"/>
                 </padding>
-                <Button text="Create Project"
+                <Button fx:id="createProjectButton"
+                        text="Create Project"
                         onAction="#onCreateProject"
                         styleClass="sidebar-button"
                         maxWidth="Infinity"/>
@@ -68,6 +75,8 @@
                     <columns>
                         <TableColumn fx:id="nameColumn" text="Name"
                                      prefWidth="200" minWidth="100"/>
+                        <TableColumn fx:id="statusColumn" text="Status"
+                                     prefWidth="110" minWidth="90"/>
                         <TableColumn fx:id="pathColumn" text="Path"
                                      prefWidth="350" minWidth="150"/>
                         <TableColumn fx:id="lastOpenedColumn" text="Last Opened"

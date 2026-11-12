@@ -1,169 +1,122 @@
 package com.vertexforge.launcher.repository;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
-import com.vertexforge.launcher.model.ProjectInfo;
 import com.vertexforge.launcher.model.RecentProjects;
-import com.vertexforge.launcher.model.RecentProjectsData;
-import com.vertexforge.launcher.model.RecentProjectsData.ProjectData;
+import com.vertexforge.launcher.repository.RecentProjectsCodec.Decoded;
+import com.vertexforge.launcher.store.AtomicJsonStore;
+import com.vertexforge.launcher.store.StoreSnapshot;
+import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.util.LauncherLog;
-import com.vertexforge.launcher.util.ProjectValidator;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
-import java.util.List;
+import java.time.Clock;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
+/**
+ * The recent-projects list in {@code ~/.vertexforge/recent-projects.json} (VK-1678).
+ * <p>
+ * Loading never drops a project and never touches the projects themselves. Every change re-reads the file under the
+ * store's lock and applies itself to what it read, so launchers running at the same time never lose each other's
+ * changes. A change that cannot be saved throws {@link StoreWriteException}, and the file stays as it was.
+ */
 public class RecentProjectsRepository {
 
     /** The store's file name inside the launcher's settings folder. */
     public static final String FILE_NAME = "recent-projects.json";
 
-    private final Gson gson;
-    private final Path storagePath;
+    private final AtomicJsonStore store;
+    private final Supplier<UUID> ids;
+    private final Clock clock;
     private final LauncherLog log;
 
-    public RecentProjectsRepository(Path storagePath, LauncherLog log) {
-        this.storagePath = Objects.requireNonNull(storagePath, "storagePath");
+    public RecentProjectsRepository(AtomicJsonStore store, Supplier<UUID> ids, Clock clock, LauncherLog log) {
+        this.store = Objects.requireNonNull(store, "store");
+        this.ids = Objects.requireNonNull(ids, "ids");
+        this.clock = Objects.requireNonNull(clock, "clock");
         this.log = Objects.requireNonNull(log, "log");
-        this.gson = createGson();
     }
 
-    public RecentProjects load() {
-        if (!Files.exists(storagePath)) {
-            return new RecentProjects();
-        }
+    /** The store for the recent-projects file at {@code file}, logging what it recovers from to {@code log}. */
+    public static AtomicJsonStore openStore(Path file, Clock clock, LauncherLog log) {
+        return new AtomicJsonStore(file, RecentProjectsCodec.FORMAT, clock, AtomicJsonStore.DEFAULT_LOCK_TIMEOUT,
+                log::warn);
+    }
 
+    public Path file() {
+        return store.file();
+    }
+
+    /** Reads the list. A corrupt file is moved aside (see {@link AtomicJsonStore#read()}). Never throws. */
+    public RecentProjectsView load() {
+        StoreSnapshot snapshot = store.read();
+        switch (snapshot.status()) {
+            case NEWER_READ_ONLY -> log.warn("The recent projects file " + store.file()
+                    + " was written by a newer version of the launcher; it is read-only here");
+            case UNREADABLE -> log.warn("Could not read the recent projects file " + store.file() + ": "
+                    + snapshot.detail());
+            default -> {
+                // Quarantines and unmovable files are reported by the store itself.
+            }
+        }
+        return view(snapshot, RecentProjectsCodec.decode(snapshot.root()));
+    }
+
+    /**
+     * Adds a project (or, when the path is already listed, refreshes that entry's name and time), then trims the
+     * list to {@code limit}, never dropping the new entry or a pinned one.
+     */
+    public RecentProjectsView add(Path path, String name, int limit) throws StoreWriteException {
+        Objects.requireNonNull(path, "path");
+        UUID newId = ids.get();
+        return change("add " + path, projects -> {
+            RecentProjects.Added added = projects.add(path, name, clock.instant(), newId);
+            return added.projects().trim(limit, added.id());
+        });
+    }
+
+    /** Records that the project was just opened. Does nothing when another launcher removed it meanwhile. */
+    public RecentProjectsView markOpened(UUID id) throws StoreWriteException {
+        return change("mark " + id + " as opened", projects -> projects.touch(id, clock.instant()));
+    }
+
+    /** Removes the entry from the list; the project on disk is never touched. */
+    public RecentProjectsView remove(UUID id) throws StoreWriteException {
+        return change("remove " + id, projects -> projects.remove(id));
+    }
+
+    private RecentProjectsView change(String action, UnaryOperator<RecentProjects> operation)
+            throws StoreWriteException {
+        AtomicInteger skipped = new AtomicInteger();
+        StoreSnapshot snapshot;
         try {
-            String json = Files.readString(storagePath);
-            RecentProjectsData data = gson.fromJson(json, RecentProjectsData.class);
-
-            if (data == null) {
-                return new RecentProjects();
-            }
-
-            return fromData(data);
-
-        } catch (IOException e) {
-            log.warn("Failed to read recent projects file: " + e.getMessage());
-            return new RecentProjects();
-        } catch (JsonSyntaxException e) {
-            log.warn("Invalid JSON in recent projects file: " + e.getMessage());
-            return new RecentProjects();
+            snapshot = store.update(root -> {
+                Decoded current = RecentProjectsCodec.decode(root);
+                skipped.set(current.skippedElements());
+                RecentProjects next = operation.apply(current.projects());
+                return RecentProjectsCodec.encode(next, root);
+            });
+        } catch (StoreWriteException e) {
+            log.warn("Failed to save recent projects (" + action + "): " + e.getMessage());
+            throw e;
         }
+        if (skipped.get() > 0) {
+            log.warn(skippedMessage(skipped.get()) + "; they were not written back");
+        }
+        return view(snapshot, RecentProjectsCodec.decode(snapshot.root()));
     }
 
-    public void save(RecentProjects projects) {
-        try {
-            ensureDirectoryExists();
-
-            RecentProjectsData data = toData(projects);
-            String json = gson.toJson(data);
-            Files.writeString(storagePath, json);
-
-        } catch (IOException e) {
-            log.warn("Failed to save recent projects: " + e.getMessage());
+    private RecentProjectsView view(StoreSnapshot snapshot, Decoded decoded) {
+        if (decoded.skippedElements() > 0) {
+            log.warn(skippedMessage(decoded.skippedElements()));
         }
+        return new RecentProjectsView(decoded.projects().displayOrder(), snapshot.status(), snapshot.quarantinedTo(),
+                snapshot.detail(), decoded.skippedElements());
     }
 
-    private Gson createGson() {
-        return new GsonBuilder()
-                .setPrettyPrinting()
-                .create();
-    }
-
-    private void ensureDirectoryExists() throws IOException {
-        Path parent = storagePath.getParent();
-        if (parent != null && !Files.exists(parent)) {
-            Files.createDirectories(parent);
-        }
-    }
-
-    private RecentProjectsData toData(RecentProjects projects) {
-        List<ProjectData> projectDataList = projects.getAll().stream()
-                .map(p -> new ProjectData(
-                        p.name(),
-                        p.path().toString(),
-                        p.lastOpened().toString()
-                ))
-                .toList();
-
-        return RecentProjectsData.create(projectDataList);
-    }
-
-    private boolean isPathSafe(Path path) {
-        // Must be absolute path
-        if (!path.isAbsolute()) {
-            return false;
-        }
-
-        // Normalize to resolve any ".." or "." components
-        Path normalized = path.normalize();
-
-        // After normalization, path should equal original (no traversal sequences)
-        // This catches paths like "/home/user/../../../etc/passwd"
-        if (!normalized.equals(path.toAbsolutePath().normalize())) {
-            return false;
-        }
-
-        // Ensure normalized path doesn't contain suspicious components
-        for (Path component : normalized) {
-            String name = component.toString();
-            if (name.equals("..") || name.equals(".")) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private RecentProjects fromData(RecentProjectsData data) {
-        RecentProjects projects = new RecentProjects();
-
-        if (data.projects() == null) {
-            return projects;
-        }
-
-        for (ProjectData pd : data.projects()) {
-            // A "null" element in the projects array used to throw here and stop the launcher from opening.
-            if (pd == null) {
-                log.warn("Skipping an empty entry in the recent projects file");
-                continue;
-            }
-            try {
-                if (pd.name() == null || pd.path() == null || pd.lastOpened() == null) {
-                    continue;
-                }
-
-                Path path = Paths.get(pd.path());
-
-                // Security: Validate path to prevent path traversal attacks
-                if (!isPathSafe(path)) {
-                    log.warn("Skipping unsafe path: " + pd.path());
-                    continue;
-                }
-
-                // Skip invalid project paths (file doesn't exist, wrong extension, etc.)
-                if (!ProjectValidator.isValid(path)) {
-                    continue;
-                }
-
-                Instant lastOpened = Instant.parse(pd.lastOpened());
-                ProjectInfo projectInfo = new ProjectInfo(pd.name(), path, lastOpened);
-                projects.add(projectInfo);
-
-            } catch (DateTimeParseException e) {
-                log.warn("Invalid timestamp for project '" + pd.name() + "': " + pd.lastOpened());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid project data: " + e.getMessage());
-            }
-        }
-
-        return projects;
+    private static String skippedMessage(int count) {
+        return "Skipping " + count + " empty " + (count == 1 ? "entry" : "entries") + " in the recent projects file";
     }
 }

@@ -1,15 +1,18 @@
 package com.vertexforge.launcher.model;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -20,108 +23,136 @@ class RecentProjectsTest {
     @TempDir
     Path tempDir;
 
-    private ProjectInfo project(String name, int minutesAfterT0) {
-        return new ProjectInfo(name, tempDir.resolve(name + ".vfproj"), T0.plusSeconds(60L * minutesAfterT0));
+    private Path path(String name) {
+        return tempDir.resolve(name + ".vfproj");
     }
 
-    private static List<String> names(RecentProjects projects) {
-        return projects.getAll().stream().map(ProjectInfo::name).toList();
+    private RecentEntry entry(String name, int minutesAfterT0) {
+        return RecentEntry.create(UUID.randomUUID(), path(name), name, T0.plusSeconds(60L * minutesAfterT0));
     }
 
-    @Test
-    void getAllReturnsNewestFirst() {
-        RecentProjects projects = new RecentProjects()
-                .add(project("Old", 1))
-                .add(project("Newest", 3))
-                .add(project("Middle", 2));
-
-        assertEquals(List.of("Newest", "Middle", "Old"), names(projects));
-        assertEquals(3, projects.size());
+    private static List<String> names(List<RecentEntry> entries) {
+        return entries.stream().map(RecentEntry::displayName).toList();
     }
 
     @Test
-    void addingTheSamePathReplacesTheEntry() {
-        RecentProjects projects = new RecentProjects()
-                .add(project("Game", 1))
-                .add(new ProjectInfo("Renamed", tempDir.resolve("Game.vfproj"), T0.plusSeconds(600)));
+    void displayOrderIsNewestFirstWithUnknownTimesLast() {
+        RecentEntry noTime = RecentEntry.fromJson(UUID.randomUUID(),
+                JsonParser.parseString("{\"name\": \"NoTime\", \"path\": \"/x/NoTime.vfproj\"}").getAsJsonObject());
+        RecentProjects projects = new RecentProjects(List.of(entry("Old", 1), noTime, entry("Newest", 3),
+                entry("Middle", 2)));
 
-        assertEquals(List.of("Renamed"), names(projects));
+        assertEquals(List.of("Newest", "Middle", "Old", "NoTime"), names(projects.displayOrder()));
+        assertEquals(List.of("Old", "NoTime", "Newest", "Middle"), names(projects.entries()), "file order is kept");
     }
 
     @Test
-    void exceedingTheCapDropsTheOldestEntry() {
-        RecentProjects projects = new RecentProjects(3)
-                .add(project("A", 5))
-                .add(project("B", 1))
-                .add(project("C", 3))
-                .add(project("D", 4));
+    void addingANewPathAppendsAnEntryWithTheGivenId() {
+        UUID id = UUID.randomUUID();
 
-        assertEquals(List.of("A", "D", "C"), names(projects));
+        RecentProjects.Added added = RecentProjects.empty().add(path("Game"), "Game", T0, id);
+
+        assertEquals(id, added.id());
+        assertEquals(1, added.projects().size());
+        assertEquals(path("Game"), added.projects().entries().getFirst().path());
     }
 
     @Test
-    void defaultCapIsTen() {
-        RecentProjects projects = new RecentProjects();
-        for (int i = 0; i < 11; i++) {
-            projects.add(project("P" + i, i));
+    void addingAListedPathKeepsItsIdAndExtrasAndUpdatesNameAndTime() {
+        JsonObject raw = new JsonObject();
+        raw.addProperty("name", "Game");
+        raw.addProperty("path", path("Game").toString());
+        raw.addProperty("lastOpened", T0.toString());
+        raw.addProperty("custom", 1);
+        RecentEntry stored = RecentEntry.fromJson(UUID.randomUUID(), raw);
+        RecentProjects projects = new RecentProjects(List.of(stored));
+
+        RecentProjects.Added added = projects.add(path("Game"), "Renamed", T0.plusSeconds(600), UUID.randomUUID());
+
+        RecentEntry updated = added.projects().entries().getFirst();
+        assertEquals(stored.id(), added.id());
+        assertEquals(stored.id(), updated.id());
+        assertEquals("Renamed", updated.name());
+        assertEquals(T0.plusSeconds(600), updated.lastOpened());
+        assertEquals(1, updated.raw().get("custom").getAsInt());
+        assertEquals(1, added.projects().size());
+    }
+
+    @Test
+    void touchMovesTheProjectToTheFrontOfTheDisplayOrder() {
+        RecentEntry old = entry("Old", 1);
+        RecentProjects projects = new RecentProjects(List.of(old, entry("New", 2)));
+
+        RecentProjects touched = projects.touch(old.id(), T0.plusSeconds(3600));
+
+        assertEquals(List.of("Old", "New"), names(touched.displayOrder()));
+        assertEquals(T0.plusSeconds(3600), touched.displayOrder().getFirst().lastOpened());
+    }
+
+    @Test
+    void touchAndRemoveOfAnUnknownIdChangeNothing() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        assertSame(projects, projects.touch(UUID.randomUUID(), T0.plusSeconds(3600)));
+        assertSame(projects, projects.remove(UUID.randomUUID()));
+    }
+
+    @Test
+    void removeDeletesOnlyThatEntry() {
+        RecentEntry drop = entry("Drop", 2);
+        RecentProjects projects = new RecentProjects(List.of(entry("Keep", 1), drop));
+
+        assertEquals(List.of("Keep"), names(projects.remove(drop.id()).entries()));
+    }
+
+    @Test
+    void trimDropsTheOldestFirst() {
+        RecentProjects projects = new RecentProjects(List.of(entry("A", 5), entry("B", 1), entry("C", 3),
+                entry("D", 4)));
+
+        assertEquals(List.of("A", "D", "C"), names(projects.trim(3, null).displayOrder()));
+    }
+
+    @Test
+    void trimNeverDropsAPinnedEntryOrTheOneJustAdded() {
+        RecentEntry pinned = entry("Pinned", 0).withPinned(true);
+        RecentEntry justAdded = entry("JustAdded", -10);
+        RecentProjects projects = new RecentProjects(List.of(pinned, justAdded, entry("Old", 1), entry("New", 2)));
+
+        RecentProjects trimmed = projects.trim(2, justAdded.id());
+
+        assertEquals(List.of("Pinned", "JustAdded"), names(trimmed.entries()));
+        // With only protected entries left, the list may stay above the limit.
+        assertEquals(2, projects.trim(1, justAdded.id()).size());
+    }
+
+    @Test
+    void theDefaultLimitComfortablyHoldsFiftyProjects() {
+        List<RecentEntry> fiftyOne = new ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            fiftyOne.add(entry("P" + i, i));
         }
 
-        assertEquals(10, RecentProjects.DEFAULT_MAX_SIZE);
-        assertEquals(10, projects.size());
-        assertTrue(names(projects).stream().noneMatch("P0"::equals), "the oldest entry must be dropped");
+        RecentProjects trimmed = new RecentProjects(fiftyOne).trim(50, null);
+
+        assertEquals(50, trimmed.size());
+        assertTrue(names(trimmed.entries()).stream().noneMatch("P0"::equals), "the oldest entry must be dropped");
     }
 
     @Test
-    void touchMovesTheProjectToTheFront() {
-        RecentProjects projects = new RecentProjects()
-                .add(project("Old", 1))
-                .add(project("New", 2));
-
-        projects.touch(tempDir.resolve("Old.vfproj"), T0.plusSeconds(3600));
-
-        assertEquals(List.of("Old", "New"), names(projects));
-        assertEquals(T0.plusSeconds(3600), projects.getAll().getFirst().lastOpened());
+    void aLimitBelowOneIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> RecentProjects.empty().trim(0, null));
     }
 
     @Test
-    void touchOfAnUnknownPathChangesNothing() {
-        RecentProjects projects = new RecentProjects().add(project("Game", 1));
+    void nothingHereTouchesTheFileSystem() {
+        // Entries whose files do not exist are kept by every operation.
+        RecentEntry missing = entry("Missing", 1);
+        RecentProjects projects = new RecentProjects(List.of(missing))
+                .add(path("Other"), "Other", T0, UUID.randomUUID()).projects()
+                .touch(missing.id(), T0.plusSeconds(5))
+                .trim(50, null);
 
-        projects.touch(tempDir.resolve("Unknown.vfproj"), T0.plusSeconds(3600));
-
-        assertEquals(List.of("Game"), names(projects));
-        assertEquals(T0.plusSeconds(60), projects.getAll().getFirst().lastOpened());
-    }
-
-    @Test
-    void removeDeletesTheEntry() {
-        RecentProjects projects = new RecentProjects()
-                .add(project("Keep", 1))
-                .add(project("Drop", 2));
-
-        projects.remove(tempDir.resolve("Drop.vfproj"));
-
-        assertEquals(List.of("Keep"), names(projects));
-    }
-
-    @Test
-    void capBelowOneIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> new RecentProjects(0));
-    }
-
-    @Test
-    void invalidMeansTheProjectFileIsMissing() throws IOException {
-        ProjectInfo present = project("Present", 1);
-        Files.writeString(present.path(), "{}");
-        RecentProjects projects = new RecentProjects()
-                .add(present)
-                .add(project("Missing", 2));
-
-        assertEquals(1, projects.countInvalid());
-
-        projects.removeInvalid();
-
-        assertEquals(List.of("Present"), names(projects));
-        assertEquals(0, projects.countInvalid());
+        assertEquals(2, projects.size());
     }
 }

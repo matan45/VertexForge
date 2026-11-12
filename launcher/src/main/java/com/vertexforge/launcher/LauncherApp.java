@@ -6,13 +6,13 @@ import com.vertexforge.launcher.ui.MainView;
 import com.vertexforge.launcher.util.GlobalExceptionHandler;
 import com.vertexforge.launcher.util.LauncherLog;
 import javafx.application.Application;
-import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 
 
 public class LauncherApp extends Application {
@@ -21,8 +21,13 @@ public class LauncherApp extends Application {
     private static final int MIN_WIDTH = 800;
     private static final int MIN_HEIGHT = 600;
 
+    /** How long closing the window waits for a create or a save in progress (VK-1678). */
+    private static final Duration SHUTDOWN_WAIT = Duration.ofSeconds(10);
+
     private LauncherEnvironment environment;
     private LauncherLog log;
+    private ProjectHub hub;
+    private MainView.Loaded view;
     /** The main window once it is showing; the owner of every error dialog. */
     private volatile Stage mainStage;
 
@@ -40,9 +45,9 @@ public class LauncherApp extends Application {
     @Override
     public void start(Stage primaryStage) {
         try {
-            ProjectHub hub = ProjectHub.create(environment, log);
-            Parent root = MainView.load(hub);
-            Scene scene = MainView.createScene(root);
+            hub = ProjectHub.create(environment, log);
+            view = MainView.load(hub);
+            Scene scene = MainView.createScene(view.root());
 
             primaryStage.setTitle(APP_TITLE);
             primaryStage.setMinWidth(MIN_WIDTH);
@@ -89,6 +94,20 @@ public class LauncherApp extends Application {
      */
     @Override
     public void stop() {
-        // Cleanup resources if needed
+        // A create or a save may still be running on the store thread: let it finish rather than cut it off. The
+        // store thread is not a daemon, so the process only ends once that work is done.
+        if (view != null) {
+            try {
+                if (!view.shutdown(SHUTDOWN_WAIT)) {
+                    log.warn("A project creation or a recent-projects save was still running after "
+                            + SHUTDOWN_WAIT.toSeconds() + " s; the launcher exits as soon as it finishes");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        if (hub != null) {
+            hub.close();
+        }
     }
 }

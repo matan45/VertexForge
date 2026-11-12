@@ -217,25 +217,53 @@
     -fx-alignment: CENTER-LEFT;
 }
 
-/* Invalid Project Row Styling */
-.projects-table .invalid-project-row {
+/* Project status rows (VK-1678): pseudo-classes set from each row's status */
+.projects-table .table-row-cell:missing {
     -fx-background-color: #3d2626;
 }
 
-.projects-table .invalid-project-row:odd {
+.projects-table .table-row-cell:missing:odd {
     -fx-background-color: #3a2424;
 }
 
-.projects-table .invalid-project-row:selected {
+.projects-table .table-row-cell:missing:selected {
     -fx-background-color: #5c3030;
 }
 
-.projects-table .invalid-project-row .table-cell {
+.projects-table .table-row-cell:missing .table-cell {
     -fx-text-fill: #cc6666;
 }
 
-.projects-table .invalid-project-row:selected .table-cell {
+.projects-table .table-row-cell:missing:selected .table-cell {
     -fx-text-fill: #ffaaaa;
+}
+
+.projects-table .table-row-cell:unreadable {
+    -fx-background-color: #3d3420;
+}
+
+.projects-table .table-row-cell:unreadable:odd {
+    -fx-background-color: #3a3220;
+}
+
+.projects-table .table-row-cell:unreadable:selected {
+    -fx-background-color: #5c4e2a;
+}
+
+.projects-table .table-row-cell:unreadable .table-cell {
+    -fx-text-fill: #d9a54a;
+}
+
+.projects-table .table-row-cell:unreadable:selected .table-cell {
+    -fx-text-fill: #ffd27f;
+}
+
+.projects-table .table-row-cell:checking .table-cell {
+    -fx-text-fill: #888888;
+}
+
+.projects-table .table-row-cell:checking:selected .table-cell {
+    -fx-text-fill: #cccccc;
 }
 
 /* TableView Empty State */
@@ -341,4 +369,46 @@
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #666666;
     -fx-opacity: 0.7;
+}
+
+/* ============================================
+   Banners (VK-1678)
+   ============================================ */
+.banner {
+    -fx-padding: 8 12;
+    -fx-spacing: 10;
+    -fx-alignment: CENTER_LEFT;
+    -fx-border-width: 0 0 1 0;
+}
+
+.banner .banner-text {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 13px;
+}
+
+.banner-info {
+    -fx-background-color: #264f78;
+    -fx-border-color: transparent transparent #3a6ea5 transparent;
+}
+
+.banner-warning {
+    -fx-background-color: #5a4a1e;
+    -fx-border-color: transparent transparent #8a7230 transparent;
+}
+
+.banner-error {
+    -fx-background-color: #5c3030;
+    -fx-border-color: transparent transparent #8a4444 transparent;
+}
+
+.banner-close {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cccccc;
+    -fx-font-size: 14px;
+    -fx-padding: 0 6;
+    -fx-cursor: hand;
+}
+
+.banner-close:hover {
+    -fx-text-fill: #ffffff;
 }

@@ -1,6 +1,7 @@
 package com.vertexforge.launcher.selftest;
 
-import com.vertexforge.launcher.model.ProjectInfo;
+import com.vertexforge.launcher.TestSupport;
+import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.selftest.SelfTest.CheckFailure;
 import com.vertexforge.launcher.selftest.SelfTest.Reporter;
 import com.vertexforge.launcher.service.ProjectHub;
@@ -31,11 +32,29 @@ class SelfTestTest {
     @Test
     void theCoreChecksPassAndStayInsideTheWorkFolder() throws CheckFailure {
         ProjectHub hub = SelfTest.runCoreChecks(tempDir);
+        try {
+            List<RecentEntry> projects = hub.listProjects().entries();
+            assertEquals(1, projects.size());
+            // Created projects are listed by real path; the CI temp folder is an 8.3 short path.
+            assertTrue(projects.getFirst().path().startsWith(TestSupport.real(tempDir)), projects.toString());
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json.lock")));
+            assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream().noneMatch(n -> n.endsWith(".tmp")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("store/recent-projects.json")),
+                    "the store round trip runs inside the work folder too");
+        } finally {
+            hub.close();
+        }
+    }
 
-        List<ProjectInfo> projects = hub.listProjects();
-        assertEquals(1, projects.size());
-        assertTrue(projects.getFirst().path().startsWith(tempDir));
-        assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json")));
+    @Test
+    void theStoreRoundTripPassesOnItsOwn() throws Exception {
+        Path dir = tempDir.resolve("store");
+        TestSupport.CapturedLog log = TestSupport.log(tempDir.resolve("logs"));
+
+        SelfTest.checkStoreRoundTrip(dir, TestSupport.fixedClock(), log.log);
+
+        assertEquals("", log.console(), "a clean round trip logs nothing");
     }
 
     @Test

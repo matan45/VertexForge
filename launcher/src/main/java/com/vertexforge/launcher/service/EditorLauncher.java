@@ -36,17 +36,18 @@ public class EditorLauncher {
         this.crashWindow = Objects.requireNonNull(crashWindow, "crashWindow");
     }
 
+    /**
+     * Starts the editor on a background thread. The file checks run there too: on a network share that has just
+     * gone away they can block for many seconds, which must never happen on the FX thread (VK-1678).
+     */
     public CompletableFuture<LaunchResult> launchAsync(Path editorPath, Path projectPath) {
-        if (!Files.isExecutable(editorPath)) {
-            return CompletableFuture.completedFuture(
-                    LaunchResult.fail("Editor not found: " + editorPath));
-        }
-        if (!Files.exists(projectPath)) {
-            return CompletableFuture.completedFuture(
-                    LaunchResult.fail("Project file not found: " + projectPath));
-        }
-
         return CompletableFuture.supplyAsync(() -> {
+            if (!Files.isExecutable(editorPath)) {
+                return LaunchResult.fail("Editor not found: " + editorPath);
+            }
+            if (!Files.exists(projectPath)) {
+                return LaunchResult.fail("Project file not found: " + projectPath);
+            }
             try {
                 ProcessBuilder pb = new ProcessBuilder(
                         editorPath.toString(),
