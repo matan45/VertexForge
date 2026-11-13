@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,39 @@ class ZipExtractorTest {
                 Files.readAllBytes(target.resolve("core/Collection.mt")));
         assertArrayEquals("class Actor {}\n".getBytes(StandardCharsets.UTF_8),
                 Files.readAllBytes(target.resolve("engine/oop/Actor.mt")));
+    }
+
+    @Test
+    void tellsTheListenerAboutEveryFileButNoFolder() throws IOException {
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("empty/", "");
+        entries.put("core/Collection.mt", "a");
+        entries.put("engine/oop/Actor.mt", "b");
+        Path target = Files.createDirectory(tempDir.resolve("lib"));
+        List<Path> heard = new ArrayList<>();
+
+        ZipExtractor.extract(new ByteArrayInputStream(zip(entries)), target, heard::add);
+
+        assertEquals(List.of(target.resolve("core/Collection.mt"), target.resolve("engine/oop/Actor.mt")), heard);
+        for (Path file : heard) {
+            assertTrue(Files.isRegularFile(file), file + " is written before the listener hears about it");
+        }
+    }
+
+    @Test
+    void aListenerThatThrowsStopsTheExtraction() throws IOException {
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("a.mt", "a");
+        entries.put("b.mt", "b");
+        Path target = Files.createDirectory(tempDir.resolve("lib"));
+
+        IOException error = assertThrows(IOException.class,
+                () -> ZipExtractor.extract(new ByteArrayInputStream(zip(entries)), target, file -> {
+                    throw new IOException("stop at " + file.getFileName());
+                }));
+
+        assertEquals("stop at a.mt", error.getMessage());
+        assertFalse(Files.exists(target.resolve("b.mt")));
     }
 
     @Test

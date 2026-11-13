@@ -11,19 +11,17 @@ import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.vertexforge.launcher.store.StoreWriteException.Reason;
+import com.vertexforge.launcher.util.TransientIo;
 
 import java.io.IOException;
-import java.io.InterruptedIOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -61,9 +59,9 @@ import java.util.function.UnaryOperator;
 public final class AtomicJsonStore {
 
     public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(5);
-    static final Duration DEFAULT_RETRY_DELAY = Duration.ofMillis(200);
+    static final Duration DEFAULT_RETRY_DELAY = TransientIo.STORE_DELAY;
     /** How many times the final move is tried; antivirus scanners briefly hold a just-written file. */
-    static final int MOVE_ATTEMPTS = 5;
+    static final int MOVE_ATTEMPTS = TransientIo.STORE_ATTEMPTS;
     static final String LOCK_SUFFIX = ".lock";
     static final String TEMP_SUFFIX = ".tmp";
     static final String CORRUPT_INFIX = ".corrupt-";
@@ -396,34 +394,14 @@ public final class AtomicJsonStore {
         }
     }
 
+    /** A fixed delay between tries, as before VK-1679 moved the loop into {@link TransientIo}. */
     private void moveWithRetry(Path temp) throws IOException {
-        for (int attempt = 1; ; attempt++) {
-            try {
-                mover.move(temp, file);
-                return;
-            } catch (IOException e) {
-                if (attempt >= MOVE_ATTEMPTS || !isTransient(e)) {
-                    throw e;
-                }
-            }
-            try {
-                Thread.sleep(retryDelay.toMillis());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                InterruptedIOException interrupted = new InterruptedIOException("interrupted while saving " + file);
-                interrupted.initCause(e);
-                throw interrupted;
-            }
-        }
+        TransientIo.retry(() -> mover.move(temp, file), MOVE_ATTEMPTS, retryDelay, retryDelay, "saving " + file);
     }
 
-    /**
-     * A failure that a retry can fix: access denied, or a plain {@link FileSystemException}, which is how a Windows
-     * sharing violation (another program, typically an antivirus scanner, has the file open) arrives. Subclasses such
-     * as {@code AtomicMoveNotSupportedException} are never retried. The reason text is localized, so it is not read.
-     */
+    /** See {@link TransientIo#isTransient}. */
     static boolean isTransient(IOException e) {
-        return e instanceof AccessDeniedException || e.getClass() == FileSystemException.class;
+        return TransientIo.isTransient(e);
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.vertexforge.launcher;
 
+import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.env.ProcessStarter;
 import com.vertexforge.launcher.util.LauncherLog;
@@ -86,10 +87,14 @@ public final class TestSupport {
         }
     }
 
-    /** An environment rooted in temp folders, with the given environment variables and process starter. */
+    /**
+     * An environment rooted in temp folders, with the given environment variables and process starter, a UTF-8 code
+     * page (no code-page warnings) and no drive information (no native calls).
+     */
     public static LauncherEnvironment environment(Path configDir, Path workingDir, Clock clock,
                                                   Map<String, String> variables, ProcessStarter starter) {
-        return new LauncherEnvironment(clock, configDir, workingDir, variables::get, starter);
+        return new LauncherEnvironment(clock, configDir, workingDir, variables::get, starter,
+                StandardCharsets.UTF_8, DriveTypes.unknown());
     }
 
     /** A clock that moves one second forward on every read, so consecutive timestamps never tie. */

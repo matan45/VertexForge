@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.controller.MainController;
+import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
@@ -152,7 +153,10 @@ public final class SelfTest {
         return hub;
     }
 
-    /** No user folder, no environment variables, no processes: everything lives below {@code workDir}. */
+    /**
+     * No user folder, no environment variables, no processes, no native calls: everything lives below
+     * {@code workDir}.
+     */
     static LauncherEnvironment hermeticEnvironment(Path workDir) {
         return new LauncherEnvironment(
                 Clock.systemDefaultZone(),
@@ -161,7 +165,9 @@ public final class SelfTest {
                 name -> null,
                 builder -> {
                     throw new IOException("the self-test never starts processes");
-                });
+                },
+                StandardCharsets.UTF_8,
+                DriveTypes.unknown());
     }
 
     private static void checkResources() throws IOException {
@@ -326,7 +332,7 @@ public final class SelfTest {
                 return null;
             });
         } finally {
-            loaded.background().shutdownNow();
+            loaded.shutdownNow();
         }
     }
 
@@ -386,7 +392,7 @@ public final class SelfTest {
                 requireNoCssErrors(cssErrors);
             });
         } catch (CheckFailure failure) {
-            loaded[0].background().shutdownNow();
+            loaded[0].shutdownNow();
             throw failure;
         }
         return loaded[0];

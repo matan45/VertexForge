@@ -35,17 +35,28 @@ public class ProjectHub implements AutoCloseable {
     private final EditorLocator editorLocator;
     private final EditorLauncher editorLauncher;
     private final ProjectStatusChecker statusChecker;
+    private final LocationChecker locationChecker;
     private final int listLimit;
     private final Clock clock;
 
+    /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                       EditorLocator editorLocator, EditorLauncher editorLauncher,
                       ProjectStatusChecker statusChecker, int listLimit, Clock clock) {
+        this(repository, projectCreator, editorLocator, editorLauncher, statusChecker,
+                new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED), listLimit, clock);
+    }
+
+    public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
+                      EditorLocator editorLocator, EditorLauncher editorLauncher,
+                      ProjectStatusChecker statusChecker, LocationChecker locationChecker, int listLimit,
+                      Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
         this.editorLocator = Objects.requireNonNull(editorLocator, "editorLocator");
         this.editorLauncher = Objects.requireNonNull(editorLauncher, "editorLauncher");
         this.statusChecker = Objects.requireNonNull(statusChecker, "statusChecker");
+        this.locationChecker = Objects.requireNonNull(locationChecker, "locationChecker");
         this.clock = Objects.requireNonNull(clock, "clock");
         // Validates the range.
         this.listLimit = new LauncherSettings(listLimit).recentProjectsLimit();
@@ -69,6 +80,7 @@ public class ProjectHub implements AutoCloseable {
                 new EditorLocator(environment.env(), environment.workingDir()),
                 new EditorLauncher(environment.processStarter()),
                 new ProjectStatusChecker(PathProbe.system(), ProjectStatusChecker.DEFAULT_TIMEOUT),
+                new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
                 settings.recentProjectsLimit(),
                 environment.clock());
     }
@@ -96,9 +108,24 @@ public class ProjectHub implements AutoCloseable {
     /**
      * Creates a project and, when that succeeds, adds it to the recent list under its canonical path. A project that
      * was created but could not be listed is reported through {@link CreateOutcome#listError()}.
+     * <p>
+     * Both steps run on the calling thread. The window runs them on two threads instead ({@link CreationJob}), so that
+     * a slow creation never holds up the list.
      */
     public CreateOutcome createProject(String name, Path location) {
-        ProjectCreationResult result = projectCreator.createProject(name, location);
+        return listCreated(createProjectFiles(new CreateRequest(name, location), CreationMonitor.NONE), name);
+    }
+
+    /** Creates the project's files (VK-1679); never touches the recent list. Never throws. */
+    public ProjectCreationResult createProjectFiles(CreateRequest request, CreationMonitor monitor) {
+        return projectCreator.create(request, monitor);
+    }
+
+    /**
+     * Adds a project {@link #createProjectFiles} just created to the recent list, under its canonical path. A failed or
+     * cancelled creation adds nothing.
+     */
+    public CreateOutcome listCreated(ProjectCreationResult result, String name) {
         if (!result.success()) {
             return CreateOutcome.failed(result);
         }
@@ -109,6 +136,11 @@ public class ProjectHub implements AutoCloseable {
         } catch (StoreWriteException e) {
             return CreateOutcome.notListed(result, projectPath, e);
         }
+    }
+
+    /** Whether a project called {@code name} can be created in {@code location}, checked in the background. */
+    public CompletableFuture<LocationChecker.LocationCheck> checkLocation(Path location, String name) {
+        return locationChecker.check(location, name);
     }
 
     /** The real path of a file that was just created, so it is listed under one spelling; else absolute + normalized. */
@@ -138,9 +170,10 @@ public class ProjectHub implements AutoCloseable {
         return clock.getZone();
     }
 
-    /** Stops the status checks' threads. */
+    /** Stops the status and location checks' threads. */
     @Override
     public void close() {
         statusChecker.close();
+        locationChecker.close();
     }
 }

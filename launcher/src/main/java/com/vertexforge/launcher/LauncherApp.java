@@ -1,6 +1,7 @@
 package com.vertexforge.launcher;
 
 import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.ui.MainView;
 import com.vertexforge.launcher.util.GlobalExceptionHandler;
@@ -21,7 +22,7 @@ public class LauncherApp extends Application {
     private static final int MIN_WIDTH = 800;
     private static final int MIN_HEIGHT = 600;
 
-    /** How long closing the window waits for a create or a save in progress (VK-1678). */
+    /** How long closing the window waits for a cancelled creation's cleanup and a save in progress (VK-1678). */
     private static final Duration SHUTDOWN_WAIT = Duration.ofSeconds(10);
 
     private LauncherEnvironment environment;
@@ -94,13 +95,16 @@ public class LauncherApp extends Application {
      */
     @Override
     public void stop() {
-        // A create or a save may still be running on the store thread: let it finish rather than cut it off. The
-        // store thread is not a daemon, so the process only ends once that work is done.
+        // A creation in progress is cancelled and cleans up after itself; a save on the store thread is let finish
+        // rather than cut off. The store thread is not a daemon, so the process only ends once that work is done.
         if (view != null) {
+            boolean creating = view.controller().creationRunning();
             try {
                 if (!view.shutdown(SHUTDOWN_WAIT)) {
                     log.warn("A project creation or a recent-projects save was still running after "
-                            + SHUTDOWN_WAIT.toSeconds() + " s; the launcher exits as soon as it finishes");
+                            + SHUTDOWN_WAIT.toSeconds() + " s; the launcher exits as soon as the save finishes"
+                            + (creating ? ". The cancelled creation may leave a temporary \"."
+                                    + "<name>" + ProjectCreator.STAGING_INFIX + "<id>\" folder in its location" : ""));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

@@ -3,6 +3,7 @@ package com.vertexforge.launcher.service;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
 import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus.Kind;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.repository.RecentProjectsView;
@@ -113,6 +114,55 @@ class ProjectHubTest {
         assertFalse(outcome.listed());
         assertNull(outcome.listError());
         assertTrue(hub.listProjects().isEmpty());
+    }
+
+    @Test
+    void creatingTheFilesNeverTouchesTheList() {
+        ProjectCreationResult result = hub.createProjectFiles(new CreateRequest("Game", projectsDir),
+                CreationMonitor.NONE);
+
+        assertTrue(result.success(), result::errorMessage);
+        assertTrue(hub.listProjects().isEmpty());
+        assertFalse(Files.exists(configDir), "the store was not written");
+    }
+
+    @Test
+    void listingACreatedProjectUsesItsRealPath() {
+        ProjectCreationResult result = hub.createProjectFiles(new CreateRequest("Game", projectsDir),
+                CreationMonitor.NONE);
+
+        CreateOutcome outcome = hub.listCreated(result, "Game");
+
+        assertTrue(outcome.listed());
+        assertEquals(projectsDir.resolve("Game/Game.vfproj"), outcome.projectPath());
+        assertEquals(List.of("Game"), names(hub.listProjects()));
+    }
+
+    @Test
+    void aFailedOrCancelledCreationIsNeverListed() {
+        CreateOutcome failed = hub.listCreated(ProjectCreationResult.failure("no"), "Game");
+        CreateOutcome cancelled = hub.listCreated(ProjectCreationResult.cancelled(null), "Game");
+
+        assertFalse(failed.created() || failed.listed());
+        assertFalse(cancelled.created() || cancelled.listed());
+        assertTrue(hub.listProjects().isEmpty());
+    }
+
+    @Test
+    void aRelativeLocationCreatesAndListsNothing() {
+        Path relative = Path.of("vk1679-hub-relative-" + UUID.randomUUID());
+
+        CreateOutcome outcome = hub.createProject("Game", relative);
+
+        assertFalse(outcome.created());
+        assertFalse(Files.exists(relative));
+        assertTrue(hub.listProjects().isEmpty());
+    }
+
+    @Test
+    void aLocationCheckAnswersInTheBackground() throws Exception {
+        assertTrue(hub.checkLocation(projectsDir, "Game").get(5, TimeUnit.SECONDS).ok());
+        assertFalse(hub.checkLocation(projectsDir, "CON").get(5, TimeUnit.SECONDS).ok());
     }
 
     @Test

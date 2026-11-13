@@ -1,10 +1,14 @@
 package com.vertexforge.launcher.controller;
 
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
+import com.vertexforge.launcher.dialog.CreateProjectForm;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
+import com.vertexforge.launcher.service.CreateRequest;
+import com.vertexforge.launcher.service.CreationJob;
+import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
@@ -63,7 +67,8 @@ import java.util.function.Consumer;
  * <p>
  * Threading (VK-1678): every list read and change runs on the single {@code background} executor, in order, and its
  * result comes back through {@link Platform#runLater}, so results are applied in the order they were asked for.
- * Status checks run on the hub's own threads. Everything in this class itself runs on the FX thread.
+ * Status and location checks run on the hub's own threads, and project files are written on the single
+ * {@code creation} executor (VK-1679). Everything in this class itself runs on the FX thread.
  */
 public class MainController implements Initializable {
 
@@ -109,12 +114,15 @@ public class MainController implements Initializable {
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
     private final ProjectHub hub;
     private final Executor background;
+    private final Executor creation;
     private final CompletableFuture<Void> firstLoad = new CompletableFuture<>();
 
     /** An editor launch is in progress. */
     private final BooleanProperty launching = new SimpleBooleanProperty(false);
-    /** A project creation is in progress; a second one must wait (see onCreateProject). */
+    /** A project creation is in progress, possibly after its dialog closed; a second one must wait. */
     private final BooleanProperty creating = new SimpleBooleanProperty(false);
+    /** The creation in progress, or {@code null}. */
+    private CreationJob activeJob;
     /** The list's file must not be written (newer, corrupt and unmovable, or unreadable). */
     private final BooleanProperty readOnly = new SimpleBooleanProperty(false);
     /** The selected row can be opened; follows the selected row's status. */
@@ -123,9 +131,10 @@ public class MainController implements Initializable {
 
     private BannerBar banners;
 
-    public MainController(ProjectHub hub, Executor background) {
+    public MainController(ProjectHub hub, Executor background, Executor creation) {
         this.hub = Objects.requireNonNull(hub, "hub");
         this.background = Objects.requireNonNull(background, "background");
+        this.creation = Objects.requireNonNull(creation, "creation");
     }
 
     @Override
@@ -150,6 +159,18 @@ public class MainController implements Initializable {
     /** The projects table, for the self-test's checks of the packaged image. */
     public TableView<ProjectViewModel> projectsTable() {
         return projectsTable;
+    }
+
+    /** Asks a creation in progress to stop (the launcher is closing). FX thread. */
+    public void cancelCreation() {
+        if (activeJob != null) {
+            activeJob.cancel();
+        }
+    }
+
+    /** Whether a creation is in progress. FX thread. */
+    public boolean creationRunning() {
+        return activeJob != null;
     }
 
     private void setupTableColumns() {
@@ -427,6 +448,20 @@ public class MainController implements Initializable {
         if (selected == null || !selected.isOpenable() || launching.get()) {
             return;
         }
+        launchProject(selected.getProjectPath(), selected.getId());
+    }
+
+    /**
+     * Opens {@code projectFile} in the editor, then marks the entry {@code id} as opened (when it is listed and the
+     * list may be written) and minimizes the launcher.
+     *
+     * @param id the project's entry, or {@code null} to leave the list alone (a project created a moment ago, whose
+     *           entry was stamped when it was added)
+     */
+    private void launchProject(Path projectFile, UUID id) {
+        if (launching.get()) {
+            return;
+        }
 
         // Find editor executable
         var editorPathOpt = hub.findEditor();
@@ -440,10 +475,9 @@ public class MainController implements Initializable {
 
         // Disable UI to prevent double-clicks during launch
         launching.set(true);
-        UUID id = selected.getId();
 
         // Launch editor asynchronously on a background thread
-        hub.launchEditor(editorPathOpt.get(), selected.getProjectPath())
+        hub.launchEditor(editorPathOpt.get(), projectFile)
                 .thenAccept(result -> Platform.runLater(() -> {
                     launching.set(false);
                     if (!result.success()) {
@@ -452,7 +486,7 @@ public class MainController implements Initializable {
                     }
 
                     // Update last opened timestamp (a read-only list is never written)
-                    if (!readOnly.get()) {
+                    if (id != null && !readOnly.get()) {
                         runInBackground(() -> hub.markOpened(id), this::applySavedView, this::showSaveError);
                     }
 
@@ -483,36 +517,98 @@ public class MainController implements Initializable {
         }
         Window owner = projectsTable.getScene().getWindow();
 
-        // Show dialog and get user input
-        Optional<CreateProjectDialog.ProjectCreationParams> params =
-                CreateProjectDialog.show(owner);
+        // The dialog checks, creates and shows progress itself (VK-1679); it ends with the creation to follow up on.
+        List<CreationJob> started = new ArrayList<>();
+        Optional<CreateProjectForm.Result> result =
+                CreateProjectDialog.show(owner, createServices(started), hub.findEditor().isPresent());
+        if (result.isPresent()) {
+            followCreation(result.get());
+        } else if (!started.isEmpty()) {
+            // The dialog closed without going through its form: still follow its last creation, never open it.
+            followCreation(new CreateProjectForm.Result(started.getLast(), false));
+        }
+    }
 
-        if (params.isEmpty()) {
-            return; // User cancelled
+    /** @param started collects every creation the dialog starts, in order */
+    private CreateProjectForm.Services createServices(List<CreationJob> started) {
+        return new CreateProjectForm.Services() {
+            @Override
+            public CompletableFuture<LocationCheck> checkLocation(Path location, String name) {
+                return hub.checkLocation(location, name);
+            }
+
+            @Override
+            public CreationJob startCreation(CreateRequest request, CreationJob.ProgressListener listener) {
+                CreationJob job = MainController.this.startCreation(request, listener);
+                started.add(job);
+                return job;
+            }
+        };
+    }
+
+    /**
+     * Starts a creation: its files on the creation thread, then its list add on the store thread. A second creation
+     * must wait until this one has finished, even after its dialog closed (a cancel that is still cleaning up).
+     */
+    private CreationJob startCreation(CreateRequest request, CreationJob.ProgressListener listener) {
+        CreationJob job = CreationJob.start(hub, request, creation, background, listener);
+        activeJob = job;
+        creating.set(true);
+        job.outcome().whenComplete((outcome, error) -> Platform.runLater(() -> {
+            if (activeJob == job) {
+                activeJob = null;
+                creating.set(false);
+            }
+        }));
+        return job;
+    }
+
+    /** Follows up on how the dialog ended, once its creation (if any) has finished. */
+    private void followCreation(CreateProjectForm.Result result) {
+        CreationJob job = result.job();
+        if (job == null) {
+            return;
+        }
+        job.outcome().whenComplete((outcome, error) -> Platform.runLater(() -> {
+            if (error != null || outcome == null) {
+                // The outcome never completes exceptionally; this is only a safety net.
+                banners.show(BANNER_CREATE, BannerBar.Kind.ERROR, "Project creation failed: " + describe(error), true);
+                return;
+            }
+            onCreationFinished(job, outcome, result.openAfterCreate());
+        }));
+    }
+
+    private void onCreationFinished(CreationJob job, CreateOutcome outcome, boolean openAfterCreate) {
+        if (outcome.created()) {
+            onProjectCreated(outcome);
+            if (job.cancelRequested()) {
+                // Cancel came too late: the project was already being moved into place. It is kept and listed (an
+                // unlisted one already has its own banner).
+                if (outcome.listed()) {
+                    banners.show(BANNER_CREATE, BannerBar.Kind.INFO, "\"" + job.name()
+                            + "\" was created before Cancel could stop it.", true);
+                }
+            } else if (openAfterCreate) {
+                launchProject(outcome.projectPath(), null);
+            }
+            return;
         }
 
-        // Blocks a second creation until this one is done: its dialog would validate against a folder the first
-        // one is about to create, and a failed creation deletes that folder again.
-        creating.set(true);
-        String name = params.get().name();
-        Path location = params.get().location();
-        runInBackground(() -> hub.createProject(name, location),
-                outcome -> {
-                    creating.set(false);
-                    onProjectCreated(outcome);
-                },
-                error -> {
-                    creating.set(false);
-                    showErrorDialog("Project Creation Failed", "Failed to create project: " + describe(error));
-                });
+        // Only a creation the dialog stopped waiting for gets here (any other failure is shown in the dialog): report
+        // what it left behind, or why it failed.
+        String message = outcome.result().errorMessage();
+        if (outcome.result().cancelled()) {
+            if (message != null) {
+                banners.show(BANNER_CREATE, BannerBar.Kind.WARNING, "Project creation was cancelled. " + message, true);
+            }
+        } else {
+            banners.show(BANNER_CREATE, BannerBar.Kind.ERROR, "Project creation failed: "
+                    + (message != null ? message : "unknown error"), true);
+        }
     }
 
     private void onProjectCreated(CreateOutcome outcome) {
-        if (!outcome.created()) {
-            showErrorDialog("Project Creation Failed",
-                    "Failed to create project: " + outcome.result().errorMessage());
-            return;
-        }
         if (!outcome.listed()) {
             banners.show(BANNER_CREATE, BannerBar.Kind.ERROR, "Project created at " + outcome.projectPath()
                     + ", but it could not be added to the list: " + outcome.listError().getMessage(), true);

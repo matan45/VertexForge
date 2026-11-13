@@ -2,6 +2,7 @@ package com.vertexforge.launcher.env;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +17,16 @@ class LauncherEnvironmentTest {
         assertEquals(Path.of(System.getProperty("user.home"), ".vertexforge"), environment.configDir());
         assertEquals(Path.of(System.getProperty("user.dir")), environment.workingDir());
         assertEquals(System.getenv("PATH"), environment.env().apply("PATH"));
+    }
+
+    @Test
+    void theNativeCharsetComesFromNativeEncodingWithTheDefaultAsFallback() {
+        assertEquals(Charset.forName("windows-1252"), LauncherEnvironment.nativeCharset("Cp1252"));
+        assertEquals(Charset.defaultCharset(), LauncherEnvironment.nativeCharset(null));
+        assertEquals(Charset.defaultCharset(), LauncherEnvironment.nativeCharset(" "));
+        assertEquals(Charset.defaultCharset(), LauncherEnvironment.nativeCharset("no-such-charset"));
+        assertEquals(LauncherEnvironment.nativeCharset(System.getProperty("native.encoding")),
+                LauncherEnvironment.system().nativeCharset());
     }
 
     @Test

@@ -110,6 +110,8 @@
                 <configuration>
                     <!-- A provider that silently finds no tests must fail the build, not pass it. -->
                     <failIfNoTests>true</failIfNoTests>
+                    <!-- WindowsDriveTypes calls GetDriveTypeW through the FFM API (VK-1679); without this the JVM warns. -->
+                    <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <systemPropertyVariables>
                         <!-- Backstop: a test that reaches LauncherEnvironment.system() never touches the real ~/.vertexforge. -->
                         <user.home>${project.build.directory}/test-home</user.home>
@@ -125,6 +127,9 @@
                 <version>${javafx-maven-plugin.version}</version>
                 <configuration>
                     <mainClass>com.vertexforge.launcher.LauncherApp</mainClass>
+                    <options>
+                        <option>--enable-native-access=ALL-UNNAMED</option>
+                    </options>
                 </configuration>
             </plugin>
 
@@ -145,6 +150,10 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <!-- Use Launcher class (non-Application) for fat JAR compatibility -->
                                     <mainClass>com.vertexforge.launcher.Launcher</mainClass>
+                                    <manifestEntries>
+                                        <!-- java -jar: lets WindowsDriveTypes call GetDriveTypeW without a warning (VK-1679). -->
+                                        <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+                                    </manifestEntries>
                                 </transformer>
                             </transformers>
                             <filters>
@@ -245,6 +254,10 @@
                     <icon>${project.basedir}/src/main/resources/icon.ico</icon>
                     <resourceDir>${project.basedir}/src/main/resources/jpackage</resourceDir>
                     <winConsole>false</winConsole>
+                    <!-- The app image runs the jar from the classpath, so the manifest entry does not apply (VK-1679). -->
+                    <javaOptions>
+                        <option>--enable-native-access=ALL-UNNAMED</option>
+                    </javaOptions>
                 </configuration>
             </plugin>
         </plugins>
