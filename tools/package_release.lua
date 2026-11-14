@@ -21,7 +21,9 @@
 -- Editor/Runtime resolve engine assets via "../../resources/" relative to the exe
 -- (cwd = the x64/ folder), so resources live at bin/<App>/resources/, two levels
 -- up from each exe — NOT at the bundle root. The launcher app-image sits beside
--- bin/ so EditorLauncher's "../bin/Editor/Release/x64/Editor.exe" probe resolves.
+-- bin/: the launcher finds its bundled engine from its own exe (jpackage.app-path)
+-- as ../bin/Editor/Release/x64/Editor.exe (BundledEngine.java, VK-1681), whatever
+-- folder it is started from, and registers it in ~/.vertexforge/engines.json.
 --
 -- engine.json (tools/engine_version.lua) records workingDirectory "." (the exe
 -- folder) and the engine content paths assets/templates and assets/scripts/lib at
