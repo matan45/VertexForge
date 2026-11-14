@@ -16,7 +16,7 @@
     Structure:
     - Top: Banners (damaged or read-only recent-projects list, failed saves - VK-1678)
     - Center: Projects list (TableView - VK-154)
-    - Right: Sidebar with action buttons (Create Project, Refresh)
+    - Right: Sidebar with action buttons (Create Project, Refresh, Engines - VK-1681)
     - Bottom: Open Project button
 -->
 <BorderPane xmlns="http://javafx.com/javafx/25"
@@ -52,6 +52,11 @@
                         onAction="#onRefreshProjects"
                         styleClass="sidebar-button"
                         maxWidth="Infinity"/>
+                <Button fx:id="enginesButton"
+                        text="Engines…"
+                        onAction="#onManageEngines"
+                        styleClass="sidebar-button"
+                        maxWidth="Infinity"/>
             </VBox>
         </VBox>
     </right>
@@ -77,8 +82,10 @@
                                      prefWidth="200" minWidth="100"/>
                         <TableColumn fx:id="statusColumn" text="Status"
                                      prefWidth="110" minWidth="90"/>
+                        <TableColumn fx:id="engineColumn" text="Engine"
+                                     prefWidth="140" minWidth="90"/>
                         <TableColumn fx:id="pathColumn" text="Path"
-                                     prefWidth="350" minWidth="150"/>
+                                     prefWidth="300" minWidth="150"/>
                         <TableColumn fx:id="lastOpenedColumn" text="Last Opened"
                                      prefWidth="150" minWidth="120"/>
                     </columns>

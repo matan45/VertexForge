@@ -2,6 +2,7 @@ package com.vertexforge.launcher.viewmodel;
 
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.TestSupport;
+import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import org.junit.jupiter.api.Test;
@@ -98,5 +99,20 @@ class ProjectViewModelTest {
 
         assertFalse(row.isCurrentProbe(first));
         assertTrue(row.isCurrentProbe(second));
+    }
+
+    @Test
+    void theEngineColumnShowsTheBindingAndIsNeverBlank() {
+        ProjectViewModel unbound = new ProjectViewModel(entry("Game", TestSupport.T0));
+        ProjectViewModel bound = new ProjectViewModel(
+                entry("Bound", TestSupport.T0).withEngineId(UUID.randomUUID().toString()));
+
+        // Before the engines are checked: an unbound project follows the default, a bound one is not known yet.
+        assertEquals(EngineLabels.DEFAULT, unbound.engineTextProperty().get());
+        assertEquals(EngineLabels.CHECKING, bound.getEngineText());
+
+        bound.setEngineText("1.0.0 Development");
+        assertEquals("1.0.0 Development", bound.engineTextProperty().get());
+        assertThrows(NullPointerException.class, () -> bound.setEngineText(null));
     }
 }

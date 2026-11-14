@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -154,5 +155,35 @@ class RecentProjectsTest {
                 .trim(50, null);
 
         assertEquals(2, projects.size());
+    }
+
+    @Test
+    void bindingAnEngineSetsOnlyThatEntrysEngineIdAndKeepsUnknownMembers() {
+        RecentEntry game = RecentEntry.fromJson(UUID.randomUUID(), JsonParser.parseString(
+                "{\"name\": \"Game\", \"path\": \"/x/Game.vfproj\", \"future\": 1}").getAsJsonObject());
+        RecentEntry other = entry("Other", 1);
+        RecentProjects projects = new RecentProjects(List.of(game, other));
+        String engineId = "5b0c9d1e-7f0a-4d3b-9a51-2f6f1c0e8a42";
+
+        RecentProjects bound = projects.bindEngine(game.id(), engineId);
+
+        RecentEntry boundGame = bound.find(game.id()).orElseThrow();
+        assertEquals(engineId, boundGame.engineId());
+        assertEquals(1, boundGame.raw().get("future").getAsInt());
+        assertNull(bound.find(other.id()).orElseThrow().engineId());
+
+        RecentEntry unbound = bound.bindEngine(game.id(), null).find(game.id()).orElseThrow();
+        assertNull(unbound.engineId());
+        assertTrue(unbound.raw().get(RecentEntry.ENGINE_ID).isJsonNull());
+    }
+
+    @Test
+    void bindingAGoneOrAlreadyBoundEntryChangesNothing() {
+        RecentEntry game = entry("Game", 1).withEngineId("e");
+        RecentProjects projects = new RecentProjects(List.of(game));
+
+        assertSame(projects, projects.bindEngine(UUID.randomUUID(), "x"));
+        assertSame(projects, projects.bindEngine(game.id(), "e"));
+        assertSame(game, game.withEngineId("e"));
     }
 }

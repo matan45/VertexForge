@@ -53,7 +53,7 @@ class CreationJobTest {
     void setUp() throws IOException {
         Path root = TestSupport.real(tempDir);
         projectsDir = Files.createDirectories(root.resolve("projects"));
-        hub = ProjectHub.create(TestSupport.environment(root.resolve("config"), root,
+        hub = ProjectHub.create(TestSupport.environment(root.resolve("config"),
                 new TickingClock(TestSupport.T0), Map.of(), new RecordingStarter(FakeProcess.running(), null)),
                 TestSupport.log(root.resolve("logs")).log);
     }

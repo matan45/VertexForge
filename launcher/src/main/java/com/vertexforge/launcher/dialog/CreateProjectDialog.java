@@ -111,7 +111,7 @@ public class CreateProjectDialog {
 
     private DialogPane createDialogPane() {
         DialogPane dialogPane = new DialogPane();
-        dialogPane.getStyleClass().add("create-project-dialog");
+        dialogPane.getStyleClass().addAll(DialogStyle.LAUNCHER_DIALOG, "create-project-dialog");
         // A dialog is a window of its own: it does not get the main window's stylesheet unless it is given it.
         try {
             dialogPane.getStylesheets().add(MainView.stylesheet().toExternalForm());

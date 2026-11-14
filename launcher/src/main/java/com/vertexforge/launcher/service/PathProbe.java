@@ -2,6 +2,7 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.util.ProjectValidator;
+import com.vertexforge.launcher.util.Volumes;
 
 import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
@@ -74,19 +75,9 @@ public interface PathProbe {
         return ProjectStatus.missing("Drive " + file.getRoot() + " is not available");
     }
 
-    /**
-     * Whether {@code file} is on a drive letter that does not exist right now (an unplugged USB drive, a removed
-     * {@code subst}). Only drive-letter roots are checked: looking at a network share's root could block.
-     */
+    /** See {@link Volumes#isAbsentDriveLetter}. */
     private static boolean driveIsAbsent(Path file) {
-        Path root = file.getRoot();
-        if (root == null) {
-            return false;
-        }
-        String text = root.toString();
-        boolean driveLetter = text.length() == 3 && Character.isLetter(text.charAt(0)) && text.charAt(1) == ':'
-                && (text.charAt(2) == '\\' || text.charAt(2) == '/');
-        return driveLetter && !Files.exists(root);
+        return Volumes.isAbsentDriveLetter(file);
     }
 
     private static String reasonOf(IOException e) {

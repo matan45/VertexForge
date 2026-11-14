@@ -101,6 +101,14 @@ public record RecentEntry(
         return with(PINNED, new JsonPrimitive(newPinned));
     }
 
+    /** Binds the project to an engine install (VK-1681); {@code null} unbinds it, so it follows the default again. */
+    public RecentEntry withEngineId(String newEngineId) {
+        if (Objects.equals(newEngineId, engineId) && raw.has(ENGINE_ID)) {
+            return this;
+        }
+        return with(ENGINE_ID, newEngineId == null ? JsonNull.INSTANCE : new JsonPrimitive(newEngineId));
+    }
+
     /** The name to show: the stored name, else the project file's name without {@code .vfproj}, else the raw path. */
     public String displayName() {
         if (name != null && !name.isBlank()) {

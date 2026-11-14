@@ -1,5 +1,14 @@
 package com.vertexforge.launcher.service;
 
+import com.vertexforge.launcher.engine.EngineCatalog;
+import com.vertexforge.launcher.engine.EngineListing;
+import com.vertexforge.launcher.engine.EngineOption;
+import com.vertexforge.launcher.engine.EngineOptions;
+import com.vertexforge.launcher.engine.EngineRegistryRepository;
+import com.vertexforge.launcher.engine.EngineRegistryView;
+import com.vertexforge.launcher.engine.EngineResolver;
+import com.vertexforge.launcher.engine.LaunchPlan;
+import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus;
@@ -32,7 +41,7 @@ public class ProjectHub implements AutoCloseable {
 
     private final RecentProjectsRepository repository;
     private final ProjectCreator projectCreator;
-    private final EditorLocator editorLocator;
+    private final EngineCatalog engines;
     private final EditorLauncher editorLauncher;
     private final ProjectStatusChecker statusChecker;
     private final LocationChecker locationChecker;
@@ -41,19 +50,19 @@ public class ProjectHub implements AutoCloseable {
 
     /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
-                      EditorLocator editorLocator, EditorLauncher editorLauncher,
+                      EngineCatalog engines, EditorLauncher editorLauncher,
                       ProjectStatusChecker statusChecker, int listLimit, Clock clock) {
-        this(repository, projectCreator, editorLocator, editorLauncher, statusChecker,
+        this(repository, projectCreator, engines, editorLauncher, statusChecker,
                 new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED), listLimit, clock);
     }
 
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
-                      EditorLocator editorLocator, EditorLauncher editorLauncher,
+                      EngineCatalog engines, EditorLauncher editorLauncher,
                       ProjectStatusChecker statusChecker, LocationChecker locationChecker, int listLimit,
                       Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
-        this.editorLocator = Objects.requireNonNull(editorLocator, "editorLocator");
+        this.engines = Objects.requireNonNull(engines, "engines");
         this.editorLauncher = Objects.requireNonNull(editorLauncher, "editorLauncher");
         this.statusChecker = Objects.requireNonNull(statusChecker, "statusChecker");
         this.locationChecker = Objects.requireNonNull(locationChecker, "locationChecker");
@@ -63,8 +72,9 @@ public class ProjectHub implements AutoCloseable {
     }
 
     /**
-     * Wires the hub for an environment: the recent list lives in {@code configDir/recent-projects.json} and its cap
-     * comes from {@code configDir/launcher-settings.json}. Reads only the (small, local) settings file.
+     * Wires the hub for an environment: the recent list lives in {@code configDir/recent-projects.json}, its cap
+     * comes from {@code configDir/launcher-settings.json} and the engines from {@code configDir/engines.json}. Reads
+     * only the (small, local) settings file.
      */
     public static ProjectHub create(LauncherEnvironment environment, LauncherLog log) {
         Path configDir = environment.configDir();
@@ -77,7 +87,7 @@ public class ProjectHub implements AutoCloseable {
         return new ProjectHub(
                 repository,
                 new ProjectCreator(environment.clock(), log),
-                new EditorLocator(environment.env(), environment.workingDir()),
+                EngineCatalog.create(environment, log),
                 new EditorLauncher(environment.processStarter()),
                 new ProjectStatusChecker(PathProbe.system(), ProjectStatusChecker.DEFAULT_TIMEOUT),
                 new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
@@ -103,6 +113,19 @@ public class ProjectHub implements AutoCloseable {
     /** Records that a project was just opened, which moves it to the top of the list. */
     public RecentProjectsView markOpened(UUID id) throws StoreWriteException {
         return repository.markOpened(id);
+    }
+
+    /**
+     * Records that a project was just opened and, when {@code bindEngine} is given, binds it to that engine, in one
+     * write (an unbound project's first open, or a choice the user asked to remember; VK-1681).
+     */
+    public RecentProjectsView markOpened(UUID id, Optional<UUID> bindEngine) throws StoreWriteException {
+        return repository.markOpened(id, bindEngine);
+    }
+
+    /** Binds a project to an engine; {@code null} makes it follow the default engine again (VK-1681). */
+    public RecentProjectsView bindEngine(UUID id, UUID engineId) throws StoreWriteException {
+        return repository.bindEngine(id, engineId);
     }
 
     /**
@@ -152,12 +175,53 @@ public class ProjectHub implements AutoCloseable {
         }
     }
 
-    public Optional<Path> findEditor() {
-        return editorLocator.findEditorExecutable();
+    // ---------------------------------------------------------------------------------------------------------------
+    // Engines (VK-1681)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** Reads the engines file, registering the running launcher's bundled engine first if needed. Store thread. */
+    public EngineListing listEngines() {
+        return engines.load();
     }
 
-    public CompletableFuture<LaunchResult> launchEditor(Path editorPath, Path projectPath) {
-        return editorLauncher.launchAsync(editorPath, projectPath);
+    /** Checks every listed engine in the background, each with its own timeout. Never completes exceptionally. */
+    public CompletableFuture<EngineOptions> checkEngines(EngineListing listing) {
+        return engines.check(listing);
+    }
+
+    /** Which engine opens a project bound to {@code engineId} ({@code null}: unbound). Pure; any thread. */
+    public LaunchPlan planLaunch(EngineOptions options, String engineId) {
+        return EngineResolver.resolve(options, engineId);
+    }
+
+    /** Checks a file picked with "Add Engine…" in the background; registers nothing. */
+    public CompletableFuture<PickedEngine> inspectEngine(Path picked) {
+        return engines.inspect(picked);
+    }
+
+    /** Registers an engine {@link #inspectEngine} found usable. Store thread. */
+    public EngineRegistryRepository.Added addEngine(PickedEngine.Usable engine) throws StoreWriteException {
+        return engines.add(engine);
+    }
+
+    /** Unregisters an engine; its files are never touched, and projects bound to it ask on their next open. */
+    public EngineRegistryView removeEngine(UUID id) throws StoreWriteException {
+        return engines.remove(id);
+    }
+
+    /** Makes {@code id} the default engine; {@code null} clears the default. Store thread. */
+    public EngineRegistryView setDefaultEngine(UUID id) throws StoreWriteException {
+        return engines.setDefault(id);
+    }
+
+    /** Starts {@code engine}'s editor on {@code projectPath}, in the engine's working directory. */
+    public CompletableFuture<LaunchResult> launch(EngineOption engine, Path projectPath) {
+        Objects.requireNonNull(engine, "engine");
+        if (!engine.isOk() || engine.executable() == null) {
+            return CompletableFuture.completedFuture(LaunchResult.fail("The engine cannot be used: "
+                    + engine.health().reason()));
+        }
+        return editorLauncher.launchAsync(engine.executable(), engine.health().workingDirectory(), projectPath);
     }
 
     /** How many projects the list keeps. */
@@ -170,10 +234,11 @@ public class ProjectHub implements AutoCloseable {
         return clock.getZone();
     }
 
-    /** Stops the status and location checks' threads. */
+    /** Stops the status, location and engine checks' threads. */
     @Override
     public void close() {
         statusChecker.close();
         locationChecker.close();
+        engines.close();
     }
 }

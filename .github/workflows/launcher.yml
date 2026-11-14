@@ -105,9 +105,11 @@ jobs:
         run: |
           $exe = (Resolve-Path 'target/dist/VertexForge Launcher/VertexForge Launcher.exe').Path
           $report = Join-Path $env:RUNNER_TEMP 'self-test-ok.txt'
+          # Started from an unrelated folder: the launcher must find itself through jpackage.app-path (VK-1681).
           $run = @{
             FilePath               = $exe
-            ArgumentList           = @('--self-test', "--self-test-report=`"$report`"")
+            ArgumentList           = @('--self-test', '--self-test-packaged', "--self-test-report=`"$report`"")
+            WorkingDirectory       = $env:RUNNER_TEMP
             Wait                   = $true
             PassThru               = $true
             RedirectStandardOutput = Join-Path $env:RUNNER_TEMP 'self-test-ok.out'

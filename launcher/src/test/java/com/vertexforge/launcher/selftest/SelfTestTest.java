@@ -39,6 +39,8 @@ class SelfTestTest {
             assertTrue(projects.getFirst().path().startsWith(TestSupport.real(tempDir)), projects.toString());
             assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json")));
             assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json.lock")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/engines.json")),
+                    "the engine registry check writes its file inside the work folder");
             assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream().noneMatch(n -> n.endsWith(".tmp")));
             assertTrue(Files.isRegularFile(tempDir.resolve("store/recent-projects.json")),
                     "the store round trip runs inside the work folder too");
@@ -64,6 +66,29 @@ class SelfTestTest {
         assertEquals(null, environment.env().apply("PATH"));
         assertEquals(tempDir.resolve("config"), environment.configDir());
         assertThrows(IOException.class, () -> environment.processStarter().start(new ProcessBuilder("cmd")));
+    }
+
+    @Test
+    void theHermeticEnvironmentIsNotPackaged() {
+        assertEquals(Optional.empty(), SelfTest.hermeticEnvironment(tempDir).launcherExecutable());
+    }
+
+    @Test
+    void thePackagedCheckIsOptIn() {
+        assertTrue(SelfTest.isPackagedRequested(new String[]{"--self-test", "--self-test-packaged"}));
+        assertFalse(SelfTest.isPackagedRequested(new String[]{"--self-test"}));
+    }
+
+    @Test
+    void theLauncherLocationCheckWantsAnExeAtTheRootOfItsAppImage() throws IOException {
+        Path launcher = TestSupport.packagedLauncher(tempDir.resolve("VertexForge"));
+        SelfTest.checkLauncherLocation(Optional.of(launcher));
+
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkLauncherLocation(Optional.empty()));
+        assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkLauncherLocation(Optional.of(tempDir.resolve("missing.exe"))));
+        Path loose = Files.writeString(tempDir.resolve("Loose.exe"), "fake");
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkLauncherLocation(Optional.of(loose)));
     }
 
     @Test

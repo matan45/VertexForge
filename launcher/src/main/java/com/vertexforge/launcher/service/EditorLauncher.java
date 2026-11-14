@@ -39,11 +39,18 @@ public class EditorLauncher {
     /**
      * Starts the editor on a background thread. The file checks run there too: on a network share that has just
      * gone away they can block for many seconds, which must never happen on the FX thread (VK-1678).
+     *
+     * @param workingDirectory the folder the editor starts in: the one its {@code engine.json} names, or its own
+     *                         folder for an install without one (VK-1681). A dev build loads its shaders relative to
+     *                         it.
      */
-    public CompletableFuture<LaunchResult> launchAsync(Path editorPath, Path projectPath) {
+    public CompletableFuture<LaunchResult> launchAsync(Path editorPath, Path workingDirectory, Path projectPath) {
         return CompletableFuture.supplyAsync(() -> {
-            if (!Files.isExecutable(editorPath)) {
+            if (!Files.isRegularFile(editorPath) || !Files.isExecutable(editorPath)) {
                 return LaunchResult.fail("Editor not found: " + editorPath);
+            }
+            if (!Files.isDirectory(workingDirectory)) {
+                return LaunchResult.fail("Working directory not found: " + workingDirectory);
             }
             if (!Files.exists(projectPath)) {
                 return LaunchResult.fail("Project file not found: " + projectPath);
@@ -53,7 +60,7 @@ public class EditorLauncher {
                         editorPath.toString(),
                         projectPath.toString()
                 );
-                pb.directory(editorPath.getParent().toFile());
+                pb.directory(workingDirectory.toFile());
                 pb.inheritIO();
 
                 Process process = processStarter.start(pb);

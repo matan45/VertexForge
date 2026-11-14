@@ -2,6 +2,7 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.CapturedLog;
+import com.vertexforge.launcher.engine.EngineCatalog;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.ProjectStatus.Kind;
 import com.vertexforge.launcher.model.RecentEntry;
@@ -70,7 +71,8 @@ class ProjectStatusCheckerTest {
             repository.add(root.resolve("share").resolve("P" + i).resolve("P" + i + ".vfproj"), "P" + i, 50);
         }
         ProjectHub hub = new ProjectHub(repository, new ProjectCreator(TestSupport.fixedClock(), log.log),
-                new EditorLocator(Map.<String, String>of()::get, root),
+                EngineCatalog.create(TestSupport.environment(root.resolve("config"), TestSupport.fixedClock(),
+                        Map.of(), new RecordingStarter(FakeProcess.running(), null)), log.log),
                 new EditorLauncher(new RecordingStarter(FakeProcess.running(), null)),
                 checker, 50, TestSupport.fixedClock());
 

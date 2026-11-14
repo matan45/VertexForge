@@ -288,12 +288,12 @@
 }
 
 /* ============================================
-   Create Project Dialog (VK-155, VK-1679)
-   The dialog pane carries both "dialog-pane" and "create-project-dialog", and the stylesheet is added to the pane
+   Launcher dialogs: Create Project (VK-155, VK-1679), Engines and the engine chooser (VK-1681)
+   Each dialog pane carries both "dialog-pane" and "launcher-dialog", and the stylesheet is added to the pane
    itself (a dialog is a window of its own), so every rule starts at the pane. The palette is set on the pane too:
    it is not under .root here.
    ============================================ */
-.dialog-pane.create-project-dialog {
+.dialog-pane.launcher-dialog {
     -fx-base: #2b2b2b;
     -fx-background: #2b2b2b;
     -fx-control-inner-background: #3c3c3c;
@@ -304,21 +304,21 @@
     -fx-min-width: 550px;
 }
 
-.dialog-pane.create-project-dialog .header-panel {
+.dialog-pane.launcher-dialog .header-panel {
     -fx-background-color: #333333;
 }
 
-.dialog-pane.create-project-dialog .header-panel .label {
+.dialog-pane.launcher-dialog .header-panel .label {
     -fx-text-fill: #ffffff;
     -fx-font-size: 16px;
 }
 
-.dialog-pane.create-project-dialog .form-label {
+.dialog-pane.launcher-dialog .form-label {
     -fx-text-fill: #cccccc;
     -fx-font-size: 13px;
 }
 
-.dialog-pane.create-project-dialog .text-field {
+.dialog-pane.launcher-dialog .text-field {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #ffffff;
     -fx-border-color: #555555;
@@ -328,46 +328,46 @@
     -fx-prompt-text-fill: #888888;
 }
 
-.dialog-pane.create-project-dialog .text-field:focused {
+.dialog-pane.launcher-dialog .text-field:focused {
     -fx-border-color: #4a9eff;
 }
 
-.dialog-pane.create-project-dialog .text-field:disabled {
+.dialog-pane.launcher-dialog .text-field:disabled {
     -fx-opacity: 0.6;
 }
 
-.dialog-pane.create-project-dialog .check-box {
+.dialog-pane.launcher-dialog .check-box {
     -fx-text-fill: #cccccc;
 }
 
-.dialog-pane.create-project-dialog .validation-error {
+.dialog-pane.launcher-dialog .validation-error {
     -fx-text-fill: #cc6666;
     -fx-font-size: 12px;
 }
 
-.dialog-pane.create-project-dialog .validation-warning {
+.dialog-pane.launcher-dialog .validation-warning {
     -fx-text-fill: #d7ba7d;
     -fx-font-size: 12px;
 }
 
-.dialog-pane.create-project-dialog .creation-status {
+.dialog-pane.launcher-dialog .creation-status {
     -fx-text-fill: #cccccc;
     -fx-font-size: 12px;
 }
 
-.dialog-pane.create-project-dialog .creation-progress > .bar {
+.dialog-pane.launcher-dialog .creation-progress > .bar {
     -fx-background-color: #4a9eff;
     -fx-background-insets: 0;
     -fx-background-radius: 2;
 }
 
-.dialog-pane.create-project-dialog .creation-progress > .track {
+.dialog-pane.launcher-dialog .creation-progress > .track {
     -fx-background-color: #3c3c3c;
     -fx-background-insets: 0;
     -fx-background-radius: 2;
 }
 
-.dialog-pane.create-project-dialog .browse-button {
+.dialog-pane.launcher-dialog .browse-button {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #cccccc;
     -fx-padding: 8 15;
@@ -375,42 +375,68 @@
     -fx-background-radius: 3;
 }
 
-.dialog-pane.create-project-dialog .browse-button:hover {
+.dialog-pane.launcher-dialog .browse-button:hover {
     -fx-background-color: #4a4a4a;
 }
 
-.dialog-pane.create-project-dialog .browse-button:pressed {
+.dialog-pane.launcher-dialog .browse-button:pressed {
     -fx-background-color: #555555;
 }
 
 /* Dialog buttons */
-.dialog-pane.create-project-dialog .button-bar .button {
+.dialog-pane.launcher-dialog .button-bar .button {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #cccccc;
     -fx-padding: 8 20;
     -fx-background-radius: 3;
 }
 
-.dialog-pane.create-project-dialog .button-bar .button:hover {
+.dialog-pane.launcher-dialog .button-bar .button:hover {
     -fx-background-color: #4a4a4a;
 }
 
-.dialog-pane.create-project-dialog .button-bar .button:default {
+.dialog-pane.launcher-dialog .button-bar .button:default {
     -fx-background-color: #4a9eff;
     -fx-text-fill: #ffffff;
 }
 
-.dialog-pane.create-project-dialog .button-bar .button:default:hover {
+.dialog-pane.launcher-dialog .button-bar .button:default:hover {
     -fx-background-color: #5aafff;
 }
 
-.dialog-pane.create-project-dialog .button-bar .button:default:disabled {
+.dialog-pane.launcher-dialog .button-bar .button:default:disabled {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #666666;
     -fx-opacity: 0.7;
 }
 
-.dialog-pane.create-project-dialog .button-bar .button:disabled {
+.dialog-pane.launcher-dialog .button-bar .button:disabled {
+    -fx-opacity: 0.5;
+}
+
+/* Engines dialog and engine chooser (VK-1681) */
+.dialog-pane.launcher-dialog .engine-problem {
+    -fx-text-fill: #d7ba7d;
+    -fx-font-size: 13px;
+}
+
+.dialog-pane.launcher-dialog .engine-note {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 12px;
+}
+
+.dialog-pane.launcher-dialog .engine-actions .button {
+    -fx-background-color: #3c3c3c;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 6 14;
+    -fx-background-radius: 3;
+}
+
+.dialog-pane.launcher-dialog .engine-actions .button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.dialog-pane.launcher-dialog .engine-actions .button:disabled {
     -fx-opacity: 0.5;
 }
 

@@ -2,6 +2,17 @@ package com.vertexforge.launcher.controller;
 
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
 import com.vertexforge.launcher.dialog.CreateProjectForm;
+import com.vertexforge.launcher.dialog.EngineChooserDialog;
+import com.vertexforge.launcher.dialog.EngineServices;
+import com.vertexforge.launcher.dialog.EnginesDialog;
+import com.vertexforge.launcher.engine.EditorOverride;
+import com.vertexforge.launcher.engine.EngineLabels;
+import com.vertexforge.launcher.engine.EngineOption;
+import com.vertexforge.launcher.engine.EngineOptions;
+import com.vertexforge.launcher.engine.EngineRegistryCodec;
+import com.vertexforge.launcher.engine.EngineRegistryView;
+import com.vertexforge.launcher.engine.LaunchPlan;
+import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.repository.RecentProjectsView;
@@ -76,6 +87,11 @@ public class MainController implements Initializable {
     static final String BANNER_QUARANTINE = "quarantine";
     static final String BANNER_SAVE = "save";
     static final String BANNER_CREATE = "create";
+    static final String BANNER_ENGINES_READ_ONLY = "engines-read-only";
+    static final String BANNER_ENGINES_QUARANTINE = "engines-quarantine";
+    static final String BANNER_ENGINES = "engines";
+    static final String BANNER_ENGINES_CHECK = "engines-check";
+    static final String BANNER_OVERRIDE = "editor-override";
 
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
     private static final PseudoClass UNREADABLE_ROW = PseudoClass.getPseudoClass("unreadable");
@@ -89,6 +105,9 @@ public class MainController implements Initializable {
 
     @FXML
     private TableColumn<ProjectViewModel, ProjectStatus> statusColumn;
+
+    @FXML
+    private TableColumn<ProjectViewModel, String> engineColumn;
 
     @FXML
     private TableColumn<ProjectViewModel, String> pathColumn;
@@ -111,6 +130,9 @@ public class MainController implements Initializable {
     @FXML
     private Button createProjectButton;
 
+    @FXML
+    private Button enginesButton;
+
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
     private final ProjectHub hub;
     private final Executor background;
@@ -125,9 +147,17 @@ public class MainController implements Initializable {
     private CreationJob activeJob;
     /** The list's file must not be written (newer, corrupt and unmovable, or unreadable). */
     private final BooleanProperty readOnly = new SimpleBooleanProperty(false);
+    /** Change Engine… is checking the engines or showing its chooser (VK-1681). */
+    private final BooleanProperty choosingEngine = new SimpleBooleanProperty(false);
     /** The selected row can be opened; follows the selected row's status. */
     private final BooleanProperty selectedOpenable = new SimpleBooleanProperty(false);
     private final ChangeListener<Boolean> openableListener = (observable, was, now) -> selectedOpenable.set(now);
+
+    /** The engines as last checked (VK-1681), or {@code null} before the first check answered. */
+    private EngineOptions engineOptions;
+    /** Only the latest engine check updates the window. */
+    private long engineToken;
+    private final EngineServices engineServices = new ControllerEngineServices();
 
     private BannerBar banners;
 
@@ -175,6 +205,7 @@ public class MainController implements Initializable {
 
     private void setupTableColumns() {
         nameColumn.setCellValueFactory(cell -> cell.getValue().nameProperty());
+        engineColumn.setCellValueFactory(cell -> cell.getValue().engineTextProperty());
         pathColumn.setCellValueFactory(cell -> cell.getValue().pathTextProperty());
 
         statusColumn.setCellValueFactory(cell -> cell.getValue().statusProperty());
@@ -231,11 +262,15 @@ public class MainController implements Initializable {
     private void setupContextMenu() {
         ContextMenu contextMenu = new ContextMenu();
 
+        MenuItem changeEngineItem = new MenuItem("Change Engine…");
+        changeEngineItem.setOnAction(e -> changeEngineOfSelected());
+        changeEngineItem.disableProperty().bind(readOnly.or(launching).or(choosingEngine));
+
         MenuItem removeItem = new MenuItem("Remove from List");
         removeItem.setOnAction(e -> removeSelectedProject());
         removeItem.disableProperty().bind(readOnly);
 
-        contextMenu.getItems().add(removeItem);
+        contextMenu.getItems().addAll(changeEngineItem, removeItem);
 
         projectsTable.setRowFactory(table -> {
             ProjectRow row = new ProjectRow();
@@ -295,7 +330,8 @@ public class MainController implements Initializable {
 
     private void setupButtons() {
         // One binding each: a bound property must never be set directly.
-        openProjectButton.disableProperty().bind(launching.or(selectedOpenable.not()));
+        openProjectButton.disableProperty().bind(launching.or(choosingEngine).or(selectedOpenable.not()));
+        enginesButton.disableProperty().bind(launching.or(choosingEngine));
         createProjectButton.disableProperty().bind(creating.or(readOnly));
     }
 
@@ -303,8 +339,9 @@ public class MainController implements Initializable {
     // Loading and showing the list
     // ---------------------------------------------------------------------------------------------------------------
 
-    /** Reads the list again and re-checks every project (startup and Refresh). Never removes anything. */
+    /** Reads the list again and re-checks every project and engine (startup and Refresh). Never removes anything. */
     private void reload() {
+        reloadEngines();
         runInBackground(hub::listProjects, view -> applyView(view, true), error -> {
             // Nothing is known about the file, so nothing may write it until a Refresh reads it.
             readOnly.set(true);
@@ -348,6 +385,8 @@ public class MainController implements Initializable {
                 row = new ProjectViewModel(entry);
                 toCheck.add(row);
             }
+            // The entry's binding may have changed (a first open binds it).
+            applyEngineLabel(row);
             rows.add(row);
         }
 
@@ -445,39 +484,65 @@ public class MainController implements Initializable {
 
     private void openSelectedProject() {
         ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
-        if (selected == null || !selected.isOpenable() || launching.get()) {
+        if (selected == null || !selected.isOpenable() || launching.get() || choosingEngine.get()) {
             return;
         }
-        launchProject(selected.getProjectPath(), selected.getId());
+        launchProject(selected.getProjectPath(), selected.getId(), selected.getEntry().engineId());
     }
 
     /**
-     * Opens {@code projectFile} in the editor, then marks the entry {@code id} as opened (when it is listed and the
-     * list may be written) and minimizes the launcher.
+     * Opens {@code projectFile} with the engine it is bound to (VK-1681): the engines are checked in the background,
+     * {@link LaunchPlan} decides, and the user is asked when it cannot. Once the editor has started, the entry
+     * {@code id} is marked as opened (and bound to its engine on its first open) when it is listed and the list may
+     * be written, and the launcher minimizes.
      *
-     * @param id the project's entry, or {@code null} to leave the list alone (a project created a moment ago, whose
-     *           entry was stamped when it was added)
+     * @param id       the project's entry, or {@code null} when it is not listed
+     * @param engineId the entry's engine binding, or {@code null} for an unbound project
      */
-    private void launchProject(Path projectFile, UUID id) {
-        if (launching.get()) {
+    private void launchProject(Path projectFile, UUID id, String engineId) {
+        if (launching.get() || choosingEngine.get()) {
             return;
         }
 
-        // Find editor executable
-        var editorPathOpt = hub.findEditor();
-        if (editorPathOpt.isEmpty()) {
-            showErrorDialog("Editor Not Found",
-                    "Could not find the editor executable.\n" +
-                    "Set VERTEXFORGE_EDITOR_PATH environment variable or ensure " +
-                    "the editor is built in the bin/ directory.");
-            return;
-        }
-
-        // Disable UI to prevent double-clicks during launch
+        // Disable UI to prevent double-clicks while the engines are checked and the editor starts
         launching.set(true);
 
+        withEngines(options -> {
+            try {
+                switch (hub.planLaunch(options, engineId)) {
+                    case LaunchPlan.Ready ready -> startEditor(ready.engine(), projectFile, id, ready.bindTo());
+                    case LaunchPlan.Choose choose -> {
+                        boolean canRemember = id != null && !readOnly.get();
+                        Optional<EngineChooserDialog.Choice> choice = EngineChooserDialog.showForOpen(window(),
+                                choose.problem(), choose.candidates(), canRemember, choose.rememberByDefault(),
+                                engineServices);
+                        if (choice.isEmpty() || choice.get().engine().isEmpty()) {
+                            launching.set(false);
+                            return;
+                        }
+                        EngineOption engine = choice.get().engine().get();
+                        startEditor(engine, projectFile, id,
+                                choice.get().remember() ? engine.id() : Optional.empty());
+                    }
+                }
+            } catch (RuntimeException e) {
+                // Never leave the window disabled; the global handler reports the error.
+                launching.set(false);
+                throw e;
+            }
+        }, error -> {
+            launching.set(false);
+            showErrorDialog("Launch Failed", "Could not check the engines: " + describe(error));
+        });
+    }
+
+    /**
+     * Starts the editor of {@code engine}; once it runs, marks the entry as opened, binds it to {@code bindTo} in
+     * the same write, and minimizes the launcher. {@code launching} must already be set.
+     */
+    private void startEditor(EngineOption engine, Path projectFile, UUID id, Optional<UUID> bindTo) {
         // Launch editor asynchronously on a background thread
-        hub.launchEditor(editorPathOpt.get(), projectFile)
+        hub.launch(engine, projectFile)
                 .thenAccept(result -> Platform.runLater(() -> {
                     launching.set(false);
                     if (!result.success()) {
@@ -485,9 +550,9 @@ public class MainController implements Initializable {
                         return;
                     }
 
-                    // Update last opened timestamp (a read-only list is never written)
+                    // Update last opened timestamp and the binding (a read-only list is never written)
                     if (id != null && !readOnly.get()) {
-                        runInBackground(() -> hub.markOpened(id), this::applySavedView, this::showSaveError);
+                        runInBackground(() -> hub.markOpened(id, bindTo), this::applySavedView, this::showSaveError);
                     }
 
                     // Minimize launcher after successful launch
@@ -519,8 +584,10 @@ public class MainController implements Initializable {
 
         // The dialog checks, creates and shows progress itself (VK-1679); it ends with the creation to follow up on.
         List<CreationJob> started = new ArrayList<>();
+        // Until the engines have been checked, offer to open the new project; Open then says what is missing.
+        boolean engineAvailable = engineOptions == null || engineOptions.anyUsable();
         Optional<CreateProjectForm.Result> result =
-                CreateProjectDialog.show(owner, createServices(started), hub.findEditor().isPresent());
+                CreateProjectDialog.show(owner, createServices(started), engineAvailable);
         if (result.isPresent()) {
             followCreation(result.get());
         } else if (!started.isEmpty()) {
@@ -590,7 +657,12 @@ public class MainController implements Initializable {
                             + "\" was created before Cancel could stop it.", true);
                 }
             } else if (openAfterCreate) {
-                launchProject(outcome.projectPath(), null);
+                // Its first open: it is bound to the engine it opens with (VK-1681), like any other project.
+                Optional<RecentEntry> listed = outcome.listed()
+                        ? outcome.view().findByPath(outcome.projectPath())
+                        : Optional.empty();
+                launchProject(outcome.projectPath(), listed.map(RecentEntry::id).orElse(null),
+                        listed.map(RecentEntry::engineId).orElse(null));
             }
             return;
         }
@@ -648,6 +720,231 @@ public class MainController implements Initializable {
     @FXML
     private void onOpenProject() {
         openSelectedProject();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Engines (VK-1681)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    @FXML
+    private void onManageEngines() {
+        // A launch or a Change Engine… may be about to open its own dialog: one modal flow at a time.
+        if (launching.get() || choosingEngine.get()) {
+            return;
+        }
+        EnginesDialog.show(window(), engineOptions, engineServices);
+    }
+
+    /** Binds the selected project to another engine, or back to the default one. */
+    private void changeEngineOfSelected() {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (selected == null || readOnly.get() || launching.get() || choosingEngine.get()) {
+            return;
+        }
+        UUID id = selected.getId();
+        String name = selected.getName();
+        String current = selected.getEntry().engineId();
+        choosingEngine.set(true);
+        withEngines(options -> {
+            try {
+                Optional<EngineChooserDialog.Choice> choice =
+                        EngineChooserDialog.showForChange(window(), name, options, current, engineServices);
+                if (choice.isEmpty()) {
+                    return;
+                }
+                // "Use the default engine" unbinds the project; it is bound again when it next opens.
+                UUID engineId = choice.get().engine().flatMap(EngineOption::id).orElse(null);
+                runInBackground(() -> hub.bindEngine(id, engineId), this::applySavedView, this::showSaveError);
+            } finally {
+                choosingEngine.set(false);
+            }
+        }, error -> {
+            choosingEngine.set(false);
+            showErrorDialog("Change Engine", "Could not check the engines: " + describe(error));
+        });
+    }
+
+    /** Lists and checks the engines again (startup, Refresh); a failure only shows a banner. */
+    private void reloadEngines() {
+        withEngines(options -> {
+            // Shown by withEngines.
+        }, error -> banners.show(BANNER_ENGINES_CHECK, BannerBar.Kind.ERROR,
+                "The engines could not be checked: " + describe(error) + ". Press Refresh to try again.", true));
+    }
+
+    /**
+     * Lists the engines on the store thread and checks them on their own threads (each with a timeout). The result
+     * is shown, unless a later check has started meanwhile, and handed to {@code onReady}, on the FX thread. Exactly
+     * one of {@code onReady} and {@code onFailure} is called, so a caller's in-progress state is always cleared.
+     */
+    private void withEngines(Consumer<EngineOptions> onReady, Consumer<Throwable> onFailure) {
+        long token = ++engineToken;
+        runInBackground(hub::listEngines, listing -> {
+            try {
+                showEngineStoreBanners(listing.registry());
+                hub.checkEngines(listing).whenComplete((options, error) -> Platform.runLater(() -> {
+                    if (error != null || options == null) {
+                        onFailure.accept(error != null ? unwrap(error)
+                                : new IllegalStateException("the engine check gave no answer"));
+                        return;
+                    }
+                    try {
+                        if (token == engineToken) {
+                            applyEngineOptions(options);
+                        }
+                    } catch (RuntimeException e) {
+                        onFailure.accept(e);
+                        return;
+                    }
+                    onReady.accept(options);
+                }));
+            } catch (RuntimeException e) {
+                onFailure.accept(e);
+            }
+        }, onFailure);
+    }
+
+    private void applyEngineOptions(EngineOptions options) {
+        engineOptions = options;
+        banners.hide(BANNER_ENGINES_CHECK);
+        showOverrideBanner(options);
+        for (ProjectViewModel row : projectsList) {
+            applyEngineLabel(row);
+        }
+    }
+
+    private void applyEngineLabel(ProjectViewModel row) {
+        row.setEngineText(EngineLabels.forProject(row.getEntry().engineId(), engineOptions));
+    }
+
+    /** The override decides every launch, so it is always on show while it is set. */
+    private void showOverrideBanner(EngineOptions options) {
+        Optional<EngineOption> override = options.override();
+        if (override.isEmpty()) {
+            banners.hide(BANNER_OVERRIDE);
+            return;
+        }
+        EngineOption value = override.get();
+        if (value.isOk()) {
+            banners.show(BANNER_OVERRIDE, BannerBar.Kind.INFO, EditorOverride.ENV_VAR + " is set: every project"
+                    + " opens with " + value.pathText() + " (" + value.versionText() + "), whatever engine it uses.",
+                    false);
+        } else {
+            banners.show(BANNER_OVERRIDE, BannerBar.Kind.WARNING, EditorOverride.ENV_VAR + " is set to \""
+                    + value.rawPath() + "\", which is ignored: " + value.health().reason() + ".", false);
+        }
+    }
+
+    private void showEngineStoreBanners(EngineRegistryView view) {
+        switch (view.status()) {
+            case NEWER_READ_ONLY -> banners.show(BANNER_ENGINES_READ_ONLY, BannerBar.Kind.INFO,
+                    "The engine list was saved by a newer version of the launcher, so it is read-only here: its"
+                            + " engines can be used, but not added, removed or made the default.", false);
+            case CORRUPT, CORRUPT_UNMOVABLE -> banners.show(BANNER_ENGINES_READ_ONLY, BannerBar.Kind.ERROR,
+                    "The engine list is damaged and could not be set aside (" + view.detail()
+                            + "). It is read-only until the file is fixed or removed. Press Refresh to try again.",
+                    false);
+            case UNREADABLE -> banners.show(BANNER_ENGINES_READ_ONLY, BannerBar.Kind.ERROR,
+                    "The engine list could not be read (" + view.detail()
+                            + "). It is read-only for now. Press Refresh to try again.", false);
+            default -> banners.hide(BANNER_ENGINES_READ_ONLY);
+        }
+        view.quarantinedTo().ifPresent(this::showEngineQuarantineBanner);
+    }
+
+    /** Stays until dismissed, even after later reads find the new list fine. */
+    private void showEngineQuarantineBanner(Path movedTo) {
+        banners.show(BANNER_ENGINES_QUARANTINE, BannerBar.Kind.WARNING,
+                "The engine list was damaged. It was kept as " + movedTo.getFileName() + " and a new list was"
+                        + " started; projects that used its engines will ask which engine to use.", true);
+    }
+
+    private void showEngineSaveError(Throwable error) {
+        banners.show(BANNER_ENGINES, BannerBar.Kind.ERROR,
+                "Could not save the engine list: " + describe(error), true);
+        if (error instanceof StoreWriteException storeError) {
+            storeError.quarantinedTo().ifPresent(this::showEngineQuarantineBanner);
+        }
+    }
+
+    private Window window() {
+        return projectsTable.getScene().getWindow();
+    }
+
+    /**
+     * The engine dialogs' requests. Every one is started on the FX thread, does its work in the background and
+     * completes on the FX thread.
+     */
+    private final class ControllerEngineServices implements EngineServices {
+
+        @Override
+        public CompletableFuture<EngineOptions> refresh() {
+            CompletableFuture<EngineOptions> result = new CompletableFuture<>();
+            withEngines(result::complete, result::completeExceptionally);
+            return result;
+        }
+
+        @Override
+        public CompletableFuture<AddOutcome> add(Path picked) {
+            CompletableFuture<AddOutcome> result = new CompletableFuture<>();
+            hub.inspectEngine(picked).whenComplete((inspected, error) -> Platform.runLater(() -> {
+                if (error != null || inspected == null) {
+                    result.completeExceptionally(error != null ? unwrap(error)
+                            : new IllegalStateException("the engine check gave no answer"));
+                    return;
+                }
+                switch (inspected) {
+                    case PickedEngine.Refused refused -> result.complete(AddOutcome.refused(refused.reason()));
+                    case PickedEngine.Usable usable -> runInBackground(() -> hub.addEngine(usable), added -> {
+                        banners.hide(BANNER_ENGINES);
+                        withEngines(options -> result.complete(
+                                        AddOutcome.added(options, added.engine().id(), added.existed())),
+                                result::completeExceptionally);
+                    }, saveError -> failChange(result, saveError));
+                }
+            }));
+            return result;
+        }
+
+        @Override
+        public CompletableFuture<EngineOptions> remove(UUID id) {
+            return change(() -> hub.removeEngine(id));
+        }
+
+        @Override
+        public CompletableFuture<EngineOptions> setDefault(UUID id) {
+            return change(() -> hub.setDefaultEngine(id));
+        }
+
+        @Override
+        public int projectsUsing(UUID id) {
+            int count = 0;
+            for (ProjectViewModel row : projectsList) {
+                if (EngineRegistryCodec.uuid(row.getEntry().engineId()).equals(Optional.of(id))) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        /** Saves a change on the store thread, then lists and checks the engines again. */
+        private CompletableFuture<EngineOptions> change(Callable<EngineRegistryView> save) {
+            CompletableFuture<EngineOptions> result = new CompletableFuture<>();
+            runInBackground(save, saved -> {
+                banners.hide(BANNER_ENGINES);
+                withEngines(result::complete, result::completeExceptionally);
+            }, error -> failChange(result, error));
+            return result;
+        }
+
+        /** A change that was not saved: say so, and show the list's real state (it may have changed underneath). */
+        private void failChange(CompletableFuture<?> result, Throwable error) {
+            showEngineSaveError(error);
+            result.completeExceptionally(error);
+            if (error instanceof StoreWriteException) {
+                reloadEngines();
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------------------------------------------

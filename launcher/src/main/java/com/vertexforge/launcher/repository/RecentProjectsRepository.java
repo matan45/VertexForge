@@ -10,6 +10,7 @@ import com.vertexforge.launcher.util.LauncherLog;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -79,7 +80,25 @@ public class RecentProjectsRepository {
 
     /** Records that the project was just opened. Does nothing when another launcher removed it meanwhile. */
     public RecentProjectsView markOpened(UUID id) throws StoreWriteException {
-        return change("mark " + id + " as opened", projects -> projects.touch(id, clock.instant()));
+        return markOpened(id, Optional.empty());
+    }
+
+    /**
+     * Records that the project was just opened and, when {@code bindEngine} is given, binds it to that engine
+     * (VK-1681), in one write. Does nothing when another launcher removed it meanwhile.
+     */
+    public RecentProjectsView markOpened(UUID id, Optional<UUID> bindEngine) throws StoreWriteException {
+        Objects.requireNonNull(bindEngine, "bindEngine");
+        return change("mark " + id + " as opened", projects -> {
+            RecentProjects touched = projects.touch(id, clock.instant());
+            return bindEngine.map(engine -> touched.bindEngine(id, engine.toString())).orElse(touched);
+        });
+    }
+
+    /** Binds the project to an engine ({@code null}: it follows the default engine again), VK-1681. */
+    public RecentProjectsView bindEngine(UUID id, UUID engineId) throws StoreWriteException {
+        return change("bind " + id + " to engine " + engineId,
+                projects -> projects.bindEngine(id, engineId == null ? null : engineId.toString()));
     }
 
     /** Removes the entry from the list; the project on disk is never touched. */

@@ -1,5 +1,6 @@
 package com.vertexforge.launcher.viewmodel;
 
+import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import javafx.beans.binding.Bindings;
@@ -38,6 +39,7 @@ public final class ProjectViewModel {
     private final ReadOnlyStringWrapper name;
     private final ReadOnlyStringWrapper pathText;
     private final ReadOnlyObjectWrapper<Instant> lastOpened;
+    private final ReadOnlyStringWrapper engineText;
     private final ObjectProperty<ProjectStatus> status = new SimpleObjectProperty<>(ProjectStatus.CHECKING);
     private final BooleanBinding openable;
     private long probeToken;
@@ -47,6 +49,8 @@ public final class ProjectViewModel {
         this.name = new ReadOnlyStringWrapper(entry.displayName());
         this.pathText = new ReadOnlyStringWrapper(pathTextOf(entry));
         this.lastOpened = new ReadOnlyObjectWrapper<>(entry.lastOpened());
+        // Until the engines have been checked (VK-1681); the window then sets the real text.
+        this.engineText = new ReadOnlyStringWrapper(EngineLabels.forProject(entry.engineId(), null));
         // The path cannot change for this row (see matches), so only the status needs observing.
         this.openable = Bindings.createBooleanBinding(
                 () -> status.get().isOk() && this.entry.path() != null, status);
@@ -111,6 +115,20 @@ public final class ProjectViewModel {
 
     public ReadOnlyObjectProperty<Instant> lastOpenedProperty() {
         return lastOpened.getReadOnlyProperty();
+    }
+
+    /** The Engine column's text (see {@link EngineLabels}); never blank. */
+    public String getEngineText() {
+        return engineText.get();
+    }
+
+    public void setEngineText(String text) {
+        Objects.requireNonNull(text, "text");
+        engineText.set(text);
+    }
+
+    public ReadOnlyStringProperty engineTextProperty() {
+        return engineText.getReadOnlyProperty();
     }
 
     public ProjectStatus getStatus() {

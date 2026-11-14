@@ -95,6 +95,26 @@ public final class RecentProjects {
         return this;
     }
 
+    /**
+     * Binds the entry to an engine install ({@code null} unbinds it, VK-1681); does nothing when the id is gone or
+     * the entry already has this binding.
+     */
+    public RecentProjects bindEngine(UUID id, String engineId) {
+        List<RecentEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            RecentEntry entry = next.get(i);
+            if (entry.id().equals(id)) {
+                RecentEntry bound = entry.withEngineId(engineId);
+                if (bound == entry) {
+                    return this;
+                }
+                next.set(i, bound);
+                return new RecentProjects(next);
+            }
+        }
+        return this;
+    }
+
     /** Removes the entry; does nothing when the id is gone. Never touches the project on disk. */
     public RecentProjects remove(UUID id) {
         List<RecentEntry> next = new ArrayList<>(entries);

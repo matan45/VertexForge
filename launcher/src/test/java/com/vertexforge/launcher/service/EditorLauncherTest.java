@@ -112,8 +112,13 @@ class EditorLauncherTest {
         return Files.writeString(tempDir.resolve("Game.vfproj"), "{}");
     }
 
+    /** Launches in the editor's own folder (an install without engine.json). */
     private static LaunchResult launch(RecordingStarter starter, Path editor, Path project) {
-        return new EditorLauncher(starter, Duration.ZERO).launchAsync(editor, project).join();
+        return launch(starter, editor, editor.getParent(), project);
+    }
+
+    private static LaunchResult launch(RecordingStarter starter, Path editor, Path workingDirectory, Path project) {
+        return new EditorLauncher(starter, Duration.ZERO).launchAsync(editor, workingDirectory, project).join();
     }
 
     @Test
@@ -165,17 +170,39 @@ class EditorLauncherTest {
     }
 
     @Test
-    void startsTheEditorWithTheProjectFromTheEditorFolder() throws IOException {
+    void aFolderNamedLikeTheEditorIsNotAnEditor() throws IOException {
+        RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
+        Path folder = Files.createDirectories(tempDir.resolve("bin/Editor.exe"));
+
+        assertEquals(LaunchResult.fail("Editor not found: " + folder), launch(starter, folder, project()));
+        assertTrue(starter.started.isEmpty());
+    }
+
+    @Test
+    void aMissingWorkingDirectoryFailsWithoutStartingAnything() throws IOException {
+        RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
+        Path missing = tempDir.resolve("VFEngine/editor");
+
+        LaunchResult result = launch(starter, editor(), missing, project());
+
+        assertEquals(LaunchResult.fail("Working directory not found: " + missing), result);
+        assertTrue(starter.started.isEmpty());
+    }
+
+    /** VK-1681: a dev build starts in the folder its engine.json names, not in its own (it loads its shaders there). */
+    @Test
+    void startsTheEditorWithTheProjectInTheGivenWorkingDirectory() throws IOException {
         RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
         Path editor = editor();
+        Path workingDirectory = Files.createDirectories(tempDir.resolve("VFEngine/editor"));
         Path project = project();
 
-        launch(starter, editor, project);
+        launch(starter, editor, workingDirectory, project);
 
         assertEquals(1, starter.started.size());
         ProcessBuilder builder = starter.started.getFirst();
         assertEquals(List.of(editor.toString(), project.toString()), builder.command());
-        assertEquals(editor.getParent().toFile(), builder.directory());
+        assertEquals(workingDirectory.toFile(), builder.directory());
         assertEquals(ProcessBuilder.Redirect.INHERIT, builder.redirectInput());
         assertEquals(ProcessBuilder.Redirect.INHERIT, builder.redirectOutput());
         assertEquals(ProcessBuilder.Redirect.INHERIT, builder.redirectError());

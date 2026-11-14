@@ -143,7 +143,7 @@ class CreateProjectFormTest {
         ProcessStarter noProcesses = builder -> {
             throw new IOException("no processes in this test");
         };
-        hub = ProjectHub.create(TestSupport.environment(root.resolve("config"), root,
+        hub = ProjectHub.create(TestSupport.environment(root.resolve("config"),
                 new TickingClock(TestSupport.T0), Map.of(), noProcesses), TestSupport.log(root.resolve("logs")).log);
     }
 

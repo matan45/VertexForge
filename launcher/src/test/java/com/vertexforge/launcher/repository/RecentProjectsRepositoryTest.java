@@ -382,4 +382,31 @@ class RecentProjectsRepositoryTest {
         assertTrue(Files.isDirectory(storeFile));
         assertTrue(repository.load().readOnly());
     }
+
+    @Test
+    void markOpenedCanBindTheProjectToAnEngine() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        UUID engine = UUID.randomUUID();
+
+        RecentProjectsView view = repository.markOpened(id, Optional.of(engine));
+
+        assertEquals(engine.toString(), view.find(id).orElseThrow().engineId());
+        JsonObject stored = readStore().getAsJsonArray("projects").get(0).getAsJsonObject();
+        assertEquals(engine.toString(), stored.get(RecentEntry.ENGINE_ID).getAsString());
+
+        // A later open without a binding keeps it; binding to null makes the project follow the default again.
+        assertEquals(engine.toString(), repository.markOpened(id).find(id).orElseThrow().engineId());
+        assertNull(repository.bindEngine(id, null).find(id).orElseThrow().engineId());
+        assertTrue(readStore().getAsJsonArray("projects").get(0).getAsJsonObject()
+                .get(RecentEntry.ENGINE_ID).isJsonNull());
+    }
+
+    @Test
+    void bindingAProjectAnotherLauncherRemovedDoesNotBringItBack() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        newRepository().remove(id);
+
+        assertTrue(repository.bindEngine(id, UUID.randomUUID()).isEmpty());
+        assertTrue(repository.markOpened(id, Optional.of(UUID.randomUUID())).isEmpty());
+    }
 }

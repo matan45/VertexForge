@@ -1,9 +1,17 @@
 package com.vertexforge.launcher.selftest;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.controller.MainController;
+import com.vertexforge.launcher.engine.EngineManifest;
+import com.vertexforge.launcher.engine.EngineOption;
+import com.vertexforge.launcher.engine.EngineOptions;
+import com.vertexforge.launcher.engine.EngineRegistryCodec;
+import com.vertexforge.launcher.engine.EngineRegistryRepository;
+import com.vertexforge.launcher.engine.LaunchPlan;
+import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectStatus;
@@ -74,6 +82,11 @@ public final class SelfTest {
 
     public static final String FLAG = "--self-test";
     public static final String REPORT_PREFIX = "--self-test-report=";
+    /**
+     * Also checks that the launcher knows its own exe ({@code jpackage.app-path}), from which it finds its bundled
+     * engine (VK-1681). Only the packaged app image has one, so CI passes this flag only there.
+     */
+    public static final String PACKAGED_FLAG = "--self-test-packaged";
     static final Duration UI_TIMEOUT = Duration.ofSeconds(45);
     static final Duration WATCHDOG_TIMEOUT = Duration.ofSeconds(60);
     static final String PASS = "SELF-TEST PASS";
@@ -92,6 +105,10 @@ public final class SelfTest {
 
     public static boolean isRequested(String[] args) {
         return Arrays.asList(args).contains(FLAG);
+    }
+
+    static boolean isPackagedRequested(String[] args) {
+        return Arrays.asList(args).contains(PACKAGED_FLAG);
     }
 
     /** The {@code --self-test-report=<file>} path, if given. */
@@ -119,6 +136,9 @@ public final class SelfTest {
         boolean toolkitStarted = false;
         try {
             workDir = Files.createTempDirectory("vf-launcher-selftest");
+            if (isPackagedRequested(args)) {
+                check("launcher location", () -> checkLauncherLocation(LauncherEnvironment.systemLauncherExecutable()));
+            }
             ProjectHub hub = runCoreChecks(workDir);
             toolkitStarted = startToolkit();
             runUiChecks(hub);
@@ -150,6 +170,8 @@ public final class SelfTest {
         check("store round trip", () -> checkStoreRoundTrip(workDir.resolve("store"), environment.clock(), log));
         check("zip round trip", () -> checkZipRoundTrip(workDir.resolve("zip")));
         check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects")));
+        check("engine registry", () -> checkEngineRegistry(hub, workDir.resolve("engines"),
+                environment.configDir().resolve(EngineRegistryRepository.FILE_NAME)));
         return hub;
     }
 
@@ -161,7 +183,7 @@ public final class SelfTest {
         return new LauncherEnvironment(
                 Clock.systemDefaultZone(),
                 workDir.resolve("config"),
-                workDir,
+                Optional.empty(),
                 name -> null,
                 builder -> {
                     throw new IOException("the self-test never starts processes");
@@ -304,6 +326,82 @@ public final class SelfTest {
             if (lib.noneMatch(Files::isRegularFile)) {
                 throw new IllegalStateException("the script library was not extracted");
             }
+        }
+    }
+
+    /**
+     * The engine registry end to end (VK-1681): a fake Development build laid out like this repository's
+     * ({@code bin/Editor/Development/x64} with an {@code engine.json} whose working directory is
+     * {@code ../../../../VFEngine/editor}) is added through its manifest, checks OK, starts in that working directory,
+     * opens an unbound project and binds it; {@code engines.json} is version 1 with no temp file left behind.
+     */
+    static void checkEngineRegistry(ProjectHub hub, Path root, Path enginesFile) throws Exception {
+        Path exeDir = Files.createDirectories(root.resolve("bin/Editor/Development/x64"));
+        Path workingDir = Files.createDirectories(root.resolve("VFEngine/editor"));
+        Path editor = Files.writeString(exeDir.resolve("Editor.exe"), "not a real editor");
+        editor.toFile().setExecutable(true);
+        JsonObject manifest = new JsonObject();
+        manifest.addProperty("manifestVersion", 1);
+        manifest.addProperty("engineVersion", "1.0.0");
+        manifest.addProperty("configuration", "Development");
+        manifest.add("gitCommit", JsonNull.INSTANCE);
+        manifest.addProperty("editorExe", "Editor.exe");
+        manifest.addProperty("workingDirectory", "../../../../VFEngine/editor");
+        Files.writeString(exeDir.resolve(EngineManifest.FILE_NAME), manifest.toString(), StandardCharsets.UTF_8);
+
+        PickedEngine picked = hub.inspectEngine(exeDir.resolve(EngineManifest.FILE_NAME))
+                .get(UI_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        if (!(picked instanceof PickedEngine.Usable usable)) {
+            throw new IllegalStateException("the fake Development build was refused: " + picked);
+        }
+        UUID id = hub.addEngine(usable).engine().id();
+
+        EngineOptions options = hub.checkEngines(hub.listEngines()).get(UI_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        EngineOption engine = options.find(id)
+                .orElseThrow(() -> new IllegalStateException("the added engine is not listed: " + options));
+        if (!engine.isOk() || !workingDir.toRealPath().equals(engine.health().workingDirectory())) {
+            throw new IllegalStateException("the engine did not check OK in its manifest's working directory: "
+                    + engine.health());
+        }
+        if (!"1.0.0 Development".equals(engine.versionText())) {
+            throw new IllegalStateException("the engine's version reads as " + engine.versionText());
+        }
+        if (!(hub.planLaunch(options, null) instanceof LaunchPlan.Ready ready)
+                || !ready.engine().equals(engine) || !ready.bindTo().equals(Optional.of(id))) {
+            throw new IllegalStateException("an unbound project would not open with, and bind to, the only engine");
+        }
+
+        JsonObject written = JsonParser.parseString(Files.readString(enginesFile, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        if (written.get("version").getAsInt() != EngineRegistryCodec.CURRENT_VERSION
+                || written.getAsJsonArray(EngineRegistryCodec.ENGINES).size() != 1) {
+            throw new IllegalStateException("engines.json is not what was added: " + written);
+        }
+        try (Stream<Path> files = Files.list(enginesFile.getParent())) {
+            List<String> left = files.map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".tmp"))
+                    .toList();
+            if (!left.isEmpty()) {
+                throw new IllegalStateException("temporary files were left behind: " + left);
+            }
+        }
+    }
+
+    /**
+     * The packaged launcher knows its own exe: {@code jpackage.app-path} names a file whose folder holds the app
+     * image's {@code app} and {@code runtime} folders. The bundled engine is found from there (VK-1681).
+     */
+    static void checkLauncherLocation(Optional<Path> launcherExecutable) {
+        Path exe = launcherExecutable.orElseThrow(() -> new IllegalStateException(
+                LauncherEnvironment.APP_PATH_PROPERTY + " is not set: this is not the packaged launcher"));
+        if (!Files.isRegularFile(exe)) {
+            throw new IllegalStateException(LauncherEnvironment.APP_PATH_PROPERTY + " names " + exe
+                    + ", which is not a file");
+        }
+        Path imageRoot = exe.getParent();
+        if (imageRoot == null || !Files.isDirectory(imageRoot.resolve("app"))
+                || !Files.isDirectory(imageRoot.resolve("runtime"))) {
+            throw new IllegalStateException("the launcher exe " + exe + " is not at the root of its app image");
         }
     }
 
