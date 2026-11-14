@@ -4,15 +4,26 @@
 #include "SerializationFileAccess.hpp"
 #include <fstream>
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <system_error>
 
 namespace serialization
 {
-    std::optional<config::ProjectConfig> ProjectSerialization::loadProject(std::string_view filename)
+    ProjectInspection ProjectSerialization::inspectProject(std::string_view filename)
     {
+        ProjectInspection inspection;
+        auto fail = [&inspection](ProjectInspectionStatus status, std::string message)
+        {
+            inspection.status = status;
+            inspection.message = std::move(message);
+            inspection.config.reset();
+            return inspection;
+        };
+
         try
         {
             std::string filePath{filename};
@@ -23,33 +34,38 @@ namespace serialization
             }
             catch (const json::parse_error& e)
             {
-                vfLogError("JSON parse error in project file {}: {}", filename, e.what());
-                return std::nullopt;
+                return fail(ProjectInspectionStatus::ParseError, std::string("JSON parse error: ") + e.what());
             }
             if (projectJson.is_null())
             {
-                vfLogError("Failed to open project file: {}", filename);
-                return std::nullopt;
+                return fail(ProjectInspectionStatus::FileUnreadable, "the file is missing, empty or unreadable");
             }
 
-            if (!validateStructure(projectJson))
+            if (std::string error = structureError(projectJson); !error.empty())
             {
-                return std::nullopt;
+                return fail(ProjectInspectionStatus::InvalidStructure, std::move(error));
             }
 
             config::ProjectFileVersion fileVersion;
             std::string versionStr = projectJson["schemaVersion"].get<std::string>();
             if (!parseSchemaVersion(versionStr, fileVersion))
             {
-                vfLogError("Invalid schema version format in project file: {}", versionStr);
-                return std::nullopt;
+                return fail(ProjectInspectionStatus::InvalidSchemaVersion,
+                            "Invalid schema version format: '" + versionStr + "' (expected MAJOR.MINOR)");
             }
 
+            if (fileVersion.major > config::ProjectSchemaVersion::major)
+            {
+                return fail(ProjectInspectionStatus::SchemaTooNew,
+                            "Project schema version " + fileVersion.toString() +
+                                " is newer than this engine supports (" + config::ProjectSchemaVersion::toString() +
+                                "); open it with a newer VertexForge");
+            }
             if (!fileVersion.isCompatible())
             {
-                vfLogError("Project schema version {} is not compatible with engine version {}",
-                           fileVersion.toString(), config::ProjectSchemaVersion::toString());
-                return std::nullopt;
+                return fail(ProjectInspectionStatus::SchemaTooOld,
+                            "Project schema version " + fileVersion.toString() +
+                                " is older than this engine supports (" + config::ProjectSchemaVersion::toString() + ")");
             }
 
             config::ProjectConfig project;
@@ -89,7 +105,8 @@ namespace serialization
                 const auto& fallbackJson = projectJson["fontFallbackChain"];
                 if (!fallbackJson.is_array())
                 {
-                    vfLogWarning("Ignoring invalid 'fontFallbackChain' in project file: expected an array");
+                    inspection.warnings.push_back(
+                        "Ignoring invalid 'fontFallbackChain' in project file: expected an array");
                 }
                 else
                 {
@@ -97,13 +114,13 @@ namespace serialization
                     {
                         if (!entry.is_string())
                         {
-                            vfLogWarning("Ignoring non-string entry in project 'fontFallbackChain'");
+                            inspection.warnings.push_back("Ignoring non-string entry in project 'fontFallbackChain'");
                             continue;
                         }
                         if (project.fontFallbackChain.size() >= config::ProjectConfig::maxFontFallbacks)
                         {
-                            vfLogWarning("Ignoring project font fallback beyond the maximum of {}",
-                                         config::ProjectConfig::maxFontFallbacks);
+                            inspection.warnings.push_back("Ignoring project font fallback beyond the maximum of " +
+                                                          std::to_string(config::ProjectConfig::maxFontFallbacks));
                             break;
                         }
                         project.fontFallbackChain.push_back(entry.get<std::string>());
@@ -111,14 +128,33 @@ namespace serialization
                 }
             }
 
-            vfLogInfo("Project loaded successfully: {}", project.projectName);
-            return project;
+            inspection.status = ProjectInspectionStatus::Ok;
+            inspection.message.clear();
+            inspection.config = std::move(project);
+            return inspection;
         }
         catch (const std::exception& e)
         {
-            vfLogError("Failed to load project file '{}': {}", filename, e.what());
+            return fail(ProjectInspectionStatus::FileUnreadable, std::string("the file could not be read: ") + e.what());
+        }
+    }
+
+    std::optional<config::ProjectConfig> ProjectSerialization::loadProject(std::string_view filename)
+    {
+        ProjectInspection inspection = inspectProject(filename);
+        for (const std::string& warning : inspection.warnings)
+        {
+            vfLogWarning("{}", warning);
+        }
+
+        if (!inspection.ok())
+        {
+            vfLogError("Failed to load project file '{}': {}", filename, inspection.message);
             return std::nullopt;
         }
+
+        vfLogInfo("Project loaded successfully: {}", inspection.config->projectName);
+        return std::move(inspection.config);
     }
 
     bool ProjectSerialization::saveProject(const config::ProjectConfig& project, std::string_view filename)
@@ -204,7 +240,7 @@ namespace serialization
                 return false;
             }
 
-            return validateStructure(projectJson);
+            return structureError(projectJson).empty();
         }
         catch (...)
         {
@@ -212,89 +248,74 @@ namespace serialization
         }
     }
 
-    bool ProjectSerialization::validateStructure(const json& projectJson)
+    std::string ProjectSerialization::structureError(const json& projectJson)
     {
         if (!projectJson.is_object())
         {
-            vfLogError("Invalid project file: root is not a JSON object");
-            return false;
+            return "Invalid project file: root is not a JSON object";
         }
 
-        if (!projectJson.contains("schemaVersion") || !projectJson["schemaVersion"].is_string())
+        for (const char* field : {"schemaVersion", "projectName", "version", "workingDirectory", "startupScene"})
         {
-            vfLogError("Invalid project file: missing or invalid 'schemaVersion' field");
-            return false;
+            if (!projectJson.contains(field) || !projectJson[field].is_string())
+            {
+                return std::string("Invalid project file: missing or invalid '") + field + "' field";
+            }
         }
 
-        if (!projectJson.contains("projectName") || !projectJson["projectName"].is_string())
+        for (const char* field : {"projectName", "version", "workingDirectory", "startupScene"})
         {
-            vfLogError("Invalid project file: missing or invalid 'projectName' field");
-            return false;
+            if (projectJson[field].get<std::string>().empty())
+            {
+                return std::string("Invalid project file: '") + field + "' cannot be empty";
+            }
         }
 
-        if (!projectJson.contains("version") || !projectJson["version"].is_string())
-        {
-            vfLogError("Invalid project file: missing or invalid 'version' field");
-            return false;
-        }
-
-        if (!projectJson.contains("workingDirectory") || !projectJson["workingDirectory"].is_string())
-        {
-            vfLogError("Invalid project file: missing or invalid 'workingDirectory' field");
-            return false;
-        }
-
-        if (!projectJson.contains("startupScene") || !projectJson["startupScene"].is_string())
-        {
-            vfLogError("Invalid project file: missing or invalid 'startupScene' field");
-            return false;
-        }
-
-        if (projectJson["projectName"].get<std::string>().empty())
-        {
-            vfLogError("Invalid project file: 'projectName' cannot be empty");
-            return false;
-        }
-
-        if (projectJson["version"].get<std::string>().empty())
-        {
-            vfLogError("Invalid project file: 'version' cannot be empty");
-            return false;
-        }
-
-        if (projectJson["workingDirectory"].get<std::string>().empty())
-        {
-            vfLogError("Invalid project file: 'workingDirectory' cannot be empty");
-            return false;
-        }
-
-        if (projectJson["startupScene"].get<std::string>().empty())
-        {
-            vfLogError("Invalid project file: 'startupScene' cannot be empty");
-            return false;
-        }
-
-        return true;
+        return {};
     }
 
     bool ProjectSerialization::parseSchemaVersion(const std::string& versionStr, config::ProjectFileVersion& outVersion)
     {
-        size_t dotPos = versionStr.find('.');
+        // Decimal digits on both sides of exactly one dot. std::stoul used to accept "-1" (wrapping
+        // to 0xFFFFFFFF, i.e. "newer than any engine"), leading blanks and trailing junk. A number
+        // too large for 32 bits is still a (very) new version, so it saturates.
+        const auto parsePart = [](std::string_view part, uint32_t& out)
+        {
+            if (part.empty())
+            {
+                return false;
+            }
+            for (char c : part)
+            {
+                if (c < '0' || c > '9')
+                {
+                    return false;
+                }
+            }
+            const char* last = part.data() + part.size();
+            auto [ptr, ec] = std::from_chars(part.data(), last, out);
+            if (ec == std::errc::result_out_of_range)
+            {
+                out = UINT32_MAX;
+                return true;
+            }
+            return ec == std::errc{} && ptr == last;
+        };
+
+        const size_t dotPos = versionStr.find('.');
         if (dotPos == std::string::npos)
         {
             return false;
         }
 
-        try
-        {
-            outVersion.major = static_cast<uint32_t>(std::stoul(versionStr.substr(0, dotPos)));
-            outVersion.minor = static_cast<uint32_t>(std::stoul(versionStr.substr(dotPos + 1)));
-            return true;
-        }
-        catch (...)
+        const std::string_view text(versionStr);
+        config::ProjectFileVersion parsed;
+        if (!parsePart(text.substr(0, dotPos), parsed.major) || !parsePart(text.substr(dotPos + 1), parsed.minor))
         {
             return false;
         }
+        outVersion = parsed;
+        return true;
     }
 
     std::string ProjectSerialization::getCurrentTimestamp()

@@ -2,6 +2,7 @@
 #include "McpService.hpp"
 #include "config/EditorPreferences.hpp"
 #include "events/EventDispatcher.hpp"
+#include "launch/EditorArguments.hpp"
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -30,8 +31,9 @@ namespace editor
     class EditorMcpHost
     {
     public:
-        static constexpr uint16_t minPort = 1024;
-        static constexpr uint16_t maxPort = 65535;
+        // VK-1682: one rule for the command line (launch::parseEditorArguments) and the preferences.
+        static constexpr uint16_t minPort = launch::minMcpPort;
+        static constexpr uint16_t maxPort = launch::maxMcpPort;
 
         EditorMcpHost();
         ~EditorMcpHost();

@@ -4,6 +4,7 @@
 #include "events/project/FileOperationsEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
+#include "launch/EditorStateDirectory.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
 
@@ -80,7 +81,8 @@ namespace windows
 
         for (auto& entry : fs::directory_iterator(path, fs::directory_options::skip_permission_denied, ec))
         {
-            if (!entry.is_directory())
+            // VK-1682: the editor's own state folder (the project lock) is not project content.
+            if (!entry.is_directory() || launch::isEditorStateDirectory(entry.path()))
             {
                 continue;
             }
@@ -94,7 +96,7 @@ namespace windows
             for (auto& child : fs::directory_iterator(entry.path(), fs::directory_options::skip_permission_denied,
                                                       childEc))
             {
-                if (child.is_directory())
+                if (child.is_directory() && !launch::isEditorStateDirectory(child.path()))
                 {
                     hasChildren = true;
                     break;

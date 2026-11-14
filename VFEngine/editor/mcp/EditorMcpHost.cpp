@@ -20,17 +20,7 @@ namespace editor
 
     std::optional<uint16_t> EditorMcpHost::parsePort(std::string_view text)
     {
-        if (text.empty())
-            return std::nullopt;
-
-        int value = 0;
-        const char* last = text.data() + text.size();
-        auto [ptr, ec] = std::from_chars(text.data(), last, value);
-        if (ec != std::errc{} || ptr != last)
-            return std::nullopt;
-        if (value < minPort || value > maxPort)
-            return std::nullopt;
-        return static_cast<uint16_t>(value);
+        return launch::parseMcpPort(text);
     }
 
     EditorMcpHost::Endpoint EditorMcpHost::fromSettings(const config::McpSettings& settings)

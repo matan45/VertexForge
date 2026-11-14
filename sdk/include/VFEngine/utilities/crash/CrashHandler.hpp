@@ -25,4 +25,14 @@ namespace util
     // access violation) to the script that was running. Cheap and allocation-free
     // internally; safe to call on a hot per-frame path.
     void setCrashLogContext(const std::string& context);
+
+    // Called first when the crash filter runs, before the minidump, the report and the message box
+    // (which keeps the process alive until someone closes it). VK-1682: the editor writes "failed"
+    // into its --launch-status file from here, so a launcher learns of the crash at once.
+    // `exceptionCode` is also the process exit code; `dumpPath` is the dump about to be written
+    // (relative to the working directory). Runs on the faulting thread, possibly with the heap
+    // corrupt: it must not allocate, lock or throw. nullptr (the default) disables it.
+    using CrashNotifier = void (*)(unsigned long exceptionCode, const char* exceptionLabel,
+                                   const char* dumpPath) noexcept;
+    void setCrashNotifier(CrashNotifier notifier) noexcept;
 }

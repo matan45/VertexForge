@@ -142,7 +142,12 @@ namespace handlers
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
-        projectService = std::make_shared<services::ProjectServiceImpl>();
+        {
+            auto projectServiceImpl = std::make_shared<services::ProjectServiceImpl>();
+            // VK-1682: the editor lock follows every project switch (startup, MCP project_open).
+            projectServiceImpl->setOpenGuard(projectOpenGuard);
+            projectService = std::move(projectServiceImpl);
+        }
         assetDatabaseService = std::make_shared<services::AssetDatabaseServiceImpl>();
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()

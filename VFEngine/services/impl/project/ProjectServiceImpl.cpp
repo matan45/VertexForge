@@ -3,6 +3,7 @@
 #include "../../events/project/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"
 #include <filesystem>
+#include <system_error>
 
 namespace services
 {
@@ -58,6 +59,11 @@ namespace services
             });
     }
 
+    void ProjectServiceImpl::setOpenGuard(OpenGuard guard)
+    {
+        openGuard = std::move(guard);
+    }
+
     bool ProjectServiceImpl::loadProject(const std::string& filePath)
     {
         auto project = serialization::ProjectSerialization::loadProject(filePath);
@@ -66,26 +72,49 @@ namespace services
             return false;
         }
 
-        // Resolve workingDirectory relative to the project file's directory
-        std::filesystem::path projectFilePath(filePath);
-        std::filesystem::path projectDir = projectFilePath.parent_path();
-        std::filesystem::path workingDir(project->workingDirectory);
-
-        if (workingDir.is_relative())
+        // Path work can throw (a path the ANSI code page cannot represent, a failing file
+        // system); a failure here must leave the current project as it was.
+        try
         {
-            project->workingDirectory = (projectDir / workingDir).lexically_normal().string();
+            // Resolve workingDirectory relative to the project file's directory
+            std::filesystem::path projectFilePath(filePath);
+            std::filesystem::path projectDir = projectFilePath.parent_path();
+            std::filesystem::path workingDir(project->workingDirectory);
+
+            if (workingDir.is_relative())
+            {
+                project->workingDirectory = (projectDir / workingDir).lexically_normal().string();
+            }
+
+            // Validate paths after resolution
+            std::error_code ec;
+            if (!std::filesystem::exists(project->workingDirectory, ec))
+            {
+                vfLogWarning("Project working directory does not exist: {}", project->workingDirectory);
+            }
+
+            std::filesystem::path scenePath = std::filesystem::path(project->workingDirectory) / project->startupScene;
+            if (!std::filesystem::exists(scenePath, ec))
+            {
+                vfLogWarning("Project startup scene not found: {}", scenePath.string());
+            }
+
+            // VK-1682: last, so an accepted switch (the editor lock already moved) is always
+            // followed by the commit below: only assignments and publish (which catches every
+            // subscriber's exception) remain.
+            if (openGuard)
+            {
+                if (std::optional<std::string> refusal = openGuard(projectFilePath))
+                {
+                    vfLogError("Cannot open project {}: {}", filePath, *refusal);
+                    return false;
+                }
+            }
         }
-
-        // Validate paths after resolution
-        if (!std::filesystem::exists(project->workingDirectory))
+        catch (const std::exception& e)
         {
-            vfLogWarning("Project working directory does not exist: {}", project->workingDirectory);
-        }
-
-        std::filesystem::path scenePath = std::filesystem::path(project->workingDirectory) / project->startupScene;
-        if (!std::filesystem::exists(scenePath))
-        {
-            vfLogWarning("Project startup scene not found: {}", scenePath.string());
+            vfLogError("Failed to open project {}: {}", filePath, e.what());
+            return false;
         }
 
         currentProject = *project;

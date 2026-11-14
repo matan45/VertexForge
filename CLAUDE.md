@@ -138,6 +138,12 @@ Large modules are split into separately compiled subsystem projects using `remov
 | Editor | `VFEngine/editor/run/Main.cpp` | ImGui-based editor |
 | Runtime | `VFEngine/runtime/run/Main.cpp` | Standalone game runtime |
 
+**Editor launch contract** (VK-1682; `Main.cpp` header, helpers in `utilities/launch/`, launcher twin `launcher/.../service/EditorExitCode.java`, pinned by `test_editor_launch`):
+- **Command line:** `Editor.exe [project.vfproj] [--launch-status <file>] [--mcp] [--mcp-port <n>] [--mcp-token <t>]`. Parsing is strict.
+- **Exit codes:** 0 normal, 2 bad arguments, 3 the `.vfproj` failed to load, 4 its schema MAJOR is newer than this editor, 5 another editor holds the project. The argument, `.vfproj` and lock checks run before the main window opens (the `EditorHandler` constructor creates it); a load that still fails after `init()` also exits 3. A crash exits with its exception code.
+- **`--launch-status`:** one atomic JSON line `{state: loading|ready|failed, code, message, pid}`. It says `ready` only after the startup scene loaded (a broken scene still gives `ready`, with a warning). The crash filter's `setCrashNotifier` hook and a SIGABRT handler write `failed`. Exit 0 is a normal exit whatever the last state.
+- **Lock:** `<.vfproj folder>/.vertexforge/editor.lock` is an exclusive `LockFileEx` on 1 byte at offset 2^32; the content `{"pid":N}` stays readable. `ProjectServiceImpl::setOpenGuard` moves it on every project switch (MCP `project_open`). On read-only media the project opens without it, with a warning. The content browser, the folder tree and the game exporter skip `.vertexforge`.
+
 ## Project Structure
 
 ```
@@ -194,7 +200,7 @@ External plugins live outside `VFEngine/` under `plugins/<PluginName>/` (e.g. `p
 
 The Editor embeds a Model Context Protocol server (`VFEngine/mcp/`, owned by `editor/mcp/EditorMcpHost`) so an AI agent such as Claude Code can build scenes, write and build mType scripts, run Play mode and read logs. It lives in Editor.exe because `EventDispatcher` is per-binary. Transport is Streamable HTTP on **127.0.0.1 only** (`POST /mcp`, one JSON response per request) — stdio is impossible because every `vfLog*` writes to stdout. `GET /mcp` with `Accept: text/event-stream` opens the standalone SSE stream (`transport/EventStreamHub`: at most 2 streams, a 3rd evicts the oldest, 15 s `: keepalive`, chunked) used only for server→client notifications (`notifications/tools/list_changed`); `McpService::stop()` order is `queue.shutdown → hub.close → http.stop`, and the hub mutex is never held during a socket send.
 
-- **Enable**: Preferences > AI / MCP (enable, port, optional bearer token, "Copy Claude Code command"), or per session with `Editor.exe <project> --mcp` / `--mcp-port <n>` / `--mcp-token <t>` (command-line flags are never saved; applying an MCP preference change takes over). The status bar shows `MCP off` / `MCP :<port>` / `MCP error`.
+- **Enable**: Preferences > AI / MCP (enable, port, optional bearer token, "Copy Claude Code command"), or per session with `Editor.exe <project> --mcp` / `--mcp-port <n>` / `--mcp-token <t>` (command-line flags are never saved; applying an MCP preference change takes over; a malformed flag exits 2, see "Editor launch contract"). The status bar shows `MCP off` / `MCP :<port>` / `MCP error`.
 - **Connect**: `claude mcp add --transport http vertexforge http://127.0.0.1:7878/mcp` (add `--header "Authorization: Bearer <token>"` when a token is set).
 - **Adding a tool**: add a `mcp::ToolDef` (name, description, JSON `inputSchema`, handler returning `ToolResult::ok/error`) to the matching `register*Tools` group in `mcp/tools/*.cpp`; new groups are declared in `CoreTools.hpp` and called from `registerCoreTools`. Tools use only Services/Import/Utilities headers and reach the engine through `EventDispatcher`.
   - **Affinity**: `ThreadAffinity::Main` (default) runs the handler on the editor main thread inside `EditorMcpHost::drain()` — required for anything touching EventDispatcher handlers, EnTT or ImGui. `ThreadAffinity::Worker` runs on the HTTP connection thread and is only for filesystem/long work (script writes, imports); such a handler must wrap every dispatcher call in `context.runOnMain(...)`. Raise `timeout` for long tools (build/import).

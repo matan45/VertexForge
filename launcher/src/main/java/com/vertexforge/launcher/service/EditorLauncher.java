@@ -70,7 +70,7 @@ public class EditorLauncher {
                 if (!process.isAlive()) {
                     int exitCode = process.exitValue();
                     if (exitCode != 0) {
-                        return LaunchResult.fail("Editor exited with code: " + exitCode);
+                        return LaunchResult.fail("Editor exited with " + EditorExitCode.describe(exitCode));
                     }
                 }
 

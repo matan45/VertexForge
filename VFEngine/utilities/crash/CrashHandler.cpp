@@ -24,6 +24,7 @@ namespace util
     {
         std::atomic<bool> installed{false};
         LPTOP_LEVEL_EXCEPTION_FILTER previousFilter = nullptr;
+        std::atomic<CrashNotifier> crashNotifier{nullptr};
 
         // Fixed buffer (no heap interaction at crash time, when the heap may be
         // corrupt). A benign race on concurrent writers only ever yields a
@@ -127,13 +128,21 @@ namespace util
             std::snprintf(stamp, sizeof(stamp), "%04d%02d%02d_%02d%02d%02d", st.wYear, st.wMonth,
                           st.wDay, st.wHour, st.wMinute, st.wSecond);
 
-            std::error_code ec;
-            std::filesystem::create_directories("crashes", ec);
-
             char dmpPath[MAX_PATH];
             char txtPath[MAX_PATH];
             std::snprintf(dmpPath, sizeof(dmpPath), "crashes/crash_%s.dmp", stamp);
             std::snprintf(txtPath, sizeof(txtPath), "crashes/crash_%s.txt", stamp);
+
+            // VK-1682: before anything that can be slow or fault again (directory creation, the
+            // minidump, symbolization) and before the message box.
+            if (CrashNotifier notifier = crashNotifier.load())
+            {
+                const DWORD notifyCode = (ep && ep->ExceptionRecord) ? ep->ExceptionRecord->ExceptionCode : 0;
+                notifier(notifyCode, exceptionLabel(notifyCode), dmpPath);
+            }
+
+            std::error_code ec;
+            std::filesystem::create_directories("crashes", ec);
 
             // --- minidump ---
             HANDLE hFile = CreateFileA(dmpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
@@ -224,6 +233,11 @@ namespace util
         SetThreadStackGuarantee(&stackGuaranteeBytes);
 
         previousFilter = SetUnhandledExceptionFilter(&vfCrashFilter);
+    }
+
+    void setCrashNotifier(CrashNotifier notifier) noexcept
+    {
+        crashNotifier.store(notifier);
     }
 
     void setCrashLogContext(const std::string& context)

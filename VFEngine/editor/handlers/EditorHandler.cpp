@@ -31,14 +31,46 @@
 #include "events/project/ApplicationEvents.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/scene/ScenePersistenceEvents.hpp"
+#include "events/scene/SceneSettingsEvents.hpp"
 #include "Import.hpp"
 #include "core/PluginManager.hpp"
+#include "launch/Utf8Path.hpp"
 #include "resource/PathResolver.hpp"
 #include "time/Timer.hpp"
+#include <algorithm>
+#include <exception>
 #include <filesystem>
+#include <mutex>
+#include <system_error>
 
 namespace handlers
 {
+    namespace
+    {
+        // VK-1682: what the scene notifications report while the startup watch is armed. They can
+        // be published from the Scene task on a worker thread. Subscribers hold this by shared_ptr,
+        // never `this`: publish() calls a copy of the subscriber list outside its lock, so a handler
+        // can still run after unsubscribe() returned.
+        struct StartupSignals
+        {
+            std::atomic<bool> sceneLoaded{false};
+            std::atomic<int> lastPercent{-1};
+            std::mutex failureMutex;
+            std::string failure;
+        };
+    }
+
+    struct EditorHandler::StartupWatch
+    {
+        std::shared_ptr<StartupSignals> signals = std::make_shared<StartupSignals>();
+        std::string warning;
+        StartupCallback onDone;
+        // Declared last: destroyed (unsubscribed) first.
+        events::ScopedSubscription loadedSubscription;
+        events::ScopedSubscription completedSubscription;
+        events::ScopedSubscription progressSubscription;
+    };
+
     EditorHandler::EditorHandler()
         : bootstrap{std::make_unique<core::EditorBootstrap>()}
           , windowImguiHandler{std::make_unique<WindowImguiHandler>()}
@@ -119,6 +151,10 @@ namespace handlers
                 stopCmd.mode = services::EditorMode::Edit;
                 events::EventDispatcher::instance().execute(stopCmd);
             }
+
+            // VK-1682: also here, after execute(): the startup scene loads inside this frame's Scene
+            // task, so by now it has finished (or failed) and no task touches the watch.
+            pollStartupWatch();
         });
 
         editorRenderServiceImpl = dynamic_cast<services::EditorRenderServiceImpl*>(renderService.get());
@@ -266,41 +302,195 @@ namespace handlers
         bootstrap->cleanUp();
     }
 
-    bool EditorHandler::loadProject(const std::string& projectPath)
+    EditorHandler::ProjectLoadResult EditorHandler::loadProject(const std::string& projectPath)
     {
+        ProjectLoadResult result;
         auto& dispatcher = events::EventDispatcher::instance();
 
+        editor::SplashScreen::instance().setStatus(
+            "Loading project " + launch::pathToUtf8(std::filesystem::path(projectPath).filename()) + "...");
+
+        // Synchronous: parses the .vfproj and rebuilds the asset database before it returns.
         events::project::LoadProjectCommand loadCmd;
         loadCmd.filePath = projectPath;
         if (!dispatcher.execute(loadCmd))
         {
             vfLogError("Failed to load project file: {}", projectPath);
-            return false;
+            return result;
         }
+        result.loaded = true;
 
         vfLogInfo("Project loaded from CLI: {}", projectPath);
 
-        // Load the startup scene from the project config
+        // Queue the startup scene from the project config. LoadSceneCommand only queues it: the
+        // load runs in the first frame's Scene task (watchStartup reports when it is done).
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
         if (projectOpt.has_value() && !projectOpt->startupScene.empty())
         {
             std::filesystem::path scenePath =
                 std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
 
-            if (std::filesystem::exists(scenePath))
+            std::error_code ec;
+            if (std::filesystem::exists(scenePath, ec))
             {
+                editor::SplashScreen::instance().setStatus(
+                    "Loading scene " + launch::pathToUtf8(scenePath.filename()) + "...");
+
                 events::scene::LoadSceneCommand sceneCmd;
                 sceneCmd.filePath = scenePath.string();
-                dispatcher.execute(sceneCmd);
-                vfLogInfo("Startup scene loaded: {}", scenePath.string());
+                result.sceneQueued = dispatcher.execute(sceneCmd);
+                if (result.sceneQueued)
+                {
+                    vfLogInfo("Startup scene queued: {}", scenePath.string());
+                }
+                else
+                {
+                    result.warning = "its startup scene " + launch::pathToUtf8(scenePath) + " could not be queued";
+                    vfLogWarning("Startup scene could not be queued: {}", scenePath.string());
+                }
             }
             else
             {
+                result.warning = "its startup scene " + launch::pathToUtf8(scenePath) + " was not found";
                 vfLogWarning("Startup scene not found: {}", scenePath.string());
             }
         }
 
-        return true;
+        return result;
+    }
+
+    void EditorHandler::watchStartup(std::string warning, StartupCallback onDone)
+    {
+        auto watch = std::make_unique<StartupWatch>();
+        watch->warning = std::move(warning);
+        watch->onDone = std::move(onDone);
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        const std::shared_ptr<StartupSignals> signals = watch->signals;
+
+        // Any scene, not only the startup one: an MCP call drained at the top of the first frame
+        // may already have replaced the queued load.
+        watch->loadedSubscription = events::ScopedSubscription(
+            dispatcher.subscribe<events::scene::SceneLoadedNotification>(
+                [signals](const events::scene::SceneLoadedNotification&)
+                {
+                    signals->sceneLoaded.store(true);
+                }));
+
+        watch->completedSubscription = events::ScopedSubscription(
+            dispatcher.subscribe<events::scene::SceneLoadingCompletedNotification>(
+                [signals](const events::scene::SceneLoadingCompletedNotification& notification)
+                {
+                    if (!notification.success)
+                    {
+                        std::lock_guard<std::mutex> lock(signals->failureMutex);
+                        signals->failure = notification.errorMessage.empty() ? std::string("the scene file failed to load")
+                                                                             : notification.errorMessage;
+                    }
+                }));
+
+        // The splash repaints only when its status changes, so a percentage keeps it visibly alive.
+        watch->progressSubscription = events::ScopedSubscription(
+            dispatcher.subscribe<events::scene::SceneLoadingProgressUpdatedNotification>(
+                [signals](const events::scene::SceneLoadingProgressUpdatedNotification& notification)
+                {
+                    if (!(notification.progress >= 0.0f))
+                    {
+                        return;
+                    }
+                    const int percent = std::min(100, static_cast<int>(notification.progress * 100.0f));
+                    if (signals->lastPercent.exchange(percent) != percent)
+                    {
+                        editor::SplashScreen::instance().setStatus("Loading scene... " + std::to_string(percent) + "%");
+                    }
+                }));
+
+        startupWatch = std::move(watch);
+    }
+
+    void EditorHandler::pollStartupWatch()
+    {
+        if (!startupWatch)
+        {
+            return;
+        }
+
+        auto& dispatcher = events::EventDispatcher::instance();
+        try
+        {
+            // Also false when the queued load was replaced or never queued: the watch never hangs.
+            if (dispatcher.query(events::scene::IsSceneLoadPendingQuery{}))
+            {
+                return;
+            }
+        }
+        catch (const std::exception&)
+        {
+            // No scene service to ask: nothing can be pending.
+        }
+
+        std::unique_ptr<StartupWatch> watch = std::move(startupWatch);
+        watch->loadedSubscription.unsubscribe();
+        watch->completedSubscription.unsubscribe();
+        watch->progressSubscription.unsubscribe();
+
+        // The project may have changed since loadProject (an MCP project_open in the first frame).
+        std::string projectName;
+        try
+        {
+            if (auto project = dispatcher.query(events::project::GetCurrentProjectQuery{}))
+            {
+                projectName = project->projectName;
+            }
+        }
+        catch (const std::exception&)
+        {
+        }
+
+        std::string failure;
+        {
+            std::lock_guard<std::mutex> lock(watch->signals->failureMutex);
+            failure = watch->signals->failure;
+        }
+
+        StartupOutcome outcome;
+        outcome.sceneLoaded = watch->signals->sceneLoaded.load();
+        const std::string subject = projectName.empty() ? std::string("The project") : "Project " + projectName;
+        if (outcome.sceneLoaded)
+        {
+            outcome.message = subject + " is ready";
+        }
+        else if (!watch->warning.empty())
+        {
+            outcome.message = subject + " is open, but " + watch->warning;
+        }
+        else if (!failure.empty())
+        {
+            outcome.message = subject + " is open, but its startup scene failed to load: " + failure;
+        }
+        else
+        {
+            outcome.message = subject + " is open, but its startup scene did not finish loading";
+        }
+
+        if (!outcome.sceneLoaded)
+        {
+            vfLogWarning("{}", outcome.message);
+        }
+
+        editor::SplashScreen::instance().close();
+
+        if (watch->onDone)
+        {
+            try
+            {
+                watch->onDone(outcome);
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("Startup callback failed: {}", e.what());
+            }
+        }
     }
 
     void EditorHandler::setupEventSubscriptions()
@@ -323,6 +513,9 @@ namespace handlers
     void EditorHandler::cleanupEventSubscriptions()
     {
         auto& dispatcher = events::EventDispatcher::instance();
+
+        // VK-1682: an editor closed during its startup load never resolves the watch.
+        startupWatch.reset();
 
         if (resizeSubscription.isValid())
         {

@@ -16,6 +16,7 @@
 #include "../material/PipelineWarmupManifest.hpp"
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
+#include "../launch/EditorStateDirectory.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -680,6 +681,13 @@ namespace gameExport
 		{
 			const auto& entry = *it;
 
+			// VK-1682: the editor's own state (.vertexforge/editor.lock) never ships.
+			if (entry.is_directory() && launch::isEditorStateDirectory(entry.path()))
+			{
+				it.disable_recursion_pending();
+				continue;
+			}
+
 			// Skip export output directory
 			if (entry.is_directory() && !excludeAbsolute.empty())
 			{
@@ -1307,6 +1315,13 @@ namespace gameExport
 		for (auto it = fs::recursive_directory_iterator(src, ec); it != fs::recursive_directory_iterator(); ++it)
 		{
 			const auto& entry = *it;
+
+			// VK-1682: the editor's own state (.vertexforge/editor.lock) never ships.
+			if (entry.is_directory() && launch::isEditorStateDirectory(entry.path()))
+			{
+				it.disable_recursion_pending();
+				continue;
+			}
 
 			// Skip the export output directory to prevent infinite recursion
 			if (entry.is_directory() && !excludeAbsolute.empty())

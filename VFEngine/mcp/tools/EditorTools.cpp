@@ -160,7 +160,9 @@ namespace mcp::tools
                 "project path). The current scene is replaced and unsaved changes are lost. The scene load is "
                 "deferred to the next frame(s); call scene_get_hierarchy afterwards. Switching projects inside "
                 "a running editor is less exercised than a fresh launch - if anything looks stale, restart the "
-                "editor with the project path instead. Not allowed in Play mode.";
+                "editor with the project path instead. Not allowed in Play mode. Fails, leaving the current "
+                "project open, when another editor has the project's folder open (it holds "
+                ".vertexforge/editor.lock; logs_read names its pid); on success the lock moves to the new project.";
             tool.inputSchema = schema::object({
                 {"path", schema::string("Absolute path to the .vfproject file")}
             }, {"path"});

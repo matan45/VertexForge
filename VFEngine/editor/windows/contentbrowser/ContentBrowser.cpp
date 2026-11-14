@@ -16,6 +16,7 @@
 #include "../../clipboard/ClipboardManager.hpp"
 #include "../../dragdrop/DragDropManager.hpp"
 #include "Import.hpp"
+#include "launch/EditorStateDirectory.hpp"
 #include <IconsFontAwesome6.h>
 #include <imgui_internal.h>
 #include <algorithm>
@@ -353,6 +354,10 @@ namespace windows
                     continue;
 
                 if (entry.path().extension() == ".vfmeta" || filename == "assetdb.json")
+                    continue;
+
+                // VK-1682: the editor's own state (the project lock), never project content.
+                if (launch::isEditorStateDirectory(entry.path()))
                     continue;
 
                 Asset asset;

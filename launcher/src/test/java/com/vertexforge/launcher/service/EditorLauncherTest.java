@@ -157,7 +157,7 @@ class EditorLauncherTest {
 
     @Test
     void anEditorThatExitedWithAnErrorFails() throws IOException {
-        assertEquals(LaunchResult.fail("Editor exited with code: 3"),
+        assertEquals(LaunchResult.fail("Editor exited with code 3: the project failed to load"),
                 launch(new RecordingStarter(FakeProcess.exited(3), null), editor(), project()));
     }
 
