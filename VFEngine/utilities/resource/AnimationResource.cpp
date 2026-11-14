@@ -72,11 +72,11 @@ namespace resource
         data.version.minor = endian::readLE<uint32_t>(file);
         data.version.patch = endian::readLE<uint32_t>(file);
 
-        if (data.version.major != Version::major || data.version.minor != Version::minor || data.version.patch != Version::patch)
+        if (!AssetFormatVersion::matches(data.version.major, data.version.minor, data.version.patch))
         {
             vfLogError("Incompatible animation file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
                        data.version.major, data.version.minor, data.version.patch,
-                       Version::major, Version::minor, Version::patch);
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return data;
         }
 
@@ -185,10 +185,11 @@ namespace resource
             header.error = truncated;
             return header;
         }
-        if (major != Version::major || minor != Version::minor || patch != Version::patch)
+        if (!AssetFormatVersion::matches(major, minor, patch))
         {
             header.error = std::format("incompatible .vfAnim version {}.{}.{} (expected {}.{}.{}); re-import the source file",
-                                       major, minor, patch, Version::major, Version::minor, Version::patch);
+                                       major, minor, patch,
+                                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return header;
         }
 
@@ -262,7 +263,7 @@ namespace resource
         uint32_t minor = endian::readLE<uint32_t>(file);
         uint32_t patch = endian::readLE<uint32_t>(file);
 
-        if (major != Version::major || minor != Version::minor || patch != Version::patch)
+        if (!AssetFormatVersion::matches(major, minor, patch))
             return 0;
 
         // Skip name, duration, ticksPerSecond

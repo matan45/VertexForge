@@ -20,11 +20,11 @@ namespace resource
         header.version.minor = minorVersion;
         header.version.patch = patchVersion;
 
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (!AssetFormatVersion::matches(majorVersion, minorVersion, patchVersion))
         {
             vfLogError("MeshStreamHandle: Incompatible mesh file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
                        majorVersion, minorVersion, patchVersion,
-                       Version::major, Version::minor, Version::patch);
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return false;
         }
 

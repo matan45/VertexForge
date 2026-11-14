@@ -50,8 +50,7 @@ namespace gameExport
 		newManifest = ExportManifest{};
 		newManifest.gameName = config.gameName;
 		newManifest.gameVersion = config.gameVersion;
-		newManifest.engineVersion = "VertexForge " + std::to_string(Version::major) + "." +
-			std::to_string(Version::minor) + "." + std::to_string(Version::patch);
+		newManifest.engineVersion = Version::displayName;
 		newManifest.pluginApiVersion = config.expectedPluginApiVersion;
 
 		if (!config.cleanBuild && fs::exists(manifestPath))

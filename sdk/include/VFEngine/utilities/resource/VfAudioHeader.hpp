@@ -57,9 +57,9 @@ namespace resource
     struct VfAudioHeader
     {
         uint8_t fileType = static_cast<uint8_t>(FileType::AUDIO);
-        uint32_t versionMajor = Version::major;
-        uint32_t versionMinor = Version::minor;
-        uint32_t versionPatch = Version::patch;
+        uint32_t versionMajor = AssetFormatVersion::major;
+        uint32_t versionMinor = AssetFormatVersion::minor;
+        uint32_t versionPatch = AssetFormatVersion::patch;
         uint8_t compressionFormat = 0;
         uint8_t loadType = 0;
         uint32_t sampleRate = 0;

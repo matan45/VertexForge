@@ -11,7 +11,7 @@
 -- Bundle layout (the bin/ tree is preserved so existing relative paths resolve):
 --   dist/VertexForge/
 --     VertexForge Launcher/           jpackage APP_IMAGE (bundled JRE; sibling of bin/) — entry point
---     bin/Editor/Release/x64/         Editor.exe + all DLLs
+--     bin/Editor/Release/x64/         Editor.exe + all DLLs + engine.json (VK-1680 manifest)
 --     bin/Editor/resources/           editor/, shaders/, ibl/   (../../resources/ target for Editor.exe)
 --     bin/Runtime/Release/x64/        Runtime.exe + all DLLs
 --     bin/Runtime/resources/          editor/, shaders/, ibl/   (../../resources/ target for Runtime.exe)
@@ -22,6 +22,10 @@
 -- (cwd = the x64/ folder), so resources live at bin/<App>/resources/, two levels
 -- up from each exe — NOT at the bundle root. The launcher app-image sits beside
 -- bin/ so EditorLauncher's "../bin/Editor/Release/x64/Editor.exe" probe resolves.
+--
+-- engine.json (tools/engine_version.lua) records workingDirectory "." (the exe
+-- folder) and the engine content paths assets/templates and assets/scripts/lib at
+-- the bundle root, mirroring the repo layout; VK-1688 copies those folders there.
 
 function vfPackageRelease()
    local dist = "dist/VertexForge"
@@ -54,6 +58,24 @@ function vfPackageRelease()
       end
    end
 
+   -- 1b. Preflight: the Release Editor's own manifest (its postbuild writes it) must
+   --     match VERSION, or the bundle would claim a version its binaries were not built as.
+   local buildManifestPath = "bin/Editor/Release/x64/engine.json"
+   local buildManifest = nil
+   if os.isfile(buildManifestPath) then
+      local ok, decoded = pcall(json.decode, io.readfile(buildManifestPath))
+      if ok and type(decoded) == "table" then
+         buildManifest = decoded
+      end
+   end
+   local engineVersion = vfReadEngineVersion().text
+   if buildManifest and buildManifest.engineVersion ~= engineVersion then
+      print("ERROR: the Release binaries were built as engine " .. tostring(buildManifest.engineVersion) ..
+         " but VERSION is " .. engineVersion .. ".")
+      print("Re-run premake5 vs2022 and rebuild Release.")
+      return
+   end
+
    print("Packaging VertexForge release into " .. dist .. "/ ...")
 
    -- 2. Clean slate.
@@ -68,6 +90,22 @@ function vfPackageRelease()
    print("  Runtime binaries: " .. n)
    n = copyTree("bin/Tests/Release/x64",   "**", dist .. "/bin/Tests/Release/x64")
    print("  Tests binaries: " .. n)
+
+   -- 3b. engine.json (VK-1680). Step 3 copied the dev-tree manifest; rewrite it for the
+   --     bundle: working directory = the exe folder, content paths under the bundle root.
+   --     gitCommit = the commit the Release Editor was built at, when its manifest has one.
+   if not buildManifest then
+      print("  WARNING: " .. buildManifestPath .. " missing or unreadable; gitCommit = current HEAD")
+   end
+   local releaseExeDir = path.getabsolute(dist .. "/bin/Editor/Release/x64")
+   vfWriteEngineManifest {
+      exeDir = releaseExeDir,
+      workingDir = releaseExeDir,
+      contentRoot = path.getabsolute(dist),
+      configuration = "Release",
+      gitCommit = (buildManifest and type(buildManifest.gitCommit) == "string") and buildManifest.gitCommit
+         or vfGitCommit()
+   }
 
    -- 4. Resources — placed two levels up from each exe so "../../resources/" resolves.
    --    Tests is CPU-only and needs none.

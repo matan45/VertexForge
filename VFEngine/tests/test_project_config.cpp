@@ -108,11 +108,12 @@ TEST_CASE("FileExtension: constants are non-empty strings") {
 
 // ---- FileVersion defaults ----
 
-TEST_CASE("FileVersion: default matches Version constants") {
+// VK-1680: asset files carry AssetFormatVersion, never the engine Version.
+TEST_CASE("FileVersion: defaults match AssetFormatVersion") {
     FileVersion fv;
-    CHECK(fv.major == Version::major);
-    CHECK(fv.minor == Version::minor);
-    CHECK(fv.patch == Version::patch);
+    CHECK(fv.major == AssetFormatVersion::major);
+    CHECK(fv.minor == AssetFormatVersion::minor);
+    CHECK(fv.patch == AssetFormatVersion::patch);
 }
 
 // ---- ProjectSchemaVersion ----

@@ -1,3 +1,9 @@
+-- Engine identity (VK-1680): VERSION -> VFEngine/utilities/config/EngineVersion.generated.hpp
+-- (struct Version in Config.hpp) and the engine.json manifest. Generated before anything else so the
+-- header exists when vfExportPluginSDK() copies the utilities headers into sdk/ below.
+include "tools/engine_version.lua"
+vfWriteEngineVersionHeader()
+
 workspace "VertexForge"
    configurations { "Debug", "Development", "Release" }
    platforms { "x64" }
@@ -163,6 +169,14 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
    filter {}
+
+   -- engine.json beside Editor.exe (VK-1680, tools/engine_version.lua): the dev-tree manifest the
+   -- launcher reads to identify this build. Declared last so it runs after the copies; a build event
+   -- only reports its final exit code, and `|| exit /b 1` fails the build when the manifest cannot be
+   -- written (e.g. VERSION edited without re-running premake).
+   postbuildcommands {
+      '"' .. path.translate(_PREMAKE_COMMAND, "\\") .. '" --file=../../tools/engine_version.lua --vfconfig=%{cfg.buildcfg} engine-manifest || exit /b 1'
+   }
 
 -- Project 2: Core
 project "Core"

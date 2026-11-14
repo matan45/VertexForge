@@ -257,9 +257,9 @@ namespace terrain
             const uint32_t dataSize = data.width * data.height * SURFACE_MASK_CHANNELS;
 
             resource::endian::writeLE<uint8_t>(outFile, VFIMAGE_FILE_TYPE_TEXTURE);
-            resource::endian::writeLE<uint32_t>(outFile, Version::major);
-            resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-            resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::major);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::minor);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::patch);
             resource::endian::writeLE<uint32_t>(outFile, data.width);
             resource::endian::writeLE<uint32_t>(outFile, data.height);
             resource::endian::writeLE<uint32_t>(outFile, SURFACE_MASK_CHANNELS);

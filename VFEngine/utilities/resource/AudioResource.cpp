@@ -211,11 +211,11 @@ namespace resource
             return nullptr;
         }
 
-        if (fileHeader.versionMajor != Version::major || fileHeader.versionMinor != Version::minor ||
-            fileHeader.versionPatch != Version::patch)
+        if (!AssetFormatVersion::matches(fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch))
         {
-            vfLogError("Incompatible file version for streaming: {}.{}.{}",
-                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch);
+            vfLogError("Incompatible file version for streaming: {}.{}.{}, expected {}.{}.{}",
+                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch,
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return nullptr;
         }
 
@@ -306,11 +306,11 @@ namespace resource
 
         audioData.headerFileType = static_cast<resource::FileType>(fileHeader.fileType);
 
-        if (fileHeader.versionMajor != Version::major || fileHeader.versionMinor != Version::minor ||
-            fileHeader.versionPatch != Version::patch)
+        if (!AssetFormatVersion::matches(fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch))
         {
-            vfLogError("Incompatible file version: {}.{}.{}",
-                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch);
+            vfLogError("Incompatible file version: {}.{}.{}, expected {}.{}.{}",
+                       fileHeader.versionMajor, fileHeader.versionMinor, fileHeader.versionPatch,
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return {};
         }
 

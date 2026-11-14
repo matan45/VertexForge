@@ -42,9 +42,9 @@ namespace
     struct ClipFixture
     {
         uint8_t fileType = static_cast<uint8_t>(resource::FileType::ANIMATION);
-        uint32_t major = Version::major;
-        uint32_t minor = Version::minor;
-        uint32_t patch = Version::patch;
+        uint32_t major = AssetFormatVersion::major;
+        uint32_t minor = AssetFormatVersion::minor;
+        uint32_t patch = AssetFormatVersion::patch;
         std::string name = "Run";
         float duration = 48.0f; // ticks
         float ticksPerSecond = 24.0f;
@@ -241,7 +241,7 @@ TEST_SUITE("AnimationClipSummary")
         }
         SUBCASE("incompatible version")
         {
-            clip.major = Version::major + 1;
+            clip.major = AssetFormatVersion::major + 1;
             writeFile(path, clipBytes(clip));
         }
         SUBCASE("channel count above the loader's limit")
@@ -275,7 +275,7 @@ TEST_SUITE("AnimationClipSummary")
     {
         const fs::path dir = makeScratchDir("vf_vk1656_clip_summary_version");
         ClipFixture clip;
-        clip.minor = Version::minor + 3;
+        clip.minor = AssetFormatVersion::minor + 3;
         const fs::path path = writeFile(dir / "old.vfAnim", clipBytes(clip));
 
         const auto header = resource::AnimationResource::readClipSummary(path.string());

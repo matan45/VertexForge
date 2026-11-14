@@ -117,7 +117,7 @@ namespace types
     {
         resource::AnimationData animData;
         animData.headerFileType = resource::FileType::ANIMATION;
-        animData.version = {Version::major, Version::minor, Version::patch};
+        animData.version = {AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch};
         animData.name = anim->mName.C_Str();
         animData.duration = static_cast<float>(anim->mDuration);
         animData.ticksPerSecond = anim->mTicksPerSecond > 0.0 ? static_cast<float>(anim->mTicksPerSecond) : 24.0f;
@@ -188,9 +188,9 @@ namespace types
         }
 
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(animData.headerFileType));
-        resource::endian::writeLE<uint32_t>(outFile, Version::major);
-        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::major);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::minor);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::patch);
 
         writeString(outFile, animData.name);
         resource::endian::writeLE<float>(outFile, animData.duration);

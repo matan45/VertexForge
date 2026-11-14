@@ -17,13 +17,9 @@ function vfExportPluginSDK()
       local sdk = "sdk"
 
       -- Template .vfplugin must carry the engine's current API version or the
-      -- loader rejects it — read it from the single source of truth.
-      local apiVersion = "9"
-      local versionHeader = io.readfile("VFEngine/plugin/api/PluginVersion.hpp")
-      if versionHeader then
-         local v = versionHeader:match("VF_PLUGIN_API_VERSION%s*=%s*(%d+)")
-         if v then apiVersion = v end
-      end
+      -- loader rejects it — read it from the single source of truth. Errors out
+      -- (tools/engine_version.lua) instead of silently stamping a stale version.
+      local apiVersion = vfReadPluginApiVersion()
 
       local function copyTree(srcBase, pattern, dstBase)
          local files = os.matchfiles(path.join(srcBase, pattern))
@@ -197,6 +193,10 @@ time (same idea as Godot's GDExtension function table).
 - MSVC toolset v145 (VS2026), x64, C++20, /MD runtime, `/utf-8`
 - `apiVersion` in the `.vfplugin` must equal the engine's
   `VF_PLUGIN_API_VERSION` (`include/VFEngine/plugin/api/PluginVersion.hpp`)
+- Asset importers that write engine binary assets (`.vfImage`, `.vfMesh`, ...)
+  must stamp `AssetFormatVersion` (`include/VFEngine/utilities/config/Config.hpp`),
+  never `Version`: `Version` is the engine (product) version, and files stamped
+  with it are rejected after the next engine version bump.
 - Plugins must NOT call Vulkan directly (no dispatcher in plugin DLLs) — use
   the custom render pipeline API (`createCustomPipeline`/`uploadCustomMesh`/
   `drawCustomMesh`) instead.

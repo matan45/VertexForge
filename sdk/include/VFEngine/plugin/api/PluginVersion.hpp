@@ -66,6 +66,10 @@ namespace plugin {
     //      PluginContext::getEventDispatcher() (ApplyPostProcessSettingsCommand, GetPostProcessSettingsQuery,
     //      and RenderSettings::postProcess in Get/SetRenderSettings), so a plugin built against v24 would lay it
     //      out at the wrong size. No in-tree plugin uses these types, but every plugin rebuilds.
+    // VK-1680 (no bump): Config.hpp's `Version` now comes from the repo-root VERSION file (generated
+    //      EngineVersion.generated.hpp) and binary assets carry the new AssetFormatVersion. FileVersion
+    //      keeps its 12-byte layout. Importers (e.g. PSDImport) must stamp AssetFormatVersion, never
+    //      Version, or their files are rejected after the next VERSION bump.
     constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
 
 }

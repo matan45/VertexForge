@@ -148,7 +148,7 @@ namespace serialization
                 projectJson["inputMapping"] = *project.inputMapping;
             }
 
-            projectJson["engineVersion"] = getEngineVersionString();
+            projectJson["engineVersion"] = Version::displayName;
             projectJson["lastModified"] = getCurrentTimestamp();
 
             if (project.pluginApiVersion.has_value())
@@ -305,13 +305,6 @@ namespace serialization
         localtime_s(&tm, &time);
         std::ostringstream oss;
         oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S");
-        return oss.str();
-    }
-
-    std::string ProjectSerialization::getEngineVersionString()
-    {
-        std::ostringstream oss;
-        oss << "VertexForge " << Version::major << "." << Version::minor << "." << Version::patch;
         return oss.str();
     }
 }

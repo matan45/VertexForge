@@ -23,9 +23,9 @@ namespace types::meshlayout
     inline void writeFileHeader(std::ofstream& outFile, uint32_t numMeshes)
     {
         resource::endian::writeLE<uint8_t>(outFile, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(outFile, Version::major);
-        resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-        resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::major);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::minor);
+        resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::patch);
         resource::endian::writeLE<uint32_t>(outFile, numMeshes);
         resource::endian::writeLE<uint32_t>(outFile, static_cast<uint32_t>(resource::MeshCompressionFlags::ALL));
     }

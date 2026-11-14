@@ -18,6 +18,10 @@ time (same idea as Godot's GDExtension function table).
 - MSVC toolset v145 (VS2026), x64, C++20, /MD runtime, `/utf-8`
 - `apiVersion` in the `.vfplugin` must equal the engine's
   `VF_PLUGIN_API_VERSION` (`include/VFEngine/plugin/api/PluginVersion.hpp`)
+- Asset importers that write engine binary assets (`.vfImage`, `.vfMesh`, ...)
+  must stamp `AssetFormatVersion` (`include/VFEngine/utilities/config/Config.hpp`),
+  never `Version`: `Version` is the engine (product) version, and files stamped
+  with it are rejected after the next engine version bump.
 - Plugins must NOT call Vulkan directly (no dispatcher in plugin DLLs) — use
   the custom render pipeline API (`createCustomPipeline`/`uploadCustomMesh`/
   `drawCustomMesh`) instead.

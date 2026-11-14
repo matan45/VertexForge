@@ -39,6 +39,13 @@ Note the Editor stays a `ConsoleApp` in all three configs (console logs always v
 
 **Output**: Executables in `bin/Editor/<Config>/x64/`, `bin/Runtime/<Config>/x64/`, `bin/Tests/<Config>/x64/`. Each SharedLib subsystem also lands in `bin/<Subsystem>/<Config>/x64/` and is copied into Editor/Runtime/Tests output dirs via `postbuildcommands`.
 
+**Engine version and engine.json** (VK-1680, `tools/engine_version.lua`):
+- The repo-root `VERSION` file (`MAJOR.MINOR.PATCH`) is the ONLY engine version source. Every premake run writes `VFEngine/utilities/config/EngineVersion.generated.hpp` from it (gitignored; its `sdk/include` copy is tracked), and `Config.hpp`'s `Version` reads it (`Version::text` "1.0.0", `Version::displayName` "VertexForge 1.0.0"). After editing VERSION, re-run `premake5 vs2022` and rebuild. `test_engine_version` fails on a stale generation.
+- Don't bump VERSION casually: every editor save rewrites the `.vfproj` `engineVersion`.
+- The Editor postbuild (`premake5 --file=../../tools/engine_version.lua --vfconfig=<Config> engine-manifest`) writes `engine.json` beside `Editor.exe`. It fails the build when VERSION and the generated header disagree. `tools/package_release.lua` rewrites it for `dist/VertexForge`.
+  - Fields: `manifestVersion` (1), `engineVersion`, `assetFormatVersion`, `projectSchemaVersion`, `pluginApiVersion`, `configuration`, `gitCommit` (40-hex or null), `editorExe`, `workingDirectory`, `templatesDir`, `scriptLibDir`.
+  - Paths are relative to the manifest. `workingDirectory` is `../../../../VFEngine/editor` in dev (the editor loads `../../resources` from its working directory) and `.` in the release folder. `templatesDir` (`assets/templates`) and `scriptLibDir` (`assets/scripts/lib`) resolve to the same strings in both, because the release folder mirrors the repo layout.
+
 ## Tests
 
 The `Tests` project (`VFEngine/tests/`) is a doctest-based CPU-only unit test runner — no rendering dependencies. Each `test_*.cpp` registers its own `TEST_CASE`s.
@@ -357,6 +364,8 @@ meshProcessor.loadFromFile(file, fileName, location, progressCallback);
 ## Custom Asset Formats
 
 `.vfImage`, `.vfHdr`, `.vfMesh`, `.vfAudio`, `.vfAnim`, `.vfImposter`, `.vfWorld` - Binary formats for engine-processed assets.
+
+The shared header of `.vfImage`/`.vfHdr`/`.vfMesh`/`.vfAnim`/`.vfAudio` carries `AssetFormatVersion` (`Config.hpp`, 1.0.0, exact match via `AssetFormatVersion::matches`), never the engine `Version` (VK-1680). Writers, plugin importers included, stamp `AssetFormatVersion::*`. Bump it ONLY when that binary layout changes: a bump invalidates every asset on disk. `test_asset_format_version` loads hand-built 1.0.0 files and scans `VFEngine/` + `plugins/` so that only the tests read `Version::major/minor/patch`. Fonts, terrain, sectors etc. own their own format versions.
 
 ## Adding New Features
 

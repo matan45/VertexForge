@@ -20,7 +20,6 @@ namespace serialization
         static bool validateStructure(const json& projectJson);
         static bool parseSchemaVersion(const std::string& versionStr, config::ProjectFileVersion& outVersion);
         static std::string getCurrentTimestamp();
-        static std::string getEngineVersionString();
     };
 
 }

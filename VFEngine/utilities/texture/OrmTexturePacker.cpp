@@ -244,9 +244,9 @@ namespace texture
             }
 
             resource::endian::writeLE<uint8_t>(file, static_cast<uint8_t>(resource::FileType::TEXTURE));
-            resource::endian::writeLE<uint32_t>(file, Version::major);
-            resource::endian::writeLE<uint32_t>(file, Version::minor);
-            resource::endian::writeLE<uint32_t>(file, Version::patch);
+            resource::endian::writeLE<uint32_t>(file, AssetFormatVersion::major);
+            resource::endian::writeLE<uint32_t>(file, AssetFormatVersion::minor);
+            resource::endian::writeLE<uint32_t>(file, AssetFormatVersion::patch);
             resource::endian::writeLE<uint32_t>(file, ormTexture.width);
             resource::endian::writeLE<uint32_t>(file, ormTexture.height);
             resource::endian::writeLE<uint32_t>(file, ormTexture.numbersOfChannels);
