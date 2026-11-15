@@ -2,7 +2,6 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.engine.EngineCatalog;
 import com.vertexforge.launcher.engine.EngineListing;
-import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.engine.EngineOptions;
 import com.vertexforge.launcher.engine.EngineRegistryRepository;
 import com.vertexforge.launcher.engine.EngineRegistryView;
@@ -10,12 +9,18 @@ import com.vertexforge.launcher.engine.EngineResolver;
 import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
-import com.vertexforge.launcher.service.EditorLauncher.LaunchResult;
+import com.vertexforge.launcher.session.EditorSession;
+import com.vertexforge.launcher.session.LaunchRequest;
+import com.vertexforge.launcher.session.SessionLogs;
+import com.vertexforge.launcher.session.SessionScheduler;
+import com.vertexforge.launcher.session.SessionStart;
+import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
 import com.vertexforge.launcher.store.StoreWriteException;
@@ -29,6 +34,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 /**
  * The launcher's project operations, free of JavaFX so that they run in plain unit tests (VK-1677).
@@ -45,8 +51,13 @@ public class ProjectHub implements AutoCloseable {
     private final EditorLauncher editorLauncher;
     private final ProjectStatusChecker statusChecker;
     private final LocationChecker locationChecker;
+    /** Writes the Settings dialog's choices; {@code null} for a hub that cannot save them (tests). */
+    private final LauncherSettingsRepository settingsRepository;
+    private final ShellOpener shell;
     private final int listLimit;
     private final Clock clock;
+    /** The settings as last read or saved; written on the store thread, read on any. */
+    private volatile LauncherSettings settings;
 
     /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
@@ -56,42 +67,63 @@ public class ProjectHub implements AutoCloseable {
                 new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED), listLimit, clock);
     }
 
+    /** A hub with the default settings for everything but the list's cap, which it cannot save. */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                       EngineCatalog engines, EditorLauncher editorLauncher,
                       ProjectStatusChecker statusChecker, LocationChecker locationChecker, int listLimit,
                       Clock clock) {
+        this(repository, projectCreator, engines, editorLauncher, statusChecker, locationChecker, null,
+                new LauncherSettings(listLimit), clock);
+    }
+
+    /**
+     * @param settingsRepository where {@link #saveSettings} writes, or {@code null} when it may not
+     * @param settings           the settings as read at startup
+     */
+    public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
+                      EngineCatalog engines, EditorLauncher editorLauncher,
+                      ProjectStatusChecker statusChecker, LocationChecker locationChecker,
+                      LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
         this.engines = Objects.requireNonNull(engines, "engines");
         this.editorLauncher = Objects.requireNonNull(editorLauncher, "editorLauncher");
         this.statusChecker = Objects.requireNonNull(statusChecker, "statusChecker");
         this.locationChecker = Objects.requireNonNull(locationChecker, "locationChecker");
+        this.settingsRepository = settingsRepository;
+        this.settings = Objects.requireNonNull(settings, "settings");
+        this.shell = new ShellOpener(editorLauncher.processStarter());
         this.clock = Objects.requireNonNull(clock, "clock");
-        // Validates the range.
-        this.listLimit = new LauncherSettings(listLimit).recentProjectsLimit();
+        this.listLimit = settings.recentProjectsLimit();
     }
 
     /**
-     * Wires the hub for an environment: the recent list lives in {@code configDir/recent-projects.json}, its cap
-     * comes from {@code configDir/launcher-settings.json} and the engines from {@code configDir/engines.json}. Reads
-     * only the (small, local) settings file.
+     * Wires the hub for an environment: the recent list lives in {@code configDir/recent-projects.json}, the settings
+     * (the list's cap, the launch behaviour) in {@code configDir/launcher-settings.json}, the engines in
+     * {@code configDir/engines.json} and the per-launch logs in {@code configDir/logs/} (VK-1683). Reads only the
+     * (small, local) settings file.
      */
     public static ProjectHub create(LauncherEnvironment environment, LauncherLog log) {
         Path configDir = environment.configDir();
-        LauncherSettings settings = new LauncherSettingsRepository(
-                configDir.resolve(LauncherSettingsRepository.FILE_NAME), environment.clock(), log).load();
+        LauncherSettingsRepository settingsRepository = new LauncherSettingsRepository(
+                configDir.resolve(LauncherSettingsRepository.FILE_NAME), environment.clock(), log);
+        LauncherSettings settings = settingsRepository.load();
         RecentProjectsRepository repository = new RecentProjectsRepository(
                 RecentProjectsRepository.openStore(configDir.resolve(RecentProjectsRepository.FILE_NAME),
                         environment.clock(), log),
                 UUID::randomUUID, environment.clock(), log);
+        EditorLauncher editorLauncher = new EditorLauncher(environment.processStarter(),
+                new SessionLogs(configDir.resolve(SessionLogs.DIRECTORY_NAME), log::warn),
+                environment.nativeCharset(), environment.clock(), SessionScheduler.daemon());
         return new ProjectHub(
                 repository,
                 new ProjectCreator(environment.clock(), log),
                 EngineCatalog.create(environment, log),
-                new EditorLauncher(environment.processStarter()),
+                editorLauncher,
                 new ProjectStatusChecker(PathProbe.system(), ProjectStatusChecker.DEFAULT_TIMEOUT),
                 new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
-                settings.recentProjectsLimit(),
+                settingsRepository,
+                settings,
                 environment.clock());
     }
 
@@ -126,6 +158,47 @@ public class ProjectHub implements AutoCloseable {
     /** Binds a project to an engine; {@code null} makes it follow the default engine again (VK-1681). */
     public RecentProjectsView bindEngine(UUID id, UUID engineId) throws StoreWriteException {
         return repository.bindEngine(id, engineId);
+    }
+
+    /** Sets a project's "Open with MCP" (VK-1683). Store thread. */
+    public RecentProjectsView setMcp(UUID id, McpSetting setting) throws StoreWriteException {
+        return repository.setMcp(id, setting);
+    }
+
+    /** The settings as last read or saved. Any thread. */
+    public LauncherSettings settings() {
+        return settings;
+    }
+
+    /**
+     * Saves the launch behaviour (VK-1683) and returns the settings as written. Store thread.
+     *
+     * @throws IllegalStateException when this hub cannot save settings
+     */
+    public LauncherSettings saveSettings(LauncherSettings.AfterLaunch afterLaunch, boolean showEditorConsole)
+            throws StoreWriteException {
+        if (settingsRepository == null) {
+            throw new IllegalStateException("This launcher cannot save its settings");
+        }
+        LauncherSettings saved = settingsRepository.save(afterLaunch, showEditorConsole);
+        // The list's cap is read once at startup; keep it as the list uses it.
+        settings = new LauncherSettings(listLimit, saved.afterLaunch(), saved.showEditorConsole());
+        return settings;
+    }
+
+    /** Whether {@link #saveSettings} may be called. */
+    public boolean canSaveSettings() {
+        return settingsRepository != null;
+    }
+
+    /** Where the per-launch logs are kept ({@code ~/.vertexforge/logs}). */
+    public Path sessionLogsDirectory() {
+        return editorLauncher.logs().directory();
+    }
+
+    /** Opens files and folders in Windows (Open log, Open crash folder). */
+    public ShellOpener shell() {
+        return shell;
     }
 
     /**
@@ -214,14 +287,18 @@ public class ProjectHub implements AutoCloseable {
         return engines.setDefault(id);
     }
 
-    /** Starts {@code engine}'s editor on {@code projectPath}, in the engine's working directory. */
-    public CompletableFuture<LaunchResult> launch(EngineOption engine, Path projectPath) {
-        Objects.requireNonNull(engine, "engine");
-        if (!engine.isOk() || engine.executable() == null) {
-            return CompletableFuture.completedFuture(LaunchResult.fail("The engine cannot be used: "
-                    + engine.health().reason()));
-        }
-        return editorLauncher.launchAsync(engine.executable(), engine.health().workingDirectory(), projectPath);
+    /**
+     * Starts the request's editor on its project, in the engine's working directory, with its output going to a new
+     * per-launch log (VK-1683). Completes on a background thread; nothing watches the editor until
+     * {@link #newSession}'s session begins.
+     */
+    public CompletableFuture<StartResult> launch(LaunchRequest request) {
+        return editorLauncher.start(request);
+    }
+
+    /** The session that watches an editor {@link #launch} started; call {@link EditorSession#begin()} once listed. */
+    public EditorSession newSession(SessionStart start, Executor events, EditorSession.Listener listener) {
+        return editorLauncher.newSession(start, events, listener);
     }
 
     /** How many projects the list keeps. */
@@ -234,11 +311,12 @@ public class ProjectHub implements AutoCloseable {
         return clock.getZone();
     }
 
-    /** Stops the status, location and engine checks' threads. */
+    /** Stops the status, location, engine and session threads. Running editors are never touched. */
     @Override
     public void close() {
         statusChecker.close();
         locationChecker.close();
         engines.close();
+        editorLauncher.close();
     }
 }

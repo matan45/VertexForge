@@ -12,10 +12,13 @@ import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus.Kind;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.repository.RecentProjectsView;
-import com.vertexforge.launcher.service.EditorLauncher.LaunchResult;
 import com.vertexforge.launcher.service.EditorLauncherTest.FakeProcess;
 import com.vertexforge.launcher.service.EditorLauncherTest.RecordingStarter;
+import com.vertexforge.launcher.session.LaunchRequest;
+import com.vertexforge.launcher.session.StartResult;
+import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
@@ -325,11 +328,15 @@ class ProjectHubTest {
 
         EngineOptions options = checked(hub);
         LaunchPlan.Ready ready = assertInstanceOf(LaunchPlan.Ready.class, hub.planLaunch(options, game.engineId()));
-        LaunchResult result = hub.launch(ready.engine(), game.path()).join();
+        StartResult result = hub.launch(new LaunchRequest(ready.engine(), game.path(), "Game", McpSetting.DEFAULT,
+                hub.settings().showEditorConsole())).join();
 
-        assertEquals(LaunchResult.ok(), result);
+        assertInstanceOf(StartResult.Started.class, result, result::toString);
         ProcessBuilder started = starter.started.getFirst();
-        assertEquals(List.of(editor.toString(), game.path().toString()), started.command());
+        // This manifest has no launchContract, so no --console, although the setting is on by default.
+        assertEquals(List.of(editor.toString(), game.path().toString(), "--launch-status"),
+                started.command().subList(0, 3));
+        assertEquals(4, started.command().size());
         assertEquals(repo.resolve("VFEngine/editor").toFile(), started.directory());
         assertEquals("1.0.0 Development", ready.engine().versionText());
 
@@ -417,12 +424,59 @@ class ProjectHubTest {
         Path project = projectsDir.resolve("Game/Game.vfproj");
 
         EngineOption engine = checked(hub).usable().getFirst();
-        LaunchResult result = hub.launch(engine, project).join();
+        StartResult result = hub.launch(new LaunchRequest(engine, project, "Game", McpSetting.DEFAULT, true)).join();
 
-        assertEquals(LaunchResult.ok(), result);
-        assertEquals(List.of(editor.toString(), project.toString()), starter.started.getFirst().command());
+        StartResult.Started started = assertInstanceOf(StartResult.Started.class, result, result::toString);
+        assertEquals(List.of(editor.toString(), project.toString(), "--launch-status",
+                started.start().statusFile().orElseThrow().toString()), starter.started.getFirst().command());
         // An install without engine.json starts in its own folder.
         assertEquals(editor.getParent().toFile(), starter.started.getFirst().directory());
         assertEquals(EngineOption.UNKNOWN_VERSION, engine.versionText());
+        // The per-launch log lives in the launcher's config folder (VK-1683).
+        assertEquals(configDir.resolve("logs"), started.start().log().getParent());
+    }
+
+    /** VK-1683: an engine whose manifest advertises the launch contract gets --console while the setting is on. */
+    @Test
+    void anEngineWithTheLaunchContractGetsTheConsoleFlagByDefault() throws Exception {
+        Path repo = root.resolve("repo");
+        Path editor = TestSupport.devEngine(repo);
+        TestSupport.writeManifest(editor.getParent(), "Development", "../../../../VFEngine/editor", 1);
+        addEngine(hub, editor.resolveSibling("engine.json"));
+        hub.createProject("Game", projectsDir);
+        RecentEntry game = listed(hub, "Game");
+        LaunchPlan.Ready ready = assertInstanceOf(LaunchPlan.Ready.class, hub.planLaunch(checked(hub), null));
+
+        assertTrue(hub.settings().showEditorConsole(), "on by default");
+        hub.launch(new LaunchRequest(ready.engine(), game.path(), game.displayName(), game.mcp(),
+                hub.settings().showEditorConsole())).join();
+
+        assertEquals("--console", starter.started.getFirst().command().getLast());
+    }
+
+    /** VK-1683: the Settings dialog's choices are saved, and the hub uses them at once. */
+    @Test
+    void savedSettingsAreKeptAndUsed() throws Exception {
+        assertTrue(hub.canSaveSettings());
+
+        hub.saveSettings(LauncherSettings.AfterLaunch.STAY, false);
+
+        assertEquals(LauncherSettings.AfterLaunch.STAY, hub.settings().afterLaunch());
+        assertFalse(hub.settings().showEditorConsole());
+        LauncherSettings reread = hub(Map.of()).settings();
+        assertEquals(LauncherSettings.AfterLaunch.STAY, reread.afterLaunch());
+        assertFalse(reread.showEditorConsole());
+    }
+
+    /** VK-1683: "Open with MCP" is stored on the entry and survives an open. */
+    @Test
+    void anEntrysMcpSettingIsSavedAndKept() throws Exception {
+        hub.createProject("Game", projectsDir);
+        RecentEntry game = listed(hub, "Game");
+
+        hub.setMcp(game.id(), new McpSetting(true, 7979));
+        hub.markOpened(game.id(), Optional.empty());
+
+        assertEquals(new McpSetting(true, 7979), listed(hub(Map.of()), "Game").mcp());
     }
 }

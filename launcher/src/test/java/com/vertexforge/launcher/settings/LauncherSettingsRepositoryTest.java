@@ -2,6 +2,7 @@ package com.vertexforge.launcher.settings;
 
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.CapturedLog;
+import com.vertexforge.launcher.store.StoreWriteException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -105,5 +106,70 @@ class LauncherSettingsRepositoryTest {
         assertThrows(IllegalArgumentException.class, () -> new LauncherSettings(0));
         assertThrows(IllegalArgumentException.class, () -> new LauncherSettings(501));
         assertEquals(500, new LauncherSettings(500).recentProjectsLimit());
+    }
+
+    private LauncherSettingsRepository repository() {
+        return new LauncherSettingsRepository(file, TestSupport.fixedClock(), log.log);
+    }
+
+    /** VK-1683: minimize and come back, with the editor's console, unless the file says otherwise. */
+    @Test
+    void theLaunchBehaviourDefaultsToMinimizeWithTheConsole() {
+        LauncherSettings settings = load();
+
+        assertEquals(LauncherSettings.AfterLaunch.MINIMIZE, settings.afterLaunch());
+        assertTrue(settings.showEditorConsole());
+    }
+
+    @Test
+    void theLaunchBehaviourIsRead() throws IOException {
+        write("{\"version\": 1, \"afterLaunch\": \"close\", \"showEditorConsole\": false}");
+
+        assertEquals(LauncherSettings.AfterLaunch.CLOSE, load().afterLaunch());
+        assertFalse(load().showEditorConsole());
+    }
+
+    @Test
+    void anInvalidLaunchBehaviourFallsBackWithAWarning() throws IOException {
+        write("{\"version\": 1, \"afterLaunch\": \"hide\", \"showEditorConsole\": \"yes\"}");
+
+        LauncherSettings settings = load();
+
+        assertEquals(LauncherSettings.AfterLaunch.MINIMIZE, settings.afterLaunch());
+        assertTrue(settings.showEditorConsole());
+        assertTrue(log.console().contains("afterLaunch"), log.console());
+        assertTrue(log.console().contains("showEditorConsole"), log.console());
+    }
+
+    @Test
+    void saveWritesOnlyItsMembersAndKeepsTheOthers() throws Exception {
+        write("{\"version\": 1, \"recentProjectsLimit\": 20, \"theme\": \"dark\"}");
+
+        LauncherSettings saved = repository().save(LauncherSettings.AfterLaunch.STAY, false);
+
+        assertEquals(new LauncherSettings(20, LauncherSettings.AfterLaunch.STAY, false), saved);
+        assertEquals(saved, load());
+        String text = Files.readString(file);
+        assertTrue(text.contains("\"theme\": \"dark\""), text);
+        assertTrue(text.contains("\"afterLaunch\": \"stay\""), text);
+        assertTrue(text.contains("\"showEditorConsole\": false"), text);
+    }
+
+    @Test
+    void saveCreatesTheFile() throws Exception {
+        repository().save(LauncherSettings.AfterLaunch.CLOSE, true);
+
+        assertEquals(new LauncherSettings(LauncherSettings.DEFAULT_RECENT_PROJECTS_LIMIT,
+                LauncherSettings.AfterLaunch.CLOSE, true), load());
+    }
+
+    @Test
+    void aNewerFileIsNeverOverwritten() throws IOException {
+        write("{\"version\": 9, \"afterLaunch\": \"stay\"}");
+        byte[] before = Files.readAllBytes(file);
+
+        assertThrows(StoreWriteException.class,
+                () -> repository().save(LauncherSettings.AfterLaunch.CLOSE, true));
+        assertArrayEquals(before, Files.readAllBytes(file));
     }
 }

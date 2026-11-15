@@ -10,10 +10,13 @@ import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.EditorLauncherTest.FakeProcess;
 import com.vertexforge.launcher.service.EditorLauncherTest.RecordingStarter;
+import com.vertexforge.launcher.session.ManualScheduler;
+import com.vertexforge.launcher.session.SessionLogs;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -73,7 +76,9 @@ class ProjectStatusCheckerTest {
         ProjectHub hub = new ProjectHub(repository, new ProjectCreator(TestSupport.fixedClock(), log.log),
                 EngineCatalog.create(TestSupport.environment(root.resolve("config"), TestSupport.fixedClock(),
                         Map.of(), new RecordingStarter(FakeProcess.running(), null)), log.log),
-                new EditorLauncher(new RecordingStarter(FakeProcess.running(), null)),
+                new EditorLauncher(new RecordingStarter(FakeProcess.running(), null),
+                        new SessionLogs(root.resolve("config/logs"), message -> {
+                        }), StandardCharsets.UTF_8, TestSupport.fixedClock(), new ManualScheduler()),
                 checker, 50, TestSupport.fixedClock());
 
         // The window lists the projects without touching any of them...

@@ -44,6 +44,8 @@ public record RecentEntry(
     public static final String LAST_OPENED = "lastOpened";
     public static final String PINNED = "pinned";
     public static final String ENGINE_ID = "engineId";
+    /** "Open with MCP" (VK-1683); not one of the six v2 members, so older v2 launchers keep it as an unknown member. */
+    public static final String MCP = "mcp";
 
     private static final String PROJECT_EXTENSION = ".vfproj";
 
@@ -107,6 +109,21 @@ public record RecentEntry(
             return this;
         }
         return with(ENGINE_ID, newEngineId == null ? JsonNull.INSTANCE : new JsonPrimitive(newEngineId));
+    }
+
+    /** "Open with MCP" for this project (VK-1683); {@link McpSetting#DEFAULT} when it was never set or is malformed. */
+    public McpSetting mcp() {
+        return McpSetting.fromJson(raw.get(MCP));
+    }
+
+    /** Sets "Open with MCP"; returns this entry when the stored member already says the same. */
+    public RecentEntry withMcp(McpSetting setting) {
+        Objects.requireNonNull(setting, "setting");
+        JsonObject stored = setting.toJson();
+        if (stored.equals(raw.get(MCP))) {
+            return this;
+        }
+        return with(MCP, stored);
     }
 
     /** The name to show: the stored name, else the project file's name without {@code .vfproj}, else the raw path. */

@@ -3,8 +3,10 @@ package com.vertexforge.launcher.viewmodel;
 import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.session.EditorSession;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
+import javafx.beans.binding.ObjectBinding;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -41,6 +43,9 @@ public final class ProjectViewModel {
     private final ReadOnlyObjectWrapper<Instant> lastOpened;
     private final ReadOnlyStringWrapper engineText;
     private final ObjectProperty<ProjectStatus> status = new SimpleObjectProperty<>(ProjectStatus.CHECKING);
+    /** The phase of this launcher's editor on the project (VK-1683); {@code null} when none runs. */
+    private final ObjectProperty<EditorSession.Phase> sessionPhase = new SimpleObjectProperty<>(null);
+    private final ObjectBinding<StatusDisplay> statusDisplay;
     private final BooleanBinding openable;
     private long probeToken;
 
@@ -54,6 +59,8 @@ public final class ProjectViewModel {
         // The path cannot change for this row (see matches), so only the status needs observing.
         this.openable = Bindings.createBooleanBinding(
                 () -> status.get().isOk() && this.entry.path() != null, status);
+        this.statusDisplay = Bindings.createObjectBinding(
+                () -> new StatusDisplay(status.get(), sessionPhase.get()), status, sessionPhase);
     }
 
     /** {@code yyyy-MM-dd HH:mm} in {@code zone}, or {@link #UNKNOWN_DATE}. */
@@ -141,6 +148,28 @@ public final class ProjectViewModel {
 
     public ObjectProperty<ProjectStatus> statusProperty() {
         return status;
+    }
+
+    /** The phase of this launcher's editor on the project; {@code null} when none runs (VK-1683). */
+    public EditorSession.Phase getSessionPhase() {
+        return sessionPhase.get();
+    }
+
+    public void setSessionPhase(EditorSession.Phase phase) {
+        sessionPhase.set(phase == EditorSession.Phase.EXITED ? null : phase);
+    }
+
+    public ObjectProperty<EditorSession.Phase> sessionPhaseProperty() {
+        return sessionPhase;
+    }
+
+    /** The Status column's value: the file's status, or the running editor's phase. */
+    public StatusDisplay getStatusDisplay() {
+        return statusDisplay.get();
+    }
+
+    public ObjectBinding<StatusDisplay> statusDisplayProperty() {
+        return statusDisplay;
     }
 
     public boolean isOpenable() {

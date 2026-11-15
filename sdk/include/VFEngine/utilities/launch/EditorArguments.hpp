@@ -10,12 +10,23 @@
 // VK-1682: the Editor.exe command line.
 //
 //   Editor.exe [project.vfproj] [--launch-status <file>] [--mcp] [--mcp-port <n>] [--mcp-token <t>]
+//              [--console]
 //
 // The first positional argument is the project path; flags may appear in any order. Parsing is
 // strict: an unknown flag, a missing value, an invalid port, a repeated flag or a second
 // positional argument is an error, and Editor.exe exits with EditorExitCode::BadArguments.
+//
+// VK-1683: --console opens a console window of the editor's own and mirrors the redirected
+// output into it (launch/EditorConsole.hpp), for a launcher that captures the output in a log.
 namespace launch
 {
+    // VK-1683: the launch-contract revision this editor implements. engine.json carries it as
+    // `launchContract` (tools/engine_version.lua reads this line), so a launcher passes only the
+    // flags this editor accepts. Bump it whenever a flag is added: an older editor rejects an
+    // unknown flag (strict parsing, exit 2).
+    //   1 = the VK-1682 contract + --console (VK-1683)
+    inline constexpr int editorLaunchContract = 1;
+
     inline constexpr uint16_t minMcpPort = 1024;
     inline constexpr uint16_t maxMcpPort = 65535;
 
@@ -29,6 +40,8 @@ namespace launch
         bool mcpEnable = false;               // --mcp: enable with the preference (or default) port
         std::optional<uint16_t> mcpPort;      // --mcp-port <n>: forces enabled
         std::optional<std::string> mcpToken;  // --mcp-token <t>: forces enabled, bearer token
+        bool console = false;                 // --console: open a console window of its own and mirror
+                                              // the redirected output into it (VK-1683)
     };
 
     struct EditorArgumentsResult

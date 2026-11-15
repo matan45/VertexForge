@@ -100,6 +100,17 @@ function vfReadPluginApiVersion()
    return value
 end
 
+-- launch::editorLaunchContract (decimal string, VK-1683): the Editor.exe command-line contract
+-- revision, so a launcher passes only flags this editor accepts.
+function vfReadEditorLaunchContract()
+   local file = "VFEngine/utilities/launch/EditorArguments.hpp"
+   local value = readRepoFile(file):match("int%s+editorLaunchContract%s*=%s*(%d+)%s*;")
+   if not value then
+      error("engine_version.lua: editorLaunchContract not found in " .. file, 0)
+   end
+   return value
+end
+
 -- Writes EngineVersion.generated.hpp from VERSION, only when its content changes (no rebuild storm).
 function vfWriteEngineVersionHeader()
    local v = vfReadEngineVersion()
@@ -176,6 +187,7 @@ function vfWriteEngineManifest(m)
       { "assetFormatVersion",   jsonString(vfReadAssetFormatVersion()) },
       { "projectSchemaVersion", jsonString(vfReadProjectSchemaVersion()) },
       { "pluginApiVersion",     vfReadPluginApiVersion() },
+      { "launchContract",       vfReadEditorLaunchContract() },
       { "configuration",        jsonString(m.configuration) },
       { "gitCommit",            m.gitCommit and jsonString(m.gitCommit) or "null" },
       { "editorExe",            jsonString("Editor.exe") },

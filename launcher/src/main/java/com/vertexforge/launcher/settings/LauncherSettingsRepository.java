@@ -5,27 +5,33 @@ import com.google.gson.JsonObject;
 import com.vertexforge.launcher.store.AtomicJsonStore;
 import com.vertexforge.launcher.store.DocumentFormat;
 import com.vertexforge.launcher.store.StoreSnapshot;
+import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.util.LauncherLog;
 
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Reads {@code ~/.vertexforge/launcher-settings.json} (VK-1678). The editor's {@code editor_settings.json} lives in the
- * same folder, so the launcher keeps its own file.
+ * Reads and writes {@code ~/.vertexforge/launcher-settings.json} (VK-1678). The editor's {@code editor_settings.json}
+ * lives in the same folder, so the launcher keeps its own file.
  * <pre>
- * { "version": 1, "recentProjectsLimit": 50 }
+ * { "version": 1, "recentProjectsLimit": 50, "afterLaunch": "minimize", "showEditorConsole": true }
  * </pre>
- * Until VK-1694 adds a writer, any such file was written by hand, so reading is forgiving and never changes the file:
- * a missing {@code version} means 1, and a corrupt file or an invalid value falls back to the default with a warning.
+ * The file may have been written by hand, so reading is forgiving and never changes the file: a missing
+ * {@code version} means 1, and a corrupt file or an invalid value falls back to the default with a warning.
+ * {@link #save} (the Settings dialog, VK-1683) writes only the members it owns and keeps every other one; like every
+ * {@link AtomicJsonStore} write, it first sets a corrupt file aside.
  */
 public final class LauncherSettingsRepository {
 
     public static final String FILE_NAME = "launcher-settings.json";
     public static final String RECENT_PROJECTS_LIMIT = "recentProjectsLimit";
+    public static final String AFTER_LAUNCH = "afterLaunch";
+    public static final String SHOW_EDITOR_CONSOLE = "showEditorConsole";
     public static final DocumentFormat FORMAT = new DocumentFormat(1, OptionalInt.of(1), root -> {
         // Every member is optional and checked on its own.
     });
@@ -54,7 +60,67 @@ public final class LauncherSettingsRepository {
                 // OK, LEGACY or NEWER_READ_ONLY: read the members this version knows.
             }
         }
-        return new LauncherSettings(recentProjectsLimit(snapshot.root()));
+        return fromRoot(snapshot.root());
+    }
+
+    /**
+     * Writes the launch behaviour (VK-1683), keeping every other member, and returns the settings as written. Blocks
+     * on the file lock, so it runs on the store thread.
+     *
+     * @throws StoreWriteException when nothing was written (a newer or unreadable file, a lock timeout, ...)
+     */
+    public LauncherSettings save(LauncherSettings.AfterLaunch afterLaunch, boolean showEditorConsole)
+            throws StoreWriteException {
+        Objects.requireNonNull(afterLaunch, "afterLaunch");
+        StoreSnapshot written;
+        try {
+            written = store.update(root -> {
+                root.addProperty(AFTER_LAUNCH, afterLaunch.jsonName());
+                root.addProperty(SHOW_EDITOR_CONSOLE, showEditorConsole);
+                return root;
+            });
+        } catch (StoreWriteException e) {
+            log.warn("Failed to save the launcher settings: " + e.getMessage());
+            throw e;
+        }
+        written.quarantinedTo().ifPresent(movedTo -> log.warn("The launcher settings file was damaged; it was kept as "
+                + movedTo.getFileName() + " and a new one was written"));
+        return fromRoot(written.root());
+    }
+
+    private LauncherSettings fromRoot(JsonObject root) {
+        return new LauncherSettings(recentProjectsLimit(root), afterLaunch(root), showEditorConsole(root));
+    }
+
+    private LauncherSettings.AfterLaunch afterLaunch(JsonObject root) {
+        JsonElement value = root.get(AFTER_LAUNCH);
+        if (value == null || value.isJsonNull()) {
+            return LauncherSettings.DEFAULT_AFTER_LAUNCH;
+        }
+        if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+            Optional<LauncherSettings.AfterLaunch> parsed =
+                    LauncherSettings.AfterLaunch.fromJsonName(value.getAsString());
+            if (parsed.isPresent()) {
+                return parsed.get();
+            }
+        }
+        log.warn("Ignoring \"" + AFTER_LAUNCH + "\": " + value + " in " + store.file()
+                + ": it must be \"minimize\", \"close\" or \"stay\"; using \""
+                + LauncherSettings.DEFAULT_AFTER_LAUNCH.jsonName() + "\"");
+        return LauncherSettings.DEFAULT_AFTER_LAUNCH;
+    }
+
+    private boolean showEditorConsole(JsonObject root) {
+        JsonElement value = root.get(SHOW_EDITOR_CONSOLE);
+        if (value == null || value.isJsonNull()) {
+            return LauncherSettings.DEFAULT_SHOW_EDITOR_CONSOLE;
+        }
+        if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()) {
+            return value.getAsBoolean();
+        }
+        log.warn("Ignoring \"" + SHOW_EDITOR_CONSOLE + "\": " + value + " in " + store.file()
+                + ": it must be true or false; using " + LauncherSettings.DEFAULT_SHOW_EDITOR_CONSOLE);
+        return LauncherSettings.DEFAULT_SHOW_EDITOR_CONSOLE;
     }
 
     private int recentProjectsLimit(JsonObject root) {

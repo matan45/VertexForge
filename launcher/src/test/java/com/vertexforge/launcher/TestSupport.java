@@ -123,6 +123,12 @@ public final class TestSupport {
      * configuration and working directory (relative to {@code dir}).
      */
     public static Path writeManifest(Path dir, String configuration, String workingDirectory) {
+        return writeManifest(dir, configuration, workingDirectory, null);
+    }
+
+    /** As {@link #writeManifest(Path, String, String)}, with a {@code launchContract} member (VK-1683) when given. */
+    public static Path writeManifest(Path dir, String configuration, String workingDirectory,
+                                     Integer launchContract) {
         String text = """
                 {
                   "manifestVersion": 1,
@@ -135,9 +141,10 @@ public final class TestSupport {
                   "editorExe": "Editor.exe",
                   "workingDirectory": "%s",
                   "templatesDir": "../../../../assets/templates",
-                  "scriptLibDir": "../../../../assets/scripts/lib"
+                  "scriptLibDir": "../../../../assets/scripts/lib"%s
                 }
-                """.formatted(configuration, workingDirectory);
+                """.formatted(configuration, workingDirectory,
+                launchContract == null ? "" : ",\n  \"launchContract\": " + launchContract);
         try {
             return Files.writeString(Files.createDirectories(dir).resolve("engine.json"), text, StandardCharsets.UTF_8);
         } catch (IOException e) {

@@ -40,6 +40,14 @@ public final class BannerBar {
 
     /** Shows (or replaces) the banner for {@code key}; a dismissable one has a close button. */
     public void show(String key, Kind kind, String message, boolean dismissable) {
+        show(key, kind, message, dismissable, null, null);
+    }
+
+    /**
+     * As {@link #show(String, Kind, String, boolean)}, with a button labelled {@code actionText} that runs
+     * {@code action} (VK-1683: "Open log"); no button when either is {@code null}.
+     */
+    public void show(String key, Kind kind, String message, boolean dismissable, String actionText, Runnable action) {
         Label text = new Label(message);
         text.setWrapText(true);
         text.setMaxWidth(Double.MAX_VALUE);
@@ -48,6 +56,12 @@ public final class BannerBar {
 
         HBox banner = new HBox(text);
         banner.getStyleClass().addAll("banner", kind.styleClass);
+        if (actionText != null && action != null) {
+            Button button = new Button(actionText);
+            button.getStyleClass().add("banner-action");
+            button.setOnAction(event -> action.run());
+            banner.getChildren().add(button);
+        }
         if (dismissable) {
             Button close = new Button("×");
             close.getStyleClass().add("banner-close");

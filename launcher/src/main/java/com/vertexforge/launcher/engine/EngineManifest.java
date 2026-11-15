@@ -30,7 +30,8 @@ import java.util.regex.Pattern;
  * { "manifestVersion": 1, "engineVersion": "1.0.0", "assetFormatVersion": "1.0.0", "projectSchemaVersion": "1.0",
  *   "pluginApiVersion": 25, "configuration": "Development", "gitCommit": "599a8a30…" or null,
  *   "editorExe": "Editor.exe", "workingDirectory": "../../../../VFEngine/editor",
- *   "templatesDir": "../../../../assets/templates", "scriptLibDir": "../../../../assets/scripts/lib" }
+ *   "templatesDir": "../../../../assets/templates", "scriptLibDir": "../../../../assets/scripts/lib",
+ *   "launchContract": 1 }
  * </pre>
  * Paths are relative to the manifest's folder. The members the launcher needs to start the editor are required and
  * checked strictly; the others are informational and read as {@code null} when they are missing or of the wrong type.
@@ -47,6 +48,9 @@ import java.util.regex.Pattern;
  * @param workingDirectory     the folder the editor must start in, relative to the manifest's folder
  * @param templatesDir         the project templates folder, or {@code null} (VK-1689)
  * @param scriptLibDir         the mType script library folder, or {@code null} (VK-1689)
+ * @param launchContract       the editor launch-contract revision ({@code launch::editorLaunchContract}, VK-1683), or
+ *                             {@code null} for an editor built before the field existed: the launcher then passes only
+ *                             the arguments every editor accepts. 1 adds {@code --console}.
  */
 public record EngineManifest(
         int manifestVersion,
@@ -59,7 +63,8 @@ public record EngineManifest(
         String editorExe,
         String workingDirectory,
         String templatesDir,
-        String scriptLibDir
+        String scriptLibDir,
+        Integer launchContract
 ) {
     public static final String FILE_NAME = "engine.json";
     public static final int SUPPORTED_VERSION = 1;
@@ -76,6 +81,9 @@ public record EngineManifest(
     static final String WORKING_DIRECTORY = "workingDirectory";
     static final String TEMPLATES_DIR = "templatesDir";
     static final String SCRIPT_LIB_DIR = "scriptLibDir";
+    static final String LAUNCH_CONTRACT = "launchContract";
+    /** The first contract revision with {@code --console} (VK-1683). */
+    public static final int CONSOLE_FLAG_CONTRACT = 1;
 
     /** {@code MAJOR.MINOR.PATCH} without leading zeros, as {@code tools/engine_version.lua} writes it. */
     private static final Pattern VERSION_PATTERN = Pattern.compile("(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){2}");
@@ -149,7 +157,19 @@ public record EngineManifest(
                 editorExe,
                 workingDirectory,
                 optionalString(root, TEMPLATES_DIR),
-                optionalString(root, SCRIPT_LIB_DIR));
+                optionalString(root, SCRIPT_LIB_DIR),
+                launchContract(root.get(LAUNCH_CONTRACT)));
+    }
+
+    /** Whether this engine's editor accepts {@code --console} (VK-1683). */
+    public boolean acceptsConsoleFlag() {
+        return launchContract != null && launchContract >= CONSOLE_FLAG_CONTRACT;
+    }
+
+    /** A whole number of at least 1; {@code null} otherwise, which the launcher treats as an unknown contract. */
+    private static Integer launchContract(JsonElement element) {
+        Integer value = wholeNumber(element);
+        return value != null && value >= 1 ? value : null;
     }
 
     /**

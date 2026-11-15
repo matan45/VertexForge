@@ -266,6 +266,15 @@
     -fx-text-fill: #cccccc;
 }
 
+/* A project an editor of this launcher has open (VK-1683) */
+.projects-table .table-row-cell:running .table-cell {
+    -fx-text-fill: #7fc8f8;
+}
+
+.projects-table .table-row-cell:running:selected .table-cell {
+    -fx-text-fill: #cfe9ff;
+}
+
 /* TableView Empty State */
 .projects-table .placeholder {
     -fx-background-color: transparent;
@@ -440,6 +449,30 @@
     -fx-opacity: 0.5;
 }
 
+/* Settings, MCP and editor-failure dialogs (VK-1683) */
+.dialog-pane.launcher-dialog .dialog-note {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 12px;
+}
+
+.dialog-pane.launcher-dialog .radio-button {
+    -fx-text-fill: #cccccc;
+}
+
+.dialog-pane.launcher-dialog .failure-summary {
+    -fx-text-fill: #d7ba7d;
+    -fx-font-size: 13px;
+}
+
+.dialog-pane.launcher-dialog .failure-details {
+    -fx-font-family: "Consolas", "Courier New", monospace;
+    -fx-font-size: 12px;
+    -fx-control-inner-background: #1e1e1e;
+    -fx-text-fill: #cccccc;
+    -fx-highlight-fill: #264f78;
+    -fx-highlight-text-fill: #ffffff;
+}
+
 /* ============================================
    Banners (VK-1678)
    ============================================ */
@@ -480,4 +513,17 @@
 
 .banner-close:hover {
     -fx-text-fill: #ffffff;
+}
+
+/* A banner's action, e.g. "Open log" (VK-1683) */
+.banner-action {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-text-fill: #ffffff;
+    -fx-padding: 3 10;
+    -fx-background-radius: 3;
+    -fx-cursor: hand;
+}
+
+.banner-action:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.22);
 }

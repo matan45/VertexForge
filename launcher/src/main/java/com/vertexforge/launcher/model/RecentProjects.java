@@ -115,6 +115,23 @@ public final class RecentProjects {
         return this;
     }
 
+    /** Sets the entry's "Open with MCP" (VK-1683); does nothing when the id is gone or nothing changes. */
+    public RecentProjects setMcp(UUID id, McpSetting setting) {
+        List<RecentEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            RecentEntry entry = next.get(i);
+            if (entry.id().equals(id)) {
+                RecentEntry changed = entry.withMcp(setting);
+                if (changed == entry) {
+                    return this;
+                }
+                next.set(i, changed);
+                return new RecentProjects(next);
+            }
+        }
+        return this;
+    }
+
     /** Removes the entry; does nothing when the id is gone. Never touches the project on disk. */
     public RecentProjects remove(UUID id) {
         List<RecentEntry> next = new ArrayList<>(entries);

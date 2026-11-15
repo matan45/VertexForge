@@ -2,6 +2,7 @@
 #include "../splash/SplashScreen.hpp"
 #include "crash/CrashHandler.hpp"
 #include "launch/EditorArguments.hpp"
+#include "launch/EditorConsole.hpp"
 #include "launch/EditorExitCode.hpp"
 #include "launch/LaunchStatusFile.hpp"
 #include "launch/ProjectLock.hpp"
@@ -19,12 +20,13 @@
 #include <system_error>
 #include <vector>
 
-// Editor.exe [project.vfproj] [--launch-status <file>] [--mcp] [--mcp-port <n>] [--mcp-token <t>]
+// Editor.exe [project.vfproj] [--launch-status <file>] [--mcp] [--mcp-port <n>] [--mcp-token <t>] [--console]
 //
 // The first non-flag argument is the project path; flags may appear in any order. Without
 // arguments the editor starts with no project.
 //
-// Launch contract (VK-1682), relied on by the launcher:
+// Launch contract (VK-1682, VK-1683), relied on by the launcher. engine.json carries its revision as
+// `launchContract` (launch::editorLaunchContract), so a launcher passes only flags this editor accepts:
 //
 // Exit codes (launch::EditorExitCode; the launcher's twin is service/EditorExitCode.java):
 //   0  normal exit
@@ -47,6 +49,17 @@
 // Project lock: while a project is open the editor holds <project folder>/.vertexforge/editor.lock
 // (launch/ProjectLock.hpp). Switching projects (MCP project_open) moves it. On read-only media the
 // project opens without it, with a warning.
+//
+// Output (VK-1683): stdout and stderr redirected to a file or a pipe are unbuffered, so a launcher's
+// log is complete up to the last line, even after a crash.
+//
+// --console (VK-1683): for a launcher that captures the output and starts the editor without a
+// console window. The editor opens a console window of its own and mirrors the redirected output
+// into it, from the start of the file; the output still goes to the file. Closing that window ends
+// the editor (exit code 0xC000013A, as when the console of an editor started from Explorer is
+// closed); Ctrl+C is ignored. When stdout already is a console the flag does nothing; when the
+// window cannot be opened or cannot show the output, the editor warns and runs on. See
+// launch/EditorConsole.hpp.
 namespace
 {
     using launch::EditorExitCode;
@@ -98,8 +111,11 @@ namespace
 }
 
 int main(int argc, char* argv[]) {
-    // Install the crash handler first (so even a fault during log init is dumped), then mirror the
-    // log to disk, so that argument errors land in the log too.
+    // Before any output: a redirected stdout/stderr must not sit in a CRT buffer (VK-1683).
+    launch::prepareStandardStreams();
+
+    // Then the crash handler (so even a fault during log init is dumped), then mirror the log to
+    // disk, so that argument errors land in the log too.
     util::installCrashHandler();
     util::initLogFile("Editor");
 
@@ -179,6 +195,29 @@ int main(int argc, char* argv[]) {
         std::cerr << "Editor.exe: --launch-status " << args.launchStatusPath << ": cannot write the status file"
                   << std::endl;
         return launch::toInt(EditorExitCode::BadArguments);
+    }
+
+    // Declared before the project lock and the editor, so it is destroyed after both: the console
+    // mirrors the output to the very end, cleanUp() included.
+    launch::EditorConsole editorConsole;
+    if (args.console)
+    {
+        // The file name only; projectText is the UTF-8 absolute path (or the raw argument).
+        std::string_view projectName = projectText;
+        if (const std::size_t slash = projectName.find_last_of("\\/");
+            slash != std::string_view::npos && slash + 1 < projectName.size())
+        {
+            projectName.remove_prefix(slash + 1);
+        }
+        const std::string title = "VertexForge Editor - " +
+                                  (projectName.empty() ? std::string("no project") : std::string(projectName)) +
+                                  " (closing this window closes the editor)";
+        const launch::EditorConsole::Result opened = editorConsole.open(title);
+        if (opened.status == launch::EditorConsole::Result::Status::Failed ||
+            opened.status == launch::EditorConsole::Result::Status::OpenedWithoutMirror)
+        {
+            vfLogWarning("--console: {}", opened.message);
+        }
     }
 
     if (projectPathUnusable)

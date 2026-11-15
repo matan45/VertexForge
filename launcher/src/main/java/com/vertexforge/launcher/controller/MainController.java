@@ -5,6 +5,9 @@ import com.vertexforge.launcher.dialog.CreateProjectForm;
 import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
 import com.vertexforge.launcher.dialog.EnginesDialog;
+import com.vertexforge.launcher.dialog.McpDialog;
+import com.vertexforge.launcher.dialog.SessionFailureDialog;
+import com.vertexforge.launcher.dialog.SettingsDialog;
 import com.vertexforge.launcher.engine.EditorOverride;
 import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.engine.EngineOption;
@@ -13,18 +16,30 @@ import com.vertexforge.launcher.engine.EngineRegistryCodec;
 import com.vertexforge.launcher.engine.EngineRegistryView;
 import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
+import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.CreationJob;
+import com.vertexforge.launcher.service.EditorExitCode;
 import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.session.EditorSession;
+import com.vertexforge.launcher.session.EditorSessions;
+import com.vertexforge.launcher.session.LaunchRequest;
+import com.vertexforge.launcher.session.LaunchStatus;
+import com.vertexforge.launcher.session.SessionOutcome;
+import com.vertexforge.launcher.session.SessionReport;
+import com.vertexforge.launcher.session.SessionStart;
+import com.vertexforge.launcher.session.StartResult;
+import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.ui.BannerBar;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
+import com.vertexforge.launcher.viewmodel.StatusDisplay;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -48,16 +63,20 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -79,7 +98,9 @@ import java.util.function.Consumer;
  * Threading (VK-1678): every list read and change runs on the single {@code background} executor, in order, and its
  * result comes back through {@link Platform#runLater}, so results are applied in the order they were asked for.
  * Status and location checks run on the hub's own threads, and project files are written on the single
- * {@code creation} executor (VK-1679). Everything in this class itself runs on the FX thread.
+ * {@code creation} executor (VK-1679). Every editor this window starts is watched by an {@link EditorSession} on the
+ * hub's session thread, which reports back through {@link Platform#runLater} (VK-1683). Everything in this class
+ * itself runs on the FX thread.
  */
 public class MainController implements Initializable {
 
@@ -92,10 +113,13 @@ public class MainController implements Initializable {
     static final String BANNER_ENGINES = "engines";
     static final String BANNER_ENGINES_CHECK = "engines-check";
     static final String BANNER_OVERRIDE = "editor-override";
+    static final String BANNER_SESSION_PREFIX = "session:";
+    static final String BANNER_SETTINGS = "settings";
 
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
     private static final PseudoClass UNREADABLE_ROW = PseudoClass.getPseudoClass("unreadable");
     private static final PseudoClass CHECKING_ROW = PseudoClass.getPseudoClass("checking");
+    private static final PseudoClass RUNNING_ROW = PseudoClass.getPseudoClass("running");
 
     @FXML
     private TableView<ProjectViewModel> projectsTable;
@@ -104,7 +128,7 @@ public class MainController implements Initializable {
     private TableColumn<ProjectViewModel, String> nameColumn;
 
     @FXML
-    private TableColumn<ProjectViewModel, ProjectStatus> statusColumn;
+    private TableColumn<ProjectViewModel, StatusDisplay> statusColumn;
 
     @FXML
     private TableColumn<ProjectViewModel, String> engineColumn;
@@ -133,6 +157,9 @@ public class MainController implements Initializable {
     @FXML
     private Button enginesButton;
 
+    @FXML
+    private Button settingsButton;
+
     private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
     private final ProjectHub hub;
     private final Executor background;
@@ -158,6 +185,9 @@ public class MainController implements Initializable {
     /** Only the latest engine check updates the window. */
     private long engineToken;
     private final EngineServices engineServices = new ControllerEngineServices();
+
+    /** The editors this window started that still run, one per project (VK-1683). */
+    private final EditorSessions sessions = new EditorSessions();
 
     private BannerBar banners;
 
@@ -208,18 +238,19 @@ public class MainController implements Initializable {
         engineColumn.setCellValueFactory(cell -> cell.getValue().engineTextProperty());
         pathColumn.setCellValueFactory(cell -> cell.getValue().pathTextProperty());
 
-        statusColumn.setCellValueFactory(cell -> cell.getValue().statusProperty());
-        statusColumn.setComparator(Comparator.comparing(ProjectStatus::kind));
+        // The file's status, or the phase of an editor this window started on the project (VK-1683).
+        statusColumn.setCellValueFactory(cell -> cell.getValue().statusDisplayProperty());
+        statusColumn.setComparator(StatusDisplay.ORDER);
         statusColumn.setCellFactory(column -> new TableCell<>() {
             @Override
-            protected void updateItem(ProjectStatus status, boolean empty) {
-                super.updateItem(status, empty);
-                if (empty || status == null) {
+            protected void updateItem(StatusDisplay display, boolean empty) {
+                super.updateItem(display, empty);
+                if (empty || display == null) {
                     setText(null);
                     setTooltip(null);
                 } else {
-                    setText(status.label());
-                    setTooltip(status.reason().isEmpty() ? null : new Tooltip(status.reason()));
+                    setText(display.label());
+                    setTooltip(display.tooltip().isEmpty() ? null : new Tooltip(display.tooltip()));
                 }
             }
         });
@@ -266,11 +297,16 @@ public class MainController implements Initializable {
         changeEngineItem.setOnAction(e -> changeEngineOfSelected());
         changeEngineItem.disableProperty().bind(readOnly.or(launching).or(choosingEngine));
 
+        // VK-1683: "Open with MCP" and its port, stored on the entry.
+        MenuItem mcpItem = new MenuItem("MCP…");
+        mcpItem.setOnAction(e -> editMcpOfSelected());
+        mcpItem.disableProperty().bind(readOnly.or(launching).or(choosingEngine));
+
         MenuItem removeItem = new MenuItem("Remove from List");
         removeItem.setOnAction(e -> removeSelectedProject());
         removeItem.disableProperty().bind(readOnly);
 
-        contextMenu.getItems().addAll(changeEngineItem, removeItem);
+        contextMenu.getItems().addAll(changeEngineItem, mcpItem, removeItem);
 
         projectsTable.setRowFactory(table -> {
             ProjectRow row = new ProjectRow();
@@ -284,9 +320,12 @@ public class MainController implements Initializable {
         });
     }
 
-    /** A row styled by its project's status; it follows the status as background checks answer. */
+    /**
+     * A row styled by its project's status; it follows the status as background checks answer, and the editor this
+     * window started on the project (VK-1683).
+     */
     private static final class ProjectRow extends TableRow<ProjectViewModel> {
-        private final ChangeListener<ProjectStatus> statusListener = (observable, was, now) -> applyStatus(now);
+        private final ChangeListener<StatusDisplay> displayListener = (observable, was, now) -> applyStatus(now);
         private ProjectViewModel watched;
 
         @Override
@@ -294,23 +333,25 @@ public class MainController implements Initializable {
             super.updateItem(item, empty);
             // A recycled row stops following its previous item.
             if (watched != null) {
-                watched.statusProperty().removeListener(statusListener);
+                watched.statusDisplayProperty().removeListener(displayListener);
                 watched = null;
             }
             if (empty || item == null) {
                 applyStatus(null);
             } else {
                 watched = item;
-                item.statusProperty().addListener(statusListener);
-                applyStatus(item.getStatus());
+                item.statusDisplayProperty().addListener(displayListener);
+                applyStatus(item.getStatusDisplay());
             }
         }
 
-        private void applyStatus(ProjectStatus status) {
-            ProjectStatus.Kind kind = status == null ? null : status.kind();
+        private void applyStatus(StatusDisplay display) {
+            boolean running = display != null && display.running();
+            ProjectStatus.Kind kind = display == null || running ? null : display.status().kind();
             pseudoClassStateChanged(MISSING_ROW, kind == ProjectStatus.Kind.MISSING);
             pseudoClassStateChanged(UNREADABLE_ROW, kind == ProjectStatus.Kind.UNREADABLE);
             pseudoClassStateChanged(CHECKING_ROW, kind == ProjectStatus.Kind.CHECKING);
+            pseudoClassStateChanged(RUNNING_ROW, running);
         }
     }
 
@@ -332,6 +373,7 @@ public class MainController implements Initializable {
         // One binding each: a bound property must never be set directly.
         openProjectButton.disableProperty().bind(launching.or(choosingEngine).or(selectedOpenable.not()));
         enginesButton.disableProperty().bind(launching.or(choosingEngine));
+        settingsButton.disableProperty().bind(launching.or(choosingEngine));
         createProjectButton.disableProperty().bind(creating.or(readOnly));
     }
 
@@ -387,6 +429,8 @@ public class MainController implements Initializable {
             }
             // The entry's binding may have changed (a first open binds it).
             applyEngineLabel(row);
+            // A rebuilt row still shows the editor running on its project (VK-1683).
+            row.setSessionPhase(sessions.find(row.getProjectPath()).map(EditorSessions.Live::phase).orElse(null));
             rows.add(row);
         }
 
@@ -487,22 +531,32 @@ public class MainController implements Initializable {
         if (selected == null || !selected.isOpenable() || launching.get() || choosingEngine.get()) {
             return;
         }
-        launchProject(selected.getProjectPath(), selected.getId(), selected.getEntry().engineId());
+        launchProject(selected.getProjectPath(), selected.getEntry());
     }
 
     /**
      * Opens {@code projectFile} with the engine it is bound to (VK-1681): the engines are checked in the background,
-     * {@link LaunchPlan} decides, and the user is asked when it cannot. Once the editor has started, the entry
-     * {@code id} is marked as opened (and bound to its engine on its first open) when it is listed and the list may
-     * be written, and the launcher minimizes.
+     * {@link LaunchPlan} decides, and the user is asked when it cannot. A project an editor of this window already
+     * has open starts nothing (VK-1683). Once the editor is ready, the entry is marked as opened (and bound to its
+     * engine on its first open) when it is listed and the list may be written, and the after-launch setting applies.
      *
-     * @param id       the project's entry, or {@code null} when it is not listed
-     * @param engineId the entry's engine binding, or {@code null} for an unbound project
+     * @param entry the project's entry, or {@code null} when it is not listed
      */
-    private void launchProject(Path projectFile, UUID id, String engineId) {
+    private void launchProject(Path projectFile, RecentEntry entry) {
         if (launching.get() || choosingEngine.get()) {
             return;
         }
+        // One session per project: Open on a running project starts nothing (VK-1683).
+        Optional<EditorSessions.Live> live = sessions.find(projectFile);
+        if (live.isPresent()) {
+            showAlreadyRunning(live.get());
+            return;
+        }
+
+        UUID id = entry == null ? null : entry.id();
+        String engineId = entry == null ? null : entry.engineId();
+        String name = entry != null ? entry.displayName() : projectName(projectFile);
+        McpSetting mcp = entry == null ? McpSetting.DEFAULT : entry.mcp();
 
         // Disable UI to prevent double-clicks while the engines are checked and the editor starts
         launching.set(true);
@@ -510,7 +564,8 @@ public class MainController implements Initializable {
         withEngines(options -> {
             try {
                 switch (hub.planLaunch(options, engineId)) {
-                    case LaunchPlan.Ready ready -> startEditor(ready.engine(), projectFile, id, ready.bindTo());
+                    case LaunchPlan.Ready ready ->
+                            startEditor(ready.engine(), projectFile, name, mcp, id, ready.bindTo());
                     case LaunchPlan.Choose choose -> {
                         boolean canRemember = id != null && !readOnly.get();
                         Optional<EngineChooserDialog.Choice> choice = EngineChooserDialog.showForOpen(window(),
@@ -521,7 +576,7 @@ public class MainController implements Initializable {
                             return;
                         }
                         EngineOption engine = choice.get().engine().get();
-                        startEditor(engine, projectFile, id,
+                        startEditor(engine, projectFile, name, mcp, id,
                                 choice.get().remember() ? engine.id() : Optional.empty());
                     }
                 }
@@ -536,37 +591,320 @@ public class MainController implements Initializable {
         });
     }
 
+    /** The project's file name without {@code .vfproj}, for a project that is not listed. */
+    private static String projectName(Path projectFile) {
+        String fileName = projectFile.getFileName() == null ? projectFile.toString()
+                : projectFile.getFileName().toString();
+        return fileName.endsWith(".vfproj") ? fileName.substring(0, fileName.length() - ".vfproj".length())
+                : fileName;
+    }
+
     /**
-     * Starts the editor of {@code engine}; once it runs, marks the entry as opened, binds it to {@code bindTo} in
-     * the same write, and minimizes the launcher. {@code launching} must already be set.
+     * Starts the editor of {@code engine} and hands it to a session (VK-1683). {@code launching} must already be set;
+     * it is cleared once the process has started (or failed to), and the session is listed in the same FX task, so
+     * no second launch of the project can slip in between.
+     *
+     * @param id     the project's entry, or {@code null} when it is not listed
+     * @param bindTo the engine the entry is bound to once the editor is ready
      */
-    private void startEditor(EngineOption engine, Path projectFile, UUID id, Optional<UUID> bindTo) {
-        // Launch editor asynchronously on a background thread
-        hub.launch(engine, projectFile)
-                .thenAccept(result -> Platform.runLater(() -> {
-                    launching.set(false);
-                    if (!result.success()) {
-                        showErrorDialog("Launch Failed", result.errorMessage());
-                        return;
-                    }
+    private void startEditor(EngineOption engine, Path projectFile, String name, McpSetting mcp, UUID id,
+                             Optional<UUID> bindTo) {
+        if (mcp.enabled()) {
+            sessions.usingMcpPort(mcp.port()).ifPresent(other -> banners.show(BANNER_SESSION_PREFIX + "port",
+                    BannerBar.Kind.WARNING, "\"" + other.projectName() + "\" already runs with its MCP server on port "
+                            + mcp.port() + ", so the MCP server of \"" + name + "\" cannot start. Give one of them"
+                            + " another port (right-click the project, then MCP…).", true));
+        }
+        LaunchRequest request = new LaunchRequest(engine, projectFile, name, mcp, hub.settings().showEditorConsole());
+        hub.launch(request).whenComplete((result, error) -> Platform.runLater(() -> {
+            launching.set(false);
+            if (error != null || result == null) {
+                showErrorDialog("Launch Failed", "Unexpected error: " + describe(error));
+                return;
+            }
+            switch (result) {
+                case StartResult.Failed failed -> showErrorDialog("Launch Failed", failed.message());
+                case StartResult.Started started -> beginSession(started.start(), mcp, id, bindTo);
+            }
+        }));
+    }
 
-                    // Update last opened timestamp and the binding (a read-only list is never written)
-                    if (id != null && !readOnly.get()) {
-                        runInBackground(() -> hub.markOpened(id, bindTo), this::applySavedView, this::showSaveError);
-                    }
+    /** Lists and starts watching an editor that has just started. */
+    private void beginSession(SessionStart start, McpSetting mcp, UUID id, Optional<UUID> bindTo) {
+        EditorSession session = hub.newSession(start, MainController::runLaterQuietly,
+                new BoundListener(id, bindTo));
+        sessions.add(session, mcp);
+        showSessionPhase(session, EditorSession.Phase.STARTING);
+        session.begin();
+    }
 
-                    // Minimize launcher after successful launch
-                    Stage stage = (Stage) projectsTable.getScene().getWindow();
+    /** Says that the project is already open in an editor this window started, and brings nothing up. */
+    private void showAlreadyRunning(EditorSessions.Live live) {
+        banners.show(sessionBanner(live.session()), BannerBar.Kind.INFO, "\"" + live.projectName()
+                + "\" is already open in an editor this launcher started ("
+                + live.phase().label().toLowerCase(Locale.ROOT) + "); nothing new was started.", true, "Open log",
+                () -> openFile(live.session().start().log()));
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Editor sessions (VK-1683)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** One session's listener; it knows the entry to mark as opened once the editor is ready. FX thread. */
+    private final class BoundListener implements EditorSession.Listener {
+        private final UUID id;
+        private final Optional<UUID> bindTo;
+
+        BoundListener(UUID id, Optional<UUID> bindTo) {
+            this.id = id;
+            this.bindTo = bindTo;
+        }
+
+        @Override
+        public void phaseChanged(EditorSession session, EditorSession.Phase phase) {
+            showSessionPhase(session, phase);
+            switch (phase) {
+                case READY -> onSessionReady(session, id, bindTo);
+                case NO_READY_SIGNAL -> onNoReadySignal(session);
+                case LOADING -> banners.hide(sessionBanner(session));
+                case STARTING, EXITED -> {
+                    // STARTING is shown at the start; EXITED comes through exited().
+                }
+            }
+        }
+
+        @Override
+        public void crashReported(EditorSession session, LaunchStatus status) {
+            restoreWindow();
+            banners.show(sessionBanner(session), BannerBar.Kind.ERROR, "The editor of \""
+                    + session.start().projectName() + "\" crashed (" + EditorExitCode.describe(status.code())
+                    + ") and is showing its crash message. The details follow when it closes.", true,
+                    "Open log", () -> openFile(session.start().log()));
+        }
+
+        @Override
+        public void exited(EditorSession session, SessionReport report) {
+            onSessionExited(session, report);
+        }
+    }
+
+    private static String sessionBanner(EditorSession session) {
+        return BANNER_SESSION_PREFIX + session.start().log().getFileName();
+    }
+
+    /** Shows the phase in the registry and on the project's row. */
+    private void showSessionPhase(EditorSession session, EditorSession.Phase phase) {
+        sessions.setPhase(session, phase);
+        Path project = EditorSessions.key(session.start().project());
+        for (ProjectViewModel row : projectsList) {
+            if (row.getProjectPath() != null && EditorSessions.key(row.getProjectPath()).equals(project)) {
+                row.setSessionPhase(phase);
+            }
+        }
+    }
+
+    /**
+     * The editor has opened its project: mark the entry as opened (and bind it on its first open), then apply the
+     * after-launch setting. A failed save keeps the window as it is and says so.
+     */
+    private void onSessionReady(EditorSession session, UUID id, Optional<UUID> bindTo) {
+        banners.hide(sessionBanner(session));
+        if (id != null && !readOnly.get()) {
+            runInBackground(() -> hub.markOpened(id, bindTo), view -> {
+                applySavedView(view);
+                applyAfterLaunch();
+            }, this::showSaveError);
+        } else {
+            applyAfterLaunch();
+        }
+    }
+
+    /**
+     * Minimize, close or stay, once an editor is ready. Nothing happens while the user is busy in the window (a
+     * launch, an engine choice, a creation or any other dialog); Close also waits until no other editor can still
+     * fail to open its project, so no failure goes unreported.
+     */
+    private void applyAfterLaunch() {
+        if (launching.get() || choosingEngine.get() || creationRunning() || modalDialogShowing()) {
+            return;
+        }
+        Stage stage = (Stage) window();
+        switch (hub.settings().afterLaunch()) {
+            case MINIMIZE -> stage.setIconified(true);
+            case CLOSE -> {
+                if (sessions.anyBeforeReady()) {
                     stage.setIconified(true);
-                }))
-                .exceptionally(throwable -> {
-                    Platform.runLater(() -> {
-                        launching.set(false);
-                        showErrorDialog("Launch Failed",
-                                "Unexpected error: " + throwable.getMessage());
-                    });
-                    return null;
-                });
+                } else {
+                    // stop() waits for the store thread; the editors keep running and their logs stay complete.
+                    Platform.exit();
+                }
+            }
+            case STAY -> {
+                // Nothing to do.
+            }
+        }
+    }
+
+    /** Whether a dialog that blocks the main window is open. */
+    private boolean modalDialogShowing() {
+        Window main = window();
+        for (Window other : Window.getWindows()) {
+            if (other != main && other.isShowing() && other instanceof Stage stage
+                    && stage.getModality() != Modality.NONE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void onNoReadySignal(EditorSession session) {
+        SessionStart start = session.start();
+        String why = start.statusOmitted()
+                .map(reason -> "The launcher cannot tell when it is ready: " + reason + ".")
+                .orElse(start.contractKnown()
+                        ? "It should have reported its state by now; it may be stuck before loading."
+                        : "It may be an editor that does not report its state (one built before the launch"
+                                + " contract); if the project did not open, its log says why.");
+        // The launcher never minimized for this editor (that waits for Ready), so it is still up; it is not pulled in
+        // front of the editor the user may be working in.
+        banners.show(sessionBanner(session), BannerBar.Kind.WARNING, "The editor of \"" + start.projectName()
+                + "\" is running but sent no ready signal after " + EditorSession.READY_TIMEOUT.toSeconds() + " s. "
+                + why, true, "Open log", () -> openFile(start.log()));
+    }
+
+    /**
+     * An editor ended: unlist it, re-check the projects, come back when this was the last editor or it failed, and
+     * explain a failure.
+     */
+    private void onSessionExited(EditorSession session, SessionReport report) {
+        sessions.remove(session);
+        showSessionPhase(session, EditorSession.Phase.EXITED);
+        banners.hide(sessionBanner(session));
+
+        SessionOutcome outcome = report.outcome();
+        boolean failed = !(outcome instanceof SessionOutcome.Normal);
+        if (failed || sessions.liveCount() == 0) {
+            restoreWindow();
+        }
+        // The project files may have changed while the editor ran (AC: the statuses are refreshed).
+        for (ProjectViewModel row : projectsList) {
+            check(row);
+        }
+
+        String name = session.start().projectName();
+        Path log = report.log();
+        switch (outcome) {
+            case SessionOutcome.Normal normal -> {
+                // A normal close: nothing to say.
+            }
+            case SessionOutcome.NoReadySignal noSignal -> banners.show(sessionBanner(session),
+                    BannerBar.Kind.WARNING, outcome.headline(name), true, "Open log", () -> openFile(log));
+            case SessionOutcome.ConsoleClosed closed -> banners.show(sessionBanner(session),
+                    BannerBar.Kind.WARNING, outcome.headline(name), true, "Open log", () -> openFile(log));
+            case SessionOutcome.Refused refused when !outcome.showsFailureDialog() -> banners.show(
+                    sessionBanner(session), BannerBar.Kind.INFO, outcome.headline(name), true, "Open log",
+                    () -> openFile(log));
+            default -> SessionFailureDialog.show(window(), name, report, new SessionFailureDialog.Actions() {
+                @Override
+                public void openLog(SessionReport failure) {
+                    openFile(failure.log());
+                }
+
+                @Override
+                public void openCrashFolder(SessionReport failure) {
+                    MainController.this.openCrashFolder(failure);
+                }
+            });
+        }
+    }
+
+    /** Brings the window back from the taskbar and to the front, before any dialog is shown on it. */
+    private void restoreWindow() {
+        Stage stage = (Stage) window();
+        if (stage.isIconified()) {
+            stage.setIconified(false);
+        }
+        stage.toFront();
+        stage.requestFocus();
+    }
+
+    /** Opens a file with its default program; off the FX thread, a failure is a banner. */
+    private void openFile(Path file) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                hub.shell().open(file);
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                runLaterQuietly(() -> banners.show(BANNER_SESSION_PREFIX + "open", BannerBar.Kind.ERROR,
+                        "Could not open " + file + ": " + describe(error), true));
+            }
+        });
+    }
+
+    /** Shows the newest crash report in Explorer, else the crash folder, else says there is none. */
+    private void openCrashFolder(SessionReport report) {
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                if (report.crashReport().isPresent()) {
+                    hub.shell().showInFolder(report.crashReport().get().text());
+                    return true;
+                }
+                if (Files.isDirectory(report.crashFolder())) {
+                    hub.shell().open(report.crashFolder());
+                    return true;
+                }
+                return false;
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((opened, error) -> runLaterQuietly(() -> {
+            if (error != null) {
+                banners.show(BANNER_SESSION_PREFIX + "open", BannerBar.Kind.ERROR,
+                        "Could not open the crash folder: " + describe(error), true);
+            } else if (!Boolean.TRUE.equals(opened)) {
+                banners.show(BANNER_SESSION_PREFIX + "open", BannerBar.Kind.INFO, "The editor has no crash folder ("
+                        + report.crashFolder() + "): it has never crashed there.", true);
+            }
+        }));
+    }
+
+    /** {@link Platform#runLater}, ignoring a toolkit that has already exited (the launcher is closing). */
+    private static void runLaterQuietly(Runnable action) {
+        try {
+            Platform.runLater(action);
+        } catch (IllegalStateException e) {
+            // The toolkit is gone.
+        }
+    }
+
+    /** "Open with MCP" for the selected project (VK-1683). */
+    private void editMcpOfSelected() {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (selected == null || readOnly.get() || launching.get() || choosingEngine.get()) {
+            return;
+        }
+        UUID id = selected.getId();
+        Optional<McpSetting> chosen = McpDialog.show(window(), selected.getName(), selected.getEntry().mcp());
+        chosen.ifPresent(setting -> runInBackground(() -> hub.setMcp(id, setting), this::applySavedView,
+                this::showSaveError));
+    }
+
+    @FXML
+    private void onOpenSettings() {
+        if (launching.get() || choosingEngine.get()) {
+            return;
+        }
+        LauncherSettings current = hub.settings();
+        Optional<SettingsDialog.Result> chosen = SettingsDialog.show(window(), current, hub.canSaveSettings(),
+                hub.sessionLogsDirectory());
+        chosen.ifPresent(result -> runInBackground(
+                () -> hub.saveSettings(result.afterLaunch(), result.showEditorConsole()),
+                saved -> banners.hide(BANNER_SETTINGS),
+                error -> banners.show(BANNER_SETTINGS, BannerBar.Kind.ERROR,
+                        "Could not save the settings: " + describe(error), true)));
     }
 
     @FXML
@@ -661,8 +999,7 @@ public class MainController implements Initializable {
                 Optional<RecentEntry> listed = outcome.listed()
                         ? outcome.view().findByPath(outcome.projectPath())
                         : Optional.empty();
-                launchProject(outcome.projectPath(), listed.map(RecentEntry::id).orElse(null),
-                        listed.map(RecentEntry::engineId).orElse(null));
+                launchProject(outcome.projectPath(), listed.orElse(null));
             }
             return;
         }

@@ -185,12 +185,13 @@ TEST_SUITE("EditorLaunch")
         CHECK_FALSE(result.args.mcpEnable);
         CHECK_FALSE(result.args.mcpPort.has_value());
         CHECK_FALSE(result.args.mcpToken.has_value());
+        CHECK_FALSE(result.args.console);
     }
 
     TEST_CASE("every flag in any order")
     {
-        const auto result = parse({"--mcp-port", "7878", "C:/Games/Demo/Demo.vfproj", "--launch-status", "status.json",
-                                   "--mcp", "--mcp-token", "secret"});
+        const auto result = parse({"--mcp-port", "7878", "--console", "C:/Games/Demo/Demo.vfproj", "--launch-status",
+                                   "status.json", "--mcp", "--mcp-token", "secret"});
         REQUIRE(result.ok());
         CHECK(result.args.projectPath == "C:/Games/Demo/Demo.vfproj");
         CHECK(result.args.launchStatusPath == "status.json");
@@ -199,6 +200,45 @@ TEST_SUITE("EditorLaunch")
         CHECK(*result.args.mcpPort == 7878);
         REQUIRE(result.args.mcpToken.has_value());
         CHECK(*result.args.mcpToken == "secret");
+        CHECK(result.args.console);
+    }
+
+    // VK-1683
+    TEST_CASE("--console sets the flag and takes no value")
+    {
+        const auto alone = parse({"--console"});
+        REQUIRE(alone.ok());
+        CHECK(alone.args.console);
+        CHECK(alone.args.projectPath.empty());
+
+        // The next argument stays the project path.
+        const auto withProject = parse({"--console", "A.vfproj"});
+        REQUIRE(withProject.ok());
+        CHECK(withProject.args.console);
+        CHECK(withProject.args.projectPath == "A.vfproj");
+
+        // It is no value of a flag before it: --launch-status still needs its file.
+        const auto asValue = parse({"--launch-status", "--console"});
+        CHECK(hasErrorContaining(asValue, "--launch-status needs a value"));
+        CHECK(asValue.args.console);
+
+        CHECK(launch::editorUsage().find("[--console]") != std::string_view::npos);
+    }
+
+    // VK-1683: engine.json's launchContract. tools/engine_version.lua (vfReadEditorLaunchContract)
+    // reads the constant's source line with the Lua pattern "int%s+editorLaunchContract%s*=%s*(%d+)%s*;".
+    TEST_CASE("the launch contract revision is written where engine_version.lua reads it")
+    {
+        CHECK(launch::editorLaunchContract >= 1);  // 1 = VK-1682 + --console
+
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "repo root not found");
+        const fs::path header = *root / "VFEngine" / "utilities" / "launch" / "EditorArguments.hpp";
+        REQUIRE(fs::exists(header));
+        const std::string source = repo_scan::stripComments(repo_scan::readFile(header));
+        const std::string line =
+            "inline constexpr int editorLaunchContract = " + std::to_string(launch::editorLaunchContract) + ";";
+        CHECK_MESSAGE(source.find(line) != std::string::npos, "missing in EditorArguments.hpp: " << line);
     }
 
     TEST_CASE("an empty token is accepted as before")
@@ -240,6 +280,12 @@ TEST_SUITE("EditorLaunch")
     TEST_CASE("a repeated flag is an error and the first value is kept")
     {
         CHECK(hasErrorContaining(parse({"--mcp", "--mcp"}), "--mcp is given more than once"));
+
+        const auto console = parse({"--console", "A.vfproj", "--console"});
+        CHECK(hasErrorContaining(console, "--console is given more than once"));
+        CHECK(console.errors.size() == 1);
+        CHECK(console.args.console);
+        CHECK(console.args.projectPath == "A.vfproj");
 
         const auto status = parse({"--launch-status", "a.json", "--launch-status", "b.json"});
         CHECK(hasErrorContaining(status, "--launch-status is given more than once"));

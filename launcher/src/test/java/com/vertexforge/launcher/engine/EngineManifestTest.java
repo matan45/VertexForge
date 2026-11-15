@@ -10,9 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -151,5 +153,24 @@ class EngineManifestTest {
         InvalidManifestException error = assertThrows(InvalidManifestException.class,
                 () -> EngineManifest.readIfPresent(tempDir));
         assertTrue(error.getMessage().contains("UTF-8"), error.getMessage());
+    }
+
+    /** VK-1683: the launch contract gates --console; an editor built before the field gets only the safe flags. */
+    @Test
+    void theLaunchContractIsReadLeniently() throws InvalidManifestException {
+        EngineManifest before = EngineManifest.parse(DEV_MANIFEST);
+        assertNull(before.launchContract());
+        assertFalse(before.acceptsConsoleFlag());
+
+        String withContract = DEV_MANIFEST.replace("\"scriptLibDir\": \"../../../../assets/scripts/lib\"",
+                "\"scriptLibDir\": \"../../../../assets/scripts/lib\",\n  \"launchContract\": 1");
+        EngineManifest manifest = EngineManifest.parse(withContract);
+        assertEquals(1, manifest.launchContract());
+        assertTrue(manifest.acceptsConsoleFlag());
+
+        for (String bad : List.of("0", "-1", "1.5", "\"1\"", "null", "true", "{}")) {
+            String text = withContract.replace("\"launchContract\": 1", "\"launchContract\": " + bad);
+            assertNull(EngineManifest.parse(text).launchContract(), bad);
+        }
     }
 }

@@ -26,6 +26,7 @@ namespace launch
         EditorArguments& args = result.args;
 
         bool seenMcp = false;
+        bool seenConsole = false;
         bool seenPort = false;
         bool seenToken = false;
         bool seenStatus = false;
@@ -104,6 +105,11 @@ namespace launch
                     }
                 }
             }
+            else if (arg == "--console")
+            {
+                isRepeat(seenConsole, arg);
+                args.console = true;
+            }
             else if (arg.starts_with("-"))
             {
                 result.errors.push_back("unknown argument " + std::string(arg));
@@ -130,6 +136,6 @@ namespace launch
     std::string_view editorUsage() noexcept
     {
         return "usage: Editor.exe [project.vfproj] [--launch-status <file>] [--mcp] "
-               "[--mcp-port <1024-65535>] [--mcp-token <token>]";
+               "[--mcp-port <1024-65535>] [--mcp-token <token>] [--console]";
     }
 }

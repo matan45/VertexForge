@@ -3,6 +3,7 @@
 #include "api/PluginVersion.hpp"
 #include "config/Config.hpp"
 #include "config/ProjectConfig.hpp"
+#include "launch/EditorArguments.hpp"
 #include "serialization/ProjectSerialization.hpp"
 
 #include <nlohmann/json.hpp>
@@ -245,9 +246,9 @@ TEST_SUITE("EngineVersion")
         INFO("manifest " << manifestPath.string() << " (rebuild the Editor " << thisConfiguration()
                          << " if it is stale)");
 
-        // The VK-1681 contract: exactly these fields.
+        // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, still manifestVersion 1).
         const char* keys[] = {"manifestVersion", "engineVersion", "assetFormatVersion", "projectSchemaVersion",
-                              "pluginApiVersion", "configuration", "gitCommit", "editorExe",
+                              "pluginApiVersion", "launchContract", "configuration", "gitCommit", "editorExe",
                               "workingDirectory", "templatesDir", "scriptLibDir"};
         CHECK(manifest.size() == std::size(keys));
         for (const char* key : keys)
@@ -266,6 +267,10 @@ TEST_SUITE("EngineVersion")
         REQUIRE(manifest.contains("pluginApiVersion"));
         REQUIRE(manifest["pluginApiVersion"].is_number_unsigned());
         CHECK(manifest["pluginApiVersion"].get<uint32_t>() == plugin::VF_PLUGIN_API_VERSION);
+        // VK-1683: the Editor.exe command-line contract revision the launcher reads before it passes a flag.
+        REQUIRE(manifest.contains("launchContract"));
+        REQUIRE(manifest["launchContract"].is_number_unsigned());
+        CHECK(manifest["launchContract"].get<int>() == launch::editorLaunchContract);
         CHECK(stringField(manifest, "configuration") == std::string(thisConfiguration()));
 
         REQUIRE(manifest.contains("gitCommit"));

@@ -1,5 +1,6 @@
 package com.vertexforge.launcher.repository;
 
+import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.repository.RecentProjectsCodec.Decoded;
 import com.vertexforge.launcher.store.AtomicJsonStore;
@@ -99,6 +100,12 @@ public class RecentProjectsRepository {
     public RecentProjectsView bindEngine(UUID id, UUID engineId) throws StoreWriteException {
         return change("bind " + id + " to engine " + engineId,
                 projects -> projects.bindEngine(id, engineId == null ? null : engineId.toString()));
+    }
+
+    /** Sets the project's "Open with MCP" (VK-1683). Does nothing when another launcher removed it meanwhile. */
+    public RecentProjectsView setMcp(UUID id, McpSetting setting) throws StoreWriteException {
+        Objects.requireNonNull(setting, "setting");
+        return change("set MCP of " + id, projects -> projects.setMcp(id, setting));
     }
 
     /** Removes the entry from the list; the project on disk is never touched. */
