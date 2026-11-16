@@ -229,7 +229,8 @@ TEST_SUITE("EditorLaunch")
     // reads the constant's source line with the Lua pattern "int%s+editorLaunchContract%s*=%s*(%d+)%s*;".
     TEST_CASE("the launch contract revision is written where engine_version.lua reads it")
     {
-        CHECK(launch::editorLaunchContract >= 1);  // 1 = VK-1682 + --console
+        // 1 = VK-1682 + --console, 2 = arguments may hold any Unicode character (VK-1684)
+        CHECK(launch::editorLaunchContract >= 2);
 
         const auto root = repo_scan::findRepoRoot();
         REQUIRE_MESSAGE(root.has_value(), "repo root not found");

@@ -89,17 +89,7 @@ namespace
         return parsed;
     }
 
-    // This Tests build's configuration, from the defines vfStandardConfigs() sets.
-    constexpr const char* thisConfiguration()
-    {
-#if defined(DEBUG)
-        return "Debug";
-#elif defined(VF_DEVELOPMENT)
-        return "Development";
-#else
-        return "Release";
-#endif
-    }
+    using repo_scan::thisConfiguration;
 
     std::string assetFormatVersionText()
     {

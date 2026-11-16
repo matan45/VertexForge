@@ -5,6 +5,7 @@
 #include "launch/EditorConsole.hpp"
 #include "launch/EditorExitCode.hpp"
 #include "launch/LaunchStatusFile.hpp"
+#include "launch/ProcessCodePage.hpp"
 #include "launch/ProjectLock.hpp"
 #include "launch/Utf8Path.hpp"
 #include "print/Log.hpp"
@@ -25,8 +26,9 @@
 // The first non-flag argument is the project path; flags may appear in any order. Without
 // arguments the editor starts with no project.
 //
-// Launch contract (VK-1682, VK-1683), relied on by the launcher. engine.json carries its revision as
-// `launchContract` (launch::editorLaunchContract), so a launcher passes only flags this editor accepts:
+// Launch contract (VK-1682, VK-1683, VK-1684), relied on by the launcher. engine.json carries its revision
+// as `launchContract` (launch::editorLaunchContract), so a launcher passes only flags and argument values
+// this editor accepts:
 //
 // Exit codes (launch::EditorExitCode; the launcher's twin is service/EditorExitCode.java):
 //   0  normal exit
@@ -60,6 +62,11 @@
 // closed); Ctrl+C is ignored. When stdout already is a console the flag does nothing; when the
 // window cannot be opened or cannot show the output, the editor warns and runs on. See
 // launch/EditorConsole.hpp.
+//
+// Unicode (VK-1684): Editor.exe embeds the UTF-8 code page manifest (launch/Utf8CodePage.manifest), so
+// its arguments, like every narrow string in the process, are UTF-8 and a path may hold any character.
+// That needs Windows 10 version 1903 or later: older Windows passes them in the ANSI code page, and the
+// editor logs an error at start. See launch/ProcessCodePage.hpp.
 namespace
 {
     using launch::EditorExitCode;
@@ -113,11 +120,21 @@ namespace
 int main(int argc, char* argv[]) {
     // Before any output: a redirected stdout/stderr must not sit in a CRT buffer (VK-1683).
     launch::prepareStandardStreams();
+    // A console shows the UTF-8 output as UTF-8 (VK-1684). Declared first, so destroyed last.
+    launch::Utf8ConsoleOutput utf8Console;
 
     // Then the crash handler (so even a fault during log init is dumped), then mirror the log to
     // disk, so that argument errors land in the log too.
     util::installCrashHandler();
     util::initLogFile("Editor");
+
+    if (!launch::processUsesUtf8())
+    {
+        // An error, not a warning: Release builds keep only errors (util::engineLogsEnabled).
+        vfLogError("Editor.exe runs in code page {}, not UTF-8 (Windows 10 version 1903 or later honours its "
+                   "UTF-8 manifest): project paths with characters outside that code page cannot be opened",
+                   launch::activeCodePage());
+    }
 
     std::vector<std::string_view> arguments;
     for (int i = 1; i < argc; ++i)
@@ -158,7 +175,8 @@ int main(int argc, char* argv[]) {
         return launch::toInt(EditorExitCode::BadArguments);
     }
 
-    // Narrow, as the engine takes path strings in the ANSI code page (VK-1684); messages are UTF-8.
+    // Narrow, as the engine takes path strings in the process code page: UTF-8 under the VK-1684
+    // manifest, the ANSI code page on Windows older than 10 1903. Messages are always UTF-8.
     std::string projectPath;
     std::string projectText;
     bool projectPathUnusable = false;
@@ -175,7 +193,8 @@ int main(int argc, char* argv[]) {
             projectFile = projectFile.lexically_normal();
             projectText = launch::pathToUtf8(projectFile);
             // Throws when the absolute path (e.g. through the working directory) has characters the
-            // ANSI code page cannot represent.
+            // process code page cannot represent: only an unpaired surrogate under UTF-8, any
+            // character outside the ANSI code page on older Windows.
             projectPath = projectFile.string();
         }
         catch (const std::exception&)
@@ -223,8 +242,8 @@ int main(int argc, char* argv[]) {
     if (projectPathUnusable)
     {
         return fail(EditorExitCode::ProjectLoadFailed,
-                    "cannot open project " + projectText + ": the path has characters this system's code page "
-                    "cannot represent");
+                    "cannot open project " + projectText + ": the path has characters this process's code "
+                    "page cannot represent (Unicode paths need Windows 10 version 1903 or later)");
     }
 
     // Declared before the editor, so the lock is released last: after cleanUp() and ~EditorHandler,

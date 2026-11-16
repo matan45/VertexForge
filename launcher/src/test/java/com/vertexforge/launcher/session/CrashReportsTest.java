@@ -3,7 +3,9 @@ package com.vertexforge.launcher.session;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,9 +23,15 @@ class CrashReportsTest {
     @TempDir
     Path tempDir;
 
+    private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
+
     private Path report(String stamp, Instant modified, String text) throws IOException {
+        return report(stamp, modified, text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private Path report(String stamp, Instant modified, byte[] bytes) throws IOException {
         Path folder = Files.createDirectories(tempDir.resolve("crashes"));
-        Path report = Files.writeString(folder.resolve("crash_" + stamp + ".txt"), text);
+        Path report = Files.write(folder.resolve("crash_" + stamp + ".txt"), bytes);
         Files.setLastModifiedTime(report, FileTime.from(modified));
         return report;
     }
@@ -76,5 +84,37 @@ class CrashReportsTest {
 
         assertEquals(CrashReports.MAX_REPORT_BYTES, found.content().length());
         assertEquals(Optional.empty(), found.dump());
+    }
+
+    /** VK-1684: the editor writes UTF-8; a line an older editor wrote in the code page still reads in it. */
+    @Test
+    void eachLineIsUtf8OrInTheCodePage() throws IOException {
+        String utf8 = "VertexForge crash report\nLast context    : שלום\n";
+        String ansi = "  [ 0] Café.exe!main\n";
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bytes.writeBytes(utf8.getBytes(StandardCharsets.UTF_8));
+        bytes.writeBytes(ansi.getBytes(WINDOWS_1252));
+        report("20261115_120100", START.plusSeconds(1), bytes.toByteArray());
+
+        CrashReports.CrashReport found = CrashReports.newestSince(tempDir, START, WINDOWS_1252).orElseThrow();
+
+        assertEquals(utf8 + ansi, found.content());
+    }
+
+    /** A cut inside the last character spoils only the last line. */
+    @Test
+    void aCharacterCutAtTheLimitSpoilsOnlyTheLastLine() throws IOException {
+        String first = "Last context    : שלום\n";
+        byte[] head = first.getBytes(StandardCharsets.UTF_8);
+        // Fill up to one byte before the limit, then a two-byte letter that the limit cuts in half.
+        String filler = "z".repeat(CrashReports.MAX_REPORT_BYTES - head.length - 1);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bytes.writeBytes(head);
+        bytes.writeBytes((filler + "ש tail\n").getBytes(StandardCharsets.UTF_8));
+        report("20261115_120100", START.plusSeconds(1), bytes.toByteArray());
+
+        CrashReports.CrashReport found = CrashReports.newestSince(tempDir, START, WINDOWS_1252).orElseThrow();
+
+        assertTrue(found.content().startsWith(first), found.content().substring(0, 40));
     }
 }

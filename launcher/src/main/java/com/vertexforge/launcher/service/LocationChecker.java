@@ -1,7 +1,5 @@
 package com.vertexforge.launcher.service;
 
-import com.vertexforge.launcher.util.ProjectValidator;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -180,8 +178,7 @@ public final class LocationChecker implements AutoCloseable {
             if (target.refused()) {
                 return LocationCheck.refused(target.problem());
             }
-            Path projectFile = location.resolve(name).resolve(name + ProjectValidator.PROJECT_EXTENSION);
-            return LocationCheck.ok(warnings.warningsFor(location, projectFile));
+            return LocationCheck.ok(warnings.warningsFor(location));
         };
     }
 }

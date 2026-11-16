@@ -21,8 +21,8 @@ import java.util.function.UnaryOperator;
  *                           {@code mvn javafx:run}. The working directory ({@code user.dir}) is never used.
  * @param env                environment-variable lookup; returns {@code null} for an unset variable
  * @param processStarter     starts the editor process
- * @param nativeCharset      the system's ANSI code page ({@code native.encoding}): the editor's narrow {@code main}
- *                           only receives paths this charset can encode (VK-1679)
+ * @param nativeCharset      the system's ANSI code page ({@code native.encoding}): an editor older than VK-1684 only
+ *                           receives paths this charset can encode, and parts of its output are in it
  * @param driveTypes         tells local drives from network ones (VK-1679)
  */
 public record LauncherEnvironment(

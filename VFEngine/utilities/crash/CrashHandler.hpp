@@ -14,8 +14,9 @@ namespace util
     // Installs an unhandled-exception filter that, on a hard crash (access
     // violation, stack overflow, illegal instruction, ...), writes:
     //   crashes/crash_YYYYMMDD_HHMMSS.dmp  - a minidump openable in Visual Studio
-    //   crashes/crash_YYYYMMDD_HHMMSS.txt  - exception code/address + symbolized stack
-    // into a "crashes/" folder under the working directory, then terminates.
+    //   crashes/crash_YYYYMMDD_HHMMSS.txt  - exception code/address + symbolized stack (UTF-8)
+    // into a "crashes/" folder under the working directory, shows a message box with the dump's
+    // absolute path, then terminates.
     // Idempotent. Call as the very first statement in main().
     void installCrashHandler();
 

@@ -161,16 +161,31 @@ class EngineManifestTest {
         EngineManifest before = EngineManifest.parse(DEV_MANIFEST);
         assertNull(before.launchContract());
         assertFalse(before.acceptsConsoleFlag());
+        assertFalse(before.acceptsUnicodeArguments());
 
         String withContract = DEV_MANIFEST.replace("\"scriptLibDir\": \"../../../../assets/scripts/lib\"",
                 "\"scriptLibDir\": \"../../../../assets/scripts/lib\",\n  \"launchContract\": 1");
         EngineManifest manifest = EngineManifest.parse(withContract);
         assertEquals(1, manifest.launchContract());
         assertTrue(manifest.acceptsConsoleFlag());
+        assertFalse(manifest.acceptsUnicodeArguments());
 
         for (String bad : List.of("0", "-1", "1.5", "\"1\"", "null", "true", "{}")) {
             String text = withContract.replace("\"launchContract\": 1", "\"launchContract\": " + bad);
             assertNull(EngineManifest.parse(text).launchContract(), bad);
         }
+    }
+
+    /** VK-1684: contract 2 is an editor in the UTF-8 code page, which still accepts --console. */
+    @Test
+    void contractTwoTakesUnicodeArguments() throws InvalidManifestException {
+        String text = DEV_MANIFEST.replace("\"scriptLibDir\": \"../../../../assets/scripts/lib\"",
+                "\"scriptLibDir\": \"../../../../assets/scripts/lib\",\n  \"launchContract\": 2");
+
+        EngineManifest manifest = EngineManifest.parse(text);
+
+        assertEquals(EngineManifest.UNICODE_ARGUMENTS_CONTRACT, manifest.launchContract());
+        assertTrue(manifest.acceptsUnicodeArguments());
+        assertTrue(manifest.acceptsConsoleFlag());
     }
 }

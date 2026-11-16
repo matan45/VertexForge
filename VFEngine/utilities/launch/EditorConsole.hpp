@@ -139,8 +139,9 @@ namespace launch
 
         // The longest prefix of data[0, size) that does not end inside a UTF-8 sequence: when one of
         // the last three bytes is a lead byte whose sequence runs past the end, the prefix stops
-        // before it. Bytes that are not UTF-8 (a line in the ANSI code page) are never held back for
-        // more than three bytes, and the result is never 0 for a full buffer.
+        // before it. Bytes that are not UTF-8 (e.g. a line in the ANSI code page, on Windows older than
+        // 10 1903) are never held back for more than three bytes, and the result is never 0 for a full
+        // buffer.
         static constexpr std::size_t utf8SafeLength(const char* data, std::size_t size) noexcept
         {
             for (std::size_t back = 1; back <= 3 && back < size; ++back)

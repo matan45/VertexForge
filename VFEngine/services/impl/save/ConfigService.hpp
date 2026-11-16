@@ -1,6 +1,7 @@
 #pragma once
 #include "../../events/EventDispatcher.hpp"
 #include <nlohmann/json.hpp>
+#include <filesystem>
 #include <string>
 #include <mutex>
 
@@ -12,9 +13,14 @@ namespace services
         mutable nlohmann::json configData;
         mutable std::mutex configMutex;
         mutable bool loaded = false;
+        std::filesystem::path stateFolder;
 
     public:
-        ConfigService();
+        // The config lives in <project folder>/<stateFolder>/config.json, the project folder being the
+        // .vfproj's folder; an empty stateFolder means the project folder itself. The editor passes
+        // ".vertexforge" (launch::editorStateDirName), so Play-mode config stays out of the content
+        // browser and of exported games; the Runtime keeps it beside its game's .vfproj.
+        explicit ConfigService(std::filesystem::path stateFolder);
         ~ConfigService() = default;
 
         void registerEventHandlers(::events::EventDispatcher& dispatcher);

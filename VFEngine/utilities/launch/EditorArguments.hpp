@@ -18,14 +18,19 @@
 //
 // VK-1683: --console opens a console window of the editor's own and mirrors the redirected
 // output into it (launch/EditorConsole.hpp), for a launcher that captures the output in a log.
+//
+// VK-1684: the arguments are UTF-8 (Editor.exe embeds the UTF-8 code page manifest, see
+// launch/ProcessCodePage.hpp), so a path may hold any character.
 namespace launch
 {
     // VK-1683: the launch-contract revision this editor implements. engine.json carries it as
     // `launchContract` (tools/engine_version.lua reads this line), so a launcher passes only the
-    // flags this editor accepts. Bump it whenever a flag is added: an older editor rejects an
-    // unknown flag (strict parsing, exit 2).
+    // flags and argument values this editor accepts. Bump it whenever a flag is added (an older
+    // editor rejects an unknown flag: strict parsing, exit 2) or an argument value becomes valid
+    // that an older editor would receive damaged.
     //   1 = the VK-1682 contract + --console (VK-1683)
-    inline constexpr int editorLaunchContract = 1;
+    //   2 = arguments may hold any Unicode character (the UTF-8 code page, VK-1684)
+    inline constexpr int editorLaunchContract = 2;
 
     inline constexpr uint16_t minMcpPort = 1024;
     inline constexpr uint16_t maxMcpPort = 65535;

@@ -88,7 +88,8 @@ public final class EditorSession {
 
     /**
      * @param events        where the listener is called (the FX thread); a rejection (the toolkit is gone) is ignored
-     * @param nativeCharset the ANSI code page, for log lines and crash reports that are not UTF-8
+     * @param nativeCharset the ANSI code page, for log and crash-report lines that are not UTF-8 (an editor older
+     *                      than VK-1684)
      */
     public EditorSession(SessionStart start, SessionScheduler scheduler, Executor events, Listener listener,
                          Clock clock, Charset nativeCharset) {

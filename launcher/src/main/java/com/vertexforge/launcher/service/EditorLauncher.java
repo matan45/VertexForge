@@ -33,6 +33,10 @@ import java.util.concurrent.Executor;
  * {@code --console} when the setting is on and the engine's {@code engine.json} says its editor accepts it. Editors
  * older than the launch contract ignore the flags they do not know, provided the project comes first; a strict
  * editor (VK-1682 and later) would exit with code 2 on a flag it does not know, hence the {@code launchContract} gate.
+ * <p>
+ * An editor of contract 2 or later runs in the UTF-8 code page and receives any path undamaged (VK-1684). An older one
+ * receives its arguments in the system's ANSI code page, so the status file is left out when that code page cannot
+ * encode its path: the editor could not open it and would exit with code 2.
  */
 public class EditorLauncher implements AutoCloseable {
 
@@ -43,7 +47,8 @@ public class EditorLauncher implements AutoCloseable {
     private final SessionScheduler scheduler;
 
     /**
-     * @param nativeCharset the ANSI code page: the editor's narrow {@code main} only receives paths it can encode
+     * @param nativeCharset the ANSI code page: an editor older than VK-1684 only receives paths it can encode, and its
+     *                      output may be in it
      * @param scheduler     the thread the sessions run on; closed with this launcher
      */
     public EditorLauncher(ProcessStarter processStarter, SessionLogs logs, Charset nativeCharset, Clock clock,
@@ -117,10 +122,12 @@ public class EditorLauncher implements AutoCloseable {
         logs.prune(SessionLogs.KEEP);
 
         Path status = files.status();
-        Optional<String> statusOmitted = nativeCharset.newEncoder().canEncode(status.toString())
+        boolean unicodeArguments = manifest != null && manifest.acceptsUnicodeArguments();
+        Optional<String> statusOmitted = unicodeArguments || nativeCharset.newEncoder().canEncode(status.toString())
                 ? Optional.empty()
                 : Optional.of("the launcher's logs folder " + logs.directory() + " has characters this system's code"
-                        + " page cannot pass to the editor, so the editor cannot report when it is ready");
+                        + " page cannot pass to an editor older than VK-1684, so the editor cannot report when it is"
+                        + " ready");
 
         Optional<Path> statusFile = statusOmitted.isEmpty() ? Optional.of(status) : Optional.empty();
         boolean console = request.consoleWanted() && manifest != null && manifest.acceptsConsoleFlag();

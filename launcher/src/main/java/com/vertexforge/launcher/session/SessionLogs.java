@@ -2,10 +2,7 @@ package com.vertexforge.launcher.session;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
-import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
@@ -99,8 +96,8 @@ public final class SessionLogs {
 
     /**
      * {@code projectName} reduced to {@code [A-Za-z0-9_-]}: every other run of characters becomes one {@code _}, so
-     * the name is plain ASCII (any code page can pass it to the editor), has no dot (never a reserved device name such
-     * as {@code CON}) and no comma (Explorer splits its arguments at commas).
+     * the name is plain ASCII (any code page can pass it to an editor older than VK-1684), has no dot (never a
+     * reserved device name such as {@code CON}) and no comma (Explorer splits its arguments at commas).
      */
     static String fileNamePart(String projectName) {
         StringBuilder out = new StringBuilder();
@@ -214,8 +211,8 @@ public final class SessionLogs {
 
     /**
      * The last {@code count} lines of {@code log}, read from at most its last {@link #TAIL_BYTES} bytes. Each line is
-     * decoded as UTF-8, or in {@code fallback} (the ANSI code page) when it is not valid UTF-8: most editor output is
-     * UTF-8, but some lines carry paths in the code page. Empty when the file cannot be read.
+     * decoded as UTF-8, or in {@code fallback} (the ANSI code page) when it is not valid UTF-8: an editor of VK-1684 or
+     * later writes only UTF-8, but an older one wrote some paths in the code page. Empty when the file cannot be read.
      */
     public static List<String> tail(Path log, int count, Charset fallback) {
         byte[] bytes;
@@ -250,7 +247,7 @@ public final class SessionLogs {
                 boolean partialFirst = first && !fromStart;
                 boolean trailingEmpty = i == bytes.length && end == lineStart;
                 if (!partialFirst && !trailingEmpty) {
-                    lines.addLast(decode(bytes, lineStart, end, fallback));
+                    lines.addLast(EditorText.decode(bytes, lineStart, end, fallback));
                     if (lines.size() > count) {
                         lines.removeFirst();
                     }
@@ -260,18 +257,5 @@ public final class SessionLogs {
             }
         }
         return List.copyOf(lines);
-    }
-
-    private static String decode(byte[] bytes, int from, int to, Charset fallback) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes, from, to - from);
-        try {
-            return StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(buffer)
-                    .toString();
-        } catch (CharacterCodingException e) {
-            return new String(bytes, from, to - from, fallback);
-        }
     }
 }

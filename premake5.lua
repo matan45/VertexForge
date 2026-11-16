@@ -57,6 +57,16 @@ function vfStandardConfigs(extraDebugDefines)
    filter {}
 end
 
+-- VK-1684: every executable runs in the UTF-8 active code page (GetACP() == 65001 on Windows 10
+-- 1903 or later; older Windows ignores it): argv, getenv, the CRT's narrow file functions, narrow
+-- std::filesystem paths and every -A Win32 call then take UTF-8. A .manifest in files {} becomes
+-- <AdditionalManifestFiles>, which link.exe merges with its default (asInvoker) manifest into the one
+-- RT_MANIFEST #1 it embeds. Embedded, it survives GameExport's copy of Runtime.exe and the icon swap
+-- (ExeIconEmbedder keeps existing resources). Never put a manifest in an .rc file (a second
+-- RT_MANIFEST #1, CVT1100). A new executable project must list it too (test_unicode_paths checks the
+-- built Editor.exe and Runtime.exe).
+local vfUtf8CodePageManifest = "VFEngine/utilities/launch/Utf8CodePage.manifest"
+
 -- Group for Engine Projects
 group "Engine"
 
@@ -69,7 +79,8 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage",
+           vfUtf8CodePageManifest }
 
    includedirs {
 	  "dependencies/imgui",
@@ -388,7 +399,7 @@ project "Runtime"
    location "VFEngine/runtime"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp" }
+   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/spdlog/include",
@@ -1270,7 +1281,7 @@ project "Tests"
    location "VFEngine/tests"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp" }
+   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/doctest/doctest",

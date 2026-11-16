@@ -449,7 +449,8 @@ namespace {
         // VK-1534: JSON key/value store (config.json next to saves/). Editor-only until
         // now, so the Config/Save script natives were silently no-ops in shipped games;
         // wiring it here fixes that and backs the persisted gfx.* graphics settings.
-        configService = std::make_unique<services::ConfigService>();
+        // An empty state folder: config.json beside the game's .vfproj (VK-1684).
+        configService = std::make_unique<services::ConfigService>(std::filesystem::path{});
 
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {

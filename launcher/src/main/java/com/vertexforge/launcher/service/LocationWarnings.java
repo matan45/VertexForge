@@ -3,17 +3,11 @@ package com.vertexforge.launcher.service;
 import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.function.UnaryOperator;
 
 /**
@@ -22,9 +16,9 @@ import java.util.function.UnaryOperator;
  * <ul>
  *   <li>OneDrive syncs every file the editor writes, and can lock or move them while it does.</li>
  *   <li>A network drive is slow, and the project is lost to the editor whenever the drive is.</li>
- *   <li>The editor takes its project path through a narrow {@code main}, so characters outside the system's ANSI code
- *       page arrive as {@code ?} (until Unicode paths, VK-1684).</li>
  * </ul>
+ * Characters outside the system's ANSI code page are no reason to warn: the editor runs in the UTF-8 code page and
+ * takes any path (VK-1684).
  */
 public final class LocationWarnings {
 
@@ -37,29 +31,27 @@ public final class LocationWarnings {
             + "the project is unavailable whenever the drive is.";
 
     private final UnaryOperator<String> env;
-    private final Charset nativeCharset;
     private final DriveTypes driveTypes;
 
-    public LocationWarnings(UnaryOperator<String> env, Charset nativeCharset, DriveTypes driveTypes) {
+    public LocationWarnings(UnaryOperator<String> env, DriveTypes driveTypes) {
         this.env = Objects.requireNonNull(env, "env");
-        this.nativeCharset = Objects.requireNonNull(nativeCharset, "nativeCharset");
         this.driveTypes = Objects.requireNonNull(driveTypes, "driveTypes");
     }
 
-    /** Warns about nothing: no environment variables, a UTF-8 code page, no drive information. */
+    /** Warns about nothing: no environment variables, no drive information. */
     public static LocationWarnings none() {
-        return new LocationWarnings(name -> null, StandardCharsets.UTF_8, DriveTypes.unknown());
+        return new LocationWarnings(name -> null, DriveTypes.unknown());
     }
 
     public static LocationWarnings forEnvironment(LauncherEnvironment environment) {
-        return new LocationWarnings(environment.env(), environment.nativeCharset(), environment.driveTypes());
+        return new LocationWarnings(environment.env(), environment.driveTypes());
     }
 
     /**
-     * The warnings for a project whose file will be {@code projectFile}, in the absolute folder {@code location}.
-     * Looks at the drive type only; never reads the folder itself.
+     * The warnings for a project in the absolute folder {@code location}. Looks at the drive type only; never reads
+     * the folder itself.
      */
-    public List<String> warningsFor(Path location, Path projectFile) {
+    public List<String> warningsFor(Path location) {
         List<String> warnings = new ArrayList<>();
         if (underOneDrive(location)) {
             warnings.add(ONEDRIVE_WARNING);
@@ -67,9 +59,6 @@ public final class LocationWarnings {
         if (onNetworkDrive(location)) {
             warnings.add(NETWORK_WARNING);
         }
-        unencodable(projectFile.toString()).ifPresent(characters -> warnings.add("The path contains " + characters
-                + ", which this system's code page (" + nativeCharset.name() + ") can't represent. The editor may "
-                + "not be able to open the project there."));
         return List.copyOf(warnings);
     }
 
@@ -110,18 +99,5 @@ public final class LocationWarnings {
             // Not knowing is never a reason to warn.
             return false;
         }
-    }
-
-    /** The distinct characters of {@code text} the code page can't encode, quoted and listed; empty when none. */
-    Optional<String> unencodable(String text) {
-        CharsetEncoder encoder = nativeCharset.newEncoder();
-        Set<String> missing = new LinkedHashSet<>();
-        text.codePoints().forEach(codePoint -> {
-            String character = Character.toString(codePoint);
-            if (!encoder.canEncode(character)) {
-                missing.add("\"" + character + "\"");
-            }
-        });
-        return missing.isEmpty() ? Optional.empty() : Optional.of(String.join(", ", missing));
     }
 }

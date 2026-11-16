@@ -361,7 +361,9 @@ public class EditorLauncherTest {
         assertFalse(turnedOff.started.getFirst().command().contains("--console"));
     }
 
-    /** A status path the code page cannot encode would reach the editor as "?", and the editor would exit 2. */
+    /**
+     * An editor older than VK-1684 would receive a status path the code page cannot encode as "?", and exit 2.
+     */
     @Test
     void aStatusPathTheCodePageCannotEncodeIsLeftOut() throws Exception {
         RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
@@ -377,6 +379,27 @@ public class EditorLauncherTest {
         assertTrue(start.statusFile().isEmpty());
         assertTrue(start.statusOmitted().orElseThrow().contains("code page"), start.statusOmitted().toString());
         assertTrue(starter.logAtStart.getFirst().contains("No launch status: "), starter.logAtStart.getFirst());
+    }
+
+    /** VK-1684: an editor of contract 2 runs in the UTF-8 code page, so it gets any status path. */
+    @Test
+    void anEditorThatTakesUnicodeArgumentsGetsAnyStatusPath() throws Exception {
+        RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
+        Path editor = editor();
+        Path project = project();
+        EditorLauncher launcher = new EditorLauncher(starter, new SessionLogs(tempDir.resolve("lögs"), message -> {
+        }), StandardCharsets.US_ASCII, TestSupport.fixedClock(), new ManualScheduler());
+
+        SessionStart start = started(launcher.startNow(new LaunchRequest(
+                engine(editor, tempDir, EngineManifest.UNICODE_ARGUMENTS_CONTRACT), project, "Game",
+                McpSetting.DEFAULT, false)));
+
+        Path status = start.statusFile().orElseThrow();
+        assertTrue(status.toString().contains("lögs"), status.toString());
+        assertEquals(List.of(editor.toString(), project.toString(), "--launch-status", status.toString()),
+                starter.started.getFirst().command());
+        assertTrue(start.statusOmitted().isEmpty(), start.statusOmitted().toString());
+        assertFalse(starter.logAtStart.getFirst().contains("No launch status"), starter.logAtStart.getFirst());
     }
 
     @Test

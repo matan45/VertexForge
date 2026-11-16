@@ -18,6 +18,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace services
 {
@@ -25,9 +26,11 @@ namespace services
     namespace fs = std::filesystem;
 
     SaveService::SaveService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                             IScriptingProvider* scriptingProvider)
+                             IScriptingProvider* scriptingProvider,
+                             std::filesystem::path stateFolder)
         : sceneGraph(sceneGraph)
         , scriptingProvider(scriptingProvider)
+        , stateFolder(std::move(stateFolder))
     {
     }
 
@@ -324,9 +327,16 @@ namespace services
         ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
-        if (projectPath.has_value())
+        if (projectPath.has_value() && !projectPath->empty())
         {
-            return projectPath.value() + "/saves";
+            // The query answers the .vfproj FILE path (as AssetDatabase reads it): saves/ lives in
+            // its folder, under stateFolder.
+            fs::path folder = fs::path(*projectPath).parent_path();
+            if (!stateFolder.empty())
+            {
+                folder /= stateFolder;
+            }
+            return (folder / "saves").string();
         }
         return "saves";
     }

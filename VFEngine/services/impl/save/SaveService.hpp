@@ -1,6 +1,7 @@
 #pragma once
 #include "../../data/SaveTypes.hpp"
 #include "../../events/EventDispatcher.hpp"
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,6 +20,7 @@ namespace services
     private:
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         IScriptingProvider* scriptingProvider;
+        std::filesystem::path stateFolder;
 
         // Pending load state (deferred until scene loads)
         std::string pendingLoadSlotName;
@@ -27,8 +29,13 @@ namespace services
         ::events::SubscriptionToken sceneLoadToken;
 
     public:
+        // Save slots live in <project folder>/<stateFolder>/saves/<slot>, the project folder being the
+        // .vfproj's folder; an empty stateFolder means the project folder itself. The editor passes
+        // ".vertexforge" (launch::editorStateDirName), so Play-mode saves stay out of the content
+        // browser and of exported games; the Runtime keeps them beside its game's .vfproj.
         SaveService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                     IScriptingProvider* scriptingProvider);
+                    IScriptingProvider* scriptingProvider,
+                    std::filesystem::path stateFolder);
         ~SaveService();
 
         void registerEventHandlers(::events::EventDispatcher& dispatcher);

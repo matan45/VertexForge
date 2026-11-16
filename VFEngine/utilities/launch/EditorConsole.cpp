@@ -194,8 +194,9 @@ namespace launch
             }
         }
 
-        // UTF-8 first; a fragment that is not valid UTF-8 is read in the ANSI code page (some log
-        // lines carry narrow paths).
+        // UTF-8 first; a fragment that is not valid UTF-8 is read in the process code page: the ANSI
+        // code page on Windows older than 10 1903 (log lines carry narrow paths), while under the
+        // VK-1684 UTF-8 code page its invalid bytes show as U+FFFD.
         void writeBytes(std::string_view bytes) noexcept
         {
             if (bytes.empty())

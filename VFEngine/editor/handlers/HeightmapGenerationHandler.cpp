@@ -54,8 +54,9 @@ namespace handlers
             services::HeightmapJobStatus status; // Running, with everything known up front
         };
 
-        // Request paths are UTF-8, and narrow std::filesystem::path construction uses the ANSI code
-        // page on Windows, so go through u8string (as mcp/tools/PathSandbox.hpp does).
+        // Request paths are UTF-8, and narrow std::filesystem::path construction uses the process code
+        // page (UTF-8 under the VK-1684 manifest, the ANSI code page on Windows older than 10 1903), so
+        // go through u8string (as mcp/tools/PathSandbox.hpp does).
         fs::path pathFromUtf8(std::string_view utf8)
         {
             return fs::path(std::u8string(utf8.begin(), utf8.end()));
@@ -218,8 +219,9 @@ namespace handlers
             if (!result.valid())
                 return "the generator produced no pixels";
 
-            // saveAsVFImage opens a narrow path, which Windows reads in the ANSI code page --
-            // path::string() is that encoding (and throws for a name it cannot express).
+            // saveAsVFImage opens a narrow path, which Windows reads in the process code page (UTF-8
+            // under the VK-1684 manifest) -- path::string() is that encoding (and throws for a name it
+            // cannot express).
             if (!procedural::HeightmapGenerator::saveAsVFImage(result, tempPath.string()))
                 return std::format("could not write {}", pathToUtf8(tempPath));
 

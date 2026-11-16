@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  *   "pluginApiVersion": 25, "configuration": "Development", "gitCommit": "599a8a30…" or null,
  *   "editorExe": "Editor.exe", "workingDirectory": "../../../../VFEngine/editor",
  *   "templatesDir": "../../../../assets/templates", "scriptLibDir": "../../../../assets/scripts/lib",
- *   "launchContract": 1 }
+ *   "launchContract": 2 }
  * </pre>
  * Paths are relative to the manifest's folder. The members the launcher needs to start the editor are required and
  * checked strictly; the others are informational and read as {@code null} when they are missing or of the wrong type.
@@ -50,7 +50,8 @@ import java.util.regex.Pattern;
  * @param scriptLibDir         the mType script library folder, or {@code null} (VK-1689)
  * @param launchContract       the editor launch-contract revision ({@code launch::editorLaunchContract}, VK-1683), or
  *                             {@code null} for an editor built before the field existed: the launcher then passes only
- *                             the arguments every editor accepts. 1 adds {@code --console}.
+ *                             the arguments every editor accepts. 1 adds {@code --console}; 2 means the arguments
+ *                             may hold any Unicode character (the editor runs in the UTF-8 code page, VK-1684).
  */
 public record EngineManifest(
         int manifestVersion,
@@ -84,6 +85,11 @@ public record EngineManifest(
     static final String LAUNCH_CONTRACT = "launchContract";
     /** The first contract revision with {@code --console} (VK-1683). */
     public static final int CONSOLE_FLAG_CONTRACT = 1;
+    /**
+     * The first contract revision whose editor receives its arguments in the UTF-8 code page (VK-1684): an older one
+     * gets them in the system's ANSI code page, so characters that code page lacks arrive damaged.
+     */
+    public static final int UNICODE_ARGUMENTS_CONTRACT = 2;
 
     /** {@code MAJOR.MINOR.PATCH} without leading zeros, as {@code tools/engine_version.lua} writes it. */
     private static final Pattern VERSION_PATTERN = Pattern.compile("(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){2}");
@@ -164,6 +170,11 @@ public record EngineManifest(
     /** Whether this engine's editor accepts {@code --console} (VK-1683). */
     public boolean acceptsConsoleFlag() {
         return launchContract != null && launchContract >= CONSOLE_FLAG_CONTRACT;
+    }
+
+    /** Whether this engine's editor receives any Unicode argument undamaged (VK-1684). */
+    public boolean acceptsUnicodeArguments() {
+        return launchContract != null && launchContract >= UNICODE_ARGUMENTS_CONTRACT;
     }
 
     /** A whole number of at least 1; {@code null} otherwise, which the launcher treats as an unknown contract. */

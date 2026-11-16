@@ -15,6 +15,9 @@ import java.util.Optional;
  * The editor's crash reports (VK-1683). The editor's crash handler writes {@code crashes/crash_YYYYMMDD_HHMMSS.dmp}
  * and a readable {@code .txt} beside it, relative to its working directory ({@code CrashHandler.cpp}). Several
  * projects can share one engine's working directory, so only a report written since a session started is its own.
+ * <p>
+ * An editor of VK-1684 or later writes the report in UTF-8; an older one wrote module and source paths in the ANSI
+ * code page. Each line is decoded on its own ({@link EditorText#decodeLines}).
  */
 public final class CrashReports {
 
@@ -43,8 +46,10 @@ public final class CrashReports {
     /**
      * The newest {@code crash_*.txt} in the editor's crash folder written at or after {@code since} (less
      * {@link #CLOCK_SLACK}); empty when there is none or the folder cannot be read. Blocks on the file system.
+     *
+     * @param fallback the charset of a line that is not valid UTF-8 (the ANSI code page)
      */
-    public static Optional<CrashReport> newestSince(Path workingDirectory, Instant since, Charset charset) {
+    public static Optional<CrashReport> newestSince(Path workingDirectory, Instant since, Charset fallback) {
         Path folder = folder(workingDirectory);
         Instant earliest = since.minus(CLOCK_SLACK);
         Path newest = null;
@@ -71,7 +76,8 @@ public final class CrashReports {
 
         String content;
         try (InputStream in = Files.newInputStream(newest)) {
-            content = new String(in.readNBytes(MAX_REPORT_BYTES), charset);
+            byte[] bytes = in.readNBytes(MAX_REPORT_BYTES);
+            content = EditorText.decodeLines(bytes, bytes.length, fallback);
         } catch (IOException | RuntimeException e) {
             content = "(the report could not be read: " + e.getMessage() + ")";
         }

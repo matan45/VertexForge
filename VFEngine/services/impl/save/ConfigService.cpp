@@ -6,12 +6,16 @@
 #include "resource/VFSHelpers.hpp"
 #include <fstream>
 #include <filesystem>
+#include <system_error>
+#include <utility>
 
 namespace services
 {
     using json = nlohmann::json;
+    namespace fs = std::filesystem;
 
-    ConfigService::ConfigService()
+    ConfigService::ConfigService(std::filesystem::path stateFolder)
+        : stateFolder(std::move(stateFolder))
     {
         configData = json::object();
     }
@@ -175,6 +179,10 @@ namespace services
 
         try
         {
+            // The editor's state folder may not exist yet; a failure shows in the write below.
+            std::error_code ec;
+            fs::create_directories(fs::path(path).parent_path(), ec);
+
             std::ofstream file(path);
             file << configData.dump(2);
             file.close();
@@ -191,9 +199,16 @@ namespace services
         ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
-        if (projectPath.has_value())
+        if (projectPath.has_value() && !projectPath->empty())
         {
-            return projectPath.value() + "/config.json";
+            // The query answers the .vfproj FILE path (as AssetDatabase reads it): config.json lives
+            // in its folder, under stateFolder.
+            fs::path folder = fs::path(*projectPath).parent_path();
+            if (!stateFolder.empty())
+            {
+                folder /= stateFolder;
+            }
+            return (folder / "config.json").string();
         }
         return "";
     }

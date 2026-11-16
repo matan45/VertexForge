@@ -11,7 +11,8 @@
 namespace mcp::tools
 {
     // Tool arguments and results carry paths as UTF-8. Narrow std::filesystem::path
-    // construction uses the ANSI code page on Windows, so always go through u8string.
+    // construction uses the process code page (UTF-8 under the VK-1684 manifest, the ANSI
+    // code page on Windows older than 10 1903), so always go through u8string.
     inline std::filesystem::path pathFromUtf8(std::string_view utf8)
     {
         return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));

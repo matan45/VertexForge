@@ -85,6 +85,7 @@
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
+#include "launch/EditorStateDirectory.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
@@ -212,11 +213,14 @@ namespace handlers
                             audioSceneUpdater->setMaxDopplerSpeed(n.maxDopplerSpeed);
                     }));
 
+        // Play-mode saves and config live in the project's .vertexforge folder (VK-1684): hidden from
+        // the content browser and never exported, unlike files beside the .vfproj.
         saveService = std::make_unique<services::SaveService>(
             bootstrap->getSceneGraphSystem(),
-            bootstrap->getScriptingProvider()
+            bootstrap->getScriptingProvider(),
+            std::filesystem::path(launch::editorStateDirName)
         );
-        configService = std::make_unique<services::ConfigService>();
+        configService = std::make_unique<services::ConfigService>(std::filesystem::path(launch::editorStateDirName));
         editorSettingsService = std::make_unique<services::EditorSettingsService>();
         editorKeybindingService = std::make_shared<services::EditorKeybindingServiceImpl>();
     }

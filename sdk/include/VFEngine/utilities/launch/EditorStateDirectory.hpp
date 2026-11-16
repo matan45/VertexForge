@@ -4,8 +4,10 @@
 #include <string_view>
 
 // VK-1682: the per-project folder the editor keeps its own state in, beside the .vfproj.
-// It holds the editor lock (ProjectLock.hpp) and is never project content: the content
-// browser and the folder tree hide it, and the game exporter never packs it.
+// It holds the editor lock (ProjectLock.hpp) and, since VK-1684, the editor's Play-mode saves
+// (SaveService) and config.json (ConfigService). It is never project content: the content
+// browser and the folder tree hide it, the asset migrator and the reference scanner skip it,
+// and the game exporter never packs it.
 namespace launch
 {
     inline constexpr std::wstring_view editorStateDirName = L".vertexforge";

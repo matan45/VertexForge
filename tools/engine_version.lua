@@ -101,7 +101,8 @@ function vfReadPluginApiVersion()
 end
 
 -- launch::editorLaunchContract (decimal string, VK-1683): the Editor.exe command-line contract
--- revision, so a launcher passes only flags this editor accepts.
+-- revision, so a launcher passes only flags and argument values this editor accepts (2 = any
+-- Unicode argument, VK-1684).
 function vfReadEditorLaunchContract()
    local file = "VFEngine/utilities/launch/EditorArguments.hpp"
    local value = readRepoFile(file):match("int%s+editorLaunchContract%s*=%s*(%d+)%s*;")

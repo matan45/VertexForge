@@ -455,7 +455,8 @@ namespace mcp::tools::env
             catch (const std::exception&)
             {
                 throw ArgError("'" + path + "': the path '" + requested +
-                               "' cannot be stored in the system code page; rename the file");
+                               "' cannot be stored in this process's code page (Unicode paths need Windows 10 "
+                               "version 1903 or later); rename the file");
             }
         }
         return out;
@@ -491,7 +492,8 @@ namespace mcp::tools::env
             std::error_code ec;
             if (!stored.empty() && !fs::is_regular_file(fs::path(stored), ec))
             {
-                // Stored in the narrow (ANSI) form the effect opens; reported as UTF-8 like every tool path.
+                // Stored in the narrow (process code page) form the effect opens; reported as UTF-8 like
+                // every tool path.
                 missing.push_back(pathToUtf8(fs::path(stored)));
             }
         }

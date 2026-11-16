@@ -144,4 +144,22 @@ TEST_CASE("migrateProject is idempotent after regenerating sidecars")
     CHECK(secondMeta->type == firstMeta->type);
 }
 
+// VK-1684: the editor's Play-mode saves live in <project>/.vertexforge/saves; they are no project
+// assets and must never get a sidecar or a GUID.
+TEST_CASE("migrateProject skips the editor's .vertexforge folder")
+{
+    TempProject proj("vf_regen_meta_state_folder");
+
+    const fs::path assetPath = proj.writeFile("vfx/kept.vfvfx", "{}");
+    const fs::path savedPath = proj.writeFile(".vertexforge/saves/slot1/saved.vfvfx", "{}");
+
+    const auto result = asset::AssetDatabaseMigrator::migrateProject(proj.root.string());
+
+    CHECK(result.assetsScanned == 1);
+    CHECK(result.metaFilesCreated == 1);
+    CHECK(result.errors.empty());
+    CHECK(fs::exists(asset::AssetMetadataSerializer::getMetaPath(assetPath)));
+    CHECK_FALSE(fs::exists(asset::AssetMetadataSerializer::getMetaPath(savedPath)));
+}
+
 }

@@ -11,7 +11,9 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <filesystem>
+#include <iterator>
 #include <system_error>
 
 // Belt-and-suspenders: also emit a linker directive so dbghelp is pulled in even
@@ -49,13 +51,42 @@ namespace util
             }
         }
 
+        // UTF-16 to UTF-8 into a fixed buffer (no heap at crash time). Converts at most
+        // (capacity - 1) / 3 UTF-16 units, never ending on the first half of a surrogate pair: one unit
+        // never needs more than 3 UTF-8 bytes (a pair is 2 units for 4 bytes), so the result always
+        // fits. Always NUL-terminates. VK-1684: the report is UTF-8 whatever the process code page.
+        void utf8Prefix(const wchar_t* text, char* out, int capacity) noexcept
+        {
+            if (capacity <= 0)
+                return;
+            out[0] = '\0';
+            if (text == nullptr)
+                return;
+
+            const int maxUnits = (capacity - 1) / 3;
+            int units = 0;
+            while (units < maxUnits && text[units] != L'\0')
+                ++units;
+            // Stopped at maxUnits with more text to come: do not split a surrogate pair.
+            if (units > 0 && text[units] != L'\0' && text[units - 1] >= 0xD800 && text[units - 1] <= 0xDBFF)
+                --units;
+            if (units == 0)
+                return;
+
+            const int written = WideCharToMultiByte(CP_UTF8, 0, text, units, out, capacity - 1, nullptr, nullptr);
+            out[written > 0 ? written : 0] = '\0';
+        }
+
+        // Longest symbol name read back, in UTF-16 units.
+        constexpr ULONG kMaxSymbolName = 512;
+
         void writeStackTrace(std::FILE* out, CONTEXT* context)
         {
             HANDLE process = GetCurrentProcess();
             HANDLE thread = GetCurrentThread();
 
             SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-            SymInitialize(process, nullptr, TRUE);
+            SymInitializeW(process, nullptr, TRUE);
 
             STACKFRAME64 frame = {};
             frame.AddrPC.Offset = context->Rip;
@@ -65,10 +96,12 @@ namespace util
             frame.AddrStack.Offset = context->Rsp;
             frame.AddrStack.Mode = AddrModeFlat;
 
-            alignas(SYMBOL_INFO) char symbolBuffer[sizeof(SYMBOL_INFO) + 512] = {0};
-            SYMBOL_INFO* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
-            symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
-            symbol->MaxNameLen = 512;
+            // The wide dbghelp functions (VK-1684): names and paths come back as UTF-16 and are written
+            // as UTF-8, independent of the process code page.
+            alignas(SYMBOL_INFOW) unsigned char symbolBuffer[sizeof(SYMBOL_INFOW) + kMaxSymbolName * sizeof(WCHAR)] = {0};
+            SYMBOL_INFOW* symbol = reinterpret_cast<SYMBOL_INFOW*>(symbolBuffer);
+            symbol->SizeOfStruct = sizeof(SYMBOL_INFOW);
+            symbol->MaxNameLen = kMaxSymbolName;
 
             for (int i = 0; i < 128; ++i)
             {
@@ -80,33 +113,42 @@ namespace util
 
                 DWORD64 addr = frame.AddrPC.Offset;
 
-                char moduleName[MAX_PATH] = "<unknown>";
+                char moduleName[3 * MAX_PATH + 1] = "<unknown>";
                 DWORD64 moduleBase = SymGetModuleBase64(process, addr);
                 if (moduleBase)
                 {
-                    char modPath[MAX_PATH];
-                    if (GetModuleFileNameA(reinterpret_cast<HMODULE>(moduleBase), modPath, MAX_PATH))
+                    wchar_t modPath[MAX_PATH];
+                    if (GetModuleFileNameW(reinterpret_cast<HMODULE>(moduleBase), modPath, MAX_PATH))
                     {
-                        const char* base = strrchr(modPath, '\\');
-                        strncpy_s(moduleName, base ? base + 1 : modPath, _TRUNCATE);
+                        modPath[MAX_PATH - 1] = L'\0';  // a truncated path is NUL-terminated only on Vista+
+                        const wchar_t* base = std::wcsrchr(modPath, L'\\');
+                        utf8Prefix(base ? base + 1 : modPath, moduleName, static_cast<int>(sizeof(moduleName)));
                     }
                 }
 
                 DWORD64 displacement = 0;
-                if (SymFromAddr(process, addr, &displacement, symbol))
+                if (SymFromAddrW(process, addr, &displacement, symbol))
                 {
-                    IMAGEHLP_LINE64 line = {};
-                    line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+                    // NameLen is the full length, which may exceed what fits; the buffer holds
+                    // kMaxSymbolName + 1 units.
+                    symbol->Name[symbol->NameLen < kMaxSymbolName ? symbol->NameLen : kMaxSymbolName] = L'\0';
+                    char symbolName[3 * kMaxSymbolName + 1];
+                    utf8Prefix(symbol->Name, symbolName, static_cast<int>(sizeof(symbolName)));
+
+                    IMAGEHLP_LINEW64 line = {};
+                    line.SizeOfStruct = sizeof(IMAGEHLP_LINEW64);
                     DWORD lineDisp = 0;
-                    if (SymGetLineFromAddr64(process, addr, &lineDisp, &line))
+                    if (SymGetLineFromAddrW64(process, addr, &lineDisp, &line))
                     {
+                        char fileName[3 * MAX_PATH + 1];
+                        utf8Prefix(line.FileName, fileName, static_cast<int>(sizeof(fileName)));
                         std::fprintf(out, "  [%2d] %s!%s + 0x%llx  (%s:%lu)\n", i, moduleName,
-                                     symbol->Name, static_cast<unsigned long long>(displacement),
-                                     line.FileName, line.LineNumber);
+                                     symbolName, static_cast<unsigned long long>(displacement),
+                                     fileName, line.LineNumber);
                     }
                     else
                     {
-                        std::fprintf(out, "  [%2d] %s!%s + 0x%llx\n", i, moduleName, symbol->Name,
+                        std::fprintf(out, "  [%2d] %s!%s + 0x%llx\n", i, moduleName, symbolName,
                                      static_cast<unsigned long long>(displacement));
                     }
                 }
@@ -206,11 +248,19 @@ namespace util
             // Flush the on-disk log so it reflects everything up to the fault.
             try { spdlog::default_logger()->flush(); } catch (...) {}
 
-            // Surface the crash for users who aren't watching the console.
-            char box[MAX_PATH + 64];
-            std::snprintf(box, sizeof(box),
-                          "VertexForge crashed.\nA crash dump was written to:\n%s", dmpPath);
-            MessageBoxA(nullptr, box, "VertexForge - Crash", MB_ICONERROR | MB_OK);
+            // Surface the crash for users who aren't watching the console. VK-1684: wide, with the
+            // dump's absolute path, so a folder name in any script shows whatever the code page is.
+            wchar_t relativeDump[64];
+            swprintf_s(relativeDump, L"crashes\\crash_%hs.dmp", stamp);
+            wchar_t absoluteDump[MAX_PATH + 64];
+            const DWORD absoluteLength =
+                GetFullPathNameW(relativeDump, static_cast<DWORD>(std::size(absoluteDump)), absoluteDump, nullptr);
+            const wchar_t* shownDump =
+                (absoluteLength > 0 && absoluteLength < std::size(absoluteDump)) ? absoluteDump : relativeDump;
+            // Fits: the 50-unit text plus at most MAX_PATH + 63 units of path.
+            wchar_t box[MAX_PATH + 160];
+            swprintf_s(box, L"VertexForge crashed.\nA crash dump was written to:\n%ls", shownDump);
+            MessageBoxW(nullptr, box, L"VertexForge - Crash", MB_ICONERROR | MB_OK);
 
             return EXCEPTION_EXECUTE_HANDLER;
         }
@@ -242,7 +292,14 @@ namespace util
 
     void setCrashLogContext(const std::string& context)
     {
-        const size_t n = context.size() < kContextCapacity - 1 ? context.size() : kContextCapacity - 1;
+        size_t n = context.size() < kContextCapacity - 1 ? context.size() : kContextCapacity - 1;
+        // A cut text ends before the character it would split (VK-1684: the context is UTF-8, e.g. a
+        // script path), so the report stays valid UTF-8.
+        if (n < context.size())
+        {
+            while (n > 0 && (static_cast<unsigned char>(context[n]) & 0xC0) == 0x80)
+                --n;
+        }
         std::memcpy(crashContext, context.data(), n);
         crashContext[n] = '\0';
     }

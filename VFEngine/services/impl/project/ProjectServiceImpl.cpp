@@ -72,8 +72,8 @@ namespace services
             return false;
         }
 
-        // Path work can throw (a path the ANSI code page cannot represent, a failing file
-        // system); a failure here must leave the current project as it was.
+        // Path work can throw (a narrow path the process code page cannot represent, a failing
+        // file system); a failure here must leave the current project as it was.
         try
         {
             // Resolve workingDirectory relative to the project file's directory

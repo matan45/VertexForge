@@ -39,8 +39,10 @@ namespace repo_scan
             return std::nullopt;
         };
 
-        char buf[MAX_PATH]{};
-        if (GetModuleFileNameA(nullptr, buf, MAX_PATH) > 0)
+        // Wide (VK-1684): a narrow MAX_PATH byte buffer would cut a UTF-8 path short.
+        wchar_t buf[MAX_PATH]{};
+        const DWORD length = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (length > 0 && length < MAX_PATH)
         {
             if (auto root = walkUp(fs::path(buf).parent_path())) return root;
         }
@@ -53,6 +55,19 @@ namespace repo_scan
         }
 
         return std::nullopt;
+    }
+
+    // This Tests build's configuration, from the defines vfStandardConfigs() sets: the
+    // bin/<App>/<Config>/x64 folder whose Editor.exe / Runtime.exe the binary checks read.
+    constexpr const char* thisConfiguration()
+    {
+#if defined(DEBUG)
+        return "Debug";
+#elif defined(VF_DEVELOPMENT)
+        return "Development";
+#else
+        return "Release";
+#endif
     }
 
     inline std::string readFile(const fs::path& path)
