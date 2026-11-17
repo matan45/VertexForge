@@ -3,8 +3,8 @@ package com.vertexforge.launcher.service;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.vertexforge.launcher.model.ProjectCreationResult;
+import com.vertexforge.launcher.project.ProjectFiles;
 import com.vertexforge.launcher.util.LauncherLog;
-import com.vertexforge.launcher.util.ProjectValidator;
 import com.vertexforge.launcher.util.TransientIo;
 import com.vertexforge.launcher.util.ZipExtractor;
 
@@ -315,7 +315,7 @@ public class ProjectCreator {
             throws IOException {
         createDirectoryStructure(projectDir);
 
-        createProjectFile(name, projectDir.resolve(name + ProjectValidator.PROJECT_EXTENSION));
+        createProjectFile(name, projectDir.resolve(name + ProjectFiles.EXTENSION));
         progress.fileWritten();
         createStartupScene(projectDir.resolve("scenes"));
         progress.fileWritten();
@@ -498,7 +498,7 @@ public class ProjectCreator {
             return abandon(location, name, staging, target, deletedEmpty, ProjectCreationResult.failure(
                     "Could not move the new project into place: " + staging + " is still there."));
         }
-        return ProjectCreationResult.success(target.resolve(name + ProjectValidator.PROJECT_EXTENSION));
+        return ProjectCreationResult.success(target.resolve(name + ProjectFiles.EXTENSION));
     }
 
     /**

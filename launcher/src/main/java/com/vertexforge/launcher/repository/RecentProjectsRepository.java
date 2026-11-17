@@ -1,6 +1,7 @@
 package com.vertexforge.launcher.repository;
 
 import com.vertexforge.launcher.model.McpSetting;
+import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.repository.RecentProjectsCodec.Decoded;
 import com.vertexforge.launcher.store.AtomicJsonStore;
@@ -14,6 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -77,6 +79,30 @@ public class RecentProjectsRepository {
             RecentProjects.Added added = projects.add(path, name, clock.instant(), newId);
             return added.projects().trim(limit, added.id());
         });
+    }
+
+    /**
+     * Adds a project that already exists on disk (VK-1685) under its real path, or, when that path is listed, only
+     * refreshes the listed entry's name; then trims the list to {@code limit}, never dropping that entry or a pinned
+     * one.
+     *
+     * @param path the project file's real path
+     * @param name the project file's {@code projectName}
+     */
+    public AddedProject addExisting(Path path, String name, int limit) throws StoreWriteException {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(name, "name");
+        UUID newId = ids.get();
+        AtomicReference<RecentProjects.Added> added = new AtomicReference<>();
+        RecentProjectsView view = change("add existing " + path, projects -> {
+            RecentProjects.Added result = projects.addExisting(path, name, clock.instant(), newId);
+            added.set(result);
+            return result.projects().trim(limit, result.id());
+        });
+        UUID id = added.get().id();
+        RecentEntry entry = view.find(id)
+                .orElseThrow(() -> new IllegalStateException("The added project " + id + " is not in the list"));
+        return new AddedProject(view, entry, added.get().existed());
     }
 
     /** Records that the project was just opened. Does nothing when another launcher removed it meanwhile. */

@@ -16,6 +16,9 @@ import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFileReader;
+import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsCodec;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
@@ -170,6 +173,7 @@ public final class SelfTest {
         check("store round trip", () -> checkStoreRoundTrip(workDir.resolve("store"), environment.clock(), log));
         check("zip round trip", () -> checkZipRoundTrip(workDir.resolve("zip")));
         check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects")));
+        check("existing project", () -> checkExistingProject(hub));
         check("engine registry", () -> checkEngineRegistry(hub, workDir.resolve("engines"),
                 environment.configDir().resolve(EngineRegistryRepository.FILE_NAME)));
         return hub;
@@ -298,6 +302,32 @@ public final class SelfTest {
             if (!Arrays.equals(file.getValue(), Files.readAllBytes(targetDir.resolve(file.getKey())))) {
                 throw new IllegalStateException("zip round trip changed " + file.getKey());
             }
+        }
+    }
+
+    /**
+     * The project the creation check made reads back through the project file reader (VK-1685), and adding its
+     * folder again finds the listed entry instead of adding a second one, so the list still holds exactly one.
+     */
+    private static void checkExistingProject(ProjectHub hub) throws Exception {
+        List<RecentEntry> listed = hub.listProjects().entries();
+        if (listed.size() != 1 || listed.getFirst().path() == null) {
+            throw new IllegalStateException("the created project is not listed: " + listed);
+        }
+        Path projectFile = listed.getFirst().path();
+        String name = ProjectFileReader.read(projectFile).projectName();
+        if (!"SelfTest".equals(name)) {
+            throw new IllegalStateException("the project file reads back as \"" + name + "\"");
+        }
+
+        PickedProject picked = hub.inspectProject(projectFile.getParent()).get(UI_TIMEOUT.toSeconds(),
+                TimeUnit.SECONDS);
+        if (!(picked instanceof PickedProject.Found found) || !projectFile.equals(found.file())) {
+            throw new IllegalStateException("the project folder was read as " + picked);
+        }
+        AddedProject added = hub.addExisting(found);
+        if (!added.existed() || added.view().entries().size() != 1) {
+            throw new IllegalStateException("adding the listed project again changed the list: " + added.view());
         }
     }
 

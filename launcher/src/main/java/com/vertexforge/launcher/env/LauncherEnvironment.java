@@ -18,7 +18,8 @@ import java.util.function.UnaryOperator;
  *                           there too, so the launcher only ever touches its own files in it
  * @param launcherExecutable the packaged launcher's own exe ({@code jpackage.app-path}), from which the bundled
  *                           engine is found (VK-1681); empty when the launcher runs from a jar or
- *                           {@code mvn javafx:run}. The working directory ({@code user.dir}) is never used.
+ *                           {@code mvn javafx:run}. The working directory ({@code user.dir}) is only read by
+ *                           {@link #systemWorkingDirectory()}, to resolve relative command-line paths (VK-1685).
  * @param env                environment-variable lookup; returns {@code null} for an unset variable
  * @param processStarter     starts the editor process
  * @param nativeCharset      the system's ANSI code page ({@code native.encoding}): an editor older than VK-1684 only
@@ -50,7 +51,8 @@ public record LauncherEnvironment(
 
     /**
      * The real machine. This is the only place in the launcher that reads {@code user.home},
-     * {@code jpackage.app-path}, {@code native.encoding} or the process environment.
+     * {@code jpackage.app-path}, {@code native.encoding} or the process environment; {@code user.dir} is read only by
+     * {@link #systemWorkingDirectory()}.
      */
     public static LauncherEnvironment system() {
         return new LauncherEnvironment(
@@ -66,6 +68,15 @@ public record LauncherEnvironment(
     /** This process's launcher exe, from {@link #APP_PATH_PROPERTY}; see {@link #launcherExecutable(String)}. */
     public static Optional<Path> systemLauncherExecutable() {
         return launcherExecutable(System.getProperty(APP_PATH_PROPERTY));
+    }
+
+    /**
+     * This process's working directory, as an absolute path: relative paths on the command line are resolved against
+     * it before they are handed to a launcher that may run in another folder (VK-1685). The only reader of
+     * {@code user.dir}.
+     */
+    public static Path systemWorkingDirectory() {
+        return Path.of("").toAbsolutePath();
     }
 
     /** The launcher exe named by {@code value}; empty when it is missing, blank, not a valid path or relative. */

@@ -44,6 +44,10 @@ class SelfTestTest {
             assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream().noneMatch(n -> n.endsWith(".tmp")));
             assertTrue(Files.isRegularFile(tempDir.resolve("store/recent-projects.json")),
                     "the store round trip runs inside the work folder too");
+            // The self-test never takes part in the single-instance check (VK-1685).
+            assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream()
+                    .noneMatch(n -> n.startsWith("launcher.") || n.startsWith("launcher-dev.")),
+                    () -> TestSupport.fileNames(tempDir.resolve("config")).toString());
         } finally {
             hub.close();
         }

@@ -409,4 +409,43 @@ class RecentProjectsRepositoryTest {
         assertTrue(repository.bindEngine(id, UUID.randomUUID()).isEmpty());
         assertTrue(repository.markOpened(id, Optional.of(UUID.randomUUID())).isEmpty());
     }
+
+    // --- existing projects (VK-1685) ---------------------------------------------------------------------------------
+
+    @Test
+    void addExistingListsAProjectOnceAndKeepsItsIdWhenAddedAgain() throws Exception {
+        Path game = projectFile("Game");
+
+        AddedProject first = repository.addExisting(game, "Game", LIMIT);
+        AddedProject again = newRepository().addExisting(game, "Renamed", LIMIT);
+
+        assertFalse(first.existed());
+        assertEquals(game, first.entry().path());
+        assertTrue(again.existed());
+        assertEquals(first.entry().id(), again.entry().id());
+        assertEquals("Renamed", again.entry().name());
+        assertEquals(List.of("Renamed"), names(again.view()));
+        assertEquals(List.of("Renamed"), names(newRepository().load()));
+    }
+
+    @Test
+    void addExistingTrimsTheListButNeverTheAddedProject() throws Exception {
+        repository.add(projectFile("Old"), "Old", LIMIT);
+
+        AddedProject added = repository.addExisting(projectFile("New"), "New", 1);
+
+        assertEquals(List.of("New"), names(added.view()));
+        assertEquals(added.entry().id(), added.view().entries().getFirst().id());
+    }
+
+    @Test
+    void addExistingNeverWritesANewerFile() throws Exception {
+        writeStore("{\"version\": 3, \"projects\": []}");
+        byte[] original = Files.readAllBytes(storeFile);
+
+        assertEquals(Reason.NEWER_VERSION, assertThrows(StoreWriteException.class,
+                () -> repository.addExisting(root.resolve("New.vfproj"), "New", LIMIT)).reason());
+        assertArrayEquals(original, Files.readAllBytes(storeFile));
+    }
+
 }

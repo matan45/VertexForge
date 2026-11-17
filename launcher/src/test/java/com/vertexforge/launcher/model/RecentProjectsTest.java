@@ -3,15 +3,19 @@ package com.vertexforge.launcher.model;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -186,4 +190,83 @@ class RecentProjectsTest {
         assertSame(projects, projects.bindEngine(game.id(), "e"));
         assertSame(game, game.withEngineId("e"));
     }
+
+    // --- addExisting (VK-1685) ---------------------------------------------------------------------------------------
+
+    @Test
+    void addingAnExistingProjectAppendsItWithTheGivenIdNameAndTime() {
+        UUID id = UUID.randomUUID();
+
+        RecentProjects.Added added = RecentProjects.empty().addExisting(path("Game"), "My Game", T0, id);
+
+        assertEquals(id, added.id());
+        assertFalse(added.existed());
+        RecentEntry entry = added.projects().entries().getFirst();
+        assertEquals(path("Game"), entry.path());
+        assertEquals("My Game", entry.name());
+        assertEquals(T0, entry.lastOpened());
+    }
+
+    @Test
+    void addingAListedProjectAgainOnlyRefreshesItsName() {
+        JsonObject raw = new JsonObject();
+        raw.addProperty("name", "Old Name");
+        raw.addProperty("path", path("Game").toString());
+        raw.addProperty("lastOpened", T0.toString());
+        raw.addProperty("pinned", true);
+        raw.addProperty("engineId", "engine-1");
+        raw.addProperty("custom", 1);
+        RecentEntry stored = RecentEntry.fromJson(UUID.randomUUID(), raw);
+        RecentProjects projects = new RecentProjects(List.of(stored, entry("Other", 5)));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "New Name", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertEquals(stored.id(), added.id());
+        assertEquals(2, added.projects().size());
+        RecentEntry updated = added.projects().find(stored.id()).orElseThrow();
+        assertEquals("New Name", updated.name());
+        assertEquals(stored.rawPath(), updated.rawPath(), "the stored path is kept");
+        assertEquals(T0, updated.lastOpened(), "adding is not opening: the time is kept");
+        assertTrue(updated.pinned());
+        assertEquals("engine-1", updated.engineId());
+        assertEquals(1, updated.raw().get("custom").getAsInt());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void anEntryStoredInAnotherLetterCaseIsTheSameProject() {
+        RecentEntry stored = RecentEntry.create(UUID.randomUUID(),
+                Path.of(path("Game").toString().toUpperCase(Locale.ROOT)), "Game", T0);
+        RecentProjects projects = new RecentProjects(List.of(stored));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "Game", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertEquals(stored.id(), added.id());
+        assertSame(projects, added.projects(), "nothing changed");
+    }
+
+    @Test
+    void addingAListedProjectUnderItsOwnNameChangesNothing() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "Game", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertSame(projects, added.projects());
+    }
+
+    @Test
+    void addReportsWhetherThePathWasListed() {
+        RecentProjects.Added first = RecentProjects.empty().add(path("Game"), "Game", T0, UUID.randomUUID());
+        RecentProjects.Added again = first.projects().add(path("Game"), "Game", T0, UUID.randomUUID());
+
+        assertFalse(first.existed());
+        assertTrue(again.existed());
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.vertexforge.launcher.service;
 
+import com.google.gson.JsonPrimitive;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
 import com.vertexforge.launcher.engine.EditorOverride;
@@ -13,6 +14,8 @@ import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus.Kind;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.model.McpSetting;
+import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.EditorLauncherTest.FakeProcess;
 import com.vertexforge.launcher.service.EditorLauncherTest.RecordingStarter;
@@ -26,17 +29,22 @@ import com.vertexforge.launcher.store.StoreWriteException.Reason;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -45,7 +53,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class ProjectHubTest {
 
@@ -479,4 +489,139 @@ class ProjectHubTest {
 
         assertEquals(new McpSetting(true, 7979), listed(hub(Map.of()), "Game").mcp());
     }
+
+    // --- existing projects (VK-1685) ---------------------------------------------------------------------------------
+
+    /** A project made somewhere else: its file name and its {@code projectName} differ. */
+    private Path existingProject(String folder, String fileName, String projectName) throws IOException {
+        Path dir = Files.createDirectories(root.resolve("elsewhere").resolve(folder));
+        return Files.writeString(dir.resolve(fileName), """
+                {"schemaVersion": "1.0", "projectName": %s, "version": "0.1.0", "workingDirectory": ".",
+                 "startupScene": "scenes/Main.vfScene", "engineVersion": "VertexForge 1.0.0"}
+                """.formatted(new JsonPrimitive(projectName)));
+    }
+
+    private static PickedProject.Found found(ProjectHub on, Path picked) throws Exception {
+        PickedProject result = on.inspectProject(picked).get(10, TimeUnit.SECONDS);
+        return assertInstanceOf(PickedProject.Found.class, result, result::toString);
+    }
+
+    @Test
+    void anExistingProjectIsListedUnderItsRealPathWithTheNameFromItsFile() throws Exception {
+        Path file = existingProject("Cloned", "Cloned.vfproj", "My Cloned Game");
+
+        AddedProject added = hub.addExisting(found(hub, file.getParent()));
+
+        assertFalse(added.existed());
+        assertEquals(file, added.entry().path());
+        assertEquals(file.toString(), added.entry().rawPath());
+        assertEquals("My Cloned Game", added.entry().displayName());
+        assertEquals(List.of("My Cloned Game"), names(hub.listProjects()));
+    }
+
+    @Test
+    void aDotDotSpellingOfAListedProjectGivesTheSameEntry() throws Exception {
+        Path file = existingProject("Game", "Game.vfproj", "Game");
+        Path dotDot = file.getParent().resolve("..").resolve("Game").resolve("Game.vfproj");
+
+        AddedProject first = hub.addExisting(found(hub, file));
+        AddedProject second = hub.addExisting(found(hub, dotDot));
+
+        assertTrue(second.existed());
+        assertEquals(first.entry().id(), second.entry().id());
+        assertEquals(1, hub.listProjects().entries().size());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void anotherLetterCaseOfAProjectIsStoredUnderItsRealSpellingOnce() throws Exception {
+        Path file = existingProject("Game", "Game.vfproj", "Game");
+        Path otherCase = Path.of(file.toString().toUpperCase(Locale.ROOT));
+
+        AddedProject first = hub.addExisting(found(hub, otherCase));
+        AddedProject second = hub.addExisting(found(hub, file));
+
+        assertEquals(file.toString(), first.entry().rawPath(), "stored under the real spelling");
+        assertTrue(second.existed());
+        assertEquals(1, hub.listProjects().entries().size());
+    }
+
+    @Test
+    void theShortNameSpellingOfAProjectGivesTheSameEntry() throws Exception {
+        // The CI runner's temp folder is an 8.3 short path (RUNNER~1); most machines have none and skip this.
+        assumeFalse(tempDir.toString().equals(root.toString()), "the temp folder has no other spelling here");
+        Path file = existingProject("Game", "Game.vfproj", "Game");
+        Path shortSpelling = tempDir.resolve(root.relativize(file));
+
+        AddedProject first = hub.addExisting(found(hub, shortSpelling));
+        AddedProject second = hub.addExisting(found(hub, file));
+
+        assertEquals(file, first.entry().path());
+        assertTrue(second.existed());
+        assertEquals(1, hub.listProjects().entries().size());
+    }
+
+    @Test
+    void aCreatedProjectAddedAgainIsAlreadyListed() throws Exception {
+        CreateOutcome created = hub.createProject("Game", projectsDir);
+
+        AddedProject added = hub.addExisting(found(hub, created.projectPath().getParent()));
+
+        assertTrue(added.existed(), "creation and adding store the same real path");
+        assertEquals(1, hub.listProjects().entries().size());
+    }
+
+    @Test
+    void anExistingProjectIsNotAddedToANewerList() throws Exception {
+        Path file = existingProject("Game", "Game.vfproj", "Game");
+        Files.createDirectories(configDir);
+        Path store = configDir.resolve("recent-projects.json");
+        Files.writeString(store, "{\"version\": 3, \"projects\": []}");
+        byte[] newer = Files.readAllBytes(store);
+        PickedProject.Found picked = found(hub, file);
+
+        assertEquals(Reason.NEWER_VERSION,
+                assertThrows(StoreWriteException.class, () -> hub.addExisting(picked)).reason());
+        assertArrayEquals(newer, Files.readAllBytes(store));
+    }
+
+    @Test
+    void aProjectFileThatIsNotValidJsonIsRefusedWithItsLocation() throws Exception {
+        Path dir = Files.createDirectories(root.resolve("elsewhere/Broken"));
+        Path file = Files.writeString(dir.resolve("Broken.vfproj"), "{\n  \"projectName\" \"Broken\"\n}\n");
+
+        PickedProject result = hub.inspectProject(file).get(10, TimeUnit.SECONDS);
+
+        PickedProject.Refused refused = assertInstanceOf(PickedProject.Refused.class, result, result::toString);
+        assertTrue(refused.reason().contains("line 2"), refused.reason());
+        assertTrue(hub.listProjects().isEmpty());
+    }
+
+    @Test
+    void aProjectThatDoesNotAnswerInTimeIsRefused() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        LauncherEnvironment environment = TestSupport.environment(configDir, Optional.empty(),
+                new TickingClock(TestSupport.T0), Map.of(), starter);
+        ProjectHub slow = ProjectHub.create(environment, TestSupport.log(root.resolve("logs")).log, path -> {
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new PickedProject.Refused(path, "too late");
+        }, Duration.ofMillis(100));
+        hubs.add(slow);
+        Path picked = root.resolve("Slow.vfproj");
+
+        try {
+            PickedProject result = slow.inspectProject(picked).get(10, TimeUnit.SECONDS);
+
+            PickedProject.Refused refused = assertInstanceOf(PickedProject.Refused.class, result, result::toString);
+            assertEquals(picked, refused.picked());
+            assertTrue(refused.reason().startsWith("No response after 100 ms"), refused.reason());
+        } finally {
+            release.countDown();
+        }
+    }
+
 }

@@ -1,6 +1,6 @@
 package com.vertexforge.launcher.service;
 
-import com.vertexforge.launcher.util.ProjectValidator;
+import com.vertexforge.launcher.project.ProjectFiles;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -87,7 +87,7 @@ public final class ProjectTemplate {
      * project folder: the deepest template file, or {@code <name>.vfproj} when the name is longer than that.
      */
     public int deepestRelativeLength(String name) {
-        return Math.max(deepestTemplateFile, name.length() + ProjectValidator.PROJECT_EXTENSION.length());
+        return Math.max(deepestTemplateFile, name.length() + ProjectFiles.EXTENSION.length());
     }
 
     static IOException missingLibrary() {

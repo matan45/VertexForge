@@ -57,8 +57,11 @@ public final class RecentProjects {
                 .toList();
     }
 
-    /** The result of {@link #add}: the new list and the id of the added or updated entry. */
-    public record Added(RecentProjects projects, UUID id) {
+    /**
+     * The result of {@link #add} and {@link #addExisting}: the new list, the id of the added or updated entry, and
+     * whether that entry was listed already.
+     */
+    public record Added(RecentProjects projects, UUID id, boolean existed) {
     }
 
     /**
@@ -75,11 +78,40 @@ public final class RecentProjects {
             if (path.equals(existing.path())) {
                 RecentEntry updated = existing.withName(name).withLastOpened(now);
                 next.set(i, updated);
-                return new Added(new RecentProjects(next), updated.id());
+                return new Added(new RecentProjects(next), updated.id(), true);
             }
         }
         next.add(RecentEntry.create(newId, path, name, now));
-        return new Added(new RecentProjects(next), newId);
+        return new Added(new RecentProjects(next), newId, false);
+    }
+
+    /**
+     * Adds a project that already exists on disk (VK-1685), or, when an entry already has this path (compared as in
+     * {@link #add}), refreshes only that entry's name from the project file. Its id, stored path, time, pin, engine
+     * binding and other members stay, so adding a listed project never moves it or changes how it opens.
+     *
+     * @param path the project file's real path
+     * @param name the project file's {@code projectName}
+     */
+    public Added addExisting(Path path, String name, Instant now, UUID newId) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(now, "now");
+        Objects.requireNonNull(newId, "newId");
+        List<RecentEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            RecentEntry existing = next.get(i);
+            if (path.equals(existing.path())) {
+                RecentEntry renamed = existing.withName(name);
+                if (renamed == existing) {
+                    return new Added(this, existing.id(), true);
+                }
+                next.set(i, renamed);
+                return new Added(new RecentProjects(next), existing.id(), true);
+            }
+        }
+        next.add(RecentEntry.create(newId, path, name, now));
+        return new Added(new RecentProjects(next), newId, false);
     }
 
     /** Records that the entry was opened at {@code now}; does nothing when the id is gone. */

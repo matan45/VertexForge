@@ -55,12 +55,60 @@
     -fx-background-color: #555555;
 }
 
+/* "Add Existing…" (VK-1685): a split button that looks like the other sidebar buttons */
+.sidebar-split {
+    -fx-background-color: #3c3c3c;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+.sidebar-split > .label {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4 0 0 4;
+    -fx-text-fill: #cccccc;
+    -fx-padding: 10 15;
+}
+
+.sidebar-split > .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 0 4 4 0;
+    -fx-border-color: transparent transparent transparent #2b2b2b;
+    -fx-border-width: 0 0 0 1;
+    -fx-padding: 10 10;
+}
+
+.sidebar-split > .arrow-button > .arrow {
+    -fx-background-color: #cccccc;
+}
+
+.sidebar-split > .label:hover,
+.sidebar-split > .arrow-button:hover {
+    -fx-background-color: #4a4a4a;
+}
+
+.sidebar-split > .label:pressed,
+.sidebar-split:showing > .arrow-button {
+    -fx-background-color: #555555;
+}
+
 /* ============================================
    Content Area
    ============================================ */
 .content-area {
     -fx-background-color: #1e1e1e;
     -fx-padding: 20;
+}
+
+/* Files dragged over the window (VK-1685) */
+.content-area:drop-target {
+    -fx-border-color: #4a9eff;
+    -fx-border-style: dashed;
+    -fx-border-width: 2;
+    -fx-border-radius: 6;
 }
 
 .section-title {

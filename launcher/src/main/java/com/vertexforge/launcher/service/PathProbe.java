@@ -1,8 +1,8 @@
 package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.model.ProjectStatus;
-import com.vertexforge.launcher.util.ProjectValidator;
-import com.vertexforge.launcher.util.Volumes;
+import com.vertexforge.launcher.project.PathFailures;
+import com.vertexforge.launcher.project.ProjectFiles;
 
 import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
@@ -29,14 +29,13 @@ public interface PathProbe {
     }
 
     /**
-     * The extension, then the attributes, then an actual open for reading. {@code Files.exists} is not used: it
-     * reports a file it may not read as absent.
+     * The extension (in any letter case, VK-1685), then the attributes, then an actual open for reading.
+     * {@code Files.exists} is not used: it reports a file it may not read as absent.
      */
     private static ProjectStatus probeFileSystem(Path file) {
         try {
-            Path fileName = file.getFileName();
-            if (fileName == null || !fileName.toString().endsWith(ProjectValidator.PROJECT_EXTENSION)) {
-                return ProjectStatus.unreadable("Not a " + ProjectValidator.PROJECT_EXTENSION + " file");
+            if (!ProjectFiles.isProjectFile(file)) {
+                return ProjectStatus.unreadable("Not a " + ProjectFiles.EXTENSION + " file");
             }
 
             BasicFileAttributes attributes;
@@ -45,9 +44,10 @@ public interface PathProbe {
             } catch (NoSuchFileException e) {
                 return missing(file);
             } catch (AccessDeniedException e) {
-                return ProjectStatus.unreadable("Access denied");
+                return ProjectStatus.unreadable(PathFailures.ACCESS_DENIED);
             } catch (FileSystemException e) {
-                return driveIsAbsent(file) ? missingDrive(file) : ProjectStatus.unreadable(reasonOf(e));
+                return PathFailures.isAbsentDrive(file) ? missingDrive(file)
+                        : ProjectStatus.unreadable(PathFailures.reasonOf(e));
             }
             if (!attributes.isRegularFile()) {
                 return ProjectStatus.unreadable("Not a file");
@@ -58,32 +58,21 @@ public interface PathProbe {
             } catch (NoSuchFileException e) {
                 return missing(file);
             } catch (AccessDeniedException e) {
-                return ProjectStatus.unreadable("Access denied");
+                return ProjectStatus.unreadable(PathFailures.ACCESS_DENIED);
             }
         } catch (IOException e) {
-            return ProjectStatus.unreadable(reasonOf(e));
+            return ProjectStatus.unreadable(PathFailures.reasonOf(e));
         } catch (RuntimeException e) {
             return ProjectStatus.unreadable("Could not check the project file: " + e);
         }
     }
 
     private static ProjectStatus missing(Path file) {
-        return driveIsAbsent(file) ? missingDrive(file) : ProjectStatus.missing("The project file was not found");
+        return PathFailures.isAbsentDrive(file) ? missingDrive(file)
+                : ProjectStatus.missing("The project file was not found");
     }
 
     private static ProjectStatus missingDrive(Path file) {
-        return ProjectStatus.missing("Drive " + file.getRoot() + " is not available");
-    }
-
-    /** See {@link Volumes#isAbsentDriveLetter}. */
-    private static boolean driveIsAbsent(Path file) {
-        return Volumes.isAbsentDriveLetter(file);
-    }
-
-    private static String reasonOf(IOException e) {
-        if (e instanceof FileSystemException fileSystemException && fileSystemException.getReason() != null) {
-            return fileSystemException.getReason();
-        }
-        return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+        return ProjectStatus.missing(PathFailures.absentDrive(file));
     }
 }

@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.vertexforge.launcher.project.ProjectFiles;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -46,8 +47,6 @@ public record RecentEntry(
     public static final String ENGINE_ID = "engineId";
     /** "Open with MCP" (VK-1683); not one of the six v2 members, so older v2 launchers keep it as an unknown member. */
     public static final String MCP = "mcp";
-
-    private static final String PROJECT_EXTENSION = ".vfproj";
 
     public RecentEntry {
         Objects.requireNonNull(id, "id");
@@ -126,16 +125,16 @@ public record RecentEntry(
         return with(MCP, stored);
     }
 
-    /** The name to show: the stored name, else the project file's name without {@code .vfproj}, else the raw path. */
+    /**
+     * The name to show: the stored name, else the project file's name without {@code .vfproj} (in any letter case,
+     * VK-1685), else the raw path.
+     */
     public String displayName() {
         if (name != null && !name.isBlank()) {
             return name;
         }
         if (path != null && path.getFileName() != null) {
-            String fileName = path.getFileName().toString();
-            return fileName.endsWith(PROJECT_EXTENSION)
-                    ? fileName.substring(0, fileName.length() - PROJECT_EXTENSION.length())
-                    : fileName;
+            return ProjectFiles.stem(path.getFileName().toString());
         }
         if (rawPath != null && !rawPath.isBlank()) {
             return rawPath;

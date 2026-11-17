@@ -126,7 +126,9 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>${javafx-maven-plugin.version}</version>
                 <configuration>
-                    <mainClass>com.vertexforge.launcher.LauncherApp</mainClass>
+                    <!-- Launcher, not LauncherApp: Java would start an Application subclass without its main, so the
+                         command line and the single-instance check (VK-1685) would never run. -->
+                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
                     <options>
                         <option>--enable-native-access=ALL-UNNAMED</option>
                     </options>

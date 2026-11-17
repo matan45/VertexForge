@@ -32,6 +32,13 @@ class PathProbeTest {
     }
 
     @Test
+    void theExtensionMayBeInAnyLetterCase() throws IOException {
+        Path project = Files.writeString(tempDir.resolve("Game.VFPROJ"), "{}");
+
+        assertEquals(Kind.OK, probe.probe(project).kind());
+    }
+
+    @Test
     void aDeletedProjectFileIsMissing() {
         ProjectStatus status = probe.probe(tempDir.resolve("gone").resolve("Gone.vfproj"));
 
@@ -62,6 +69,9 @@ class PathProbeTest {
     void aFileWithAnotherExtensionIsUnreadable() throws IOException {
         Path other = Files.writeString(tempDir.resolve("Game.txt"), "{}");
 
-        assertEquals(Kind.UNREADABLE, probe.probe(other).kind());
+        ProjectStatus status = probe.probe(other);
+
+        assertEquals(Kind.UNREADABLE, status.kind());
+        assertEquals("Not a .vfproj file", status.reason());
     }
 }

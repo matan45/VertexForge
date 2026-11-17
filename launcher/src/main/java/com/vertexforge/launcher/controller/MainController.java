@@ -6,6 +6,7 @@ import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
 import com.vertexforge.launcher.dialog.EnginesDialog;
 import com.vertexforge.launcher.dialog.McpDialog;
+import com.vertexforge.launcher.dialog.ProjectChooserDialog;
 import com.vertexforge.launcher.dialog.SessionFailureDialog;
 import com.vertexforge.launcher.dialog.SettingsDialog;
 import com.vertexforge.launcher.engine.EditorOverride;
@@ -16,9 +17,14 @@ import com.vertexforge.launcher.engine.EngineRegistryCodec;
 import com.vertexforge.launcher.engine.EngineRegistryView;
 import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
+import com.vertexforge.launcher.instance.InstanceMessage;
+import com.vertexforge.launcher.instance.InstanceRequest;
 import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFiles;
+import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
@@ -45,31 +51,43 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
+import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
+import javafx.scene.control.SplitMenuButton;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.input.TransferMode;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -115,7 +133,10 @@ public class MainController implements Initializable {
     static final String BANNER_OVERRIDE = "editor-override";
     static final String BANNER_SESSION_PREFIX = "session:";
     static final String BANNER_SETTINGS = "settings";
+    static final String BANNER_ADD = "add-existing";
+    static final String BANNER_COMMAND_LINE = "command-line";
 
+    private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
     private static final PseudoClass UNREADABLE_ROW = PseudoClass.getPseudoClass("unreadable");
     private static final PseudoClass CHECKING_ROW = PseudoClass.getPseudoClass("checking");
@@ -148,11 +169,22 @@ public class MainController implements Initializable {
     @FXML
     private VBox bannerBox;
 
+    /** The whole window's content: the drop target (VK-1685). */
+    @FXML
+    private BorderPane rootPane;
+
+    /** Outlined while files are dragged over the window. */
+    @FXML
+    private StackPane contentArea;
+
     @FXML
     private Button openProjectButton;
 
     @FXML
     private Button createProjectButton;
+
+    @FXML
+    private SplitMenuButton addExistingButton;
 
     @FXML
     private Button enginesButton;
@@ -189,6 +221,13 @@ public class MainController implements Initializable {
     /** The editors this window started that still run, one per project (VK-1683). */
     private final EditorSessions sessions = new EditorSessions();
 
+    /** Adds and opens projects that exist on disk, one request at a time (VK-1685). */
+    private final AddExistingFlow addFlow = new AddExistingFlow(new FlowServices(), MainController::runLaterQuietly);
+
+    /** Runs right before the launcher exits by itself (the Close after-launch setting); never {@code null}. */
+    private Runnable beforeExit = () -> {
+    };
+
     private BannerBar banners;
 
     public MainController(ProjectHub hub, Executor background, Executor creation) {
@@ -204,11 +243,41 @@ public class MainController implements Initializable {
         setupTableBehavior();
         setupSelectionListener();
         setupButtons();
+        setupDropTarget();
+        setupRequestQueue();
 
         // Until the first read answers, show the (empty) table with a loading note rather than "no projects".
         projectsTable.setPlaceholder(new Label("Loading…"));
         showEmptyState(false);
         reload();
+    }
+
+    /**
+     * Requests from this launcher's command line, or forwarded by a second launcher (VK-1685): the window comes to
+     * the front, and the requests are queued behind any that are waiting. An empty message only brings the window
+     * up. FX thread.
+     */
+    public void handleRequests(InstanceMessage message) {
+        Objects.requireNonNull(message, "message");
+        if (windowOrNull() != null) {
+            restoreWindow();
+        }
+        if (!message.problems().isEmpty()) {
+            banners.show(BANNER_COMMAND_LINE, BannerBar.Kind.WARNING, "Ignored on the command line: "
+                    + String.join("; ", message.problems()) + ".", true);
+        }
+        addFlow.submit(message.requests().stream()
+                .map(request -> new AddExistingFlow.Item(request.path(),
+                        request.action() == InstanceRequest.Action.OPEN))
+                .toList());
+    }
+
+    /**
+     * Runs {@code hook} right before the launcher exits by itself (the Close after-launch setting), so that a second
+     * launcher is no longer told its request was taken (VK-1685). FX thread.
+     */
+    public void setBeforeExit(Runnable hook) {
+        beforeExit = Objects.requireNonNull(hook, "hook");
     }
 
     /** Completes once the first list read has been shown (the self-test waits for it). */
@@ -375,6 +444,73 @@ public class MainController implements Initializable {
         enginesButton.disableProperty().bind(launching.or(choosingEngine));
         settingsButton.disableProperty().bind(launching.or(choosingEngine));
         createProjectButton.disableProperty().bind(creating.or(readOnly));
+        addExistingButton.disableProperty().bind(readOnly.or(launching).or(choosingEngine)
+                .or(addFlow.busyProperty()));
+    }
+
+    /**
+     * Files and folders dragged from Explorer onto any part of the window are added (VK-1685). Filters on the root see
+     * the drag even over a disabled table. Nothing here touches the disk: Explorer waits until the drop returns.
+     */
+    private void setupDropTarget() {
+        rootPane.addEventFilter(DragEvent.DRAG_OVER, event -> {
+            if (event.getDragboard().hasFiles()) {
+                // Never MOVE: the source would then delete what it dragged.
+                event.acceptTransferModes(TransferMode.COPY);
+            }
+        });
+        rootPane.addEventFilter(DragEvent.DRAG_DROPPED, event -> {
+            Dragboard board = event.getDragboard();
+            if (!board.hasFiles()) {
+                return;
+            }
+            List<Path> dropped = toPaths(board.getFiles());
+            event.setDropCompleted(true);
+            event.consume();
+            contentArea.pseudoClassStateChanged(DROP_TARGET, false);
+            addProjects(dropped);
+        });
+        rootPane.addEventHandler(DragEvent.DRAG_ENTERED, event ->
+                contentArea.pseudoClassStateChanged(DROP_TARGET, event.getDragboard().hasFiles()));
+        rootPane.addEventHandler(DragEvent.DRAG_EXITED, event ->
+                contentArea.pseudoClassStateChanged(DROP_TARGET, false));
+    }
+
+    /**
+     * Waiting requests run once the window is free: after the first list read, a launch, an engine choice, or once a
+     * dialog closes (a closing window leaves {@link Window#getWindows()}).
+     */
+    private void setupRequestQueue() {
+        ChangeListener<Boolean> freed = (observable, was, now) -> {
+            if (!now) {
+                drainLater();
+            }
+        };
+        launching.addListener(freed);
+        choosingEngine.addListener(freed);
+        Window.getWindows().addListener((ListChangeListener<Window>) change -> drainLater());
+        firstLoad.thenRun(this::drainLater);
+    }
+
+    private void drainLater() {
+        runLaterQuietly(addFlow::drain);
+    }
+
+    private static List<Path> toPaths(List<File> files) {
+        List<Path> paths = new ArrayList<>(files.size());
+        for (File file : files) {
+            try {
+                paths.add(file.toPath().toAbsolutePath().normalize());
+            } catch (InvalidPathException e) {
+                // Explorer never hands over such a name; skip it rather than fail the whole drop.
+            }
+        }
+        return paths;
+    }
+
+    /** Queues paths picked or dropped by the user for adding. */
+    private void addProjects(List<Path> paths) {
+        addFlow.submit(paths.stream().map(path -> new AddExistingFlow.Item(path, false)).toList());
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -531,7 +667,7 @@ public class MainController implements Initializable {
         if (selected == null || !selected.isOpenable() || launching.get() || choosingEngine.get()) {
             return;
         }
-        launchProject(selected.getProjectPath(), selected.getEntry());
+        launchProject(selected.getProjectPath(), selected.getEntry(), null);
     }
 
     /**
@@ -540,22 +676,26 @@ public class MainController implements Initializable {
      * has open starts nothing (VK-1683). Once the editor is ready, the entry is marked as opened (and bound to its
      * engine on its first open) when it is listed and the list may be written, and the after-launch setting applies.
      *
-     * @param entry the project's entry, or {@code null} when it is not listed
+     * @param entry        the project's entry, or {@code null} when it is not listed
+     * @param fallbackName the name of a project that is not listed (its {@code projectName}, VK-1685); {@code null}
+     *                     for the file's name without {@code .vfproj}
+     * @return {@code false} when nothing happened because a launch or an engine choice is in progress
      */
-    private void launchProject(Path projectFile, RecentEntry entry) {
+    private boolean launchProject(Path projectFile, RecentEntry entry, String fallbackName) {
         if (launching.get() || choosingEngine.get()) {
-            return;
+            return false;
         }
         // One session per project: Open on a running project starts nothing (VK-1683).
         Optional<EditorSessions.Live> live = sessions.find(projectFile);
         if (live.isPresent()) {
             showAlreadyRunning(live.get());
-            return;
+            return true;
         }
 
         UUID id = entry == null ? null : entry.id();
         String engineId = entry == null ? null : entry.engineId();
-        String name = entry != null ? entry.displayName() : projectName(projectFile);
+        String name = entry != null ? entry.displayName()
+                : fallbackName != null && !fallbackName.isBlank() ? fallbackName : projectName(projectFile);
         McpSetting mcp = entry == null ? McpSetting.DEFAULT : entry.mcp();
 
         // Disable UI to prevent double-clicks while the engines are checked and the editor starts
@@ -589,14 +729,14 @@ public class MainController implements Initializable {
             launching.set(false);
             showErrorDialog("Launch Failed", "Could not check the engines: " + describe(error));
         });
+        return true;
     }
 
-    /** The project's file name without {@code .vfproj}, for a project that is not listed. */
+    /** The project's file name without {@code .vfproj} (in any letter case), for a project that is not listed. */
     private static String projectName(Path projectFile) {
         String fileName = projectFile.getFileName() == null ? projectFile.toString()
                 : projectFile.getFileName().toString();
-        return fileName.endsWith(".vfproj") ? fileName.substring(0, fileName.length() - ".vfproj".length())
-                : fileName;
+        return ProjectFiles.stem(fileName);
     }
 
     /**
@@ -725,7 +865,9 @@ public class MainController implements Initializable {
      * fail to open its project, so no failure goes unreported.
      */
     private void applyAfterLaunch() {
-        if (launching.get() || choosingEngine.get() || creationRunning() || modalDialogShowing()) {
+        // Requests to add or open projects still waiting (VK-1685) keep the window up too.
+        if (launching.get() || choosingEngine.get() || creationRunning() || modalDialogShowing()
+                || addFlow.isBusy()) {
             return;
         }
         Stage stage = (Stage) window();
@@ -735,6 +877,8 @@ public class MainController implements Initializable {
                 if (sessions.anyBeforeReady()) {
                     stage.setIconified(true);
                 } else {
+                    // A second launcher must no longer be told its request was taken (VK-1685).
+                    beforeExit.run();
                     // stop() waits for the store thread; the editors keep running and their logs stay complete.
                     Platform.exit();
                 }
@@ -913,6 +1057,102 @@ public class MainController implements Initializable {
         reload();
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // Existing projects (VK-1685)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** "Add Existing…" and its "Project File…" item: one or more project files. */
+    @FXML
+    private void onAddExisting() {
+        if (readOnly.get() || addFlow.isBusy()) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Add Existing Project");
+        // The reader checks the extension again, in any letter case, so "All files" can only lead to a clear refusal.
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("VertexForge projects (*" + ProjectFiles.EXTENSION + ")",
+                        "*" + ProjectFiles.EXTENSION),
+                new FileChooser.ExtensionFilter("All files", "*.*"));
+        List<File> files = chooser.showOpenMultipleDialog(window());
+        if (files != null && !files.isEmpty()) {
+            addProjects(toPaths(files));
+        }
+    }
+
+    /** The "Project Folder…" item: a folder holding a project file. */
+    @FXML
+    private void onAddExistingFolder() {
+        if (readOnly.get() || addFlow.isBusy()) {
+            return;
+        }
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Add Existing Project Folder");
+        File folder = chooser.showDialog(window());
+        if (folder != null) {
+            addProjects(toPaths(List.of(folder)));
+        }
+    }
+
+    /** What the add flow needs from this window. FX thread, except where a method says otherwise. */
+    private final class FlowServices implements AddExistingFlow.Services {
+
+        @Override
+        public CompletableFuture<PickedProject> inspect(Path path) {
+            return hub.inspectProject(path);
+        }
+
+        @Override
+        public CompletableFuture<AddedProject> add(PickedProject.Found found) {
+            CompletableFuture<AddedProject> result = new CompletableFuture<>();
+            runInBackground(() -> hub.addExisting(found), result::complete, result::completeExceptionally);
+            return result;
+        }
+
+        @Override
+        public Optional<PickedProject.Found> choose(PickedProject.Choose choose) {
+            return ProjectChooserDialog.show(window(), choose);
+        }
+
+        @Override
+        public boolean readOnly() {
+            return readOnly.get();
+        }
+
+        @Override
+        public boolean busy() {
+            // No window yet (still starting, or the self-test's window-less scene): wait until it shows.
+            return !firstLoad.isDone() || windowOrNull() == null || launching.get() || choosingEngine.get()
+                    || modalDialogShowing();
+        }
+
+        @Override
+        public void added(AddedProject added) {
+            applySavedView(added.view());
+            selectById(added.entry().id());
+            projectsTable.scrollTo(projectsTable.getSelectionModel().getSelectedItem());
+        }
+
+        @Override
+        public void saveFailed(Throwable error) {
+            showSaveError(error);
+        }
+
+        @Override
+        public boolean open(Path projectFile, RecentEntry entry, String name) {
+            return launchProject(projectFile, entry, name);
+        }
+
+        @Override
+        public void report(AddExistingFlow.Report report) {
+            report.summary().ifPresentOrElse(
+                    text -> banners.show(BANNER_ADD, report.hasWarning() ? BannerBar.Kind.WARNING
+                            : BannerBar.Kind.INFO, text, true),
+                    () -> banners.hide(BANNER_ADD));
+            report.refusals().ifPresent(text -> showErrorDialog("Add Existing Project", text));
+        }
+    }
+
     @FXML
     private void onCreateProject() {
         if (creating.get() || readOnly.get()) {
@@ -999,7 +1239,7 @@ public class MainController implements Initializable {
                 Optional<RecentEntry> listed = outcome.listed()
                         ? outcome.view().findByPath(outcome.projectPath())
                         : Optional.empty();
-                launchProject(outcome.projectPath(), listed.orElse(null));
+                launchProject(outcome.projectPath(), listed.orElse(null), null);
             }
             return;
         }
@@ -1206,6 +1446,13 @@ public class MainController implements Initializable {
 
     private Window window() {
         return projectsTable.getScene().getWindow();
+    }
+
+    /** The main window, or {@code null} while the content is not in a showing window yet. */
+    private Window windowOrNull() {
+        Scene scene = projectsTable.getScene();
+        Window window = scene == null ? null : scene.getWindow();
+        return window != null && window.isShowing() ? window : null;
     }
 
     /**

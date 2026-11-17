@@ -13,6 +13,9 @@ import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectInspector;
+import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.session.EditorSession;
@@ -25,10 +28,12 @@ import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.util.LauncherLog;
+import com.vertexforge.launcher.util.SingleFlightChecks;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Objects;
 import java.util.Optional;
@@ -56,6 +61,8 @@ public class ProjectHub implements AutoCloseable {
     private final ShellOpener shell;
     private final int listLimit;
     private final Clock clock;
+    /** Reads picked, dropped and command-line projects, each with a timeout (VK-1685). */
+    private final SingleFlightChecks<Path, PickAnswer> pickChecks;
     /** The settings as last read or saved; written on the store thread, read on any. */
     private volatile LauncherSettings settings;
 
@@ -84,6 +91,19 @@ public class ProjectHub implements AutoCloseable {
                       EngineCatalog engines, EditorLauncher editorLauncher,
                       ProjectStatusChecker statusChecker, LocationChecker locationChecker,
                       LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock) {
+        this(repository, projectCreator, engines, editorLauncher, statusChecker, locationChecker, settingsRepository,
+                settings, clock, ProjectInspector.system(), ProjectStatusChecker.DEFAULT_TIMEOUT);
+    }
+
+    /**
+     * @param inspector   reads the projects picked with "Add Existing…", dropped or given on the command line (VK-1685)
+     * @param pickTimeout how long one such read may take before it is refused
+     */
+    ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
+               EngineCatalog engines, EditorLauncher editorLauncher,
+               ProjectStatusChecker statusChecker, LocationChecker locationChecker,
+               LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock,
+               ProjectInspector inspector, Duration pickTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
         this.engines = Objects.requireNonNull(engines, "engines");
@@ -95,6 +115,22 @@ public class ProjectHub implements AutoCloseable {
         this.shell = new ShellOpener(editorLauncher.processStarter());
         this.clock = Objects.requireNonNull(clock, "clock");
         this.listLimit = settings.recentProjectsLimit();
+        ProjectInspector reader = Objects.requireNonNull(inspector, "inspector");
+        Objects.requireNonNull(pickTimeout, "pickTimeout");
+        this.pickChecks = new SingleFlightChecks<>("vf-project-pick-", pickTimeout,
+                picked -> {
+                    PickedProject result = reader.inspect(picked);
+                    return result == null ? null : new PickAnswer(result, null);
+                },
+                new PickAnswer(null, "The project could not be checked"),
+                e -> new PickAnswer(null, "The project could not be checked: " + e),
+                new PickAnswer(null, "No response after " + SingleFlightChecks.describe(pickTimeout)
+                        + ": it may be in an unreachable network folder"),
+                new PickAnswer(null, "The launcher is closing"));
+    }
+
+    /** A pick check's answer: what the inspector found, or why there is nothing. */
+    private record PickAnswer(PickedProject result, String problem) {
     }
 
     /**
@@ -104,6 +140,12 @@ public class ProjectHub implements AutoCloseable {
      * (small, local) settings file.
      */
     public static ProjectHub create(LauncherEnvironment environment, LauncherLog log) {
+        return create(environment, log, ProjectInspector.system(), ProjectStatusChecker.DEFAULT_TIMEOUT);
+    }
+
+    /** As {@link #create(LauncherEnvironment, LauncherLog)}, reading picked projects with {@code inspector}. */
+    static ProjectHub create(LauncherEnvironment environment, LauncherLog log, ProjectInspector inspector,
+                             Duration pickTimeout) {
         Path configDir = environment.configDir();
         LauncherSettingsRepository settingsRepository = new LauncherSettingsRepository(
                 configDir.resolve(LauncherSettingsRepository.FILE_NAME), environment.clock(), log);
@@ -124,7 +166,9 @@ public class ProjectHub implements AutoCloseable {
                 new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
                 settingsRepository,
                 settings,
-                environment.clock());
+                environment.clock(),
+                inspector,
+                pickTimeout);
     }
 
     /** The recent projects, most recently opened first, with the state of the list's file. Never probes a project. */
@@ -234,6 +278,31 @@ public class ProjectHub implements AutoCloseable {
         }
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // Existing projects (VK-1685)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Reads a project file, or the project folder holding it, that was picked, dropped or given on the command line.
+     * Runs in the background, one read per path at a time, and never takes longer than the pick timeout: a read that
+     * has not answered by then is refused. Never completes exceptionally; registers nothing.
+     */
+    public CompletableFuture<PickedProject> inspectProject(Path picked) {
+        Objects.requireNonNull(picked, "picked");
+        return pickChecks.check(picked.toAbsolutePath().normalize()).thenApply(answer -> answer.result() != null
+                ? answer.result()
+                : new PickedProject.Refused(picked, answer.problem()));
+    }
+
+    /**
+     * Lists a project {@link #inspectProject} found, under its real path, so that every spelling of its path gives
+     * one entry; a listed project only gets its name refreshed from the file. Store thread.
+     */
+    public AddedProject addExisting(PickedProject.Found found) throws StoreWriteException {
+        Objects.requireNonNull(found, "found");
+        return repository.addExisting(found.file(), found.project().projectName(), listLimit);
+    }
+
     /** Whether a project called {@code name} can be created in {@code location}, checked in the background. */
     public CompletableFuture<LocationChecker.LocationCheck> checkLocation(Path location, String name) {
         return locationChecker.check(location, name);
@@ -311,9 +380,10 @@ public class ProjectHub implements AutoCloseable {
         return clock.getZone();
     }
 
-    /** Stops the status, location, engine and session threads. Running editors are never touched. */
+    /** Stops the status, location, pick, engine and session threads. Running editors are never touched. */
     @Override
     public void close() {
+        pickChecks.close();
         statusChecker.close();
         locationChecker.close();
         engines.close();
