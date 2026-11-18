@@ -6,6 +6,7 @@ import com.google.gson.JsonPrimitive;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.CapturedLog;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.store.StoreWriteException.Reason;
@@ -166,7 +167,7 @@ class RecentProjectsRepositoryTest {
                 .orElseThrow().id();
 
         repository.remove(drop);
-        RecentProjectsView again = newRepository().remove(drop);
+        RecentProjectsView again = newRepository().remove(drop).view();
 
         assertEquals(List.of(keep), again.entries().stream().map(RecentEntry::id).toList());
     }
@@ -448,4 +449,105 @@ class RecentProjectsRepositoryTest {
         assertArrayEquals(original, Files.readAllBytes(storeFile));
     }
 
+    // --- VK-1686: Undo of a removal, and Locate… ---------------------------------------------------------------------
+
+    @Test
+    void aRemovalHoldsTheEntryAsTheFileHadItWhenItWasRemoved() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        // Another launcher pins it after this one read the list.
+        JsonObject json = readStore();
+        json.getAsJsonArray("projects").get(0).getAsJsonObject().addProperty(RecentEntry.PINNED, true);
+        writeStore(json.toString());
+
+        RemovedProject removed = repository.remove(id);
+
+        RemovedProject.Removal removal = removed.removal().orElseThrow();
+        assertEquals(id, removal.entry().id());
+        assertTrue(removal.entry().pinned(), "the removal was read under the store's lock");
+        assertEquals(0, removal.fileIndex());
+        assertTrue(removed.view().isEmpty());
+    }
+
+    @Test
+    void removingAnEntryAnotherLauncherRemovedGivesNoRemoval() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        newRepository().remove(id);
+
+        assertTrue(repository.remove(id).removal().isEmpty());
+    }
+
+    @Test
+    void undoingARemovalPutsTheSameEntryBackAtItsPlace() throws Exception {
+        repository.add(projectFile("A"), "A", LIMIT);
+        UUID b = repository.add(projectFile("B"), "B", LIMIT).findByPath(root.resolve("projects/B/B.vfproj"))
+                .orElseThrow().id();
+        repository.add(projectFile("C"), "C", LIMIT);
+        JsonObject before = readStore();
+
+        RemovedProject.Removal removal = repository.remove(b).removal().orElseThrow();
+        assertEquals(1, removal.fileIndex());
+        repository.restore(removal);
+
+        assertEquals(before, readStore(), "the file is as it was before the removal");
+    }
+
+    @Test
+    void aVersionOneEntryKeepsItsDerivedIdThroughARemovalAndItsUndo() throws Exception {
+        Path old = root.resolve("Old.vfproj");
+        writeStore("""
+                {"version": 1, "projects": [{"name": "Old", "path": %s, "lastOpened": "2025-01-01T00:00:00Z"}]}
+                """.formatted(quote(old)));
+        UUID derived = repository.load().entries().getFirst().id();
+
+        RemovedProject.Removal removal = repository.remove(derived).removal().orElseThrow();
+        RecentProjectsView restored = repository.restore(removal);
+
+        assertEquals(derived, restored.entries().getFirst().id());
+        assertEquals(derived, newRepository().load().entries().getFirst().id());
+    }
+
+    @Test
+    void anUndoAfterTheProjectWasAddedAgainAddsNoSecondEntry() throws Exception {
+        Path game = projectFile("Game");
+        UUID id = repository.add(game, "Game", LIMIT).entries().getFirst().id();
+        RemovedProject.Removal removal = repository.remove(id).removal().orElseThrow();
+        newRepository().add(game, "Game", LIMIT);
+
+        RecentProjectsView view = repository.restore(removal);
+
+        assertEquals(1, view.entries().size());
+        assertTrue(view.find(id).isEmpty(), "the project is listed under the id it was added again with");
+    }
+
+    @Test
+    void aRelinkIsSavedWithTheEntrysIdAndMembers() throws Exception {
+        Path game = projectFile("Game");
+        UUID id = repository.add(game, "Game", LIMIT).entries().getFirst().id();
+        UUID engine = UUID.randomUUID();
+        repository.bindEngine(id, engine);
+        Path moved = projectFile("Moved");
+
+        RelinkedProject relinked = repository.relink(id, moved, "Moved Game");
+
+        assertEquals(RecentProjects.Relink.RELINKED, relinked.outcome());
+        RecentEntry after = newRepository().load().find(id).orElseThrow();
+        assertEquals(moved, after.path());
+        assertEquals("Moved Game", after.name());
+        assertEquals(engine.toString(), after.engineId());
+        assertEquals(TestSupport.T0, after.lastOpened());
+    }
+
+    @Test
+    void aRelinkToAListedFileIsRefusedAndNamesThatEntry() throws Exception {
+        UUID lost = repository.add(projectFile("Lost"), "Lost", LIMIT).entries().getFirst().id();
+        Path listed = projectFile("Listed");
+        repository.add(listed, "Listed", LIMIT);
+        JsonObject before = readStore();
+
+        RelinkedProject relinked = repository.relink(lost, listed, "Listed");
+
+        assertEquals(RecentProjects.Relink.ALREADY_LISTED, relinked.outcome());
+        assertEquals(listed, relinked.conflict().orElseThrow().path());
+        assertEquals(before, readStore());
+    }
 }

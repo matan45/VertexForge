@@ -134,9 +134,51 @@ public class RecentProjectsRepository {
         return change("set MCP of " + id, projects -> projects.setMcp(id, setting));
     }
 
-    /** Removes the entry from the list; the project on disk is never touched. */
-    public RecentProjectsView remove(UUID id) throws StoreWriteException {
-        return change("remove " + id, projects -> projects.remove(id));
+    /**
+     * Removes the entry from the list; the project on disk is never touched. The removal holds the entry as the list
+     * held it, read under the store's lock, so Undo puts back exactly what was removed (VK-1686).
+     */
+    public RemovedProject remove(UUID id) throws StoreWriteException {
+        AtomicReference<RemovedProject.Removal> removed = new AtomicReference<>();
+        RecentProjectsView view = change("remove " + id, projects -> {
+            int index = projects.indexOf(id);
+            if (index < 0) {
+                return projects;
+            }
+            removed.set(new RemovedProject.Removal(projects.entries().get(index), index));
+            return projects.remove(id);
+        });
+        return new RemovedProject(view, Optional.ofNullable(removed.get()));
+    }
+
+    /**
+     * Puts a removed entry back where it was (Undo, VK-1686), with its id and every member as they were. Does nothing
+     * when its id or its path is listed again meanwhile.
+     */
+    public RecentProjectsView restore(RemovedProject.Removal removal) throws StoreWriteException {
+        Objects.requireNonNull(removal, "removal");
+        return change("restore " + removal.entry().id(),
+                projects -> projects.restore(removal.entry(), removal.fileIndex()));
+    }
+
+    /**
+     * Points the entry at the project file it was moved to (Locate…, VK-1686), keeping its id, pin, time, engine
+     * binding and MCP setting, and refreshes its name.
+     *
+     * @param path the project file's real path
+     * @param name the project file's {@code projectName}
+     */
+    public RelinkedProject relink(UUID id, Path path, String name) throws StoreWriteException {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(name, "name");
+        AtomicReference<RecentProjects.Relinked> relinked = new AtomicReference<>();
+        RecentProjectsView view = change("relink " + id + " to " + path, projects -> {
+            RecentProjects.Relinked result = projects.relink(id, path, name);
+            relinked.set(result);
+            return result.projects();
+        });
+        RecentProjects.Relinked result = relinked.get();
+        return new RelinkedProject(view, result.outcome(), Optional.ofNullable(result.conflict()));
     }
 
     private RecentProjectsView change(String action, UnaryOperator<RecentProjects> operation)

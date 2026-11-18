@@ -170,6 +170,87 @@ public final class RecentProjects {
         return next.removeIf(entry -> entry.id().equals(id)) ? new RecentProjects(next) : this;
     }
 
+    /** The entry's position in file order, or -1 when the id is not listed. */
+    public int indexOf(UUID id) {
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).id().equals(id)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Puts a removed entry back (Undo, VK-1686) at {@code index} in file order, or at the end when the list has
+     * become shorter. Does nothing when its id is listed again, or its path is (another launcher, or Add Existing,
+     * listed the project again meanwhile). The list is not trimmed: the next add does that.
+     *
+     * @param entry the entry as it was removed, with its resolved id (its stored JSON may have none)
+     */
+    public RecentProjects restore(RecentEntry entry, int index) {
+        Objects.requireNonNull(entry, "entry");
+        for (RecentEntry listed : entries) {
+            if (listed.id().equals(entry.id()) || (entry.path() != null && entry.path().equals(listed.path()))) {
+                return this;
+            }
+        }
+        List<RecentEntry> next = new ArrayList<>(entries);
+        next.add(Math.clamp(index, 0, next.size()), entry);
+        return new RecentProjects(next);
+    }
+
+    /** What {@link #relink} did. */
+    public enum Relink {
+        /** The entry now points at the new file. */
+        RELINKED,
+        /** The entry already pointed at that file; nothing changed (or only its name). */
+        UNCHANGED,
+        /** The entry is no longer listed (another launcher removed it). */
+        GONE,
+        /** Another entry already lists that file; nothing changed. */
+        ALREADY_LISTED
+    }
+
+    /**
+     * The result of {@link #relink}.
+     *
+     * @param conflict the entry that already lists the file, for {@link Relink#ALREADY_LISTED}; else {@code null}
+     */
+    public record Relinked(RecentProjects projects, Relink outcome, RecentEntry conflict) {
+    }
+
+    /**
+     * Points an entry at the project file it was moved to (Locate…, VK-1686) and refreshes its name from that file.
+     * The entry keeps its id, pin, last-opened time, engine binding, MCP setting and unknown members. Paths compare
+     * as in {@link #add}.
+     *
+     * @param path the project file's real path
+     * @param name the project file's {@code projectName}
+     */
+    public Relinked relink(UUID id, Path path, String name) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(name, "name");
+        int index = indexOf(id);
+        if (index < 0) {
+            return new Relinked(this, Relink.GONE, null);
+        }
+        for (RecentEntry listed : entries) {
+            if (!listed.id().equals(id) && path.equals(listed.path())) {
+                return new Relinked(this, Relink.ALREADY_LISTED, listed);
+            }
+        }
+        RecentEntry current = entries.get(index);
+        boolean samePath = path.equals(current.path());
+        RecentEntry relinked = (samePath ? current : current.withPath(path)).withName(name);
+        if (relinked == current) {
+            return new Relinked(this, Relink.UNCHANGED, null);
+        }
+        List<RecentEntry> next = new ArrayList<>(entries);
+        next.set(index, relinked);
+        return new Relinked(new RecentProjects(next), samePath ? Relink.UNCHANGED : Relink.RELINKED, null);
+    }
+
     /**
      * Drops the oldest entries until at most {@code limit} remain. A pinned entry and {@code keepId} (the entry just
      * added) are never dropped, so the list may stay above the limit when only those are left.

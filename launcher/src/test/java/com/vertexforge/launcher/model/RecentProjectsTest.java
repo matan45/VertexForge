@@ -269,4 +269,111 @@ class RecentProjectsTest {
         assertTrue(again.existed());
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // Undo of a removal and Locate… (VK-1686)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** An entry with every member Locate… and Undo must keep: a pin, an engine binding, MCP and an unknown member. */
+    private RecentEntry richEntry(String name) {
+        JsonObject raw = RecentEntry.create(UUID.randomUUID(), path(name), name, T0).raw();
+        raw.addProperty(RecentEntry.PINNED, true);
+        raw.addProperty(RecentEntry.ENGINE_ID, "5b0c9d1e-7f0a-4d3b-9a51-2f6f1c0e8a42");
+        raw.add(RecentEntry.MCP, JsonParser.parseString("{\"enabled\": true, \"port\": 7900}"));
+        raw.addProperty("futureMember", "kept");
+        return RecentEntry.fromJson(UUID.fromString(raw.get(RecentEntry.ID).getAsString()), raw);
+    }
+
+    @Test
+    void indexOfIsTheFilePosition() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry b = entry("B", 2);
+        RecentProjects projects = new RecentProjects(List.of(a, b));
+
+        assertEquals(0, projects.indexOf(a.id()));
+        assertEquals(1, projects.indexOf(b.id()));
+        assertEquals(-1, projects.indexOf(UUID.randomUUID()));
+    }
+
+    @Test
+    void aRestoredEntryComesBackWhereItWasWithEverything() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry rich = richEntry("Rich");
+        RecentEntry c = entry("C", 3);
+        RecentProjects removed = new RecentProjects(List.of(a, rich, c)).remove(rich.id());
+
+        RecentProjects restored = removed.restore(rich, 1);
+
+        assertEquals(List.of(a, rich, c), restored.entries());
+        assertEquals(rich.raw(), restored.entries().get(1).raw());
+    }
+
+    @Test
+    void aRestoreIntoAShorterListGoesToTheEnd() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry gone = entry("Gone", 2);
+
+        RecentProjects restored = new RecentProjects(List.of(a)).restore(gone, 5);
+
+        assertEquals(List.of(a, gone), restored.entries());
+    }
+
+    @Test
+    void aRestoreDoesNothingWhenTheEntryOrItsProjectIsListedAgain() {
+        RecentEntry game = entry("Game", 1);
+        RecentProjects sameId = new RecentProjects(List.of(game));
+        RecentProjects samePath = new RecentProjects(List.of(
+                RecentEntry.create(UUID.randomUUID(), path("Game"), "Game again", T0)));
+
+        assertSame(sameId, sameId.restore(game, 0));
+        assertSame(samePath, samePath.restore(game, 0));
+    }
+
+    @Test
+    void aRelinkPointsTheEntryAtTheNewFileAndKeepsItsHistory() {
+        RecentEntry rich = richEntry("Rich");
+        RecentEntry other = entry("Other", 2);
+        RecentProjects projects = new RecentProjects(List.of(rich, other));
+        Path moved = tempDir.resolve("Moved").resolve("Rich.vfproj");
+
+        RecentProjects.Relinked relinked = projects.relink(rich.id(), moved, "Rich Renamed");
+
+        assertEquals(RecentProjects.Relink.RELINKED, relinked.outcome());
+        RecentEntry after = relinked.projects().entries().getFirst();
+        assertEquals(rich.id(), after.id());
+        assertEquals(moved, after.path());
+        assertEquals("Rich Renamed", after.name());
+        assertEquals(rich.lastOpened(), after.lastOpened());
+        assertTrue(after.pinned());
+        assertEquals(rich.engineId(), after.engineId());
+        assertEquals(rich.mcp(), after.mcp());
+        assertEquals("kept", after.raw().get("futureMember").getAsString());
+        assertEquals(other, relinked.projects().entries().get(1));
+    }
+
+    @Test
+    void aRelinkToAFileAnotherEntryListsChangesNothing() {
+        RecentEntry lost = entry("Lost", 1);
+        RecentEntry listed = entry("Listed", 2);
+        RecentProjects projects = new RecentProjects(List.of(lost, listed));
+
+        RecentProjects.Relinked relinked = projects.relink(lost.id(), path("Listed"), "Listed");
+
+        assertEquals(RecentProjects.Relink.ALREADY_LISTED, relinked.outcome());
+        assertSame(projects, relinked.projects());
+        assertEquals(listed, relinked.conflict());
+    }
+
+    @Test
+    void aRelinkOfAGoneEntryOrToTheSameFileChangesNothing() {
+        RecentEntry game = entry("Game", 1);
+        RecentProjects projects = new RecentProjects(List.of(game));
+
+        RecentProjects.Relinked gone = projects.relink(UUID.randomUUID(), path("Other"), "Other");
+        RecentProjects.Relinked same = projects.relink(game.id(), path("Game"), "Game");
+
+        assertEquals(RecentProjects.Relink.GONE, gone.outcome());
+        assertSame(projects, gone.projects());
+        assertEquals(RecentProjects.Relink.UNCHANGED, same.outcome());
+        assertSame(projects, same.projects());
+    }
 }

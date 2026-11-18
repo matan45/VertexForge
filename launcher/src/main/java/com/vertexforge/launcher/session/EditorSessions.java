@@ -14,8 +14,8 @@ import java.util.Optional;
  * The editors this launcher started and that still run, one per project (VK-1683). Opening a project that is in here
  * starts nothing. Owned by the FX thread; phases are the last ones the sessions reported there.
  * <p>
- * An editor started elsewhere is not in here: the editor itself refuses a project another editor holds (exit code 5,
- * VK-1682), which the launcher then reports.
+ * An editor started elsewhere is not in here: its row shows "Already open" from the folder's lock (VK-1686), and the
+ * editor itself refuses a project another editor holds (exit code 5, VK-1682), which the launcher then reports.
  */
 public final class EditorSessions {
 
@@ -81,6 +81,21 @@ public final class EditorSessions {
 
     public Optional<Live> find(Path project) {
         return project == null ? Optional.empty() : Optional.ofNullable(byProject.get(key(project)));
+    }
+
+    /**
+     * A live session on any project file of {@code project}'s folder (this one included, VK-1686): the editor locks
+     * the whole folder, so such a project cannot be opened by another editor either.
+     */
+    public Optional<Live> findInFolder(Path project) {
+        if (project == null) {
+            return Optional.empty();
+        }
+        Path folder = key(project).getParent();
+        if (folder == null) {
+            return Optional.empty();
+        }
+        return byProject.values().stream().filter(live -> folder.equals(live.project.getParent())).findFirst();
     }
 
     public Optional<Live> find(EditorSession session) {

@@ -128,7 +128,7 @@ public final class LocationChecker implements AutoCloseable {
 
     /**
      * The running check for {@code key}, or a new one. Every caller gets its own copy, so none can complete the shared
-     * one. A finished check leaves the map BEFORE it completes (see {@code ProjectStatusChecker.finish}).
+     * one. A finished check leaves the map BEFORE it completes (see {@code SingleFlightChecks.finish}).
      */
     private <K, V> CompletableFuture<V> shared(ConcurrentHashMap<K, CompletableFuture<V>> inFlight, K key,
                                                 Supplier<V> work, Function<Throwable, V> onError) {

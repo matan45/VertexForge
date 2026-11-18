@@ -1,5 +1,7 @@
 package com.vertexforge.launcher.project;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.service.ProjectCreator;
@@ -85,6 +87,9 @@ class ProjectFileReaderTest {
         assertEquals("Tom & Jerry's Game", project.projectName());
         assertEquals("1.0", project.schemaVersion());
         assertEquals("VertexForge 1.0.0", project.engineVersion());
+        // The editor would open what the launcher creates (VK-1686).
+        assertNull(project.structureProblem());
+        assertEquals(new SchemaVersion(1, 0), project.schema().orElseThrow());
     }
 
     @Test
@@ -94,13 +99,78 @@ class ProjectFileReaderTest {
         assertEquals("Engine Game", project.projectName());
         assertEquals("1.0", project.schemaVersion());
         assertEquals("VertexForge 1.0.0", project.engineVersion());
+        assertNull(project.structureProblem());
     }
 
     @Test
     void onlyTheNameIsRequired() throws InvalidProjectFileException {
         ProjectFile project = ProjectFileReader.parse("{\"projectName\": \"Bare\"}");
 
-        assertEquals(new ProjectFile("Bare", null, null), project);
+        // The launcher reads it; the editor would refuse it, and says why (VK-1686).
+        assertEquals(new ProjectFile("Bare", null, null,
+                "Invalid project file: missing or invalid 'schemaVersion' field"), project);
+        assertTrue(project.schema().isEmpty());
+    }
+
+    /** The editor's own project file, with one member replaced ({@code null} removes it). */
+    private static String engineWrittenWith(String member, String json) {
+        return withMember(ENGINE_WRITTEN, member, json);
+    }
+
+    /** {@code text} with one member replaced ({@code null} removes it). */
+    private static String withMember(String text, String member, String json) {
+        JsonObject root = JsonParser.parseString(text).getAsJsonObject();
+        if (json == null) {
+            root.remove(member);
+        } else {
+            root.add(member, JsonParser.parseString(json));
+        }
+        return root.toString();
+    }
+
+    static Stream<Arguments> editorRefusals() {
+        return Stream.of(
+                Arguments.of("schemaVersion", null, "Invalid project file: missing or invalid 'schemaVersion' field"),
+                Arguments.of("schemaVersion", "1", "Invalid project file: missing or invalid 'schemaVersion' field"),
+                Arguments.of("version", null, "Invalid project file: missing or invalid 'version' field"),
+                Arguments.of("version", "null", "Invalid project file: missing or invalid 'version' field"),
+                Arguments.of("workingDirectory", "[\".\"]",
+                        "Invalid project file: missing or invalid 'workingDirectory' field"),
+                Arguments.of("startupScene", null, "Invalid project file: missing or invalid 'startupScene' field"),
+                Arguments.of("version", "\"\"", "Invalid project file: 'version' cannot be empty"),
+                Arguments.of("workingDirectory", "\"\"", "Invalid project file: 'workingDirectory' cannot be empty"),
+                Arguments.of("startupScene", "\"\"", "Invalid project file: 'startupScene' cannot be empty"));
+    }
+
+    @ParameterizedTest(name = "{0} = {1}")
+    @MethodSource("editorRefusals")
+    void whatTheEditorWouldRefuseIsReportedInItsWords(String member, String json, String problem)
+            throws InvalidProjectFileException {
+        ProjectFile project = ProjectFileReader.parse(engineWrittenWith(member, json));
+
+        assertEquals("Engine Game", project.projectName());
+        assertEquals(problem, project.structureProblem());
+    }
+
+    @Test
+    void theEditorReportsTheFirstMemberItChecks() throws InvalidProjectFileException {
+        // schemaVersion is checked before startupScene, and "is a string" before "is not empty".
+        String text = engineWrittenWith("schemaVersion", null);
+        text = withMember(text, "startupScene", "\"\"");
+
+        assertEquals("Invalid project file: missing or invalid 'schemaVersion' field",
+                ProjectFileReader.parse(text).structureProblem());
+    }
+
+    @Test
+    void aSchemaVersionTheEditorCannotParseIsNotAStructureProblem() throws InvalidProjectFileException {
+        // The members are fine; the version's text is judged by SchemaVersion (the editor's second check).
+        ProjectFile project = ProjectFileReader.parse(engineWrittenWith("schemaVersion", "\"1.0.0\""));
+
+        assertNull(project.structureProblem());
+        assertTrue(project.schema().isEmpty());
+        assertEquals("Invalid schema version format: '1.0.0' (expected MAJOR.MINOR)",
+                EditorProjectRules.schemaFormatProblem(project.schemaVersion()));
     }
 
     @Test

@@ -306,6 +306,36 @@
     -fx-text-fill: #ffd27f;
 }
 
+/* VK-1686: a file the editor would refuse (Invalid) looks like a missing one */
+.projects-table .table-row-cell:invalid {
+    -fx-background-color: #3d2626;
+}
+
+.projects-table .table-row-cell:invalid:odd {
+    -fx-background-color: #3a2424;
+}
+
+.projects-table .table-row-cell:invalid:selected {
+    -fx-background-color: #5c3030;
+}
+
+.projects-table .table-row-cell:invalid .table-cell {
+    -fx-text-fill: #cc6666;
+}
+
+.projects-table .table-row-cell:invalid:selected .table-cell {
+    -fx-text-fill: #ffaaaa;
+}
+
+/* VK-1686: a fine project that cannot be opened right now (Needs newer engine, Already open) */
+.projects-table .table-row-cell:blocked .table-cell {
+    -fx-text-fill: #c9a0e0;
+}
+
+.projects-table .table-row-cell:blocked:selected .table-cell {
+    -fx-text-fill: #ead2f7;
+}
+
 .projects-table .table-row-cell:checking .table-cell {
     -fx-text-fill: #888888;
 }

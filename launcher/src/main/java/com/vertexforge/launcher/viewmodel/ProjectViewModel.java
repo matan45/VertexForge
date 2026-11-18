@@ -3,6 +3,7 @@ package com.vertexforge.launcher.viewmodel;
 import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.session.EditorSession;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
@@ -48,6 +49,8 @@ public final class ProjectViewModel {
     private final ObjectBinding<StatusDisplay> statusDisplay;
     private final BooleanBinding openable;
     private long probeToken;
+    /** The last answer of the file's background check (VK-1686), or {@code null} before the first one. */
+    private ProjectFileCheck fileCheck;
 
     public ProjectViewModel(RecentEntry entry) {
         this.entry = Objects.requireNonNull(entry, "entry");
@@ -178,6 +181,18 @@ public final class ProjectViewModel {
 
     public BooleanBinding openableProperty() {
         return openable;
+    }
+
+    /**
+     * The last answer of the file's background check, kept so that the status can be worked out again when the engines
+     * answer later or change (VK-1686); {@code null} before the first answer.
+     */
+    public ProjectFileCheck getFileCheck() {
+        return fileCheck;
+    }
+
+    public void setFileCheck(ProjectFileCheck check) {
+        fileCheck = Objects.requireNonNull(check, "check");
     }
 
     /** Starts a new status check of this row; only the answer to the latest check is applied. */

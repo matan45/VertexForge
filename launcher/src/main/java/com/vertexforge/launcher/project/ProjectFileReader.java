@@ -29,7 +29,8 @@ import java.util.regex.Pattern;
  * names, trailing commas, {@code NaN} or data after the document. Everything else is tolerated: a byte order mark,
  * CRLF line ends, any key order, members this launcher does not know, and versions of the wrong type (read as
  * {@code null}). Only {@code projectName} is required, because the list shows it and the editor refuses a project
- * without one.
+ * without one. What else the editor would refuse is reported in {@link ProjectFile#structureProblem()} (VK-1686), so
+ * such a project can be listed and its row says why it cannot be opened.
  */
 public final class ProjectFileReader {
 
@@ -97,7 +98,7 @@ public final class ProjectFileReader {
 
         JsonObject root = element.getAsJsonObject();
         return new ProjectFile(projectName(root), optionalString(root, SCHEMA_VERSION),
-                optionalString(root, ENGINE_VERSION));
+                optionalString(root, ENGINE_VERSION), EditorProjectRules.structureProblem(root));
     }
 
     /**

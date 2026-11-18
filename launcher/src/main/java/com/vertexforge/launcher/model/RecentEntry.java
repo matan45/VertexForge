@@ -98,6 +98,15 @@ public record RecentEntry(
         return with(NAME, newName == null ? JsonNull.INSTANCE : new JsonPrimitive(newName));
     }
 
+    /**
+     * Points the entry at another project file (Locate…, VK-1686). Its id and every other member (pin, time, engine
+     * binding, MCP, members this build does not know) stay as they are; {@code path} keeps its position.
+     */
+    public RecentEntry withPath(Path newPath) {
+        Objects.requireNonNull(newPath, "newPath");
+        return with(PATH, new JsonPrimitive(newPath.toString()));
+    }
+
     public RecentEntry withPinned(boolean newPinned) {
         return with(PINNED, new JsonPrimitive(newPinned));
     }

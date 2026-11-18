@@ -25,7 +25,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class ProjectInspectorTest {
 
+    /** A project file the editor accepts too (VK-1686), so {@link ProjectFile#structureProblem()} is {@code null}. */
     private static final String VALID = "{\"projectName\": \"My Game\", \"schemaVersion\": \"1.0\","
+            + " \"version\": \"0.1.0\", \"workingDirectory\": \".\", \"startupScene\": \"scenes/Main.vfScene\","
             + " \"engineVersion\": \"VertexForge 1.0.0\"}";
 
     @TempDir

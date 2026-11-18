@@ -112,4 +112,18 @@ class EditorSessionsTest {
                 sessions.usingMcpPort(7878).orElseThrow().project());
         assertEquals(Optional.empty(), sessions.usingMcpPort(7979), "MCP is off there");
     }
+
+    /** VK-1686: the editor locks its whole folder, so another project file there is taken too. */
+    @Test
+    void aSessionIsFoundForEveryProjectFileOfItsFolder() {
+        EditorSessions sessions = new EditorSessions();
+        EditorSession running = session(tempDir.resolve("Game/Game.vfproj"));
+        sessions.add(running, McpSetting.DEFAULT);
+
+        assertSame(running, sessions.findInFolder(tempDir.resolve("Game/Other.vfproj")).orElseThrow().session());
+        assertSame(running, sessions.findInFolder(tempDir.resolve("Game/./Game.vfproj")).orElseThrow().session());
+        assertTrue(sessions.findInFolder(tempDir.resolve("Elsewhere/Game.vfproj")).isEmpty());
+        assertTrue(sessions.findInFolder(tempDir.resolve("Game/Sub/Game.vfproj")).isEmpty());
+        assertTrue(sessions.findInFolder(null).isEmpty());
+    }
 }

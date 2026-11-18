@@ -11,13 +11,16 @@ import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectCreationResult;
-import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.EditorLockProbe;
 import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.ProjectInspector;
 import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
+import com.vertexforge.launcher.repository.RelinkedProject;
+import com.vertexforge.launcher.repository.RemovedProject;
 import com.vertexforge.launcher.session.EditorSession;
 import com.vertexforge.launcher.session.LaunchRequest;
 import com.vertexforge.launcher.session.SessionLogs;
@@ -46,7 +49,7 @@ import java.util.concurrent.Executor;
  * {@code MainController} only turns these into UI.
  * <p>
  * Every method here may block (file locks, project creation), so the UI calls them off the FX thread (VK-1678).
- * Listing never checks the projects themselves; {@link #checkStatus} does that, in the background, with a timeout.
+ * Listing never checks the projects themselves; {@link #checkProject} does that, in the background, with a timeout.
  */
 public class ProjectHub implements AutoCloseable {
 
@@ -54,7 +57,7 @@ public class ProjectHub implements AutoCloseable {
     private final ProjectCreator projectCreator;
     private final EngineCatalog engines;
     private final EditorLauncher editorLauncher;
-    private final ProjectStatusChecker statusChecker;
+    private final ProjectHealthService health;
     private final LocationChecker locationChecker;
     /** Writes the Settings dialog's choices; {@code null} for a hub that cannot save them (tests). */
     private final LauncherSettingsRepository settingsRepository;
@@ -69,17 +72,17 @@ public class ProjectHub implements AutoCloseable {
     /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                       EngineCatalog engines, EditorLauncher editorLauncher,
-                      ProjectStatusChecker statusChecker, int listLimit, Clock clock) {
-        this(repository, projectCreator, engines, editorLauncher, statusChecker,
+                      ProjectHealthService health, int listLimit, Clock clock) {
+        this(repository, projectCreator, engines, editorLauncher, health,
                 new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED), listLimit, clock);
     }
 
     /** A hub with the default settings for everything but the list's cap, which it cannot save. */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                       EngineCatalog engines, EditorLauncher editorLauncher,
-                      ProjectStatusChecker statusChecker, LocationChecker locationChecker, int listLimit,
+                      ProjectHealthService health, LocationChecker locationChecker, int listLimit,
                       Clock clock) {
-        this(repository, projectCreator, engines, editorLauncher, statusChecker, locationChecker, null,
+        this(repository, projectCreator, engines, editorLauncher, health, locationChecker, null,
                 new LauncherSettings(listLimit), clock);
     }
 
@@ -89,10 +92,10 @@ public class ProjectHub implements AutoCloseable {
      */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                       EngineCatalog engines, EditorLauncher editorLauncher,
-                      ProjectStatusChecker statusChecker, LocationChecker locationChecker,
+                      ProjectHealthService health, LocationChecker locationChecker,
                       LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock) {
-        this(repository, projectCreator, engines, editorLauncher, statusChecker, locationChecker, settingsRepository,
-                settings, clock, ProjectInspector.system(), ProjectStatusChecker.DEFAULT_TIMEOUT);
+        this(repository, projectCreator, engines, editorLauncher, health, locationChecker, settingsRepository,
+                settings, clock, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
     }
 
     /**
@@ -101,14 +104,14 @@ public class ProjectHub implements AutoCloseable {
      */
     ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                EngineCatalog engines, EditorLauncher editorLauncher,
-               ProjectStatusChecker statusChecker, LocationChecker locationChecker,
+               ProjectHealthService health, LocationChecker locationChecker,
                LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock,
                ProjectInspector inspector, Duration pickTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
         this.engines = Objects.requireNonNull(engines, "engines");
         this.editorLauncher = Objects.requireNonNull(editorLauncher, "editorLauncher");
-        this.statusChecker = Objects.requireNonNull(statusChecker, "statusChecker");
+        this.health = Objects.requireNonNull(health, "health");
         this.locationChecker = Objects.requireNonNull(locationChecker, "locationChecker");
         this.settingsRepository = settingsRepository;
         this.settings = Objects.requireNonNull(settings, "settings");
@@ -140,7 +143,7 @@ public class ProjectHub implements AutoCloseable {
      * (small, local) settings file.
      */
     public static ProjectHub create(LauncherEnvironment environment, LauncherLog log) {
-        return create(environment, log, ProjectInspector.system(), ProjectStatusChecker.DEFAULT_TIMEOUT);
+        return create(environment, log, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
     }
 
     /** As {@link #create(LauncherEnvironment, LauncherLog)}, reading picked projects with {@code inspector}. */
@@ -162,7 +165,8 @@ public class ProjectHub implements AutoCloseable {
                 new ProjectCreator(environment.clock(), log),
                 EngineCatalog.create(environment, log),
                 editorLauncher,
-                new ProjectStatusChecker(PathProbe.system(), ProjectStatusChecker.DEFAULT_TIMEOUT),
+                new ProjectHealthService(PathProbe.system(), EditorLockProbe.system()::probe,
+                        ProjectHealthService.DEFAULT_TIMEOUT),
                 new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
                 settingsRepository,
                 settings,
@@ -176,14 +180,37 @@ public class ProjectHub implements AutoCloseable {
         return repository.load();
     }
 
-    /** Whether the entry's project file can be opened; completes within the checker's timeout. */
-    public CompletableFuture<ProjectStatus> checkStatus(RecentEntry entry) {
-        return statusChecker.check(entry);
+    /**
+     * What the entry's project file holds and whether another editor has its folder open (VK-1686); completes within
+     * the health check's timeout and never exceptionally. {@link ProjectHealthService#evaluate} turns the answer into
+     * the row's status.
+     *
+     * @param probeLock whether to look at the folder's editor lock (not while an editor of this launcher has it open)
+     */
+    public CompletableFuture<ProjectFileCheck> checkProject(RecentEntry entry, boolean probeLock) {
+        return health.check(entry, probeLock);
     }
 
-    /** Removes the entry from the list; the project on disk is never touched. */
-    public RecentProjectsView removeProject(UUID id) throws StoreWriteException {
+    /**
+     * Removes the entry from the list; the project on disk is never touched. The removal is what
+     * {@link #restoreProject} needs to undo it (VK-1686). Store thread.
+     */
+    public RemovedProject removeProject(UUID id) throws StoreWriteException {
         return repository.remove(id);
+    }
+
+    /** Puts a removed entry back as it was (Undo, VK-1686); nothing when it is listed again meanwhile. Store thread. */
+    public RecentProjectsView restoreProject(RemovedProject.Removal removal) throws StoreWriteException {
+        return repository.restore(removal);
+    }
+
+    /**
+     * Points the entry at the project file {@link #inspectProject} found where it was moved to (Locate…, VK-1686),
+     * keeping its history (id, pin, time, engine binding, MCP setting). Store thread.
+     */
+    public RelinkedProject relinkProject(UUID id, PickedProject.Found found) throws StoreWriteException {
+        Objects.requireNonNull(found, "found");
+        return repository.relink(id, found.file(), found.project().projectName());
     }
 
     /** Records that a project was just opened, which moves it to the top of the list. */
@@ -380,11 +407,16 @@ public class ProjectHub implements AutoCloseable {
         return clock.getZone();
     }
 
+    /** The launcher's clock (the focus re-check's throttle reads it, VK-1686). */
+    public Clock clock() {
+        return clock;
+    }
+
     /** Stops the status, location, pick, engine and session threads. Running editors are never touched. */
     @Override
     public void close() {
         pickChecks.close();
-        statusChecker.close();
+        health.close();
         locationChecker.close();
         engines.close();
         editorLauncher.close();

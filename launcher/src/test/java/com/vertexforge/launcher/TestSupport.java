@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -76,6 +77,56 @@ public final class TestSupport {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * A {@code .vfproj} the editor accepts (VK-1686: every member its {@code structureError} requires), called
+     * {@code name}, with the given schema version and engine version.
+     */
+    public static String projectJson(String name, String schemaVersion, String engineVersion) {
+        return """
+                {
+                  "schemaVersion": "%s",
+                  "projectName": "%s",
+                  "version": "0.1.0",
+                  "workingDirectory": ".",
+                  "startupScene": "scenes/Main.vfScene",
+                  "engineVersion": "%s"
+                }
+                """.formatted(schemaVersion, name, engineVersion);
+    }
+
+    /** {@code folder/<name>.vfproj} holding {@link #projectJson} for schema 1.0 and VertexForge 1.0.0. */
+    public static Path writeProject(Path folder, String name) {
+        try {
+            return Files.writeString(Files.createDirectories(folder).resolve(name + ".vfproj"),
+                    projectJson(name, "1.0", "VertexForge 1.0.0"), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Every file and folder under {@code root} (itself included) with its size, modification time and content hash, so
+     * that two snapshots are equal only when nothing was created, deleted or changed (VK-1686).
+     */
+    public static Map<String, String> treeSnapshot(Path root) {
+        try (Stream<Path> paths = Files.walk(root)) {
+            Map<String, String> snapshot = new TreeMap<>();
+            for (Path path : paths.toList()) {
+                String key = root.relativize(path).toString();
+                if (Files.isDirectory(path)) {
+                    snapshot.put(key, "folder " + Files.getLastModifiedTime(path));
+                } else {
+                    byte[] bytes = Files.readAllBytes(path);
+                    snapshot.put(key, bytes.length + " " + Files.getLastModifiedTime(path) + " "
+                            + Arrays.hashCode(bytes));
+                }
+            }
+            return snapshot;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /** The names of the files directly in {@code dir}. */

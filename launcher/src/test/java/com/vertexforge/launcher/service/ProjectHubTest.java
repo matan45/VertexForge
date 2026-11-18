@@ -1,5 +1,7 @@
 package com.vertexforge.launcher.service;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
@@ -11,14 +13,21 @@ import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectCreationResult;
+import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.ProjectStatus.Kind;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.model.McpSetting;
+import com.vertexforge.launcher.model.RecentProjects;
 import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.repository.AddedProject;
+import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
+import com.vertexforge.launcher.repository.RelinkedProject;
+import com.vertexforge.launcher.repository.RemovedProject;
 import com.vertexforge.launcher.service.EditorLauncherTest.FakeProcess;
 import com.vertexforge.launcher.service.EditorLauncherTest.RecordingStarter;
+import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.session.LaunchRequest;
 import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
@@ -252,8 +261,8 @@ class ProjectHubTest {
         RecentProjectsView afterASave = hub(Map.of()).listProjects();
 
         assertEquals(List.of("Gone", "Game"), names(view));
-        assertEquals(Kind.MISSING, hub.checkStatus(listed(hub, "Gone")).get(10, TimeUnit.SECONDS).kind());
-        assertEquals(Kind.OK, hub.checkStatus(listed(hub, "Game")).get(10, TimeUnit.SECONDS).kind());
+        assertEquals(Kind.MISSING, status(hub, listed(hub, "Gone")).kind());
+        assertEquals(Kind.OK, status(hub, listed(hub, "Game")).kind());
         assertEquals(List.of("Later", "Gone", "Game"), names(afterASave));
     }
 
@@ -624,4 +633,108 @@ class ProjectHubTest {
         }
     }
 
+    // ---------------------------------------------------------------------------------------------------------------
+    // Project health, Locate… and Undo (VK-1686)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** The row's status as the window works it out: the file's check, then the engines as checked now. */
+    private static ProjectStatus status(ProjectHub on, RecentEntry entry) throws Exception {
+        ProjectFileCheck check = on.checkProject(entry, true).get(10, TimeUnit.SECONDS);
+        return ProjectHealthService.evaluate(check, checked(on), entry.engineId(), FolderEditor.NONE);
+    }
+
+    /** Pins an entry the way a newer launcher would (VK-1694 owns the UI): straight in the list's file. */
+    private void pinInTheFile(UUID id) throws IOException {
+        Path file = configDir.resolve(RecentProjectsRepository.FILE_NAME);
+        JsonObject root = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        for (var element : root.getAsJsonArray("projects")) {
+            JsonObject entry = element.getAsJsonObject();
+            if (id.toString().equals(entry.get(RecentEntry.ID).getAsString())) {
+                entry.addProperty(RecentEntry.PINNED, true);
+            }
+        }
+        Files.writeString(file, root.toString());
+    }
+
+    /** AC: "A renamed project folder shows Missing; after Locate… it shows OK with its history kept." */
+    @Test
+    void aRenamedProjectFolderIsMissingAndLocateBringsItBackWithItsHistory() throws Exception {
+        UUID engine = addEngine(hub, TestSupport.devEngine(root.resolve("repo")));
+        hub.createProject("Game", projectsDir);
+        UUID id = listed(hub, "Game").id();
+        hub.bindEngine(id, engine);
+        hub.setMcp(id, new McpSetting(true, 7901));
+        hub.markOpened(id);
+        pinInTheFile(id);
+        RecentEntry before = listed(hub, "Game");
+        assertEquals(Kind.OK, status(hub, before).kind());
+
+        Files.move(projectsDir.resolve("Game"), projectsDir.resolve("Game Moved"));
+
+        ProjectStatus missing = status(hub, before);
+        assertEquals(Kind.MISSING, missing.kind());
+        assertTrue(missing.reason().contains("Locate…"), missing.reason());
+
+        PickedProject picked = hub.inspectProject(projectsDir.resolve("Game Moved/Game.vfproj"))
+                .get(10, TimeUnit.SECONDS);
+        RelinkedProject relinked = hub.relinkProject(id, assertInstanceOf(PickedProject.Found.class, picked));
+
+        assertEquals(RecentProjects.Relink.RELINKED, relinked.outcome());
+        RecentEntry after = listed(hub(Map.of()), "Game");
+        assertEquals(before.id(), after.id());
+        assertEquals(TestSupport.real(projectsDir.resolve("Game Moved/Game.vfproj")), after.path());
+        assertTrue(after.pinned());
+        assertEquals(before.lastOpened(), after.lastOpened());
+        assertEquals(engine.toString(), after.engineId());
+        assertEquals(new McpSetting(true, 7901), after.mcp());
+        assertEquals(Kind.OK, status(hub, after).kind());
+    }
+
+    /** AC: "Remove followed by Undo restores the entry, and no file is ever deleted (tested on a temp project)." */
+    @Test
+    void removeThenUndoRestoresTheEntryAndNeverTouchesTheProject() throws Exception {
+        hub.createProject("Keep", projectsDir);
+        hub.createProject("Game", projectsDir);
+        RecentEntry before = listed(hub, "Game");
+        Map<String, String> files = TestSupport.treeSnapshot(projectsDir);
+
+        RemovedProject removed = hub.removeProject(before.id());
+
+        assertEquals(List.of("Keep"), names(removed.view()));
+        assertEquals(files, TestSupport.treeSnapshot(projectsDir), "Remove from List never touches the disk");
+
+        RecentProjectsView restored = hub.restoreProject(removed.removal().orElseThrow());
+
+        assertEquals(before, restored.find(before.id()).orElseThrow(), "the same entry, every member included");
+        assertEquals(Set.of("Keep", "Game"), Set.copyOf(names(restored)));
+        assertEquals(files, TestSupport.treeSnapshot(projectsDir), "nor does Undo");
+    }
+
+    /** AC: "A project saved by a newer engine shows 'Needs VertexForge' and the required version." */
+    @Test
+    void aProjectSavedByANewerEngineNeedsThatVersion() throws Exception {
+        addEngine(hub, TestSupport.devEngine(root.resolve("repo")));
+        hub.createProject("Game", projectsDir);
+        Files.writeString(projectsDir.resolve("Game/Game.vfproj"),
+                TestSupport.projectJson("Game", "2.0", "VertexForge 2.1.0"));
+
+        ProjectStatus status = status(hub, listed(hub, "Game"));
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+        assertEquals("Needs VertexForge 2.1.0", status.label());
+    }
+
+    @Test
+    void aProjectTheEditorWouldRefuseIsInvalidWithTheEditorsReason() throws Exception {
+        hub.createProject("Game", projectsDir);
+        Path file = projectsDir.resolve("Game/Game.vfproj");
+        JsonObject project = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        project.remove("startupScene");
+        Files.writeString(file, project.toString());
+
+        ProjectStatus status = status(hub, listed(hub, "Game"));
+
+        assertEquals(Kind.INVALID, status.kind());
+        assertEquals("Invalid project file: missing or invalid 'startupScene' field", status.reason());
+    }
 }

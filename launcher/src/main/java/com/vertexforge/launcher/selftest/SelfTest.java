@@ -16,7 +16,10 @@ import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.EditorLockProbe;
+import com.vertexforge.launcher.project.EditorLockState;
 import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.ProjectFileReader;
 import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsCodec;
@@ -24,6 +27,7 @@ import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.ProjectCreator;
+import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.store.StoreStatus;
@@ -347,9 +351,21 @@ public final class SelfTest {
             throw new IllegalStateException("the recent list did not round-trip the new project: " + listed);
         }
 
-        ProjectStatus status = hub.checkStatus(listed.getFirst()).get(UI_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        // The health check reads the file and the folder's editor lock (VK-1686): what the launcher creates is a
+        // project the editor accepts, no editor has it open, and the check created nothing in it.
+        ProjectFileCheck check = hub.checkProject(listed.getFirst(), true).get(UI_TIMEOUT.toSeconds(),
+                TimeUnit.SECONDS);
+        if (!(check instanceof ProjectFileCheck.Readable readable) || readable.file().structureProblem() != null
+                || !(readable.lock() instanceof EditorLockState.Free)) {
+            throw new IllegalStateException("the new project's health check gave " + check);
+        }
+        ProjectStatus status = ProjectHealthService.evaluate(check, null, null,
+                ProjectHealthService.FolderEditor.NONE);
         if (!status.isOk()) {
             throw new IllegalStateException("the new project's status is " + status);
+        }
+        if (Files.exists(EditorLockProbe.lockFile(outcome.projectPath().getParent()).getParent())) {
+            throw new IllegalStateException("the health check created the editor's state folder");
         }
 
         try (Stream<Path> lib = Files.walk(outcome.projectPath().resolveSibling("scripts").resolve("lib"))) {

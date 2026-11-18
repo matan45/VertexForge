@@ -5,6 +5,7 @@ import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.session.EditorSession;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -13,11 +14,14 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -148,5 +152,52 @@ class ProjectViewModelTest {
 
         assertTrue(StatusDisplay.ORDER.compare(running, idle) < 0);
         assertTrue(StatusDisplay.ORDER.compare(idle, missing) < 0);
+    }
+
+    /** VK-1686: a fine project that cannot be used right now is not opened either. */
+    @Test
+    void anAlreadyOpenOrTooNewProjectCannotBeOpened() {
+        ProjectViewModel row = new ProjectViewModel(entry("Game", TestSupport.T0));
+
+        row.setStatus(ProjectStatus.alreadyOpen("open elsewhere"));
+        assertFalse(row.isOpenable());
+        assertEquals("Already open", row.getStatusDisplay().label());
+        assertEquals("open elsewhere", row.getStatusDisplay().tooltip());
+
+        row.setStatus(ProjectStatus.needsNewerEngine("Needs VertexForge 2.1.0", "saved by 2.1.0"));
+        assertFalse(row.isOpenable());
+        assertEquals("Needs VertexForge 2.1.0", row.getStatusDisplay().label());
+
+        row.setStatus(ProjectStatus.invalid("bad"));
+        assertFalse(row.isOpenable());
+        assertEquals("Invalid", row.getStatusDisplay().label());
+
+        row.setStatus(ProjectStatus.ok("could not check the lock"));
+        assertTrue(row.isOpenable());
+    }
+
+    @Test
+    void theNewKindsSortAfterOkAndBeforeTheFileProblems() {
+        StatusDisplay ok = new StatusDisplay(ProjectStatus.ok(), null);
+        StatusDisplay open = new StatusDisplay(ProjectStatus.alreadyOpen("x"), null);
+        StatusDisplay newer = new StatusDisplay(ProjectStatus.needsNewerEngine("Needs VertexForge 2.0.0", "x"), null);
+        StatusDisplay invalid = new StatusDisplay(ProjectStatus.invalid("x"), null);
+        StatusDisplay missing = new StatusDisplay(ProjectStatus.missing("x"), null);
+
+        assertEquals(List.of(ok, open, newer, invalid, missing),
+                Stream.of(missing, invalid, newer, ok, open).sorted(StatusDisplay.ORDER).toList());
+    }
+
+    @Test
+    void theFilesLastAnswerSurvivesAnUpdateOfTheSameEntry() {
+        RecentEntry entry = entry("Game", TestSupport.T0);
+        ProjectViewModel row = new ProjectViewModel(entry);
+        assertNull(row.getFileCheck());
+        ProjectFileCheck check = new ProjectFileCheck.Missing("gone");
+
+        row.setFileCheck(check);
+        row.update(entry.withName("Renamed"));
+
+        assertSame(check, row.getFileCheck());
     }
 }
