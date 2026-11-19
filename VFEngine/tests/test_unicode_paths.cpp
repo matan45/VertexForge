@@ -263,6 +263,9 @@ TEST_SUITE("UnicodePaths")
         const serialization::ProjectInspection saved = serialization::ProjectSerialization::inspectProject(projectFile);
         REQUIRE(saved.ok());
         CHECK(saved.config->projectName == kHebrew.utf8);
+        // VK-1687: the .vfproj keeps its authored working directory, not the resolved Hebrew/Cyrillic path.
+        CHECK(saved.config->workingDirectory == ".");
+        CHECK(saved.config->startupScene == project.startupScene);
     }
 
     TEST_CASE("the launch contract pieces work in a Hebrew and Cyrillic folder")

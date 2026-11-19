@@ -70,6 +70,9 @@ namespace plugin {
     //      EngineVersion.generated.hpp) and binary assets carry the new AssetFormatVersion. FileVersion
     //      keeps its 12-byte layout. Importers (e.g. PSDImport) must stamp AssetFormatVersion, never
     //      Version, or their files are rejected after the next VERSION bump.
+    // VK-1687 (no bump): config::ProjectConfig is unchanged (GetCurrentProjectQuery still reports the
+    //      resolved workingDirectory); ProjectServiceImpl keeps the authored value in private members.
+    //      New types only: events::scene::QueueStartupSceneCommand / StartupSceneResult.
     constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
 
 }

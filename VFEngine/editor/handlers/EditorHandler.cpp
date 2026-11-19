@@ -322,38 +322,30 @@ namespace handlers
 
         vfLogInfo("Project loaded from CLI: {}", projectPath);
 
-        // Queue the startup scene from the project config. LoadSceneCommand only queues it: the
-        // load runs in the first frame's Scene task (watchStartup reports when it is done).
-        auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
-        if (projectOpt.has_value() && !projectOpt->startupScene.empty())
+        // Queue the startup scene from the project config. The load only queues it: it runs in the
+        // first frame's Scene task (watchStartup reports when it is done). VK-1687: a missing
+        // startup scene inside the project is built first (newScene + a sun + a camera, saved in the
+        // current format). The command never throws, but stay defensive: a throw here would turn
+        // a loaded project into exit 3 (Main.cpp).
+        try
         {
-            std::filesystem::path scenePath =
-                std::filesystem::path(projectOpt->workingDirectory) / projectOpt->startupScene;
-
-            std::error_code ec;
-            if (std::filesystem::exists(scenePath, ec))
+            const events::scene::StartupSceneResult startup =
+                dispatcher.execute(events::scene::QueueStartupSceneCommand{});
+            result.sceneQueued = startup.queued;
+            result.warning = startup.warning;
+            if (startup.queued)
             {
+                const std::filesystem::path scenePath(startup.scenePath);
                 editor::SplashScreen::instance().setStatus(
                     "Loading scene " + launch::pathToUtf8(scenePath.filename()) + "...");
-
-                events::scene::LoadSceneCommand sceneCmd;
-                sceneCmd.filePath = scenePath.string();
-                result.sceneQueued = dispatcher.execute(sceneCmd);
-                if (result.sceneQueued)
-                {
-                    vfLogInfo("Startup scene queued: {}", scenePath.string());
-                }
-                else
-                {
-                    result.warning = "its startup scene " + launch::pathToUtf8(scenePath) + " could not be queued";
-                    vfLogWarning("Startup scene could not be queued: {}", scenePath.string());
-                }
+                vfLogInfo("Startup scene queued{}: {}", startup.created ? " (created)" : "", startup.scenePath);
             }
-            else
-            {
-                result.warning = "its startup scene " + launch::pathToUtf8(scenePath) + " was not found";
-                vfLogWarning("Startup scene not found: {}", scenePath.string());
-            }
+        }
+        catch (const std::exception& e)
+        {
+            result.sceneQueued = false;
+            result.warning = std::string("its startup scene could not be prepared: ") + e.what();
+            vfLogError("Startup scene could not be prepared: {}", e.what());
         }
 
         return result;

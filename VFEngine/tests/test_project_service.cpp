@@ -5,10 +5,14 @@
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "serialization/ProjectSerialization.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace
@@ -43,6 +47,44 @@ namespace
             events::EventDispatcher::instance().clear();
         }
     };
+
+    // VK-1687 helpers.
+    std::string readText(const std::filesystem::path& file)
+    {
+        std::ifstream in(file, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+
+    // The "workingDirectory" string exactly as the .vfproj on disk holds it.
+    std::string savedWorkingDirectory(const std::filesystem::path& projectFile)
+    {
+        return nlohmann::json::parse(readText(projectFile)).at("workingDirectory").get<std::string>();
+    }
+
+    // Writes a .vfproj whose workingDirectory is exactly `workingDirectory`.
+    void writeProject(const std::filesystem::path& projectFile, const std::string& workingDirectory)
+    {
+        config::ProjectConfig config = makeValidProjectConfig({});
+        config.workingDirectory = workingDirectory;
+        REQUIRE(serialization::ProjectSerialization::saveProject(config, projectFile.string()));
+    }
+
+    // What Project Settings > Save does (ProjectSettingsWindow::saveToProject): send back the config
+    // it read, then save in place.
+    void saveLikeProjectSettings()
+    {
+        auto& dispatcher = events::EventDispatcher::instance();
+        const auto project = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        REQUIRE(project.has_value());
+
+        events::project::UpdateProjectConfigCommand update;
+        update.config = *project;
+        REQUIRE(dispatcher.execute(update));
+
+        events::project::SaveProjectCommand save;
+        save.filePath = "";
+        REQUIRE(dispatcher.execute(save));
+    }
 }
 
 TEST_SUITE("ProjectService")
@@ -206,5 +248,163 @@ TEST_SUITE("ProjectService")
         CHECK_FALSE(service.isProjectLoaded());
 
         std::filesystem::remove_all(directory);
+    }
+
+    // VK-1687: the .vfproj keeps the authored working directory; memory holds the resolved one.
+    TEST_CASE("a relative working directory survives Project Settings Save and a folder move")
+    {
+        namespace fs = std::filesystem;
+        DispatcherScope dispatcherScope;
+        const auto root = makeTestDirectory("VertexForge_ProjectService_Portable");
+        const auto original = root / "VK1687OriginalFolder";
+        const auto moved = root / "VK1687MovedFolder";
+        fs::create_directories(original / "scenes");
+        {
+            std::ofstream scene(original / "scenes" / "Main.vfScene", std::ios::binary);
+            scene << "{}";
+        }
+        writeProject(original / "Game.vfproj", ".");
+
+        services::ProjectServiceImpl service;
+        service.registerEventHandlers();
+        REQUIRE(service.loadProject((original / "Game.vfproj").string()));
+
+        std::error_code ec;
+        const std::string resolved = service.getCurrentProject()->workingDirectory;
+        CHECK(fs::path(resolved).is_absolute());
+        CHECK(fs::equivalent(resolved, original, ec));
+
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(original / "Game.vfproj") == ".");
+        CHECK(readText(original / "Game.vfproj").find("VK1687OriginalFolder") == std::string::npos);
+        // Memory still holds the resolved path every reader joins onto.
+        CHECK(service.getCurrentProject()->workingDirectory == resolved);
+
+        fs::rename(original, moved);
+        REQUIRE(service.loadProject((moved / "Game.vfproj").string()));
+        const auto reopened = *service.getCurrentProject();
+        CHECK(fs::equivalent(reopened.workingDirectory, moved, ec));
+        CHECK(fs::exists(fs::path(reopened.workingDirectory) / "scenes" / "Main.vfScene"));
+
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(moved / "Game.vfproj") == ".");
+
+        fs::remove_all(root, ec);
+    }
+
+    TEST_CASE("an absolute working directory inside the project is saved relative")
+    {
+        namespace fs = std::filesystem;
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_Repair");
+        fs::create_directories(directory / "Assets");
+
+        services::ProjectServiceImpl service;
+        service.registerEventHandlers();
+
+        // What an older editor wrote after one Project Settings Save: its own folder, absolute.
+        writeProject(directory / "Self.vfproj", directory.string());
+        REQUIRE(service.loadProject((directory / "Self.vfproj").string()));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Self.vfproj") == ".");
+
+        writeProject(directory / "Assets.vfproj", (directory / "Assets").string());
+        REQUIRE(service.loadProject((directory / "Assets.vfproj").string()));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Assets.vfproj") == "Assets");
+
+        // A folder that does not exist, written with a trailing separator, is never saved as "".
+        const std::string missing =
+            (directory / "Missing").string() + std::string(1, static_cast<char>(fs::path::preferred_separator));
+        writeProject(directory / "Missing.vfproj", missing);
+        REQUIRE(service.loadProject((directory / "Missing.vfproj").string()));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Missing.vfproj") == "Missing");
+
+        std::error_code ec;
+        fs::remove_all(directory, ec);
+    }
+
+    TEST_CASE("working directories outside the project are kept exactly as written")
+    {
+        namespace fs = std::filesystem;
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_Outside");
+        const auto shared = makeTestDirectory("VertexForge_ProjectService_OutsideShared");
+
+        services::ProjectServiceImpl service;
+        service.registerEventHandlers();
+
+        // Forward slashes on purpose: the authored spelling, not a normalised one, comes back.
+        const std::string absoluteOutside = shared.generic_string();
+        writeProject(directory / "Absolute.vfproj", absoluteOutside);
+        REQUIRE(service.loadProject((directory / "Absolute.vfproj").string()));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Absolute.vfproj") == absoluteOutside);
+
+        const std::string relativeOutside = "../VertexForge_ProjectService_OutsideShared";
+        writeProject(directory / "Relative.vfproj", relativeOutside);
+        REQUIRE(service.loadProject((directory / "Relative.vfproj").string()));
+        std::error_code ec;
+        CHECK(fs::equivalent(service.getCurrentProject()->workingDirectory, shared, ec));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Relative.vfproj") == relativeOutside);
+
+        fs::remove_all(directory, ec);
+        fs::remove_all(shared, ec);
+    }
+
+    TEST_CASE("the authored working directory follows updates, Save As and refused switches")
+    {
+        namespace fs = std::filesystem;
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_Authored");
+        const auto other = makeTestDirectory("VertexForge_ProjectService_AuthoredOther");
+        fs::create_directories(directory / "Assets");
+        fs::create_directories(directory / "Content");
+        std::error_code ec;
+
+        services::ProjectServiceImpl service;
+        service.registerEventHandlers();
+        auto& dispatcher = events::EventDispatcher::instance();
+
+        // A spelling only rule 1 (written verbatim) keeps; anything recomputed would give "Assets".
+        writeProject(directory / "Game.vfproj", "./Assets");
+        writeProject(other / "Other.vfproj", "Elsewhere");
+        service.setOpenGuard([other](const fs::path& projectFile) -> std::optional<std::string>
+        {
+            if (projectFile.parent_path() == other)
+            {
+                return std::string("refused");
+            }
+            return std::nullopt;
+        });
+
+        REQUIRE(service.loadProject((directory / "Game.vfproj").string()));
+        CHECK_FALSE(service.loadProject((other / "Other.vfproj").string()));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Game.vfproj") == "./Assets");
+
+        // A new relative value is resolved against the project folder and written as given.
+        auto updated = *service.getCurrentProject();
+        updated.workingDirectory = "Content";
+        events::project::UpdateProjectConfigCommand update;
+        update.config = updated;
+        REQUIRE(dispatcher.execute(update));
+        CHECK(fs::path(service.getCurrentProject()->workingDirectory).is_absolute());
+        CHECK(fs::equivalent(service.getCurrentProject()->workingDirectory, directory / "Content", ec));
+        saveLikeProjectSettings();
+        CHECK(savedWorkingDirectory(directory / "Game.vfproj") == "Content");
+
+        // Save As into a folder that does not contain the working directory: it must still name it.
+        events::project::SaveProjectCommand saveAs;
+        saveAs.filePath = (other / "Copy.vfproj").string();
+        REQUIRE(dispatcher.execute(saveAs));
+        const std::string copied = savedWorkingDirectory(other / "Copy.vfproj");
+        CHECK(fs::path(copied).is_absolute());
+        CHECK(fs::equivalent(copied, directory / "Content", ec));
+
+        fs::remove_all(directory, ec);
+        fs::remove_all(other, ec);
     }
 }

@@ -3,6 +3,7 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "../details/FontSlotWidget.hpp"
+#include "launch/ProjectPathRules.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cstddef>
@@ -22,6 +23,7 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        startupSceneError.clear();
 
         if (projectOpt)
         {
@@ -229,18 +231,21 @@ namespace windows
                 std::string path = fileDialog.openFileDialog(filters);
                 if (!path.empty())
                 {
-                    fs::path selectedPath(path);
-                    fs::path workDir(workingDirectory);
-
-                    if (selectedPath.string().find(workDir.string()) == 0)
+                    // VK-1687: the startup scene is stored relative to the working directory, so
+                    // the project still finds it after a move, and the exporter packs it as
+                    // "Assets/<startupScene>". A scene outside the working directory is refused.
+                    const fs::path selectedPath(path);
+                    if (const std::optional<fs::path> relative =
+                            launch::relativeInside(fs::path(workingDirectory), selectedPath))
                     {
-                        startupScene = fs::relative(selectedPath, workDir).string();
+                        startupScene = relative->generic_string();
+                        startupSceneError.clear();
+                        isDirty = true;
                     }
                     else
                     {
-                        startupScene = selectedPath.filename().string();
+                        startupSceneError = "The startup scene must be inside the project's working directory";
                     }
-                    isDirty = true;
                 }
             }
 
@@ -248,11 +253,16 @@ namespace windows
             if (ImGui::Button("Clear", ImVec2(55, 0)))
             {
                 startupScene.clear();
+                startupSceneError.clear();
                 isDirty = true;
             }
         }
         ImGui::PopID();
 
+        if (!startupSceneError.empty())
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", startupSceneError.c_str());
+        }
         if (!validateStartupScene())
         {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Scene file not found");
@@ -283,16 +293,17 @@ namespace windows
                 std::string path = fileDialog.openFileDialog(filters);
                 if (!path.empty())
                 {
-                    fs::path selectedPath(path);
-                    fs::path workDir(workingDirectory);
-
-                    if (selectedPath.string().find(workDir.string()) == 0)
+                    // VK-1687: inside the working directory the icon is stored relative to it;
+                    // outside it keeps its absolute path (the exporter reads either).
+                    const fs::path selectedPath(path);
+                    if (const std::optional<fs::path> relative =
+                            launch::relativeInside(fs::path(workingDirectory), selectedPath))
                     {
-                        exeIconPath = fs::relative(selectedPath, workDir).string();
+                        exeIconPath = relative->generic_string();
                     }
                     else
                     {
-                        exeIconPath = selectedPath.filename().string();
+                        exeIconPath = selectedPath.string();
                     }
                     isDirty = true;
                 }

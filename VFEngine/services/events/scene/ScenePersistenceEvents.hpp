@@ -27,6 +27,23 @@ namespace events::scene {
         std::string_view getName() const override { return "LoadScene"; }
     };
 
+    // VK-1687: what QueueStartupSceneCommand did with the current project's startup scene.
+    struct StartupSceneResult {
+        bool queued = false;    // a LoadSceneCommand for scenePath was accepted
+        bool created = false;   // the file was missing and the editor built and saved it first
+        std::string scenePath;  // <workingDirectory>/<startupScene>; empty when the project names none
+        std::string warning;    // why the scene is not queued (or was not created); empty otherwise
+    };
+
+    // VK-1687: queues the current project's startup scene. When the file is missing and is a
+    // .vfScene inside the project folder (outside .vertexforge), it is first built with newScene()
+    // plus a "Sun" directional light and a primary "Main Camera", and saved in the current format.
+    // Editor only (EditorHandler::loadProject, MCP project_open): the Runtime never creates scenes.
+    // Never throws; an error is reported in `warning`.
+    struct QueueStartupSceneCommand : ICommand<StartupSceneResult> {
+        std::string_view getName() const override { return "QueueStartupScene"; }
+    };
+
     struct CancelPendingSceneLoadsCommand : ICommand<void> {
         std::string_view getName() const override { return "CancelPendingSceneLoads"; }
     };

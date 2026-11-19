@@ -1050,7 +1050,10 @@ namespace gameExport
 		projConfig.workingDirectory = "Assets";
 		projConfig.startupScene = config.startupScene;
 		projConfig.fontFallbackChain = config.fontFallbackChain;
-		projConfig.exeIconPath = config.iconPath;
+		// VK-1687: an icon outside the project is kept absolute in the editor's .vfproj; the shipped
+		// game never gets the developer's absolute path, only the file name (as it did before).
+		const fs::path iconPath(config.iconPath);
+		projConfig.exeIconPath = iconPath.is_absolute() ? iconPath.filename().string() : config.iconPath;
 		if (config.expectedPluginApiVersion != 0)
 		{
 			projConfig.pluginApiVersion = config.expectedPluginApiVersion;

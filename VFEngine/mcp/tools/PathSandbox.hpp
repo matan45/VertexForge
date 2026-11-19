@@ -1,7 +1,7 @@
 #pragma once
 
-#include <algorithm>
-#include <cwctype>
+#include "launch/ProjectPathRules.hpp"
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -32,40 +32,11 @@ namespace mcp::tools
 
     namespace detail
     {
-        inline bool componentEquals(const std::filesystem::path& a, const std::filesystem::path& b)
-        {
-#ifdef _WIN32
-            // NTFS paths are case-insensitive; weakly_canonical only normalises the
-            // case of the components that exist on disk.
-            const std::wstring& left = a.native();
-            const std::wstring& right = b.native();
-            return std::equal(left.begin(), left.end(), right.begin(), right.end(),
-                              [](wchar_t x, wchar_t y) { return std::towlower(x) == std::towlower(y); });
-#else
-            return a == b;
-#endif
-        }
-
-        // True when `candidate` is `root` or lies beneath it. Both must already be
-        // canonical (no ".", "..", or redundant separators).
-        inline bool isWithin(const std::filesystem::path& root, const std::filesystem::path& candidate)
-        {
-            auto rootIt = root.begin();
-            auto candidateIt = candidate.begin();
-            for (; rootIt != root.end(); ++rootIt, ++candidateIt)
-            {
-                // A trailing separator on the root yields an empty final element.
-                if (rootIt->empty())
-                {
-                    continue;
-                }
-                if (candidateIt == candidate.end() || !componentEquals(*rootIt, *candidateIt))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
+        // VK-1687: shared with the project path rules (utilities/launch/ProjectPathRules.hpp):
+        // case-insensitive on Windows; isWithin takes canonical paths, ignores empty elements
+        // (a trailing separator) and treats an empty root as containing nothing.
+        using launch::componentEquals;
+        using launch::isWithin;
     }
 
     // Resolves `relative` (UTF-8; relative to `root`, or absolute) and returns the

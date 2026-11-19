@@ -18,9 +18,18 @@ namespace services
         using OpenGuard = std::function<std::optional<std::string>(const std::filesystem::path& projectFile)>;
 
     private:
+        // currentProject->workingDirectory is always the RESOLVED working directory (every reader
+        // joins paths onto it). VK-1687: the .vfproj keeps the value as it was authored, so a moved
+        // or cloned project still opens its own files; it is kept here, with the folder of the
+        // .vfproj it was read from or written to, and saveProject decides what to write.
         std::optional<config::ProjectConfig> currentProject;
         std::optional<std::string> currentProjectPath;
+        std::string authoredWorkingDirectory;
+        std::filesystem::path authoredBaseFolder;
         OpenGuard openGuard;
+
+        // The working directory to write into a .vfproj that lies in `targetFolder` (absolute).
+        std::string workingDirectoryToSave(const std::filesystem::path& targetFolder) const;
 
     public:
         ProjectServiceImpl() = default;

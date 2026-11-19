@@ -17,6 +17,8 @@ namespace windows
         std::string startupScene;
         std::string exeIconPath;
         std::vector<std::string> fontFallbackChain;
+        // VK-1687: why the last Browse for a startup scene was refused (it lay outside the project).
+        std::string startupSceneError;
 
         bool isDirty = false;
         bool hasProject = false;
