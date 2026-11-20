@@ -8,6 +8,8 @@ import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
 import com.vertexforge.launcher.dialog.EnginesDialog;
 import com.vertexforge.launcher.dialog.FileJobDialog;
+import com.vertexforge.launcher.dialog.LibraryUpdateDialog;
+import com.vertexforge.launcher.dialog.LibraryUpdatePrompt;
 import com.vertexforge.launcher.dialog.McpDialog;
 import com.vertexforge.launcher.dialog.ProjectChooserDialog;
 import com.vertexforge.launcher.dialog.SessionFailureDialog;
@@ -22,6 +24,7 @@ import com.vertexforge.launcher.engine.EngineOptions;
 import com.vertexforge.launcher.engine.EngineRegistryCodec;
 import com.vertexforge.launcher.engine.EngineRegistryView;
 import com.vertexforge.launcher.engine.LaunchPlan;
+import com.vertexforge.launcher.engine.EngineResolver;
 import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.instance.InstanceMessage;
 import com.vertexforge.launcher.instance.InstanceRequest;
@@ -47,6 +50,8 @@ import com.vertexforge.launcher.service.ProjectCopier;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.service.ScriptLibraryStatusService;
+import com.vertexforge.launcher.service.ScriptLibraryUpdater;
 import com.vertexforge.launcher.service.ProjectNameRules;
 import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.template.TemplateCatalogs;
@@ -80,6 +85,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
@@ -167,6 +173,7 @@ public class MainController implements Initializable {
     static final String BANNER_SHOW = "show-in-explorer";
     /** What Open did before the editor started: a backup, a copy, a cancelled job (VK-1690). */
     static final String BANNER_VERSION = "version";
+    static final String BANNER_LIBRARY = "script-library";
 
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
@@ -261,6 +268,9 @@ public class MainController implements Initializable {
     /** Opens projects once it is clear that their engine reads them (VK-1690). */
     private final OpenProjectFlow openFlow = new OpenProjectFlow(new OpenServices(),
             MainController::runLaterQuietly);
+    /** Updates a project's script library to its engine's (VK-1691). */
+    private final ScriptLibraryUpdateFlow libraryFlow = new ScriptLibraryUpdateFlow(new LibraryServices(),
+            MainController::runLaterQuietly);
 
     /** A Locate… is checking a picked file or saving the relink (VK-1686); a second one must wait. */
     private final BooleanProperty locating = new SimpleBooleanProperty(false);
@@ -351,11 +361,12 @@ public class MainController implements Initializable {
             activeJob.cancel();
         }
         openFlow.cancelJob();
+        libraryFlow.cancelJob();
     }
 
-    /** Whether a creation, a backup or a copy is in progress. FX thread. */
+    /** Whether a creation, a backup, a copy or a script-library job (VK-1691) is in progress. FX thread. */
     public boolean creationRunning() {
-        return activeJob != null || openFlow.jobRunning();
+        return activeJob != null || openFlow.jobRunning() || libraryFlow.jobRunning();
     }
 
     private void setupTableColumns() {
@@ -373,9 +384,20 @@ public class MainController implements Initializable {
                 if (empty || display == null) {
                     setText(null);
                     setTooltip(null);
+                    setGraphic(null);
                 } else {
                     setText(display.label());
                     setTooltip(display.tooltip().isEmpty() ? null : new Tooltip(display.tooltip()));
+                    // The script library's tag after the status (VK-1691).
+                    String tag = display.libraryTag();
+                    if (tag.isEmpty()) {
+                        setGraphic(null);
+                    } else {
+                        Label label = new Label(tag);
+                        label.getStyleClass().add("library-tag");
+                        setGraphic(label);
+                        setContentDisplay(ContentDisplay.RIGHT);
+                    }
                 }
             }
         });
@@ -430,6 +452,10 @@ public class MainController implements Initializable {
         changeEngineItem.setOnAction(e -> changeEngineOfSelected());
         changeEngineItem.disableProperty().bind(readOnly.or(launching).or(choosingEngine));
 
+        // VK-1691: brings the project's script library up to its engine's (it writes the project, not the list).
+        MenuItem updateLibraryItem = new MenuItem("Update Script Library…");
+        updateLibraryItem.setOnAction(e -> updateLibraryOfSelected());
+
         // VK-1683: "Open with MCP" and its port, stored on the entry.
         MenuItem mcpItem = new MenuItem("MCP…");
         mcpItem.setOnAction(e -> editMcpOfSelected());
@@ -440,13 +466,14 @@ public class MainController implements Initializable {
         removeItem.disableProperty().bind(readOnly);
 
         contextMenu.getItems().addAll(showItem, copyPathItem, new SeparatorMenuItem(), locateItem, changeEngineItem,
-                mcpItem, new SeparatorMenuItem(), removeItem);
+                updateLibraryItem, mcpItem, new SeparatorMenuItem(), removeItem);
         // These depend on the row's status, which changes in the background; each handler checks again.
         contextMenu.setOnShowing(event -> {
             ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
             showItem.setDisable(!canShowInExplorer(selected));
             copyPathItem.setDisable(selected == null || isBlank(selected.getEntry().rawPath()));
             locateItem.setDisable(!canLocate(selected));
+            updateLibraryItem.setDisable(!canUpdateLibrary(selected));
         });
 
         projectsTable.setRowFactory(table -> {
@@ -729,7 +756,55 @@ public class MainController implements Initializable {
         if (fileCheck != null) {
             row.setStatus(ProjectHealthService.evaluate(fileCheck, engineOptions, row.getEntry().engineId(),
                     folderEditor(row)));
+            checkLibrary(row, fileCheck);
         }
+    }
+
+    /**
+     * Checks the row's script library against the library of the engine it opens with (VK-1691), in the background,
+     * when its file is OK and that engine is known; only the latest answer lands.
+     */
+    private void checkLibrary(ProjectViewModel row, ProjectFileCheck fileCheck) {
+        long token = row.startLibraryCheck();
+        Path projectFile = row.getProjectPath();
+        if (!(fileCheck instanceof ProjectFileCheck.Readable readable) || !row.getStatus().isOk()
+                || engineOptions == null || projectFile == null) {
+            row.setLibrary(ScriptLibraryStatusService.LibraryState.UNKNOWN);
+            return;
+        }
+        Optional<ScriptLibraryStatusService.EngineLibrary> library =
+                switch (EngineResolver.resolve(engineOptions, row.getEntry().engineId())) {
+                    case LaunchPlan.Ready ready -> ScriptLibraryStatusService.EngineLibrary.of(ready.engine());
+                    case LaunchPlan.Choose ignored -> Optional.empty();
+                };
+        if (library.isEmpty()) {
+            row.setLibrary(ScriptLibraryStatusService.LibraryState.UNKNOWN);
+            return;
+        }
+        hub.checkScriptLibrary(projectFile, readable.file().workingDirectory(), library.get())
+                .whenComplete((state, error) -> runLaterQuietly(() -> {
+                    if (row.isCurrentLibraryCheck(token) && projectsList.contains(row)) {
+                        row.setLibrary(error == null ? state : ScriptLibraryStatusService.LibraryState.UNKNOWN);
+                    }
+                }));
+    }
+
+    /** Whether "Update Script Library…" can start on {@code row} now (VK-1691). */
+    private boolean canUpdateLibrary(ProjectViewModel row) {
+        return row != null && row.getProjectPath() != null && row.getStatus().isOk() && !launching.get()
+                && !choosingEngine.get() && !creating.get() && !creationRunning();
+    }
+
+    /** Updates the selected project's script library to its engine's (VK-1691). */
+    private void updateLibraryOfSelected() {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (!canUpdateLibrary(selected)) {
+            return;
+        }
+        // Like a launch, the flow keeps the window's buttons disabled until it ends (through release()).
+        launching.set(true);
+        libraryFlow.update(new ScriptLibraryUpdateFlow.Request(selected.getProjectPath(), selected.getEntry(),
+                selected.getName()));
     }
 
     /** Which editor of this window has a project of the row's folder open. */
@@ -1614,6 +1689,130 @@ public class MainController implements Initializable {
                 banners.show(BANNER_VERSION, BannerBar.Kind.INFO, message, true);
             } else {
                 banners.show(BANNER_VERSION, BannerBar.Kind.INFO, message, true, "Show in folder",
+                        () -> showInFolder(reveal));
+            }
+        }
+
+        @Override
+        public CompletableFuture<Boolean> libraryUpdateInterrupted(Path projectFile, String workingDirectory) {
+            return hub.scriptLibraryUpdateInterrupted(projectFile, workingDirectory);
+        }
+
+        @Override
+        public boolean confirmLibraryRecovery(String name) {
+            return confirm("Open Project", "An update of the script library of \"" + name + "\" did not finish. "
+                    + "The launcher finishes it (or puts the old library back) before the project opens.\n\n"
+                    + "Finish it and open the project?");
+        }
+
+        @Override
+        public FileJob<ScriptLibraryUpdater.RecoveryOutcome> startLibraryRecovery(Path projectFile,
+                                                                                String workingDirectory) {
+            return FileJob.start(creation, monitor -> hub.recoverScriptLibrary(projectFile, workingDirectory),
+                    FileJob.ProgressListener.NONE, ScriptLibraryUpdater.RecoveryOutcome.Failed::new);
+        }
+    }
+
+    /** What the script-library update needs from this window (VK-1691). FX thread, except where a method says so. */
+    private final class LibraryServices implements ScriptLibraryUpdateFlow.Services {
+
+        @Override
+        public CompletableFuture<EngineOptions> engines() {
+            return engineServices.refresh();
+        }
+
+        @Override
+        public CompletableFuture<ProjectFileCheck> read(Path projectFile) {
+            return hub.checkProjectFile(projectFile, true);
+        }
+
+        @Override
+        public FolderEditor folderEditor(Path projectFile) {
+            return MainController.this.folderEditor(projectFile);
+        }
+
+        @Override
+        public Optional<EngineOption> chooseEngine(OpenProjectFlow.EnginePrompt prompt) {
+            return EngineChooserDialog.showForOpen(window(), prompt.header(), prompt.problem(), prompt.candidates(),
+                            prompt.canRemember(), prompt.rememberByDefault(), prompt.offered(), engineServices)
+                    .flatMap(EngineChooserDialog.Choice::engine);
+        }
+
+        @Override
+        public boolean confirmRecovery(String name, String detail) {
+            return confirm(ScriptLibraryUpdateFlow.TITLE, detail + " The launcher finishes it (or puts the old "
+                    + "library back) first.\n\nFinish the update of \"" + name + "\" now?");
+        }
+
+        @Override
+        public Optional<Boolean> ask(LibraryUpdatePrompt prompt) {
+            return LibraryUpdateDialog.show(window(), prompt);
+        }
+
+        @Override
+        public OpenProjectFlow.JobView showJob(String title, String header, Runnable cancel) {
+            FileJobDialog dialog = FileJobDialog.show(window(), title, header, ScriptLibraryUpdateFlow::phaseText,
+                    cancel);
+            return new OpenProjectFlow.JobView() {
+                @Override
+                public void progress(JobMonitor.Phase phase, long done, long total) {
+                    dialog.progress(phase, done, total);
+                }
+
+                @Override
+                public void close() {
+                    dialog.close();
+                }
+            };
+        }
+
+        @Override
+        public FileJob<ScriptLibraryUpdater.PreviewOutcome> startPreview(ScriptLibraryUpdater.Request request,
+                                                                         FileJob.ProgressListener listener) {
+            // The creation thread runs one disk job at a time, and the launcher's shutdown cancels and waits for it.
+            return FileJob.start(creation, monitor -> hub.previewScriptLibrary(request, monitor), listener,
+                    ScriptLibraryUpdater.PreviewOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ScriptLibraryUpdater.UpdateOutcome> startUpdate(ScriptLibraryUpdater.Request request,
+                                                                       String fingerprint, boolean keepMine,
+                                                                       FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.updateScriptLibrary(request, fingerprint, keepMine, monitor),
+                    listener, ScriptLibraryUpdater.UpdateOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ScriptLibraryUpdater.RecoveryOutcome> startRecovery(Path projectFile, String workingDirectory) {
+            return FileJob.start(creation, monitor -> hub.recoverScriptLibrary(projectFile, workingDirectory),
+                    FileJob.ProgressListener.NONE, ScriptLibraryUpdater.RecoveryOutcome.Failed::new);
+        }
+
+        @Override
+        public void changed(Path projectFile) {
+            for (ProjectViewModel row : projectsList) {
+                if (projectFile.equals(row.getProjectPath())) {
+                    check(row);
+                }
+            }
+        }
+
+        @Override
+        public void release() {
+            launching.set(false);
+        }
+
+        @Override
+        public void error(String title, String message) {
+            showErrorDialog(title, message);
+        }
+
+        @Override
+        public void notice(String message, Path reveal) {
+            if (reveal == null) {
+                banners.show(BANNER_LIBRARY, BannerBar.Kind.INFO, message, true);
+            } else {
+                banners.show(BANNER_LIBRARY, BannerBar.Kind.INFO, message, true, "Show backup",
                         () -> showInFolder(reveal));
             }
         }

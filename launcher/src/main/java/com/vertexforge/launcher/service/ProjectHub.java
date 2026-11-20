@@ -72,6 +72,10 @@ public class ProjectHub implements AutoCloseable {
     private final ProjectBackupService backups;
     /** "Open a copy" (VK-1690). */
     private final ProjectCopier copier;
+    /** "Update Script Library…" (VK-1691). */
+    private final ScriptLibraryUpdater libraryUpdater;
+    /** The project list's "Library outdated" tags (VK-1691). */
+    private final ScriptLibraryStatusService libraryStatus;
     private final int listLimit;
     private final Clock clock;
     /** Reads picked, dropped and command-line projects, each with a timeout (VK-1685). */
@@ -130,6 +134,8 @@ public class ProjectHub implements AutoCloseable {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.backups = new ProjectBackupService(clock, SpaceProbe.SYSTEM);
         this.copier = new ProjectCopier(SpaceProbe.SYSTEM);
+        this.libraryUpdater = new ScriptLibraryUpdater(clock, SpaceProbe.SYSTEM, EditorLockProbe.system());
+        this.libraryStatus = new ScriptLibraryStatusService(ScriptLibraryStatusService.DEFAULT_TIMEOUT);
         this.listLimit = settings.recentProjectsLimit();
         ProjectInspector reader = Objects.requireNonNull(inspector, "inspector");
         Objects.requireNonNull(pickTimeout, "pickTimeout");
@@ -277,6 +283,48 @@ public class ProjectHub implements AutoCloseable {
      */
     public ProjectCopier.CopyOutcome copyProject(ProjectCopier.CopyRequest request, JobMonitor monitor) {
         return copier.copy(request, monitor);
+    }
+
+    /**
+     * What updating the project's script library to an engine's would do (VK-1691). Only reads. Blocks: a job's
+     * thread.
+     */
+    public ScriptLibraryUpdater.PreviewOutcome previewScriptLibrary(ScriptLibraryUpdater.Request request,
+                                                                    JobMonitor monitor) {
+        return libraryUpdater.preview(request, monitor);
+    }
+
+    /**
+     * Updates the project's script library as previewed with {@code fingerprint} (VK-1691). Blocks: a job's thread.
+     *
+     * @param keepMine whether files the user and the engine both changed keep the user's copy
+     */
+    public ScriptLibraryUpdater.UpdateOutcome updateScriptLibrary(ScriptLibraryUpdater.Request request,
+                                                                  String fingerprint, boolean keepMine,
+                                                                  JobMonitor monitor) {
+        return libraryUpdater.update(request, fingerprint, keepMine, monitor);
+    }
+
+    /** Finishes or undoes an interrupted update of the project's script library (VK-1691). Blocks: a job's thread. */
+    public ScriptLibraryUpdater.RecoveryOutcome recoverScriptLibrary(Path projectFile, String workingDirectory) {
+        return libraryUpdater.recover(projectFile, workingDirectory);
+    }
+
+    /**
+     * Whether the project's script library is behind {@code engine}'s, for the list's tag (VK-1691); completes within
+     * a timeout and never exceptionally.
+     */
+    public CompletableFuture<ScriptLibraryStatusService.LibraryState> checkScriptLibrary(
+            Path projectFile, String workingDirectory, ScriptLibraryStatusService.EngineLibrary engine) {
+        return libraryStatus.check(projectFile, workingDirectory, engine);
+    }
+
+    /**
+     * Whether an update of the project's script library was interrupted, for Open to finish it first (VK-1691);
+     * {@code false} when that cannot be told in time. Never completes exceptionally.
+     */
+    public CompletableFuture<Boolean> scriptLibraryUpdateInterrupted(Path projectFile, String workingDirectory) {
+        return libraryStatus.interrupted(projectFile, workingDirectory);
     }
 
     /**
@@ -485,6 +533,7 @@ public class ProjectHub implements AutoCloseable {
     public void close() {
         pickChecks.close();
         health.close();
+        libraryStatus.close();
         locationChecker.close();
         templates.close();
         engines.close();

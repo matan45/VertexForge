@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.Locale;
 
 /**
- * Watches a long file job (VK-1690: a project backup or copy): it hears how far the job got and can ask it to stop.
+ * Watches a long file job (VK-1690: a project backup or copy; VK-1691: a script-library update): it hears how far the job got and can ask it to stop.
  * Every method is called on the thread that runs the job.
  */
 public interface JobMonitor {
@@ -18,7 +18,12 @@ public interface JobMonitor {
         /** Reading a written archive back; {@code done} and {@code total} count content bytes. */
         VERIFYING,
         /** Copying files; {@code done} and {@code total} count content bytes. */
-        COPYING
+        COPYING,
+        /**
+         * Putting the result into place (VK-1691: swapping a script library's folders); {@code done} and
+         * {@code total} count steps. From here on a cancel is no longer possible: the job finishes.
+         */
+        COMMITTING
     }
 
     /** The {@code total} of a phase whose size is not known yet. */

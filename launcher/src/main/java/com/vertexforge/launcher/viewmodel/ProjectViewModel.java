@@ -4,6 +4,7 @@ import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.project.ProjectFileCheck;
+import com.vertexforge.launcher.service.ScriptLibraryStatusService.LibraryState;
 import com.vertexforge.launcher.session.EditorSession;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
@@ -46,9 +47,12 @@ public final class ProjectViewModel {
     private final ObjectProperty<ProjectStatus> status = new SimpleObjectProperty<>(ProjectStatus.CHECKING);
     /** The phase of this launcher's editor on the project (VK-1683); {@code null} when none runs. */
     private final ObjectProperty<EditorSession.Phase> sessionPhase = new SimpleObjectProperty<>(null);
+    /** The state of the project's script library (VK-1691). */
+    private final ObjectProperty<LibraryState> library = new SimpleObjectProperty<>(LibraryState.UNKNOWN);
     private final ObjectBinding<StatusDisplay> statusDisplay;
     private final BooleanBinding openable;
     private long probeToken;
+    private long libraryToken;
     /** The last answer of the file's background check (VK-1686), or {@code null} before the first one. */
     private ProjectFileCheck fileCheck;
 
@@ -63,7 +67,8 @@ public final class ProjectViewModel {
         this.openable = Bindings.createBooleanBinding(
                 () -> status.get().isOk() && this.entry.path() != null, status);
         this.statusDisplay = Bindings.createObjectBinding(
-                () -> new StatusDisplay(status.get(), sessionPhase.get()), status, sessionPhase);
+                () -> new StatusDisplay(status.get(), sessionPhase.get(), library.get()), status, sessionPhase,
+                library);
     }
 
     /** {@code yyyy-MM-dd HH:mm} in {@code zone}, or {@link #UNKNOWN_DATE}. */
@@ -164,6 +169,28 @@ public final class ProjectViewModel {
 
     public ObjectProperty<EditorSession.Phase> sessionPhaseProperty() {
         return sessionPhase;
+    }
+
+    /** The state of the project's script library (VK-1691). */
+    public LibraryState getLibrary() {
+        return library.get();
+    }
+
+    public void setLibrary(LibraryState state) {
+        library.set(state == null ? LibraryState.UNKNOWN : state);
+    }
+
+    public ObjectProperty<LibraryState> libraryProperty() {
+        return library;
+    }
+
+    /** Starts a check of the library; only the answer of the latest one may land ({@link #isCurrentLibraryCheck}). */
+    public long startLibraryCheck() {
+        return ++libraryToken;
+    }
+
+    public boolean isCurrentLibraryCheck(long token) {
+        return token == libraryToken;
     }
 
     /** The Status column's value: the file's status, or the running editor's phase. */

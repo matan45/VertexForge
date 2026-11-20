@@ -456,4 +456,12 @@ TEST_SUITE("mType API doc")
 
         fs::remove_all(root);
     }
+
+    TEST_CASE("the primer points a stale scripts/lib at the launcher's update, not at a hand copy")
+    {
+        // VK-1691: a copy by hand would overwrite the user's own changes; the launcher's update keeps them.
+        CHECK_FALSE(contains(doc::primer(), "copy the engine's assets/scripts/lib"));
+        CHECK(contains(doc::primer(), "run Update Script Library on the project in the VertexForge launcher"));
+        CHECK(contains(doc::primer(), "Never copy or edit files in scripts/lib yourself."));
+    }
 }

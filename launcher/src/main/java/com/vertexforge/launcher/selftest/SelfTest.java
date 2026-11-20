@@ -34,6 +34,8 @@ import com.vertexforge.launcher.service.JobMonitor;
 import com.vertexforge.launcher.service.ProjectBackupService;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.service.ScriptLibraryStatusService;
+import com.vertexforge.launcher.service.ScriptLibraryUpdater;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
@@ -187,7 +189,69 @@ public final class SelfTest {
         check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects"), engine[0]));
         check("existing project", () -> checkExistingProject(hub));
         check("project backup", () -> checkProjectBackup(hub));
+        check("script library update", () -> checkScriptLibraryUpdate(hub, engine[0]));
         return hub;
+    }
+
+    /**
+     * "Update Script Library…" end to end on the created project (VK-1691): a fresh project is up to date; after the
+     * engine's library changes and the user edits a file the engine did not change, the update takes the engine's
+     * change, adds its new file, keeps the user's edit, backs the old library up into the project's state folder and
+     * records the engine's hashes; a second look then finds nothing to do.
+     */
+    private static void checkScriptLibraryUpdate(ProjectHub hub, EngineOption engine) throws Exception {
+        Path projectFile = hub.listProjects().entries().getFirst().path();
+        ProjectFile project = ProjectFileReader.read(projectFile);
+        ScriptLibraryStatusService.EngineLibrary library = ScriptLibraryStatusService.EngineLibrary.of(engine)
+                .orElseThrow(() -> new IllegalStateException("the engine names no script library"));
+        ScriptLibraryUpdater.Request request = new ScriptLibraryUpdater.Request(projectFile,
+                project.workingDirectory(), library.folder(), library.version());
+
+        if (!(hub.previewScriptLibrary(request, JobMonitor.NONE) instanceof ScriptLibraryUpdater.PreviewOutcome.Ready
+                fresh) || !fresh.preview().plan().upToDate()) {
+            throw new IllegalStateException("a new project's library is not up to date with its engine's");
+        }
+
+        Path projectLibrary = projectFile.getParent().resolve("assets/scripts/lib");
+        Files.writeString(library.folder().resolve("engine/Log.mt"), "public class Log {\n    // new\n}\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(library.folder().resolve("engine/New.mt"), "public class New {\n}\n",
+                StandardCharsets.UTF_8);
+        String mine = "public class Behaviour {\n    // mine\n}\n";
+        Files.writeString(projectLibrary.resolve("engine/oop/Behaviour.mt"), mine, StandardCharsets.UTF_8);
+
+        if (!(hub.previewScriptLibrary(request, JobMonitor.NONE) instanceof ScriptLibraryUpdater.PreviewOutcome.Ready
+                ready)) {
+            throw new IllegalStateException("the preview did not succeed");
+        }
+        ScriptLibraryUpdater.UpdateOutcome outcome = hub.updateScriptLibrary(request, ready.preview().fingerprint(),
+                false, JobMonitor.NONE);
+        if (!(outcome instanceof ScriptLibraryUpdater.UpdateOutcome.Done done) || done.backup() == null) {
+            throw new IllegalStateException("the update gave " + outcome);
+        }
+        if (!Files.readString(projectLibrary.resolve("engine/Log.mt"), StandardCharsets.UTF_8).contains("// new")
+                || !Files.isRegularFile(projectLibrary.resolve("engine/New.mt"))
+                || !Files.readString(projectLibrary.resolve("engine/oop/Behaviour.mt"), StandardCharsets.UTF_8)
+                .equals(mine)) {
+            throw new IllegalStateException("the library was not updated as planned");
+        }
+        LibraryManifest.Contents recorded = LibraryManifest.parse(
+                Files.readAllBytes(projectLibrary.resolve(LibraryManifest.FILE_NAME)));
+        if (!recorded.files().containsKey("engine/New.mt") || recorded.files().size() != 3) {
+            throw new IllegalStateException("the new library manifest is wrong: " + recorded.files().keySet());
+        }
+        if (!done.backup().getParent().equals(ScriptLibraryUpdater.backupFolder(projectFile.getParent()))) {
+            throw new IllegalStateException("the backup is not in the project's state folder: " + done.backup());
+        }
+        try (ZipFile zip = new ZipFile(done.backup().toFile())) {
+            if (zip.getEntry("lib/engine/Log.mt") == null) {
+                throw new IllegalStateException("the backup has no lib/engine/Log.mt");
+            }
+        }
+        if (!(hub.previewScriptLibrary(request, JobMonitor.NONE) instanceof ScriptLibraryUpdater.PreviewOutcome.Ready
+                again) || !again.preview().plan().upToDate()) {
+            throw new IllegalStateException("a second update would still change the library");
+        }
     }
 
     /**

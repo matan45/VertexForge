@@ -6,6 +6,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.DosFileAttributes;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -13,7 +14,7 @@ import java.util.stream.Stream;
 
 /**
  * Folder-tree helpers shared by everything that builds a folder of its own and must be able to remove it again
- * (VK-1679, VK-1690): a project creation, a project copy.
+ * (VK-1679, VK-1690, VK-1691): a project creation, a project copy, a script-library update.
  */
 public final class FileTrees {
 
@@ -32,6 +33,19 @@ public final class FileTrees {
      * {@code failures}; the rest is still deleted.
      */
     public static void deleteTree(Path path, List<IOException> failures) {
+        deleteTree(path, failures, false);
+    }
+
+    /**
+     * {@link #deleteTree}, but a read-only file or folder has its read-only flag cleared first (VK-1691: a script
+     * library checked out by a tool that marks files read-only). Only for a tree the caller made or owns outright: the
+     * flag is the user's way to protect a file.
+     */
+    public static void deleteTreeClearingReadOnly(Path path, List<IOException> failures) {
+        deleteTree(path, failures, true);
+    }
+
+    private static void deleteTree(Path path, List<IOException> failures, boolean clearReadOnly) {
         Objects.requireNonNull(path, "path");
         Objects.requireNonNull(failures, "failures");
         BasicFileAttributes attributes;
@@ -54,13 +68,30 @@ public final class FileTrees {
                 failures.add(e);
             }
             for (Path child : children) {
-                deleteTree(child, failures);
+                deleteTree(child, failures, clearReadOnly);
             }
         }
 
+        if (clearReadOnly && !attributes.isSymbolicLink()) {
+            clearReadOnly(path, failures);
+        }
         try {
             TransientIo.retry(() -> Files.deleteIfExists(path), DELETE_ATTEMPTS, DELETE_FIRST_DELAY, DELETE_MAX_DELAY,
                     "deleting " + path);
+        } catch (IOException e) {
+            failures.add(e);
+        }
+    }
+
+    /** Clears {@code path}'s DOS read-only flag when it is set; a file system without one is left alone. */
+    private static void clearReadOnly(Path path, List<IOException> failures) {
+        try {
+            DosFileAttributes dos = Files.readAttributes(path, DosFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (dos.isReadOnly()) {
+                Files.setAttribute(path, "dos:readonly", false, LinkOption.NOFOLLOW_LINKS);
+            }
+        } catch (NoSuchFileException | UnsupportedOperationException e) {
+            // Gone already, or no DOS attributes here: the delete below decides.
         } catch (IOException e) {
             failures.add(e);
         }

@@ -23,6 +23,7 @@ import com.vertexforge.launcher.service.ProjectBackupService.BackupRequest;
 import com.vertexforge.launcher.service.ProjectCopier.CopyOutcome;
 import com.vertexforge.launcher.service.ProjectCopier.CopyRequest;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
+import com.vertexforge.launcher.service.ScriptLibraryUpdater.RecoveryOutcome;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import org.junit.jupiter.api.AfterEach;
@@ -111,6 +112,34 @@ class OpenProjectFlowTest {
         final List<String> errors = new ArrayList<>();
         final List<String> notices = new ArrayList<>();
         final List<Throwable> saveFailures = new ArrayList<>();
+        /** VK-1691: whether the project's script-library update was interrupted (the default's answer: no). */
+        CompletableFuture<Boolean> libraryInterrupted = CompletableFuture.completedFuture(false);
+        boolean confirmLibraryRecovery;
+        RecoveryOutcome libraryRecovery;
+        final List<String> libraryChecks = new ArrayList<>();
+        final List<String> libraryQuestions = new ArrayList<>();
+        final List<String> libraryRecoveries = new ArrayList<>();
+
+        @Override
+        public CompletableFuture<Boolean> libraryUpdateInterrupted(Path projectFile, String workingDirectory) {
+            libraryChecks.add(projectFile + "|" + workingDirectory);
+            return libraryInterrupted;
+        }
+
+        @Override
+        public boolean confirmLibraryRecovery(String name) {
+            libraryQuestions.add(name);
+            return confirmLibraryRecovery;
+        }
+
+        @Override
+        public FileJob<RecoveryOutcome> startLibraryRecovery(Path projectFile, String workingDirectory) {
+            libraryRecoveries.add(projectFile + "|" + workingDirectory);
+            FileJob<RecoveryOutcome> job = FileJob.start(jobThread, monitor -> libraryRecovery,
+                    FileJob.ProgressListener.NONE, RecoveryOutcome.Failed::new);
+            started.add(job);
+            return job;
+        }
 
         @Override
         public CompletableFuture<EngineOptions> engines() {
@@ -658,6 +687,128 @@ class OpenProjectFlowTest {
     // ---------------------------------------------------------------------------------------------------------------
     // Refusals
     // ---------------------------------------------------------------------------------------------------------------
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // An interrupted script-library update (VK-1691)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    @Test
+    void anInterruptedLibraryUpdateIsFinishedBeforeTheEditorStarts() throws Exception {
+        services.libraryInterrupted = CompletableFuture.completedFuture(true);
+        services.confirmLibraryRecovery = true;
+        services.libraryRecovery = new RecoveryOutcome.Recovered("An interrupted update was finished.", true);
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+
+        assertEquals(List.of(FILE + "|assets"), services.libraryChecks);
+        assertEquals(List.of("Game"), services.libraryQuestions);
+        assertEquals(List.of(FILE + "|assets"), services.libraryRecoveries);
+        assertEquals(List.of("Open Project"), services.jobs);
+        assertTrue(services.starts.isEmpty(), "the editor must not start before the library is in order");
+        assertTrue(flow.jobRunning());
+
+        finishJob();
+
+        assertFalse(flow.jobRunning());
+        assertEquals(List.of(true), services.jobClosed);
+        assertEquals(List.of("An interrupted update was finished."), services.notices);
+        assertEquals(1, services.starts.size());
+    }
+
+    @Test
+    void aRecoveryWithNothingToDoOpensWithoutANote() throws Exception {
+        services.libraryInterrupted = CompletableFuture.completedFuture(true);
+        services.confirmLibraryRecovery = true;
+        services.libraryRecovery = new RecoveryOutcome.NothingToDo();
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+        finishJob();
+
+        assertTrue(services.notices.isEmpty());
+        assertEquals(1, services.starts.size());
+    }
+
+    @Test
+    void decliningToFinishTheLibraryUpdateOpensNothing() throws Exception {
+        services.libraryInterrupted = CompletableFuture.completedFuture(true);
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+
+        assertEquals(List.of("Game"), services.libraryQuestions);
+        assertTrue(services.libraryRecoveries.isEmpty());
+        assertTrue(services.starts.isEmpty());
+        assertEquals(1, services.releases);
+        assertTrue(services.errors.isEmpty());
+    }
+
+    @Test
+    void aLibraryRecoveryThatCannotFinishOpensNothingAndSaysWhy() throws Exception {
+        List<RecoveryOutcome> outcomes = List.of(new RecoveryOutcome.NeedsAttention("Look at lib.old-1a2b3c4d."),
+                new RecoveryOutcome.Refused("The project is open in the editor."),
+                new RecoveryOutcome.Failed("Could not rename."));
+        for (RecoveryOutcome outcome : outcomes) {
+            services.engines = new CompletableFuture<>();
+            services.libraryInterrupted = CompletableFuture.completedFuture(true);
+            services.confirmLibraryRecovery = true;
+            services.libraryRecovery = outcome;
+
+            open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")),
+                    project("VertexForge 1.1.0", "1.1.0"));
+            finishJob();
+        }
+
+        assertTrue(services.starts.isEmpty());
+        assertEquals(List.of("Open Project: Look at lib.old-1a2b3c4d. The project was not opened.",
+                "Open Project: The project is open in the editor. The project was not opened.",
+                "Open Project: Could not rename. The project was not opened."), services.errors);
+    }
+
+    @Test
+    void aLibraryCheckStillRunningIsWaitedFor() throws Exception {
+        services.libraryInterrupted = new CompletableFuture<>();
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+        assertTrue(services.starts.isEmpty(), "nothing starts while the library is being checked");
+
+        services.libraryInterrupted.complete(false);
+        fx.runAll();
+
+        assertTrue(services.libraryQuestions.isEmpty());
+        assertEquals(1, services.starts.size());
+    }
+
+    @Test
+    void aLibraryCheckThatAnswersLateCanStillAsk() throws Exception {
+        services.libraryInterrupted = new CompletableFuture<>();
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+        services.libraryInterrupted.complete(true);
+        fx.runAll();
+
+        assertEquals(List.of("Game"), services.libraryQuestions);
+        assertEquals(1, services.releases, "declined (the fake's default answer)");
+    }
+
+    @Test
+    void aLibraryCheckThatFailsCountsAsNoInterruptedUpdate() throws Exception {
+        services.libraryInterrupted = CompletableFuture.failedFuture(new IllegalStateException("no answer"));
+
+        open(entry(NEW_ID), options(null, engine(NEW_ID, "1.1.0", "1.1.0")), project("VertexForge 1.1.0", "1.1.0"));
+
+        assertTrue(services.libraryQuestions.isEmpty());
+        assertEquals(1, services.starts.size());
+    }
+
+    @Test
+    void theLibraryIsCheckedOnlyForAReadableProjectFile() throws Exception {
+        services.engines.complete(options(null, engine(NEW_ID, "1.1.0", "1.1.0")));
+        services.check = new ProjectFileCheck.Missing("The project file does not exist");
+        opens++;
+        flow.open(new OpenProjectFlow.Request(FILE, entry(NEW_ID), "Game", McpSetting.DEFAULT));
+        fx.runAll();
+
+        assertTrue(services.libraryChecks.isEmpty());
+    }
 
     @Test
     void aMissingProjectFileIsRefused() throws Exception {

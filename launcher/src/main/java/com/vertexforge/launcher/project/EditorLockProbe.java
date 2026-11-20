@@ -7,6 +7,8 @@ import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -150,6 +152,178 @@ public final class EditorLockProbe {
             return Attempt.FREE;
         } finally {
             local.unlock();
+        }
+    }
+
+    /** The byte after the editor's: a launcher that holds the folder ({@link #hold}) locks it EXCLUSIVELY. */
+    public static final long LAUNCHER_OFFSET = LOCK_OFFSET + 1;
+
+    /** Why {@link #hold} fails while another launcher holds the folder. */
+    public static final String HELD_BY_LAUNCHER = "another VertexForge launcher is changing this project right now";
+
+    /**
+     * The lock held for a while (VK-1691: a script-library update). While it is held:
+     * <ul>
+     *   <li>an editor cannot open the folder: its exclusive lock on the editor's byte fails against this shared one
+     *       (it then exits with "already open");</li>
+     *   <li>another launcher cannot hold the folder too: this one also holds the next byte ({@link #LAUNCHER_OFFSET})
+     *       exclusively, which neither the editor nor a probe ever touches.</li>
+     * </ul>
+     * Taken and released on ONE thread, the job's, because it also holds this JVM's queue for the file (other probes
+     * of the folder wait meanwhile).
+     */
+    public static final class Hold implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock editorByte;
+        private final FileLock launcherByte;
+        private final ReentrantLock local;
+        private boolean closed;
+
+        private Hold(FileChannel channel, FileLock editorByte, FileLock launcherByte, ReentrantLock local) {
+            this.channel = channel;
+            this.editorByte = editorByte;
+            this.launcherByte = launcherByte;
+            this.local = local;
+        }
+
+        /** Lets go of the locks. Only on the thread that took them; a second call does nothing. */
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            release(launcherByte);
+            release(editorByte);
+            try {
+                channel.close();
+            } catch (IOException e) {
+                // Nothing more can be done; the system drops the locks with the handle.
+            }
+            local.unlock();
+        }
+
+        private static void release(FileLock lock) {
+            try {
+                lock.release();
+            } catch (IOException | RuntimeException e) {
+                // Closing the channel releases it too.
+            }
+        }
+    }
+
+    /** What {@link #hold} got. */
+    public sealed interface HoldResult {
+        /** The lock is held until {@link Hold#close}. */
+        record Holding(Hold hold) implements HoldResult {
+            public Holding {
+                Objects.requireNonNull(hold, "hold");
+            }
+        }
+
+        /**
+         * The lock could not be taken: an editor holds it ({@link EditorLockState.Held}), another launcher does, or it
+         * could not be checked ({@link EditorLockState.Unknown}).
+         */
+        record NotHeld(EditorLockState state) implements HoldResult {
+            public NotHeld {
+                Objects.requireNonNull(state, "state");
+            }
+        }
+    }
+
+    /**
+     * Takes the shared lock on the editor's byte of {@code projectFolder} and the exclusive lock on the launcher's
+     * ({@link Hold}), and keeps them; the editor's byte is retried as {@link #probe} retries it. Unlike a probe, it
+     * opens the lock file for writing (an exclusive lock needs it) and creates the state folder (one level) and an
+     * empty lock file when there is none: a lock needs a file, and it is the file the editor itself would create.
+     * Nothing is ever written into the file. Blocks; never throws.
+     */
+    public HoldResult hold(Path projectFolder) {
+        Objects.requireNonNull(projectFolder, "projectFolder");
+        Path lockPath = lockFile(projectFolder);
+        FileChannel channel;
+        try {
+            channel = openForHold(lockPath);
+        } catch (AccessDeniedException e) {
+            return new HoldResult.NotHeld(new EditorLockState.Unknown(PathFailures.ACCESS_DENIED));
+        } catch (IOException | RuntimeException e) {
+            return new HoldResult.NotHeld(new EditorLockState.Unknown(e instanceof IOException io
+                    ? PathFailures.reasonOf(io)
+                    : e.toString()));
+        }
+
+        ReentrantLock local = LOCAL_LOCKS.computeIfAbsent(lockPath.toAbsolutePath().normalize(),
+                key -> new ReentrantLock());
+        boolean holding = false;
+        try {
+            local.lockInterruptibly();
+            try {
+                FileLock editorByte = null;
+                for (int attempt = 0; editorByte == null; attempt++) {
+                    try {
+                        editorByte = channel.tryLock(LOCK_OFFSET, 1, true);
+                    } catch (OverlappingFileLockException e) {
+                        // This JVM holds the byte under another spelling of the path: wait as for a held lock.
+                        editorByte = null;
+                    }
+                    if (editorByte == null) {
+                        if (attempt >= retries) {
+                            return new HoldResult.NotHeld(new EditorLockState.Held(pid(channel)));
+                        }
+                        sleeper.sleep(retryDelay);
+                    }
+                }
+                FileLock launcherByte;
+                try {
+                    launcherByte = channel.tryLock(LAUNCHER_OFFSET, 1, false);
+                } catch (OverlappingFileLockException e) {
+                    launcherByte = null;
+                }
+                if (launcherByte == null) {
+                    return new HoldResult.NotHeld(new EditorLockState.Unknown(HELD_BY_LAUNCHER));
+                }
+                holding = true;
+                return new HoldResult.Holding(new Hold(channel, editorByte, launcherByte, local));
+            } finally {
+                if (!holding) {
+                    local.unlock();
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new HoldResult.NotHeld(new EditorLockState.Unknown("the check was interrupted"));
+        } catch (IOException e) {
+            return new HoldResult.NotHeld(new EditorLockState.Unknown(PathFailures.reasonOf(e)));
+        } catch (RuntimeException e) {
+            return new HoldResult.NotHeld(new EditorLockState.Unknown(e.toString()));
+        } finally {
+            if (!holding) {
+                // Closing the channel releases any lock already taken on it.
+                try {
+                    channel.close();
+                } catch (IOException e) {
+                    // Nothing more can be done.
+                }
+            }
+        }
+    }
+
+    /**
+     * Opens the lock file for reading and writing (never truncating), creating the state folder (one level) and an
+     * empty file first when needed.
+     */
+    private static FileChannel openForHold(Path lockPath) throws IOException {
+        try {
+            return FileChannel.open(lockPath, StandardOpenOption.READ, StandardOpenOption.WRITE);
+        } catch (NoSuchFileException e) {
+            try {
+                Files.createDirectory(lockPath.getParent());
+            } catch (FileAlreadyExistsException exists) {
+                // The state folder is there; only the file is missing.
+            }
+            return FileChannel.open(lockPath, StandardOpenOption.READ, StandardOpenOption.WRITE,
+                    StandardOpenOption.CREATE);
         }
     }
 

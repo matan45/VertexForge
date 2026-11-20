@@ -17,9 +17,10 @@ import javafx.stage.Window;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 /**
- * Shows a backup or a copy while it runs (VK-1690): a progress bar, how far it got, and Cancel. It is a window of its
+ * Shows a backup, a copy (VK-1690) or a script-library update (VK-1691) while it runs: a progress bar, how far it got, and Cancel. It is a window of its
  * own rather than a {@code Dialog}, so that Cancel and the window's close button only ask the job to stop (the job
  * cleans up first) and only {@link #close()} closes it.
  * <p>
@@ -36,22 +37,37 @@ public final class FileJobDialog {
     private final Label status = new Label("Starting…");
     private final AtomicReference<Progress> pending = new AtomicReference<>();
     private final Runnable cancel;
+    private final Function<JobMonitor.Phase, String> phaseTexts;
     private Button cancelButton;
     private boolean cancelling;
+    private boolean committing;
     private boolean closed;
 
-    private FileJobDialog(Runnable cancel) {
+    private FileJobDialog(Runnable cancel, Function<JobMonitor.Phase, String> phaseTexts) {
         this.cancel = cancel;
+        this.phaseTexts = phaseTexts;
     }
 
     /**
-     * Shows the window and returns at once. FX thread.
+     * Shows the window for a backup or a copy and returns at once. FX thread.
      *
      * @param cancel asks the job to stop; called at most once
      */
     public static FileJobDialog show(Window owner, String title, String header, Runnable cancel) {
+        return show(owner, title, header, FileJobDialog::backupPhaseText, cancel);
+    }
+
+    /**
+     * Shows the window and returns at once, naming each phase with {@code phaseTexts} (VK-1691). Once the job reports
+     * {@link JobMonitor.Phase#COMMITTING}, Cancel is disabled: the job can no longer stop. FX thread.
+     *
+     * @param cancel asks the job to stop; called at most once
+     */
+    public static FileJobDialog show(Window owner, String title, String header,
+                                     Function<JobMonitor.Phase, String> phaseTexts, Runnable cancel) {
+        Objects.requireNonNull(phaseTexts, "phaseTexts");
         Objects.requireNonNull(cancel, "cancel");
-        FileJobDialog dialog = new FileJobDialog(cancel);
+        FileJobDialog dialog = new FileJobDialog(cancel, phaseTexts);
         dialog.build(owner, title, header);
         dialog.stage.show();
         return dialog;
@@ -105,7 +121,7 @@ public final class FileJobDialog {
     }
 
     private void requestCancel() {
-        if (cancelling || closed) {
+        if (cancelling || committing || closed) {
             return;
         }
         cancelling = true;
@@ -119,25 +135,32 @@ public final class FileJobDialog {
         if (progress == null || closed || cancelling) {
             return;
         }
-        boolean bytes = progress.phase() != JobMonitor.Phase.SCANNING;
+        if (progress.phase() == JobMonitor.Phase.COMMITTING && !committing) {
+            committing = true;
+            cancelButton.setDisable(true);
+        }
+        boolean bytes = progress.phase() != JobMonitor.Phase.SCANNING
+                && progress.phase() != JobMonitor.Phase.COMMITTING;
         if (progress.total() > 0) {
             bar.setProgress(Math.min(1.0, (double) progress.done() / progress.total()));
-            status.setText(phaseText(progress.phase()) + ": " + (bytes
+            status.setText(phaseTexts.apply(progress.phase()) + ": " + (bytes
                     ? sizeText(progress.done()) + " of " + sizeText(progress.total())
                     : progress.done() + " of " + progress.total()));
         } else {
             bar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
-            status.setText(phaseText(progress.phase()) + (bytes ? ": " + sizeText(progress.done())
+            status.setText(phaseTexts.apply(progress.phase()) + (bytes ? ": " + sizeText(progress.done())
                     : ": " + progress.done() + " found"));
         }
     }
 
-    private static String phaseText(JobMonitor.Phase phase) {
+    /** The phase texts of a project backup or copy (VK-1690). */
+    static String backupPhaseText(JobMonitor.Phase phase) {
         return switch (phase) {
             case SCANNING -> "Looking at the project's files";
             case WRITING -> "Writing the backup";
             case VERIFYING -> "Checking the backup";
             case COPYING -> "Copying";
+            case COMMITTING -> "Finishing";
         };
     }
 

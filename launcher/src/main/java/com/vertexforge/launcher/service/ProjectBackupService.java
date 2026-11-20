@@ -2,13 +2,8 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.project.ProjectContent;
 import com.vertexforge.launcher.util.FileErrors;
-import com.vertexforge.launcher.util.TransientIo;
 
 import java.io.IOException;
-import java.nio.file.DirectoryNotEmptyException;
-import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -36,19 +31,15 @@ public final class ProjectBackupService {
     public static final String BACKUP_INFIX = "-backup-";
     /** The version part of the name when the project does not say which engine saved it. */
     public static final String UNKNOWN_VERSION = "unknown";
-    public static final String ZIP_EXTENSION = ".zip";
+    public static final String ZIP_EXTENSION = VerifiedZipCommit.ZIP_EXTENSION;
     /** Added to the zip's name while it is being written. */
-    public static final String PARTIAL_EXTENSION = ".partial";
+    public static final String PARTIAL_EXTENSION = VerifiedZipCommit.PARTIAL_EXTENSION;
     /** How many names a backup tries ({@code name}, {@code name-2}, … {@code name-20}) before it gives up. */
-    static final int MAX_NAME_ATTEMPTS = 20;
+    static final int MAX_NAME_ATTEMPTS = VerifiedZipCommit.MAX_NAME_ATTEMPTS;
 
     /** The final rename is retried for about 5 s, as a project creation's is: an antivirus scan can hold the zip. */
     static final int COMMIT_ATTEMPTS = ProjectCreator.COMMIT_ATTEMPTS;
     static final Duration COMMIT_FIRST_DELAY = ProjectCreator.COMMIT_FIRST_DELAY;
-    private static final int DELETE_ATTEMPTS = 5;
-    private static final Duration DELETE_FIRST_DELAY = Duration.ofMillis(50);
-    private static final Duration DELETE_MAX_DELAY = Duration.ofMillis(500);
-
     /** {@code yyyyMMdd-HHmmss} in UTC: no ':' (Windows forbids it in names), and names sort by time. */
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("uuuuMMdd-HHmmss").withZone(ZoneOffset.UTC);
@@ -208,100 +199,20 @@ public final class ProjectBackupService {
                     + "); the backup went ahead.");
         }
 
-        // 6: write and verify the .partial. From its creation on it is ours, and the only thing a failure deletes.
-        FolderZipWriter.Written written = null;
-        try {
-            for (int attempt = 1; written == null; attempt++) {
-                Path partial = destination.resolve(candidate(stem, attempt) + PARTIAL_EXTENSION);
-                try {
-                    written = FolderZipWriter.write(tree, rootEntry, partial, monitor);
-                } catch (FileAlreadyExistsException e) {
-                    // A .partial of an earlier backup that stopped; it is not ours to delete. (The writer creates its
-                    // target first, so it wrote nothing here.)
-                    if (attempt >= MAX_NAME_ATTEMPTS) {
-                        throw e;
-                    }
-                }
-            }
-            FolderZipWriter.verify(written, monitor);
-            monitor.checkCancelled();
-        } catch (JobCancelledException e) {
-            return abandon(written, new BackupOutcome.Cancelled());
-        } catch (IOException | RuntimeException e) {
-            return abandon(written, new BackupOutcome.Failed("Could not write the backup: " + describe(e)));
-        } catch (Error e) {
-            // Out of memory and the like: still take the .partial away (the writer removes its own on a failure
-            // while writing), then let FileJob report the Error.
-            abandon(written, new BackupOutcome.Failed("The backup stopped unexpectedly: " + e));
-            throw e;
-        }
-
-        long zipBytes;
-        try {
-            zipBytes = Files.size(written.zip());
-        } catch (IOException e) {
-            return abandon(written, new BackupOutcome.Failed("Could not read the backup back: " + describe(e)));
-        }
-
-        // 7: the commit. A cancel is no longer possible.
-        return commit(written, destination, stem, zipBytes, tree, notes);
-    }
-
-    private BackupOutcome commit(FolderZipWriter.Written written, Path destination, String stem, long zipBytes,
-                                 FolderTree tree, List<String> notes) {
-        Path partial = written.zip();
-        for (int attempt = 1; attempt <= MAX_NAME_ATTEMPTS; attempt++) {
-            Path zip = destination.resolve(candidate(stem, attempt));
-            try {
-                TransientIo.retry(() -> mover.move(partial, zip), COMMIT_ATTEMPTS, commitFirstDelay, commitMaxDelay,
-                        "moving the backup into place");
-            } catch (FileAlreadyExistsException | DirectoryNotEmptyException e) {
-                // Something has this name already; it is never replaced. Try the next one.
-                continue;
-            } catch (IOException | RuntimeException e) {
-                return abandon(written, new BackupOutcome.Failed("Could not move the backup into place: "
-                        + describe(e) + ". Another program (often an antivirus scan) may be using it. Try again."));
-            }
-
-            // Files.move returns quietly when source and target are the same file; make sure the rename happened.
-            if (!Files.isRegularFile(zip, LinkOption.NOFOLLOW_LINKS) || Files.exists(partial, LinkOption.NOFOLLOW_LINKS)) {
-                return abandon(written, new BackupOutcome.Failed("Could not move the backup into place: " + partial
-                        + " is still there."));
-            }
-            return new BackupOutcome.Done(zip, zipBytes, written.contentBytes(), tree.files().size(), notes);
-        }
-        return abandon(written, new BackupOutcome.Failed("Could not find a free name for the backup in "
-                + destination + ": " + candidate(stem, 1) + " up to " + candidate(stem, MAX_NAME_ATTEMPTS)
-                + " are all taken."));
-    }
-
-    /**
-     * Deletes the {@code .partial} this backup wrote (when it got that far) and returns {@code outcome}; when the file
-     * cannot be deleted, a failure that says so instead.
-     */
-    private static BackupOutcome abandon(FolderZipWriter.Written written, BackupOutcome outcome) {
-        if (written == null) {
-            return outcome;
-        }
-        Path partial = written.zip();
-        try {
-            TransientIo.retry(() -> Files.deleteIfExists(partial), DELETE_ATTEMPTS, DELETE_FIRST_DELAY,
-                    DELETE_MAX_DELAY, "deleting " + partial);
-            return outcome;
-        } catch (IOException e) {
-            String left = "The temporary file " + partial + " could not be deleted (" + describe(e)
-                    + "); you can delete it.";
-            return switch (outcome) {
-                case BackupOutcome.Failed failed -> new BackupOutcome.Failed(failed.message() + " " + left);
-                case BackupOutcome.Cancelled ignored -> new BackupOutcome.Failed("The backup was cancelled. " + left);
-                default -> new BackupOutcome.Failed(left);
-            };
-        }
+        // 6 and 7: write and verify the .partial, then commit it (VerifiedZipCommit, shared with VK-1691).
+        VerifiedZipCommit.Outcome outcome = VerifiedZipCommit.write(tree, rootEntry, destination, stem, monitor, mover,
+                COMMIT_ATTEMPTS, commitFirstDelay, commitMaxDelay);
+        return switch (outcome) {
+            case VerifiedZipCommit.Outcome.Committed committed -> new BackupOutcome.Done(committed.zip(),
+                    committed.zipBytes(), committed.contentBytes(), tree.files().size(), notes);
+            case VerifiedZipCommit.Outcome.Cancelled ignored -> new BackupOutcome.Cancelled();
+            case VerifiedZipCommit.Outcome.Failed failed -> new BackupOutcome.Failed(failed.message());
+        };
     }
 
     /** {@code stem.zip} for the first attempt, {@code stem-N.zip} after that. */
     static String candidate(String stem, int attempt) {
-        return (attempt == 1 ? stem : stem + "-" + attempt) + ZIP_EXTENSION;
+        return VerifiedZipCommit.candidate(stem, attempt);
     }
 
     private static String versionPart(String savedVersion) {

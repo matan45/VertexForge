@@ -40,6 +40,10 @@ final class FolderTemplateScanner {
         if (library.removeIf(file -> file.relative().equalsIgnoreCase(LibraryManifest.FILE_NAME))) {
             notes.add("The script library's own " + LibraryManifest.FILE_NAME + " was left out.");
         }
+        // The editor's sidecars belong to the project they were made in, and .vflib.json never lists them (VK-1691).
+        if (library.removeIf(file -> LibraryManifest.isSidecar(file.relative()))) {
+            notes.add("The script library's editor files (" + LibraryManifest.SIDECAR_EXTENSION + ") were left out.");
+        }
         if (library.isEmpty()) {
             throw new IOException("The script library " + engine.scriptLibDir() + " has no files.");
         }

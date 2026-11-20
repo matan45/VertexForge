@@ -23,6 +23,7 @@ import com.vertexforge.launcher.service.ProjectBackupService.BackupOutcome;
 import com.vertexforge.launcher.service.ProjectBackupService.BackupRequest;
 import com.vertexforge.launcher.service.ProjectCopier.CopyOutcome;
 import com.vertexforge.launcher.service.ProjectCopier.CopyRequest;
+import com.vertexforge.launcher.service.ScriptLibraryUpdater;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.session.EditorSessions;
 
@@ -185,6 +186,25 @@ public final class OpenProjectFlow {
          * @param reveal a file to offer "Show in folder" for, or {@code null}
          */
         void notice(String message, Path reveal);
+
+        /**
+         * Whether an update of the project's script library was interrupted (VK-1691); never exceptionally. A future
+         * that is already complete is used at once.
+         */
+        default CompletableFuture<Boolean> libraryUpdateInterrupted(Path projectFile, String workingDirectory) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        /** Asks whether to finish an interrupted script-library update and open; {@code false} to cancel the open. */
+        default boolean confirmLibraryRecovery(String name) {
+            return false;
+        }
+
+        /** Starts finishing an interrupted script-library update on the window's job thread; returns at once. */
+        default FileJob<ScriptLibraryUpdater.RecoveryOutcome> startLibraryRecovery(Path projectFile,
+                                                                                 String workingDirectory) {
+            throw new UnsupportedOperationException("no script-library recovery here");
+        }
     }
 
     /** What one open has learned so far. */
@@ -259,11 +279,58 @@ public final class OpenProjectFlow {
         ProjectFile project = ((ProjectFileCheck.Readable) check).file();
         Context context = new Context(request, project,
                 ProjectContent.of(request.projectFile(), project.workingDirectory()), options);
-        String engineId = request.entry() == null ? null : request.entry().engineId();
-        switch (EngineResolver.resolve(options, engineId)) {
+        // An interrupted script-library update is finished first (VK-1691): its folders would confuse the editor.
+        CompletableFuture<Boolean> interrupted = services.libraryUpdateInterrupted(request.projectFile(),
+                project.workingDirectory());
+        if (interrupted.isDone()) {
+            afterLibraryCheck(context, interrupted);
+        } else {
+            interrupted.whenCompleteAsync((ignored, error) -> guarded(() -> afterLibraryCheck(context, interrupted)),
+                    fx);
+        }
+    }
+
+    private void afterLibraryCheck(Context context, CompletableFuture<Boolean> interrupted) {
+        if (failure(interrupted) == null && Boolean.TRUE.equals(interrupted.join())) {
+            finishLibraryFirst(context);
+        } else {
+            resolveEngine(context);
+        }
+    }
+
+    private void resolveEngine(Context context) {
+        String engineId = context.request().entry() == null ? null : context.request().entry().engineId();
+        switch (EngineResolver.resolve(context.options(), engineId)) {
             case LaunchPlan.Ready ready -> decide(context, ready.engine(), ready.bindTo(), false);
             case LaunchPlan.Choose choose -> chooseFirst(context, choose);
         }
+    }
+
+    /** Finishes (or undoes) an interrupted script-library update, then goes on with the open (VK-1691). */
+    private void finishLibraryFirst(Context context) {
+        if (!services.confirmLibraryRecovery(context.name())) {
+            services.release();
+            return;
+        }
+        FileJob<ScriptLibraryUpdater.RecoveryOutcome> job = services.startLibraryRecovery(
+                context.request().projectFile(), context.project().workingDirectory());
+        JobView view = services.showJob("Open Project", "Finishing the interrupted update of the script library of \""
+                + context.name() + "\"…", job::cancel);
+        follow(job, view, "Open Project", outcome -> {
+            switch (outcome) {
+                case ScriptLibraryUpdater.RecoveryOutcome.Recovered recovered -> {
+                    services.notice(recovered.summary(), null);
+                    resolveEngine(context);
+                }
+                case ScriptLibraryUpdater.RecoveryOutcome.NothingToDo ignored -> resolveEngine(context);
+                case ScriptLibraryUpdater.RecoveryOutcome.NeedsAttention attention ->
+                        fail("Open Project", attention.reason() + " The project was not opened.");
+                case ScriptLibraryUpdater.RecoveryOutcome.Refused refused ->
+                        fail("Open Project", refused.reason() + " The project was not opened.");
+                case ScriptLibraryUpdater.RecoveryOutcome.Failed failed ->
+                        fail("Open Project", failed.message() + " The project was not opened.");
+            }
+        });
     }
 
     /**

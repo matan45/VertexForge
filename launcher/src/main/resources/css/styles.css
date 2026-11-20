@@ -537,6 +537,30 @@
     -fx-text-fill: #cccccc;
 }
 
+/* Script library update (VK-1691) */
+.dialog-pane.launcher-dialog .dialog-warning {
+    -fx-text-fill: #d7ba7d;
+    -fx-font-size: 12px;
+}
+
+.dialog-pane.launcher-dialog .titled-pane > .title {
+    -fx-background-color: #3a3a3a;
+}
+
+.dialog-pane.launcher-dialog .titled-pane > .title > .text {
+    -fx-fill: #cccccc;
+}
+
+.dialog-pane.launcher-dialog .check-box {
+    -fx-text-fill: #cccccc;
+}
+
+.projects-table .library-tag {
+    -fx-text-fill: #d7ba7d;
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 0 8;
+}
+
 .dialog-pane.launcher-dialog .failure-summary {
     -fx-text-fill: #d7ba7d;
     -fx-font-size: 13px;
