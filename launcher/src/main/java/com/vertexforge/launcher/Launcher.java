@@ -9,9 +9,9 @@ import com.vertexforge.launcher.util.LauncherLog;
 import java.time.Duration;
 
 /**
- * The jar's main class. A plain class (not an {@code Application}) so JavaFX runs from the shaded classpath jar, and
- * so that everything before the window (the self-test, the command line, the single-instance claim) runs before any
- * JavaFX class is loaded.
+ * The module's main class (VK-1692: {@code com.vertexforge.launcher/com.vertexforge.launcher.Launcher}). A plain class
+ * (not an {@code Application}) so that everything before the window (the self-test, the command line, the
+ * single-instance claim) runs before any JavaFX class is loaded.
  */
 public class Launcher {
 

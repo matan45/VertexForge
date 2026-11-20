@@ -6,6 +6,8 @@
 
     <groupId>com.vertexforge</groupId>
     <artifactId>launcher</artifactId>
+    <!-- The Maven coordinates' version only. The launcher's product version (the exe's version resource, the module
+         version, jpackage.app-version) is the repo-root VERSION file, which the image profile reads (VK-1692). -->
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
@@ -21,13 +23,21 @@
 
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <javafx-maven-plugin.version>0.0.8</javafx-maven-plugin.version>
-        <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
-        <jpackage-maven-plugin.version>1.6.5</jpackage-maven-plugin.version>
         <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
         <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+        <maven-clean-plugin.version>3.5.0</maven-clean-plugin.version>
 
         <gson.version>2.13.0</gson.version>
         <junit.version>6.1.3</junit.version>
+
+        <!--
+            The JavaFX jmods the image profile links (VK-1692). Gluon publishes them only as this zip (Maven Central
+            has the jars, whose natives JavaFX would unpack into ~/.openjfx at run time). The checksum belongs to
+            this javafx.version: change both together (Gluon publishes <url>.sha256 beside the zip).
+        -->
+        <javafx.jmods.name>openjfx-${javafx.version}_windows-x64_bin-jmods.zip</javafx.jmods.name>
+        <javafx.jmods.url>https://download2.gluonhq.com/openjfx/${javafx.version}/${javafx.jmods.name}</javafx.jmods.url>
+        <javafx.jmods.sha256>8f52d62b386bcf33a7c6077da052717446dd4238f2f92298bb0788cdcef9b4ed</javafx.jmods.sha256>
     </properties>
 
     <dependencyManagement>
@@ -43,6 +53,7 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- Compile and unit tests only: the app image takes JavaFX from the jmods (image profile), not these jars. -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -55,23 +66,12 @@
             <version>${javafx.version}</version>
         </dependency>
 
+        <!-- Windows only: every platform jar is a module named javafx.graphics, so two of them would clash. -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>win</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>linux</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>mac</classifier>
         </dependency>
 
         <dependency>
@@ -91,6 +91,20 @@
         <finalName>VertexForgeLauncher</finalName>
 
         <plugins>
+            <!--
+                jpackage 25 marks the launcher exe read-only (dropped only in JDK 26, JDK-8369206), and since JDK 25
+                File.delete refuses read-only files on Windows (JDK-8355954). Maven 3.9's default clean plugin (3.2.0)
+                then fails on target/dist; 3.5.0 can force the deletion.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>${maven-clean-plugin.version}</version>
+                <configuration>
+                    <force>true</force>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -100,6 +114,22 @@
                     <target>${maven.compiler.target}</target>
                     <release>25</release>
                 </configuration>
+                <executions>
+                    <!--
+                        The tests are compiled patched into the launcher module (module-info.java), which reads only
+                        what it requires. ProjectCreatorTest uses javax.xml and SessionLogsTest com.sun.nio.file
+                        (jdk.unsupported); both modules are already in the graph through javafx.graphics.
+                    -->
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>--add-reads</arg>
+                                <arg>com.vertexforge.launcher=java.xml,jdk.unsupported</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Unit tests (VK-1677): JUnit Jupiter, plain JVM, no JavaFX toolkit. -->
@@ -110,6 +140,12 @@
                 <configuration>
                     <!-- A provider that silently finds no tests must fail the build, not pass it. -->
                     <failIfNoTests>true</failIfNoTests>
+                    <!--
+                        The tests run from the classpath, as before VK-1692 (their child JVMs build a -cp from code
+                        sources). The module setup itself is pinned by LauncherModuleTest and proven on the app image
+                        by the packaged self-test.
+                    -->
+                    <useModulePath>false</useModulePath>
                     <!-- WindowsDriveTypes calls GetDriveTypeW through the FFM API (VK-1679); without this the JVM warns. -->
                     <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     <systemPropertyVariables>
@@ -121,6 +157,7 @@
                 </configuration>
             </plugin>
 
+            <!-- mvnw compile javafx:run: the module from target/classes, JavaFX from the Maven jars. -->
             <plugin>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-maven-plugin</artifactId>
@@ -128,117 +165,207 @@
                 <configuration>
                     <!-- Launcher, not LauncherApp: Java would start an Application subclass without its main, so the
                          command line and the single-instance check (VK-1685) would never run. -->
-                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
+                    <mainClass>com.vertexforge.launcher/com.vertexforge.launcher.Launcher</mainClass>
                     <options>
-                        <option>--enable-native-access=ALL-UNNAMED</option>
+                        <!-- The launcher's FFM calls (VK-1679) and JavaFX's native libraries. -->
+                        <option>--enable-native-access=com.vertexforge.launcher,javafx.graphics</option>
                     </options>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>${maven-shade-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <!-- The reduced pom is build output; it used to land in launcher/ and get committed. -->
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <!-- Use Launcher class (non-Application) for fat JAR compatibility -->
-                                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
-                                    <manifestEntries>
-                                        <!-- java -jar: lets WindowsDriveTypes call GetDriveTypeW without a warning (VK-1679). -->
-                                        <Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
-                                    </manifestEntries>
-                                </transformer>
-                            </transformers>
-                            <filters>
-                                <!--
-                                    Security Note: Signature exclusion is REQUIRED for fat JARs.
-                                    When combining signed JARs, original signatures become invalid
-                                    because the content changes. Without excluding them, you get
-                                    "Invalid signature file digest" errors at runtime.
-
-                                    For production releases, sign the final fat JAR using:
-                                    mvn package -Psign-jar -Dkeystore.path=... -Dkeystore.password=...
-
-                                    Dependency integrity is verified at build time via Maven's
-                                    checksum verification (SHA-1/MD5 in local repository).
-                                -->
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/*.SF</exclude>
-                                        <exclude>META-INF/*.DSA</exclude>
-                                        <exclude>META-INF/*.RSA</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!--
-                Declared AFTER maven-shade-plugin on purpose: executions bound to the same phase run in POM
-                order, and stage-jpackage-input (package) must see the shaded jar.
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>${maven-antrun-plugin.version}</version>
-                <executions>
-                    <!--
-                        jpackage copies its whole input folder into the app image and puts every jar in it on the
-                        classpath. Give it only the shaded jar: target/ also holds classes/, test output and
-                        original-*.jar, which carries every resource again and would hide one missing from the
-                        shaded jar (VK-1677 self-test).
-                    -->
-                    <execution>
-                        <id>stage-jpackage-input</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <delete dir="${project.build.directory}/jpackage-input"/>
-                                <copy file="${project.build.directory}/${project.build.finalName}.jar"
-                                      todir="${project.build.directory}/jpackage-input" failonerror="true"/>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.panteleyev</groupId>
-                <artifactId>jpackage-maven-plugin</artifactId>
-                <version>${jpackage-maven-plugin.version}</version>
-                <configuration>
-                    <name>VertexForge Launcher</name>
-                    <appVersion>1.0.0</appVersion>
-                    <vendor>VertexForge</vendor>
-                    <mainClass>com.vertexforge.launcher.Launcher</mainClass>
-                    <mainJar>VertexForgeLauncher.jar</mainJar>
-                    <input>${project.build.directory}/jpackage-input</input>
-                    <destination>target/dist</destination>
-                    <type>APP_IMAGE</type>
-                    <icon>${project.basedir}/src/main/resources/icon.ico</icon>
-                    <resourceDir>${project.basedir}/src/main/resources/jpackage</resourceDir>
-                    <winConsole>false</winConsole>
-                    <!-- The app image runs the jar from the classpath, so the manifest entry does not apply (VK-1679). -->
-                    <javaOptions>
-                        <option>--enable-native-access=ALL-UNNAMED</option>
-                    </javaOptions>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            mvnw verify -Pimage: the app image in target/dist/VertexForge Launcher/ (VK-1692). CI and
+            tools/package_release.lua build it this way; a plain verify (compile + unit tests) needs no download.
+
+            A jlink runtime (JDK modules + the Gluon JavaFX jmods + Gson) and jpackage over that runtime and the
+            application jar alone, which lands in app/mods. JavaFX's natives come from the jmods into
+            runtime/bin/javafx, where JavaFX looks first on a jlink runtime (nothing is unpacked into ~/.openjfx).
+        -->
+        <profile>
+            <id>image</id>
+            <build>
+                <plugins>
+                    <!-- jlink and jpackage refuse an existing output; force deletes the read-only exe. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>${maven-clean-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>clean-image</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>clean</goal>
+                                </goals>
+                                <configuration>
+                                    <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                                    <filesets>
+                                        <fileset>
+                                            <directory>${project.build.directory}/dist</directory>
+                                        </fileset>
+                                        <fileset>
+                                            <directory>${project.build.directory}/runtime</directory>
+                                        </fileset>
+                                        <fileset>
+                                            <directory>${project.build.directory}/jpackage-input</directory>
+                                        </fileset>
+                                        <fileset>
+                                            <directory>${project.build.directory}/javafx-jmods</directory>
+                                        </fileset>
+                                    </filesets>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- One target, so its steps run in order and do not depend on how jar:jar is ordered in package. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>${maven-antrun-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <!--
+                                            1. The version: ../VERSION as tools/engine_version.lua reads it (a UTF-8
+                                               BOM and surrounding whitespace dropped; MAJOR.MINOR.PATCH, no leading
+                                               zeros), each part at most 65535, the limit of the exe's VERSIONINFO.
+                                        -->
+                                        <loadfile property="vf.version" srcFile="${project.basedir}/../VERSION" encoding="UTF-8">
+                                            <filterchain>
+                                                <tokenfilter>
+                                                    <filetokenizer/>
+                                                    <replaceregex pattern="^﻿?\s*(.*?)\s*$" replace="\1" flags="s"/>
+                                                </tokenfilter>
+                                            </filterchain>
+                                        </loadfile>
+                                        <property name="vf.part" value="(0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])"/>
+                                        <condition property="vf.version.ok">
+                                            <matches string="${vf.version}" pattern="^${vf.part}\.${vf.part}\.${vf.part}$"/>
+                                        </condition>
+                                        <fail unless="vf.version.ok"
+                                              message="../VERSION must be MAJOR.MINOR.PATCH without leading zeros, each part at most 65535 (the launcher exe's version resource), but it holds '${vf.version}'"/>
+                                        <echo level="info" message="Launcher version ${vf.version} (from ../VERSION)"/>
+
+                                        <!--
+                                            2. The application jar: target/classes with VERSION as its module version.
+                                               The jar tool stamps it (the compiler plugin passes no module version),
+                                               and the jar carries no Maven metadata.
+                                        -->
+                                        <mkdir dir="${project.build.directory}/jpackage-input"/>
+                                        <exec executable="${java.home}/bin/jar.exe" failonerror="true">
+                                            <arg value="--create"/>
+                                            <arg value="--file=${project.build.directory}/jpackage-input/${project.build.finalName}.jar"/>
+                                            <arg value="--module-version=${vf.version}"/>
+                                            <arg value="--main-class=com.vertexforge.launcher.Launcher"/>
+                                            <arg value="-C"/>
+                                            <arg value="${project.build.outputDirectory}"/>
+                                            <arg value="."/>
+                                        </exec>
+
+                                        <!--
+                                            3. The JavaFX jmods: downloaded once into the local repository (which
+                                               setup-java's Maven cache keeps in CI), checked, then the four the
+                                               launcher uses are unpacked.
+                                        -->
+                                        <property name="jmods.cache" location="${settings.localRepository}/.cache/vertexforge"/>
+                                        <property name="jmods.zip" location="${jmods.cache}/${javafx.jmods.name}"/>
+                                        <property name="jmods.dir" location="${project.build.directory}/javafx-jmods"/>
+                                        <mkdir dir="${jmods.cache}"/>
+                                        <get src="${javafx.jmods.url}" dest="${jmods.zip}" skipexisting="true" retries="3" maxtime="900"/>
+                                        <checksum file="${jmods.zip}" algorithm="SHA-256" property="${javafx.jmods.sha256}" verifyproperty="jmods.ok"/>
+                                        <condition property="jmods.discard" value="${javafx.jmods.name}" else="nothing-to-discard">
+                                            <isfalse value="${jmods.ok}"/>
+                                        </condition>
+                                        <delete quiet="true">
+                                            <fileset dir="${jmods.cache}" includes="${jmods.discard}"/>
+                                        </delete>
+                                        <fail message="${jmods.zip} did not have the SHA-256 javafx.jmods.sha256 names, so it was deleted. Run the build again to download it again.">
+                                            <condition>
+                                                <isfalse value="${jmods.ok}"/>
+                                            </condition>
+                                        </fail>
+                                        <unzip src="${jmods.zip}" dest="${jmods.dir}">
+                                            <patternset>
+                                                <include name="*/javafx.base.jmod"/>
+                                                <include name="*/javafx.graphics.jmod"/>
+                                                <include name="*/javafx.controls.jmod"/>
+                                                <include name="*/javafx.fxml.jmod"/>
+                                            </patternset>
+                                            <mapper type="flatten"/>
+                                        </unzip>
+                                        <fail message="${jmods.zip} does not hold javafx.base, javafx.graphics, javafx.controls and javafx.fxml jmods">
+                                            <condition>
+                                                <not>
+                                                    <resourcecount count="4" when="equal">
+                                                        <fileset dir="${jmods.dir}" includes="*.jmod"/>
+                                                    </resourcecount>
+                                                </not>
+                                            </condition>
+                                        </fail>
+
+                                        <!--
+                                            4. The runtime. The module list is module-info's requires: jlink adds what
+                                               they require (java.desktop, java.xml, jdk.unsupported, ...). Keep it
+                                               in step with module-info.java and launcher.yml's MODULES check
+                                               (LauncherModuleTest pins module-info). Without java.base on the module
+                                               path jlink takes the JDK's own jmods (or, on a JDK without jmods, its
+                                               run-time image, JEP 493).
+                                        -->
+                                        <exec executable="${java.home}/bin/jlink.exe" failonerror="true">
+                                            <arg value="--module-path"/>
+                                            <arg value="${jmods.dir}${path.separator}${com.google.code.gson:gson:jar}"/>
+                                            <arg value="--add-modules"/>
+                                            <arg value="javafx.controls,javafx.fxml,com.google.gson"/>
+                                            <arg value="--strip-debug"/>
+                                            <arg value="--no-header-files"/>
+                                            <arg value="--no-man-pages"/>
+                                            <arg value="--strip-native-commands"/>
+                                            <arg value="--compress=zip-6"/>
+                                            <arg value="--output"/>
+                                            <arg value="${project.build.directory}/runtime"/>
+                                        </exec>
+
+                                        <!-- 5. The app image: that runtime plus the application jar, in app/mods. -->
+                                        <exec executable="${java.home}/bin/jpackage.exe" failonerror="true">
+                                            <arg value="--type"/>
+                                            <arg value="app-image"/>
+                                            <arg value="--name"/>
+                                            <arg value="VertexForge Launcher"/>
+                                            <arg value="--app-version"/>
+                                            <arg value="${vf.version}"/>
+                                            <arg value="--vendor"/>
+                                            <arg value="VertexForge"/>
+                                            <arg value="--icon"/>
+                                            <arg value="${project.basedir}/src/jpackage/VertexForge Launcher.ico"/>
+                                            <arg value="--runtime-image"/>
+                                            <arg value="${project.build.directory}/runtime"/>
+                                            <arg value="--module-path"/>
+                                            <arg value="${project.build.directory}/jpackage-input"/>
+                                            <arg value="--module"/>
+                                            <arg value="com.vertexforge.launcher/com.vertexforge.launcher.Launcher"/>
+                                            <!-- The launcher's FFM calls (VK-1679) and JavaFX's native libraries. -->
+                                            <arg value="--java-options"/>
+                                            <arg value="--enable-native-access=com.vertexforge.launcher,javafx.graphics"/>
+                                            <arg value="--dest"/>
+                                            <arg value="${project.build.directory}/dist"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

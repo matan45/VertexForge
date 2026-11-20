@@ -10,8 +10,8 @@ import java.lang.invoke.MethodHandle;
 
 /**
  * {@code user32!AllowSetForegroundWindow(DWORD)} through the Foreign Function API (VK-1685), like
- * {@code WindowsDriveTypes}: the lookup happens on first use and needs {@code --enable-native-access=ALL-UNNAMED}
- * (set for the jar, the app image and the tests). Any failure, now or later, makes it do nothing; the running launcher
+ * {@code WindowsDriveTypes}: the lookup happens on first use and needs native access (granted in pom.xml to the module
+ * in the app image, to ALL-UNNAMED for the tests). Any failure, now or later, makes it do nothing; the running launcher
  * then only flashes in the taskbar instead of coming to the front.
  */
 final class WindowsForegroundGrant implements ForegroundGrant {

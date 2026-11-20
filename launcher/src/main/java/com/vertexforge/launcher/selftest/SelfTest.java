@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.vertexforge.launcher.Launcher;
 import com.vertexforge.launcher.controller.MainController;
 import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineManifest;
@@ -28,6 +29,7 @@ import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsCodec;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
+import com.vertexforge.launcher.scriptlib.LegacyLibraryHashes;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.JobMonitor;
@@ -58,6 +60,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -98,9 +101,15 @@ public final class SelfTest {
     public static final String REPORT_PREFIX = "--self-test-report=";
     /**
      * Also checks that the launcher knows its own exe ({@code jpackage.app-path}), from which it finds its bundled
-     * engine (VK-1681). Only the packaged app image has one, so CI passes this flag only there.
+     * engine (VK-1681), and that it runs as the module the app image is built as (VK-1692). Only the packaged app
+     * image has either, so CI passes this flag only there.
      */
     public static final String PACKAGED_FLAG = "--self-test-packaged";
+    /** The launcher's module (module-info.java). */
+    static final String MODULE_NAME = "com.vertexforge.launcher";
+    /** The modules the app image's jlink runtime links from the JavaFX jmods and the Gson jar (VK-1692). */
+    private static final List<String> LINKED_MODULES = List.of(
+            "javafx.base", "javafx.graphics", "javafx.controls", "javafx.fxml", "com.google.gson");
     static final Duration UI_TIMEOUT = Duration.ofSeconds(45);
     static final Duration WATCHDOG_TIMEOUT = Duration.ofSeconds(60);
     static final String PASS = "SELF-TEST PASS";
@@ -109,7 +118,8 @@ public final class SelfTest {
     private static final List<String> REQUIRED_RESOURCES = List.of(
             MainView.FXML_RESOURCE,
             MainView.STYLESHEET_RESOURCE,
-            "/images/icon.png");
+            "/images/icon.png",
+            LegacyLibraryHashes.RESOURCE);
     /** The name of the project the self-test creates. */
     static final String PROJECT_NAME = "SelfTest";
 
@@ -152,6 +162,9 @@ public final class SelfTest {
             workDir = Files.createTempDirectory("vf-launcher-selftest");
             if (isPackagedRequested(args)) {
                 check("launcher location", () -> checkLauncherLocation(LauncherEnvironment.systemLauncherExecutable()));
+                check("module layout", () -> checkModuleLayout(SelfTest.class.getModule(), ModuleLayer.boot(),
+                        LauncherEnvironment.systemAppVersion(), LauncherEnvironment.systemJavaHome(),
+                        LauncherEnvironment.systemLauncherExecutable()));
             }
             ProjectHub hub = runCoreChecks(workDir);
             toolkitStarted = startToolkit();
@@ -181,6 +194,8 @@ public final class SelfTest {
         ProjectHub hub = ProjectHub.create(environment, log);
 
         check("resources", SelfTest::checkResources);
+        // Read for projects without a .vflib.json (VK-1691), which the self-test's own project is not.
+        check("legacy library hashes", LegacyLibraryHashes::bundled);
         check("store round trip", () -> checkStoreRoundTrip(workDir.resolve("store"), environment.clock(), log));
         // The engine first: the project is created from its templates and bound to it (VK-1689).
         EngineOption[] engine = new EngineOption[1];
@@ -616,6 +631,87 @@ public final class SelfTest {
                 || !Files.isDirectory(imageRoot.resolve("runtime"))) {
             throw new IllegalStateException("the launcher exe " + exe + " is not at the root of its app image");
         }
+    }
+
+    /**
+     * The packaged launcher runs as the module the app image is built as (VK-1692): named, carrying the image's
+     * version, exported and open exactly where JavaFX's reflection needs it, with native access, from the image's
+     * {@code app/mods}, on the image's own runtime, whose JavaFX and Gson are linked modules and whose JavaFX natives
+     * sit in {@code runtime/bin/javafx} (so nothing is unpacked into {@code ~/.openjfx}). {@code Application.launch}
+     * never runs in the self-test, so the export it needs is checked on the module instead.
+     */
+    static void checkModuleLayout(Module launcher, ModuleLayer layer, Optional<String> appVersion, Path javaHome,
+                                  Optional<Path> launcherExecutable) throws IOException {
+        if (!launcher.isNamed()) {
+            throw new IllegalStateException("the launcher runs from the classpath, not as the module " + MODULE_NAME);
+        }
+        if (!launcher.getName().equals(MODULE_NAME)) {
+            throw new IllegalStateException("the launcher runs as the module " + launcher.getName() + ", not "
+                    + MODULE_NAME);
+        }
+        String version = appVersion.orElseThrow(() -> new IllegalStateException(
+                LauncherEnvironment.APP_VERSION_PROPERTY + " is not set"));
+        Optional<String> moduleVersion = launcher.getDescriptor().rawVersion();
+        if (!moduleVersion.equals(Optional.of(version))) {
+            throw new IllegalStateException("the module version " + moduleVersion.orElse("(none)")
+                    + " is not the app image's version " + version);
+        }
+
+        Module graphics = bootModule(layer, "javafx.graphics");
+        Module fxml = bootModule(layer, "javafx.fxml");
+        String rootPackage = Launcher.class.getPackageName();
+        if (!launcher.isExported(rootPackage, graphics)) {
+            throw new IllegalStateException(rootPackage + " is not exported to javafx.graphics, so Application.launch"
+                    + " cannot construct the launcher's Application");
+        }
+        String controllerPackage = MainController.class.getPackageName();
+        if (!launcher.isOpen(controllerPackage, fxml)) {
+            throw new IllegalStateException(controllerPackage + " is not open to javafx.fxml, so FXMLLoader cannot"
+                    + " inject the main window's controller");
+        }
+        for (Module module : List.of(launcher, graphics)) {
+            if (!module.isNativeAccessEnabled()) {
+                throw new IllegalStateException("the module " + module.getName()
+                        + " has no native access (--enable-native-access)");
+            }
+        }
+
+        for (String name : LINKED_MODULES) {
+            URI location = moduleLocation(layer, name);
+            if (!"jrt".equals(location.getScheme())) {
+                throw new IllegalStateException("the module " + name + " comes from " + location
+                        + ", not from the app image's runtime");
+            }
+        }
+        Path imageRoot = launcherExecutable.map(Path::getParent).orElseThrow(() -> new IllegalStateException(
+                LauncherEnvironment.APP_PATH_PROPERTY + " is not set: this is not the packaged launcher"));
+        URI ownLocation = moduleLocation(layer, MODULE_NAME);
+        Path mods = imageRoot.resolve("app").resolve("mods");
+        if (!"file".equals(ownLocation.getScheme()) || Path.of(ownLocation).getParent() == null
+                || !Files.isSameFile(Path.of(ownLocation).getParent(), mods)) {
+            throw new IllegalStateException("the launcher module comes from " + ownLocation + ", not from " + mods);
+        }
+        if (!Files.isSameFile(javaHome, imageRoot.resolve("runtime"))) {
+            throw new IllegalStateException("the launcher runs on " + javaHome + ", not on the app image's runtime");
+        }
+        // JavaFX loads its natives from <java.home>/bin/javafx when it runs from a jlink runtime (NativeLibLoader),
+        // where the jmods put them; only when that fails does it unpack them from its jar into ~/.openjfx.
+        Path glass = javaHome.resolve("bin").resolve("javafx").resolve("glass.dll");
+        if (!Files.isRegularFile(glass)) {
+            throw new IllegalStateException("the runtime has no " + glass + ", so JavaFX would unpack its natives"
+                    + " into ~/.openjfx");
+        }
+    }
+
+    private static Module bootModule(ModuleLayer layer, String name) {
+        return layer.findModule(name).orElseThrow(() -> new IllegalStateException(
+                "the module " + name + " is not in the boot layer"));
+    }
+
+    private static URI moduleLocation(ModuleLayer layer, String name) {
+        return layer.configuration().findModule(name)
+                .flatMap(resolved -> resolved.reference().location())
+                .orElseThrow(() -> new IllegalStateException("the module " + name + " is not in the boot layer"));
     }
 
     private static boolean startToolkit() throws CheckFailure {

@@ -13,8 +13,9 @@ import java.nio.file.Path;
 /**
  * {@code kernel32!GetDriveTypeW} through the Foreign Function API (VK-1679).
  * <p>
- * Looking the function up is a restricted operation: without {@code --enable-native-access=ALL-UNNAMED} (set in
- * pom.xml for the jar, the app image and the tests) the JVM prints a one-time warning, and a future JDK may refuse it.
+ * Looking the function up is a restricted operation: without native access the JVM prints a one-time warning, and a
+ * future JDK may refuse it. pom.xml grants it: {@code --enable-native-access=com.vertexforge.launcher} for the app
+ * image and {@code javafx:run}, {@code ALL-UNNAMED} for the unit tests, which run from the classpath (VK-1692).
  * Any failure, now or later, only makes every drive {@link DriveTypes.Kind#UNKNOWN}. The lookup happens on first use,
  * never at startup.
  */

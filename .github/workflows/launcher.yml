@@ -1,9 +1,10 @@
-# Launcher CI (VK-1677): unit tests, the jpackage app image, and the packaged --self-test.
+# Launcher CI (VK-1677, VK-1692): unit tests, the jlink + jpackage app image, its contents, size and version, and the
+# packaged --self-test.
 #
 # Runs on EVERY pull request, so that the "launcher-ci" gate always reports and can be a required check:
 # a workflow skipped by a `paths:` filter would leave a required check pending forever. The `changes` job
-# decides whether the launcher (or the engine content its tests create projects from, VK-1689) changed; when it
-# did not, `build` is skipped and the gate passes in seconds.
+# decides whether the launcher, its version (VERSION, VK-1692) or the engine content its tests create projects from
+# (VK-1689) changed; when none did, `build` is skipped and the gate passes in seconds.
 name: Launcher
 
 on:
@@ -12,6 +13,7 @@ on:
     branches: [dev]
     paths:
       - 'launcher/**'
+      - 'VERSION'
       - 'assets/scripts/lib/**'
       - 'assets/scripts/game/examples/**'
       - 'assets/vfx/library/**'
@@ -56,7 +58,7 @@ jobs:
           # what merging would change. --no-renames keeps git from fetching blobs for rename detection.
           changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"
           printf '%s\n' "$changed"
-          if grep -qE '^(launcher/|assets/scripts/lib/|assets/scripts/game/examples/|assets/vfx/library/|assets/templates/|\.github/workflows/launcher\.yml$)' <<< "$changed"; then
+          if grep -qE '^(launcher/|VERSION$|assets/scripts/lib/|assets/scripts/game/examples/|assets/vfx/library/|assets/templates/|\.github/workflows/launcher\.yml$)' <<< "$changed"; then
             echo "launcher=true" >> "$GITHUB_OUTPUT"
           else
             echo "launcher=false" >> "$GITHUB_OUTPUT"
@@ -73,6 +75,7 @@ jobs:
         shell: pwsh
         working-directory: launcher
     steps:
+      # Cone-mode sparse checkout always includes the files at the repo root, so ../VERSION is there too.
       - name: Check out the launcher and the engine content its tests create projects from
         uses: actions/checkout@v7
         with:
@@ -83,46 +86,138 @@ jobs:
             assets/vfx/library
             assets/templates
 
+      # With its jmods (Temurin ships them separately since 24): jlink then links the JDK's modules from jmods, as
+      # it does from a local Oracle JDK. The Maven cache also keeps the JavaFX jmods zip (~/.m2/repository/.cache).
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
+          java-package: jdk+jmods
           cache: maven
 
-      - name: Build and run the unit tests
-        run: ./mvnw.cmd -B -ntp verify
-
-      - name: The launcher jar carries no project templates
+      - name: Build, run the unit tests and package the app image
         run: |
-          # New projects come from the selected engine's own templates (VK-1689), never from the jar.
-          $entries = @(jar tf target/VertexForgeLauncher.jar)
+          if (-not (Test-Path (Join-Path $env:JAVA_HOME 'jmods/java.base.jmod'))) {
+            Write-Error "the JDK at $env:JAVA_HOME has no jmods"
+            exit 1
+          }
+          ./mvnw.cmd -B -ntp verify -Pimage
+
+      # Every check runs and reports before the step fails (pwsh stops at the first Write-Error).
+      - name: The app image is lean, modular and carries VERSION
+        run: |
+          $errors = [System.Collections.Generic.List[string]]::new()
+          $image = 'target/dist/VertexForge Launcher'
+          $version = [IO.File]::ReadAllText((Resolve-Path '../VERSION').Path).Trim()
+          if ($version -notmatch '^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){2}$') {
+            Write-Error "../VERSION holds '$version'"
+            exit 1
+          }
+          "VERSION: $version"
+
+          # The application jar: the launcher module and its resources only (no templates, VK-1689; no Maven
+          # metadata, icons or natives, VK-1692), versioned from VERSION, exported and open only for JavaFX.
+          $jar = "$image/app/mods/VertexForgeLauncher.jar"
+          $entries = @(jar tf $jar)
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          $templates = @($entries | Where-Object { $_ -like 'templates/*' })
-          if ($templates.Count -gt 0) {
-            $templates
-            Write-Error 'the launcher jar still holds templates/'
-            exit 1
+          foreach ($entry in $entries) {
+            if ($entry -like 'templates/*' -or $entry -like 'META-INF/maven/*' -or $entry -like 'jpackage/*' -or
+                $entry -like '*.ico' -or $entry -like '*.dll') {
+              $errors.Add("the application jar holds $entry")
+            }
+          }
+          if ($entries -notcontains 'module-info.class') { $errors.Add('the application jar has no module-info.class') }
+          $described = @(jar --describe-module --file $jar)
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $described
+          if (-not $described[0].StartsWith("com.vertexforge.launcher@$version ")) {
+            $errors.Add("the application jar is $($described[0]), not com.vertexforge.launcher@$version")
+          }
+          $access = @($described | Where-Object { $_ -match '^(qualified )?(exports|opens) ' } | Sort-Object)
+          $expectedAccess = @('qualified exports com.vertexforge.launcher to javafx.graphics',
+                              'qualified opens com.vertexforge.launcher.controller to javafx.fxml') | Sort-Object
+          if (Compare-Object $access $expectedAccess) {
+            $errors.Add("the module's exports and opens are: $($access -join '; ')")
+          }
+          if ($described -notcontains 'main-class com.vertexforge.launcher.Launcher') {
+            $errors.Add('the application jar names no main class com.vertexforge.launcher.Launcher')
           }
 
-      - name: Package the app image
-        run: ./mvnw.cmd -B -ntp jpackage:jpackage
-
-      - name: The app image holds only the launcher jar
-        run: |
-          $names = @((Get-ChildItem 'target/dist/VertexForge Launcher/app' -Force).Name | Sort-Object)
-          $names
-          $expected = @('.jpackage.xml', 'VertexForge Launcher.cfg', 'VertexForgeLauncher.jar') | Sort-Object
-          if (Compare-Object $names $expected) {
-            Write-Error 'app/ must hold only the shaded jar and the jpackage files'
-            exit 1
+          # app/ holds only jpackage's files and the jar; nothing from the Maven build anywhere in the image.
+          $app = @((Get-ChildItem "$image/app" -Force).Name | Sort-Object)
+          $expectedApp = @('.jpackage.xml', 'mods', 'VertexForge Launcher.cfg') | Sort-Object
+          if (Compare-Object $app $expectedApp) { $errors.Add("app/ holds: $($app -join ', ')") }
+          $mods = @((Get-ChildItem "$image/app/mods" -Force).Name)
+          if (Compare-Object $mods @('VertexForgeLauncher.jar')) { $errors.Add("app/mods holds: $($mods -join ', ')") }
+          $buildOutput = @('classes', 'test-classes', 'maven-status', 'maven-archiver', 'generated-sources',
+                           'generated-test-sources', 'surefire-reports')
+          foreach ($item in Get-ChildItem $image -Recurse -Force) {
+            if ($buildOutput -contains $item.Name -or $item.Name -like 'original-*.jar' -or
+                $item.Name -like '*-shaded.jar' -or $item.Name -like '*.jmod') {
+              $errors.Add("the image holds build output: $($item.FullName)")
+            }
           }
+
+          # The runtime: jlink'd from the jmods, stripped, with JavaFX's natives in bin/javafx (where the jmods put
+          # them and where JavaFX looks first on a jlink runtime).
+          foreach ($folder in 'include', 'man', 'jmods') {
+            if (Test-Path "$image/runtime/$folder") { $errors.Add("the runtime still has $folder/") }
+          }
+          $commands = @(Get-ChildItem "$image/runtime/bin" -Filter '*.exe' -File -Recurse)
+          if ($commands.Count -gt 0) { $errors.Add("the runtime still has commands: $($commands.Name -join ', ')") }
+          if (-not (Test-Path "$image/runtime/bin/javafx/glass.dll")) {
+            $errors.Add('runtime/bin/javafx has no glass.dll, so JavaFX would unpack its natives into ~/.openjfx')
+          }
+          # module-info's requires and what they require; LauncherModuleTest and the pom's jlink --add-modules
+          # must change with this list.
+          $modulesLine = @(Get-Content "$image/runtime/release" | Where-Object { $_ -like 'MODULES=*' })
+          $modules = @(($modulesLine -replace '^MODULES="?([^"]*)"?$', '$1') -split ' ' | Where-Object { $_ } | Sort-Object)
+          $expectedModules = @('com.google.gson', 'java.base', 'java.datatransfer', 'java.desktop', 'java.prefs',
+                               'java.scripting', 'java.xml', 'javafx.base', 'javafx.controls', 'javafx.fxml',
+                               'javafx.graphics', 'jdk.unsupported') | Sort-Object
+          if (Compare-Object $modules $expectedModules) { $errors.Add("the runtime's modules are: $($modules -join ' ')") }
+
+          # The .cfg starts the module, with native access, and carries VERSION.
+          $cfg = @(Get-Content "$image/app/VertexForge Launcher.cfg")
+          foreach ($line in 'app.mainmodule=com.vertexforge.launcher/com.vertexforge.launcher.Launcher',
+                            "java-options=-Djpackage.app-version=$version",
+                            'java-options=--enable-native-access=com.vertexforge.launcher,javafx.graphics') {
+            if ($cfg -notcontains $line) { $errors.Add("the .cfg has no line '$line'") }
+          }
+          if (@($cfg | Where-Object { $_ -like 'app.classpath=*' -or $_ -like '*ALL-UNNAMED*' }).Count -gt 0) {
+            $errors.Add('the .cfg still runs the launcher from the classpath')
+          }
+
+          # The exe's version resource is VERSION.
+          $info = (Get-Item "$image/VertexForge Launcher.exe").VersionInfo
+          "exe FileVersion $($info.FileVersion), ProductVersion $($info.ProductVersion), fixed $($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)"
+          if ($info.FileVersion -ne $version -or $info.ProductVersion -ne $version) {
+            $errors.Add("the exe says FileVersion $($info.FileVersion) and ProductVersion $($info.ProductVersion), VERSION says $version")
+          }
+          $parts = $version.Split('.')
+          if ($info.FileMajorPart -ne [int]$parts[0] -or $info.FileMinorPart -ne [int]$parts[1] -or
+              $info.FileBuildPart -ne [int]$parts[2] -or $info.FilePrivatePart -ne 0) {
+            $errors.Add("the exe's fixed file version is $($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)")
+          }
+
+          # The size budget (VK-1692): at most 70 MiB on disk.
+          $bytes = (Get-ChildItem $image -Recurse -File -Force | Measure-Object Length -Sum).Sum
+          $mib = [Math]::Round($bytes / 1MB, 1)
+          "App image: $mib MiB ($bytes bytes); budget 70 MiB" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if ($bytes -gt 70MB) { $errors.Add("the app image is $mib MiB, over the 70 MiB budget") }
+
+          foreach ($e in $errors) { Write-Host "::error::$e" }
+          if ($errors.Count -gt 0) { exit 1 }
 
       - name: Self-test the packaged launcher
         timeout-minutes: 3
         run: |
           $exe = (Resolve-Path 'target/dist/VertexForge Launcher/VertexForge Launcher.exe').Path
           $report = Join-Path $env:RUNNER_TEMP 'self-test-ok.txt'
+          # JavaFX unpacks its natives into ~/.openjfx only when they are not in its runtime: the image never may.
+          $openjfx = Join-Path $env:USERPROFILE '.openjfx'
+          if (Test-Path $openjfx) { Remove-Item $openjfx -Recurse -Force }
           # Started from an unrelated folder: the launcher must find itself through jpackage.app-path (VK-1681).
           $run = @{
             FilePath               = $exe
@@ -134,7 +229,8 @@ jobs:
             RedirectStandardError  = Join-Path $env:RUNNER_TEMP 'self-test-ok.err'
           }
           $p = Start-Process @run
-          Get-Content $run.RedirectStandardError -ErrorAction SilentlyContinue
+          $stderr = @(Get-Content $run.RedirectStandardError -ErrorAction SilentlyContinue)
+          $stderr
           if (-not (Test-Path $report)) {
             Write-Error "no self-test report (exit code $($p.ExitCode))"
             exit 1
@@ -149,14 +245,30 @@ jobs:
             exit 1
           }
 
+          $errors = [System.Collections.Generic.List[string]]::new()
+          # stdout must be captured, or a clean stderr would prove nothing.
+          if (-not (Select-String -Path $run.RedirectStandardOutput -SimpleMatch 'SELF-TEST PASS' -Quiet)) {
+            $errors.Add('stdout does not say SELF-TEST PASS, so the output capture cannot be trusted')
+          }
+          # The JVM and JavaFX warn when JavaFX runs from the classpath or a module lacks native access (VK-1692).
+          foreach ($line in $stderr) {
+            if ($line -match 'Unsupported JavaFX configuration|restricted method|enable-native-access|Unknown module|^WARNING:') {
+              $errors.Add("stderr: $line")
+            }
+          }
+          if (Test-Path $openjfx) { $errors.Add("the launcher unpacked JavaFX natives into $openjfx") }
+          foreach ($e in $errors) { Write-Host "::error::$e" }
+          if ($errors.Count -gt 0) { exit 1 }
+
       - name: The self-test fails on a broken main.fxml
         timeout-minutes: 3
         run: |
           # A copy of the image whose main.fxml names an onAction handler the controller does not have.
           $broken = Join-Path $env:RUNNER_TEMP 'broken-image'
           Copy-Item 'target/dist/VertexForge Launcher' $broken -Recurse
+          # jpackage 25 leaves the exe read-only, and the copy keeps that.
           Get-ChildItem $broken -Recurse -File | Where-Object IsReadOnly | ForEach-Object { $_.IsReadOnly = $false }
-          $appJar = Join-Path $broken 'app/VertexForgeLauncher.jar'
+          $appJar = Join-Path $broken 'app/mods/VertexForgeLauncher.jar'
           $work = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'broken-fxml')
           Push-Location $work
           jar xf $appJar fxml/main.fxml
@@ -173,8 +285,10 @@ jobs:
           Pop-Location
 
           $report = Join-Path $env:RUNNER_TEMP 'self-test-broken.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'self-test-broken.err'
           $p = Start-Process -FilePath (Join-Path $broken 'VertexForge Launcher.exe') `
-            -ArgumentList @('--self-test', "--self-test-report=`"$report`"") -Wait -PassThru
+            -ArgumentList @('--self-test', "--self-test-report=`"$report`"") -Wait -PassThru `
+            -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'self-test-broken.out') -RedirectStandardError $stderr
           Get-Content $report
           if ($p.ExitCode -eq 0) {
             Write-Error 'the self-test passed with a broken main.fxml'
@@ -182,6 +296,11 @@ jobs:
           }
           if (-not (Select-String -Path $report -SimpleMatch 'onAction' -Quiet)) {
             Write-Error 'the self-test report does not name the broken handler'
+            exit 1
+          }
+          # The packaged exe has no console: this proves its stderr reaches the redirect the step above relies on.
+          if (-not (Select-String -Path $stderr -SimpleMatch 'SELF-TEST FAIL' -Quiet)) {
+            Write-Error 'stderr does not say SELF-TEST FAIL, so the output capture cannot be trusted'
             exit 1
           }
 
@@ -192,6 +311,8 @@ jobs:
           name: launcher-reports
           path: |
             launcher/target/surefire-reports/
+            launcher/target/dist/VertexForge Launcher/app/VertexForge Launcher.cfg
+            launcher/target/dist/VertexForge Launcher/runtime/release
             ${{ runner.temp }}/self-test-*
           if-no-files-found: ignore
 

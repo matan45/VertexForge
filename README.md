@@ -72,7 +72,7 @@ To produce a single, ready-to-ship folder containing everything needed to distri
 
 ### Prerequisites
 - The Release binaries must already be built, plugins included (the package ships each plugin's Release DLL from `bin/<Name>/Release/x64/`, never the copy of the last-built configuration in `plugins/<Name>/`).
-- **JDK 25** on your `PATH` or in `JAVA_HOME` (to build the launcher app-image). The Maven wrapper (`launcher/mvnw.cmd`) downloads the pinned Maven version on first use, and the build runs the launcher's unit tests. If the JDK is missing or a launcher test fails, packaging fails; pass `--skip-launcher` to package without the launcher.
+- **JDK 25** on your `PATH` or in `JAVA_HOME` (to build the launcher app-image). The Maven wrapper (`launcher/mvnw.cmd`) downloads the pinned Maven version on first use, and the build runs the launcher's unit tests. On first use it also downloads the JavaFX jmods (about 43 MiB, checksum-verified, then cached under `~/.m2/repository/.cache/vertexforge`), so that run needs network access. If the JDK is missing or a launcher test fails, packaging fails; pass `--skip-launcher` to package without the launcher.
 
 Any failure exits non-zero. The package is assembled and verified in `dist/.VertexForge-staging/` and only then swapped in, so a failed run leaves an existing `dist/VertexForge/` as it was; if the swap itself cannot complete, the error says where the previous package is. Close any Editor, Runtime or launcher running from `dist/VertexForge/` first. The Release build must match the current sources (`bin/Editor/Release/x64/engine.json` is compared with them), so re-run `premake5 vs2022` and rebuild Release after changing `VERSION` or the plugin API.
 

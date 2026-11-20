@@ -11,7 +11,7 @@
 --
 -- Bundle layout (the bin/ tree is preserved so existing relative paths resolve):
 --   dist/VertexForge/
---     VertexForge Launcher/           jpackage APP_IMAGE (bundled JRE; sibling of bin/) — entry point
+--     VertexForge Launcher/           jpackage APP_IMAGE (own jlink runtime; sibling of bin/) — entry point
 --     bin/Editor/Release/x64/         Editor.exe + all DLLs + engine.json (VK-1680 manifest)
 --     bin/Editor/resources/           editor/, shaders/, ibl/   (../../resources/ target for Editor.exe)
 --     bin/Runtime/Release/x64/        Runtime.exe + all DLLs
@@ -58,7 +58,7 @@
 -- (a file in it is open) it stays in place; when the new one then cannot be moved in, the
 -- old one is renamed back, and the error says where each package is if that fails too.
 --
--- Read-only files: jpackage leaves the launcher exe read-only, os.copyfile (CopyFileW)
+-- Read-only files: jpackage 25 leaves the launcher exe read-only, os.copyfile (CopyFileW)
 -- keeps that flag, and os.rmdir stops at the first file it cannot delete. So every copy
 -- is made writable, and trees are made writable before they are deleted.
 
@@ -333,26 +333,35 @@ function vfPackageRelease()
          path.getname(dist) .. " (or delete it), then re-run")
    end
 
-   -- 2. Java launcher → self-contained jpackage app-image (bundled JRE).
-   --    Needs JDK 25 on PATH or in JAVA_HOME; the Maven wrapper (launcher/mvnw.cmd) downloads the
-   --    pinned Maven on first use. `package` also runs the launcher's unit tests (VK-1677), so a red
-   --    test means no app image. The panteleyev plugin goal is jpackage:jpackage.
-   --    target/dist goes first: its read-only exe would fail `clean` (launcher/build.txt), jpackage
-   --    refuses an existing destination, and an old image must never pass the check below.
+   -- 2. Java launcher → self-contained jpackage app-image (VK-1692: a jlink runtime of the JDK's
+   --    modules, the Gluon JavaFX jmods and Gson, plus the launcher module in app/mods).
+   --    Needs JDK 25 (with its jmods, or one that links from its run-time image) on PATH or in
+   --    JAVA_HOME; the Maven wrapper (launcher/mvnw.cmd) downloads the pinned Maven, and the image
+   --    profile the JavaFX jmods (checksum-verified, cached in ~/.m2/repository/.cache/vertexforge),
+   --    on first use. `verify` also runs the launcher's unit tests (VK-1677), so a red test means no
+   --    app image. target/dist goes first so that an old image can never pass the checks below.
    if skipLauncher then
       print("  Launcher: skipped (--skip-launcher)")
    else
       requireRemoved("launcher/target/dist")
-      print("  Building the launcher (mvnw.cmd -B clean package jpackage:jpackage) ...")
+      print("  Building the launcher (mvnw.cmd -B clean verify -Pimage) ...")
       -- ".\" because cmd skips the current folder when NoDefaultCurrentDirectoryInExePath is set.
-      local ok, how, code = os.execute('cd launcher && .\\mvnw.cmd -B clean package jpackage:jpackage')
+      local ok, how, code = os.execute('cd launcher && .\\mvnw.cmd -B clean verify -Pimage')
       if not ok then
          fail("the launcher build failed (mvnw.cmd " .. tostring(how) .. " " .. tostring(code) .. "). " ..
-            "It needs JDK 25 on PATH or in JAVA_HOME and runs the launcher's unit tests. " ..
-            "Pass --skip-launcher to package without the launcher")
+            "It needs JDK 25 on PATH or in JAVA_HOME, runs the launcher's unit tests, and on first use " ..
+            "downloads the JavaFX jmods. Pass --skip-launcher to package without the launcher")
       end
       if not os.isfile(launcherExe) then
          fail("the launcher build succeeded but produced no " .. launcherExe)
+      end
+      -- The launcher reads VERSION itself (its pom's image profile); the two readers must agree.
+      local launcherCfg = launcherImage .. "/app/VertexForge Launcher.cfg"
+      local cfgText = io.readfile(launcherCfg)
+      local launcherVersion = cfgText and cfgText:match("java%-options=%-Djpackage%.app%-version=([^\r\n]*)")
+      if launcherVersion ~= engineVersion then
+         fail(launcherCfg .. " says jpackage.app-version " .. tostring(launcherVersion) ..
+            " but VERSION says " .. engineVersion)
       end
    end
 

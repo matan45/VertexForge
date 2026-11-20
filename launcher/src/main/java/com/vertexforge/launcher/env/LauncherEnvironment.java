@@ -17,8 +17,8 @@ import java.util.function.UnaryOperator;
  * @param configDir          the launcher's settings folder ({@code ~/.vertexforge}); the editor keeps its own files
  *                           there too, so the launcher only ever touches its own files in it
  * @param launcherExecutable the packaged launcher's own exe ({@code jpackage.app-path}), from which the bundled
- *                           engine is found (VK-1681); empty when the launcher runs from a jar or
- *                           {@code mvn javafx:run}. The working directory ({@code user.dir}) is only read by
+ *                           engine is found (VK-1681); empty when the launcher runs outside the app image (the unit
+ *                           tests, {@code mvn javafx:run}). The working directory ({@code user.dir}) is only read by
  *                           {@link #systemWorkingDirectory()}, to resolve relative command-line paths (VK-1685).
  * @param env                environment-variable lookup; returns {@code null} for an unset variable
  * @param processStarter     starts the editor process
@@ -36,8 +36,10 @@ public record LauncherEnvironment(
         DriveTypes driveTypes
 ) {
     public static final String CONFIG_DIR_NAME = ".vertexforge";
-    /** Set by jpackage's native launcher to the full path of its exe; absent under {@code java -jar}. */
+    /** Set by jpackage's native launcher to the full path of its exe; absent outside the app image. */
     public static final String APP_PATH_PROPERTY = "jpackage.app-path";
+    /** Set by jpackage's native launcher to the image's {@code --app-version}, the repo's VERSION (VK-1692). */
+    public static final String APP_VERSION_PROPERTY = "jpackage.app-version";
 
     public LauncherEnvironment {
         Objects.requireNonNull(clock, "clock");
@@ -51,8 +53,8 @@ public record LauncherEnvironment(
 
     /**
      * The real machine. This is the only place in the launcher that reads {@code user.home},
-     * {@code jpackage.app-path}, {@code native.encoding} or the process environment; {@code user.dir} is read only by
-     * {@link #systemWorkingDirectory()}.
+     * {@code jpackage.app-path}, {@code jpackage.app-version}, {@code java.home}, {@code native.encoding} or the process
+     * environment; {@code user.dir} is read only by {@link #systemWorkingDirectory()}.
      */
     public static LauncherEnvironment system() {
         return new LauncherEnvironment(
@@ -68,6 +70,17 @@ public record LauncherEnvironment(
     /** This process's launcher exe, from {@link #APP_PATH_PROPERTY}; see {@link #launcherExecutable(String)}. */
     public static Optional<Path> systemLauncherExecutable() {
         return launcherExecutable(System.getProperty(APP_PATH_PROPERTY));
+    }
+
+    /** The app image's version ({@link #APP_VERSION_PROPERTY}); empty outside the app image or when blank. */
+    public static Optional<String> systemAppVersion() {
+        String value = System.getProperty(APP_VERSION_PROPERTY);
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+    }
+
+    /** The runtime this process runs on ({@code java.home}); in the app image, its {@code runtime} folder. */
+    public static Path systemJavaHome() {
+        return Path.of(System.getProperty("java.home"));
     }
 
     /**

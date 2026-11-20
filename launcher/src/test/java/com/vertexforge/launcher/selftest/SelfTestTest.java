@@ -97,6 +97,17 @@ class SelfTestTest {
     }
 
     @Test
+    void theModuleLayoutCheckRefusesTheClasspath() {
+        // The unit tests run from the classpath, where the launcher is in the unnamed module: exactly what the app
+        // image must never do (VK-1692).
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkModuleLayout(SelfTest.class.getModule(), ModuleLayer.boot(), Optional.of("1.0.0"),
+                        Path.of(System.getProperty("java.home")), Optional.empty()));
+
+        assertTrue(failure.getMessage().contains("classpath"), failure.getMessage());
+    }
+
+    @Test
     void theFlagIsRecognisedAnywhereInTheArguments() {
         assertTrue(SelfTest.isRequested(new String[]{"--self-test"}));
         assertTrue(SelfTest.isRequested(new String[]{"--self-test-report=r.txt", "--self-test"}));
