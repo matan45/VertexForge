@@ -4,9 +4,11 @@
 #include "events/project/ProjectEvents.hpp"
 #include "impl/project/ProjectServiceImpl.hpp"
 #include "serialization/ProjectSerialization.hpp"
+#include "config/Config.hpp"
 
 #include <nlohmann/json.hpp>
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -85,6 +87,147 @@ namespace
         save.filePath = "";
         REQUIRE(dispatcher.execute(save));
     }
+
+    // VK-1690 helpers.
+    constexpr const char* olderEngineVersion = "VertexForge 0.9.0";
+
+    // A .vfproj as a hand edit or another engine left it (LF, final line break): members in
+    // authored order, members the engine does not read (a nested object in its own order, numbers)
+    // and an older engineVersion; no assetFormatVersion.
+    std::string foreignProject(bool withEngineVersion)
+    {
+        std::string text = "{\n"
+                           "  \"schemaVersion\": \"1.0\",\n"
+                           "  \"projectName\": \"StampTest\",\n"
+                           "  \"custom\": {\"inner\": {\"b\": 2, \"a\": 1}, \"list\": [1, 2.5, \"x\"], \"flag\": true},\n";
+        if (withEngineVersion)
+        {
+            text += "  \"engineVersion\": \"VertexForge 0.9.0\",\n";
+        }
+        text += "  \"version\": \"1.0\",\n"
+                "  \"workingDirectory\": \".\",\n"
+                "  \"startupScene\": \"Startup.vfScene\",\n"
+                "  \"pluginApiVersion\": 7,\n"
+                "  \"ratio\": 0.25\n"
+                "}\n";
+        return text;
+    }
+
+    void writeBytes(const std::filesystem::path& file, const std::string& bytes)
+    {
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        out.close();
+        REQUIRE_FALSE(out.fail());
+    }
+
+    std::string toCrlf(const std::string& text)
+    {
+        std::string result;
+        for (const char c : text)
+        {
+            if (c == '\n')
+            {
+                result += '\r';
+            }
+            result += c;
+        }
+        return result;
+    }
+
+    size_t countOf(const std::string& text, const std::string& needle)
+    {
+        size_t count = 0;
+        for (size_t at = text.find(needle); at != std::string::npos; at = text.find(needle, at + needle.size()))
+        {
+            ++count;
+        }
+        return count;
+    }
+
+    serialization::ProjectStamp stampFile(const std::filesystem::path& projectFile)
+    {
+        return serialization::ProjectSerialization::stampEngineVersions(projectFile.string());
+    }
+
+    bool stampTempExists(const std::filesystem::path& projectFile)
+    {
+        std::filesystem::path temp = projectFile;
+        temp += ".stamp.tmp";
+        std::error_code ec;
+        return std::filesystem::exists(temp, ec);
+    }
+
+    long long writeTimeOf(const std::filesystem::path& file)
+    {
+        return static_cast<long long>(std::filesystem::last_write_time(file).time_since_epoch().count());
+    }
+
+    // The top-level member names, in file order.
+    std::vector<std::string> memberOrder(const std::string& text)
+    {
+        const auto document = nlohmann::ordered_json::parse(text);
+        std::vector<std::string> keys;
+        for (auto it = document.begin(); it != document.end(); ++it)
+        {
+            keys.push_back(it.key());
+        }
+        return keys;
+    }
+
+    void checkStampedMembers(const std::string& text)
+    {
+        const auto document = nlohmann::ordered_json::parse(text);
+        REQUIRE(document.contains("engineVersion"));
+        REQUIRE(document.at("engineVersion").is_string());
+        CHECK(document.at("engineVersion").get<std::string>() == Version::displayName);
+        REQUIRE(document.contains("assetFormatVersion"));
+        REQUIRE(document.at("assetFormatVersion").is_string());
+        CHECK(document.at("assetFormatVersion").get<std::string>() == AssetFormatVersion::toString());
+    }
+
+    // Every member but the two the stamp owns keeps its value (nested member order included).
+    void checkOtherMembersKept(const std::string& before, const std::string& after)
+    {
+        const auto original = nlohmann::ordered_json::parse(before);
+        const auto stamped = nlohmann::ordered_json::parse(after);
+        for (auto it = original.begin(); it != original.end(); ++it)
+        {
+            const std::string& key = it.key();
+            if (key == "engineVersion" || key == "assetFormatVersion")
+            {
+                continue;
+            }
+            CAPTURE(key);
+            REQUIRE(stamped.contains(key));
+            CHECK(stamped.at(key) == it.value());
+        }
+    }
+
+    // Read-only for its lifetime. MSVC sets FILE_ATTRIBUTE_READONLY only when ALL write bits are
+    // removed; adding any write bit clears it again.
+    struct ReadOnlyScope
+    {
+        std::filesystem::path file;
+
+        explicit ReadOnlyScope(std::filesystem::path path) : file(std::move(path))
+        {
+            namespace fs = std::filesystem;
+            fs::permissions(file, fs::perms::owner_write | fs::perms::group_write | fs::perms::others_write,
+                            fs::perm_options::remove);
+            REQUIRE((fs::status(file).permissions() & fs::perms::owner_write) == fs::perms::none);
+        }
+
+        ~ReadOnlyScope()
+        {
+            std::error_code ec;
+            std::filesystem::permissions(file, std::filesystem::perms::owner_write, std::filesystem::perm_options::add,
+                                         ec);
+        }
+
+        ReadOnlyScope(const ReadOnlyScope&) = delete;
+        ReadOnlyScope& operator=(const ReadOnlyScope&) = delete;
+    };
 }
 
 TEST_SUITE("ProjectService")
@@ -406,5 +549,436 @@ TEST_SUITE("ProjectService")
 
         fs::remove_all(directory, ec);
         fs::remove_all(other, ec);
+    }
+
+    // VK-1690: the editor records in the .vfproj that it opened the project; nothing else may change.
+    TEST_CASE("the engine stamp rewrites only engineVersion and assetFormatVersion")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampInPlace");
+        const auto projectFile = directory / "Game.vfproj";
+
+        // An older engine's value is replaced where it is; the missing asset format goes right after it.
+        const std::string original = foreignProject(true);
+        writeBytes(projectFile, original);
+        const serialization::ProjectStamp result = stampFile(projectFile);
+        CHECK(result.status == serialization::ProjectStampStatus::Stamped);
+        CHECK(result.message.empty());
+        const std::string stamped = readText(projectFile);
+        REQUIRE_FALSE(stamped.empty());
+        checkStampedMembers(stamped);
+        checkOtherMembersKept(original, stamped);
+        const std::vector<std::string> insertedOrder = {"schemaVersion",    "projectName",      "custom",
+                                                        "engineVersion",    "assetFormatVersion", "version",
+                                                        "workingDirectory", "startupScene",     "pluginApiVersion",
+                                                        "ratio"};
+        CHECK(memberOrder(stamped) == insertedOrder);
+        CHECK(stamped.find('\r') == std::string::npos);
+        CHECK(stamped.back() == '\n');
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        // Both present with other values, the asset format first: each is replaced where it is, and a
+        // file without a final line break gets none.
+        const std::string reordered = "{\n"
+                                      "  \"assetFormatVersion\": \"0.9.0\",\n"
+                                      "  \"schemaVersion\": \"1.0\",\n"
+                                      "  \"engineVersion\": \"VertexForge 0.9.0\",\n"
+                                      "  \"projectName\": \"StampTest\"\n"
+                                      "}";
+        writeBytes(projectFile, reordered);
+        CHECK(stampFile(projectFile).status == serialization::ProjectStampStatus::Stamped);
+        const std::string restamped = readText(projectFile);
+        REQUIRE_FALSE(restamped.empty());
+        checkStampedMembers(restamped);
+        checkOtherMembersKept(reordered, restamped);
+        const std::vector<std::string> sameOrder = {"assetFormatVersion", "schemaVersion", "engineVersion",
+                                                    "projectName"};
+        CHECK(memberOrder(restamped) == sameOrder);
+        CHECK(restamped.back() == '}');
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp appends both members when engineVersion is missing")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampAppend");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string original = foreignProject(false);
+        writeBytes(projectFile, original);
+
+        CHECK(stampFile(projectFile).status == serialization::ProjectStampStatus::Stamped);
+        const std::string stamped = readText(projectFile);
+        checkStampedMembers(stamped);
+        checkOtherMembersKept(original, stamped);
+        const std::vector<std::string> appendedOrder = {"schemaVersion",    "projectName",  "custom",
+                                                        "version",          "workingDirectory", "startupScene",
+                                                        "pluginApiVersion", "ratio",        "engineVersion",
+                                                        "assetFormatVersion"};
+        CHECK(memberOrder(stamped) == appendedOrder);
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("a second engine stamp writes nothing")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampTwice");
+        const auto projectFile = directory / "Game.vfproj";
+        writeBytes(projectFile, foreignProject(true));
+        REQUIRE(stampFile(projectFile).status == serialization::ProjectStampStatus::Stamped);
+
+        const std::string bytes = readText(projectFile);
+        const long long writeTime = writeTimeOf(projectFile);
+        const serialization::ProjectStamp again = stampFile(projectFile);
+        CHECK(again.status == serialization::ProjectStampStatus::Unchanged);
+        CHECK(again.message.empty());
+        CHECK(readText(projectFile) == bytes);
+        CHECK(writeTimeOf(projectFile) == writeTime);
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        // What saveProject writes already names this engine.
+        const auto saved = directory / "Saved.vfproj";
+        REQUIRE(serialization::ProjectSerialization::saveProject(makeValidProjectConfig(directory), saved.string()));
+        const std::string savedBytes = readText(saved);
+        CHECK(stampFile(saved).status == serialization::ProjectStampStatus::Unchanged);
+        CHECK(readText(saved) == savedBytes);
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp keeps the line endings and a UTF-8 BOM")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampLineEndings");
+
+        const auto crlfFile = directory / "Crlf.vfproj";
+        const std::string crlfOriginal = toCrlf(foreignProject(true));
+        writeBytes(crlfFile, crlfOriginal);
+        REQUIRE(stampFile(crlfFile).status == serialization::ProjectStampStatus::Stamped);
+        const std::string crlf = readText(crlfFile);
+        checkStampedMembers(crlf);
+        checkOtherMembersKept(crlfOriginal, crlf);
+        CHECK(countOf(crlf, "\r\n") > 0);
+        CHECK(countOf(crlf, "\r\n") == countOf(crlf, "\n"));
+        CHECK(countOf(crlf, "\r\n") == countOf(crlf, "\r"));
+        CHECK(crlf.ends_with("}\r\n"));
+
+        const auto lfFile = directory / "Lf.vfproj";
+        const std::string lfOriginal = foreignProject(true);
+        writeBytes(lfFile, lfOriginal);
+        REQUIRE(stampFile(lfFile).status == serialization::ProjectStampStatus::Stamped);
+        const std::string lf = readText(lfFile);
+        checkStampedMembers(lf);
+        CHECK(countOf(lf, "\n") > 0);
+        CHECK(lf.find('\r') == std::string::npos);
+        CHECK(lf.ends_with("}\n"));
+
+        const auto bomFile = directory / "Bom.vfproj";
+        const std::string bomOriginal = "\xEF\xBB\xBF" + toCrlf(foreignProject(true));
+        writeBytes(bomFile, bomOriginal);
+        REQUIRE(stampFile(bomFile).status == serialization::ProjectStampStatus::Stamped);
+        const std::string bom = readText(bomFile);
+        CHECK(bom.starts_with("\xEF\xBB\xBF{\r\n"));
+        CHECK(countOf(bom, "\xEF\xBB\xBF") == 1);
+        checkStampedMembers(bom);
+        checkOtherMembersKept(bomOriginal, bom);
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp leaves a file it cannot parse untouched")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampInvalid");
+        const auto projectFile = directory / "Broken.vfproj";
+        for (const std::string& content : {std::string("{ not json"), std::string("[1, 2]"), std::string()})
+        {
+            CAPTURE(content);
+            writeBytes(projectFile, content);
+            const serialization::ProjectStamp result = stampFile(projectFile);
+            CHECK(result.status == serialization::ProjectStampStatus::Failed);
+            CHECK_FALSE(result.message.empty());
+            CHECK(readText(projectFile) == content);
+            CHECK_FALSE(stampTempExists(projectFile));
+        }
+
+        const auto missing = directory / "Missing.vfproj";
+        CHECK(stampFile(missing).status == serialization::ProjectStampStatus::Failed);
+        CHECK_FALSE(std::filesystem::exists(missing));
+        CHECK_FALSE(stampTempExists(missing));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp leaves a read-only file untouched")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampReadOnly");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string original = foreignProject(true);
+        writeBytes(projectFile, original);
+        {
+            ReadOnlyScope readOnly(projectFile);
+            const serialization::ProjectStamp result = stampFile(projectFile);
+            CHECK(result.status == serialization::ProjectStampStatus::Failed);
+            CHECK_FALSE(result.message.empty());
+            CHECK(readText(projectFile) == original);
+            CHECK_FALSE(stampTempExists(projectFile));
+        }
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the project service stamps the opened project only when enabled")
+    {
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampOnOpen");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string original = foreignProject(true);
+        writeBytes(projectFile, original);
+
+        {
+            // The default, which the Runtime keeps: the file is never written.
+            services::ProjectServiceImpl service;
+            REQUIRE(service.loadProject(projectFile.string()));
+            CHECK(readText(projectFile) == original);
+            REQUIRE(service.getCurrentProject().has_value());
+            REQUIRE(service.getCurrentProject()->engineVersion.has_value());
+            CHECK(*service.getCurrentProject()->engineVersion == olderEngineVersion);
+        }
+
+        std::optional<std::string> notifiedEngineVersion;
+        auto token = events::EventDispatcher::instance().subscribe<events::project::ProjectLoadedNotification>(
+            [&notifiedEngineVersion](const events::project::ProjectLoadedNotification& notification)
+            {
+                notifiedEngineVersion = notification.project.engineVersion;
+            });
+
+        services::ProjectServiceImpl editorService;
+        editorService.setStampEngineVersionOnOpen(true);
+        REQUIRE(editorService.loadProject(projectFile.string()));
+        const std::string stamped = readText(projectFile);
+        checkStampedMembers(stamped);
+        checkOtherMembersKept(original, stamped);
+        CHECK_FALSE(stampTempExists(projectFile));
+        REQUIRE(editorService.getCurrentProject().has_value());
+        REQUIRE(editorService.getCurrentProject()->engineVersion.has_value());
+        CHECK(*editorService.getCurrentProject()->engineVersion == Version::displayName);
+        REQUIRE(notifiedEngineVersion.has_value());
+        CHECK(*notifiedEngineVersion == Version::displayName);
+
+        // Opening it again writes nothing.
+        const long long writeTime = writeTimeOf(projectFile);
+        REQUIRE(editorService.loadProject(projectFile.string()));
+        CHECK(readText(projectFile) == stamped);
+        CHECK(writeTimeOf(projectFile) == writeTime);
+
+        events::EventDispatcher::instance().unsubscribe(token);
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("a refused open guard never stamps the project")
+    {
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampRefused");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string original = foreignProject(true);
+        writeBytes(projectFile, original);
+
+        services::ProjectServiceImpl service;
+        service.setStampEngineVersionOnOpen(true);
+        service.setOpenGuard([](const std::filesystem::path&) -> std::optional<std::string>
+        {
+            return std::string("another editor has it open");
+        });
+
+        CHECK_FALSE(service.loadProject(projectFile.string()));
+        CHECK_FALSE(service.isProjectLoaded());
+        CHECK(readText(projectFile) == original);
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp never lowers a newer engine's record")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampNeverLowers");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string newerEngine = "VertexForge 999.0.0";
+        const std::string newerFormat = "999.0.0";
+
+        // Both newer: nothing is written, and the result says what the file keeps recording.
+        const std::string bothNewer = "{\n"
+                                      "  \"schemaVersion\": \"1.0\",\n"
+                                      "  \"projectName\": \"StampTest\",\n"
+                                      "  \"engineVersion\": \"" + newerEngine + "\",\n"
+                                      "  \"assetFormatVersion\": \"" + newerFormat + "\"\n"
+                                      "}\n";
+        writeBytes(projectFile, bothNewer);
+        const long long writeTime = writeTimeOf(projectFile);
+        const serialization::ProjectStamp kept = stampFile(projectFile);
+        CHECK(kept.status == serialization::ProjectStampStatus::Unchanged);
+        CHECK(kept.engineVersion == newerEngine);
+        CHECK(kept.assetFormatVersion == newerFormat);
+        CHECK(readText(projectFile) == bothNewer);
+        CHECK(writeTimeOf(projectFile) == writeTime);
+
+        // Only one newer: that one stays, the other is raised to this engine's.
+        const std::string engineNewer = "{\n"
+                                        "  \"projectName\": \"StampTest\",\n"
+                                        "  \"engineVersion\": \"" + newerEngine + "\",\n"
+                                        "  \"assetFormatVersion\": \"0.9.0\"\n"
+                                        "}\n";
+        writeBytes(projectFile, engineNewer);
+        const serialization::ProjectStamp raised = stampFile(projectFile);
+        CHECK(raised.status == serialization::ProjectStampStatus::Stamped);
+        CHECK(raised.engineVersion == newerEngine);
+        CHECK(raised.assetFormatVersion == AssetFormatVersion::toString());
+        const auto document = nlohmann::ordered_json::parse(readText(projectFile));
+        CHECK(document.at("engineVersion").get<std::string>() == newerEngine);
+        CHECK(document.at("assetFormatVersion").get<std::string>() == AssetFormatVersion::toString());
+
+        // A part too large for 64 bits still reads as a newer version.
+        const std::string huge = "VertexForge 99999999999999999999999.0.0";
+        writeBytes(projectFile, "{\"projectName\": \"StampTest\", \"engineVersion\": \"" + huge
+                                    + "\", \"assetFormatVersion\": \"" + AssetFormatVersion::toString() + "\"}");
+        CHECK(stampFile(projectFile).status == serialization::ProjectStampStatus::Unchanged);
+        CHECK_FALSE(stampTempExists(projectFile));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("the engine stamp replaces a record that is not a version")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampNotAVersion");
+        const auto projectFile = directory / "Game.vfproj";
+        // Not MAJOR.MINOR.PATCH (a leading zero, two or four parts, a word, a number), or white space the
+        // launcher's VersionNumber does not trim either (a vertical tab): taken as older.
+        for (const std::string& stored :
+             {std::string("\"VertexForge 01.0.0\""), std::string("\"1.0\""), std::string("\"999.0.0.1\""),
+              std::string("\"VertexForge two\""), std::string("7"), std::string("\"VertexForge 999.0.0\\u000b\"")})
+        {
+            CAPTURE(stored);
+            writeBytes(projectFile, "{\"projectName\": \"StampTest\", \"engineVersion\": " + stored
+                                        + ", \"assetFormatVersion\": " + stored + "}");
+            CHECK(stampFile(projectFile).status == serialization::ProjectStampStatus::Stamped);
+            checkStampedMembers(readText(projectFile));
+        }
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    // The launcher's VersionNumber twin: parseProduct trims spaces, tabs, CRs and LFs around an
+    // engineVersion; parse takes an assetFormatVersion exactly as written.
+    TEST_CASE("the engine stamp reads versions as the launcher reads them")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampLikeLauncher");
+        const auto projectFile = directory / "Game.vfproj";
+
+        // A newer engineVersion with blanks around it is still newer: kept as written.
+        const std::string padded = "{\"projectName\": \"StampTest\", \"engineVersion\": \" VertexForge 999.0.0\\t\","
+                                   " \"assetFormatVersion\": \"" + AssetFormatVersion::toString() + "\"}";
+        writeBytes(projectFile, padded);
+        const serialization::ProjectStamp kept = stampFile(projectFile);
+        CHECK(kept.status == serialization::ProjectStampStatus::Unchanged);
+        CHECK(kept.engineVersion == " VertexForge 999.0.0\t");
+        CHECK(readText(projectFile) == padded);
+
+        // An assetFormatVersion with a blank is not a version (the launcher calls it malformed): replaced.
+        writeBytes(projectFile, "{\"projectName\": \"StampTest\", \"engineVersion\": \"" + std::string(Version::displayName)
+                                    + "\", \"assetFormatVersion\": \" 999.0.0\"}");
+        const serialization::ProjectStamp replaced = stampFile(projectFile);
+        CHECK(replaced.status == serialization::ProjectStampStatus::Stamped);
+        CHECK(replaced.assetFormatVersion == AssetFormatVersion::toString());
+        checkStampedMembers(readText(projectFile));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("saving a project never lowers a newer engine's record")
+    {
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_SaveNeverLowers");
+        const auto projectFile = directory / "Game.vfproj";
+
+        // A newer engine's values, as the open stamp kept them: in the config, and in the file it replaces.
+        config::ProjectConfig project = makeValidProjectConfig(directory);
+        project.engineVersion = "VertexForge 999.0.0";
+        writeBytes(projectFile, "{\"assetFormatVersion\": \"999.0.0\"}");
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
+        const auto kept = nlohmann::json::parse(readText(projectFile));
+        CHECK(kept.at("engineVersion").get<std::string>() == "VertexForge 999.0.0");
+        CHECK(kept.at("assetFormatVersion").get<std::string>() == "999.0.0");
+
+        // Older values, or none, are raised to this engine's.
+        project.engineVersion = "VertexForge 0.9.0";
+        writeBytes(projectFile, "{\"assetFormatVersion\": \"0.9.0\"}");
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
+        checkStampedMembers(readText(projectFile));
+        const auto fresh = directory / "Fresh.vfproj";
+        project.engineVersion.reset();
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, fresh.string()));
+        checkStampedMembers(readText(fresh));
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("opening a newer engine's project keeps its record")
+    {
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampOpenNewer");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string newer = "{\n"
+                                  "  \"schemaVersion\": \"1.0\",\n"
+                                  "  \"projectName\": \"StampTest\",\n"
+                                  "  \"version\": \"1.0\",\n"
+                                  "  \"workingDirectory\": \".\",\n"
+                                  "  \"startupScene\": \"Startup.vfScene\",\n"
+                                  "  \"engineVersion\": \"VertexForge 999.0.0\",\n"
+                                  "  \"assetFormatVersion\": \"999.0.0\"\n"
+                                  "}\n";
+        writeBytes(projectFile, newer);
+
+        services::ProjectServiceImpl service;
+        service.setStampEngineVersionOnOpen(true);
+        REQUIRE(service.loadProject(projectFile.string()));
+        CHECK(readText(projectFile) == newer);
+        REQUIRE(service.getCurrentProject().has_value());
+        REQUIRE(service.getCurrentProject()->engineVersion.has_value());
+        CHECK(*service.getCurrentProject()->engineVersion == "VertexForge 999.0.0");
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
+    }
+
+    TEST_CASE("a project whose engine stamp fails still opens")
+    {
+        DispatcherScope dispatcherScope;
+        const auto directory = makeTestDirectory("VertexForge_ProjectService_StampFails");
+        const auto projectFile = directory / "Game.vfproj";
+        const std::string original = foreignProject(true);
+        writeBytes(projectFile, original);
+        {
+            ReadOnlyScope readOnly(projectFile);
+            services::ProjectServiceImpl service;
+            service.setStampEngineVersionOnOpen(true);
+            CHECK(service.loadProject(projectFile.string()));
+            CHECK(readText(projectFile) == original);
+            CHECK_FALSE(stampTempExists(projectFile));
+            REQUIRE(service.getCurrentProject().has_value());
+            REQUIRE(service.getCurrentProject()->engineVersion.has_value());
+            CHECK(*service.getCurrentProject()->engineVersion == olderEngineVersion);
+        }
+
+        std::error_code ec;
+        std::filesystem::remove_all(directory, ec);
     }
 }

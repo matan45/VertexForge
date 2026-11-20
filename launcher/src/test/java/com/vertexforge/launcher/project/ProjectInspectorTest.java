@@ -58,7 +58,7 @@ class ProjectInspectorTest {
 
         assertEquals(TestSupport.real(file).toString(), found.file().toString());
         assertEquals(found.file(), found.picked());
-        assertEquals(new ProjectFile("My Game", "1.0", "VertexForge 1.0.0"), found.project());
+        assertEquals(new ProjectFile("My Game", "1.0", "VertexForge 1.0.0", null, ".", null), found.project());
     }
 
     @ParameterizedTest

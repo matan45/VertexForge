@@ -118,6 +118,22 @@ class ProjectNameRulesTest {
     }
 
     @Test
+    void aKnownDeepestLengthGivesTheSameAnswerAsABlueprint() {
+        // VK-1690: a copy knows its deepest file from scanning the original, not from a blueprint.
+        Path location = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
+        int allowed = ProjectNameRules.MAX_PATH_CHARS - ProjectNameRules.PATH_MARGIN;
+        String name = "Game";
+        int atLimit = allowed - location.toString().length() - 1 - name.length() - 1;
+
+        assertEquals(Optional.empty(), ProjectNameRules.checkPathLength(location, name, atLimit));
+        Problem problem = ProjectNameRules.checkPathLength(location, name, atLimit + 1).orElseThrow();
+        assertEquals(Rule.PATH_TOO_LONG, problem.rule());
+        String deepest = "assets/scripts/lib/" + "d".repeat(atLimit + 1 - "assets/scripts/lib/".length());
+        assertEquals(ProjectNameRules.checkPathLength(location, name, TestSupport.blueprint(deepest)),
+                Optional.of(problem), "the blueprint overload says exactly the same");
+    }
+
+    @Test
     void aLongNameMakesTheProjectFileTheDeepestFile() {
         Path location = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
         int allowed = ProjectNameRules.MAX_PATH_CHARS - ProjectNameRules.PATH_MARGIN;

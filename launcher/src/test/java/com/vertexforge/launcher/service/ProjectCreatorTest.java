@@ -4,6 +4,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.engine.EngineContent;
+import com.vertexforge.launcher.engine.EngineHealth;
+import com.vertexforge.launcher.engine.EngineManifest;
+import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.ProjectCreationResult.Status;
 import com.vertexforge.launcher.template.LibraryManifest;
@@ -164,6 +167,66 @@ class ProjectCreatorTest {
         JsonObject library = JsonParser.parseString(Files.readString(
                 parent.resolve("Game/assets/scripts/lib/.vflib.json"))).getAsJsonObject();
         assertEquals("2.3.4", library.get("engineVersion").getAsString());
+    }
+
+    /**
+     * The fake engine as the launcher finds it on disk (VK-1690): an OK install whose {@code engine.json} names the
+     * fake engine's folders, with this text as its {@code assetFormatVersion} member ({@code null}: none).
+     */
+    private EngineContent engineFromManifest(String assetFormatMember) throws Exception {
+        Path exeDir = tempDir.resolve("engine-exe");
+        EngineManifest manifest = EngineManifest.parse("""
+                {
+                  "manifestVersion": 1,
+                  "engineVersion": "1.0.0",
+                  %s
+                  "configuration": "Release",
+                  "editorExe": "Editor.exe",
+                  "workingDirectory": ".",
+                  "templatesDir": "%s",
+                  "scriptLibDir": "%s"
+                }
+                """.formatted(assetFormatMember == null ? "" : "\"assetFormatVersion\": " + assetFormatMember + ",",
+                engine.templatesDir().toString().replace('\\', '/'),
+                engine.scriptLibDir().toString().replace('\\', '/')));
+        EngineOption option = new EngineOption(engine.engineId(), exeDir.resolve("Editor.exe"), "",
+                EngineHealth.ok(manifest, exeDir), false, false, false);
+        return EngineContent.of(option).orElseThrow();
+    }
+
+    @Test
+    void theProjectFileRecordsTheEnginesAssetFormatRightAfterItsVersion() throws Exception {
+        EngineContent known = engineFromManifest("\"1.0.0\"");
+
+        ProjectCreationResult result = creator().create(TestSupport.request("Game", parent, known),
+                CreationMonitor.NONE);
+
+        assertTrue(result.success(), result::errorMessage);
+        JsonObject json = JsonParser.parseString(Files.readString(result.projectPath())).getAsJsonObject();
+        assertEquals(List.of("schemaVersion", "projectName", "version", "workingDirectory", "startupScene",
+                "exeIconPath", "engineVersion", "assetFormatVersion", "lastModified"), new ArrayList<>(json.keySet()));
+        assertEquals("1.0.0", json.get("assetFormatVersion").getAsString());
+        assertEquals("VertexForge 1.0.0", json.get("engineVersion").getAsString());
+    }
+
+    @Test
+    void anUnknownOrMalformedAssetFormatIsNotWritten() throws Exception {
+        List<String> members = new ArrayList<>();
+        members.add(null);
+        members.addAll(List.of("null", "\"1.0\"", "\"v1.0.0\"", "1"));
+        for (int i = 0; i < members.size(); i++) {
+            EngineContent unknown = engineFromManifest(members.get(i));
+            assertNull(unknown.assetFormatVersion(), members.get(i));
+
+            ProjectCreationResult result = creator().create(TestSupport.request("Game" + i, parent, unknown),
+                    CreationMonitor.NONE);
+
+            assertTrue(result.success(), result::errorMessage);
+            JsonObject json = JsonParser.parseString(Files.readString(result.projectPath())).getAsJsonObject();
+            assertFalse(json.has("assetFormatVersion"), members.get(i));
+            assertEquals(List.of("schemaVersion", "projectName", "version", "workingDirectory", "startupScene",
+                    "exeIconPath", "engineVersion", "lastModified"), new ArrayList<>(json.keySet()));
+        }
     }
 
     @Test

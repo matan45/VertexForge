@@ -27,8 +27,10 @@ import java.util.regex.Pattern;
  * <p>
  * The JSON must be strict, as the editor's reader (nlohmann::json) wants it: no comments, single quotes, unquoted
  * names, trailing commas, {@code NaN} or data after the document. Everything else is tolerated: a byte order mark,
- * CRLF line ends, any key order, members this launcher does not know, and versions of the wrong type (read as
- * {@code null}). Only {@code projectName} is required, because the list shows it and the editor refuses a project
+ * CRLF line ends, any key order, members this launcher does not know, and versions and a working directory of the
+ * wrong type (read as {@code null}; an {@code assetFormatVersion} of the wrong type keeps its JSON text, so it reads as
+ * malformed, see {@link ProjectFile#assetFormatVersion()}). Only {@code projectName} is required, because the list
+ * shows it and the editor refuses a project
  * without one. What else the editor would refuse is reported in {@link ProjectFile#structureProblem()} (VK-1686), so
  * such a project can be listed and its row says why it cannot be opened.
  */
@@ -40,6 +42,9 @@ public final class ProjectFileReader {
     static final String PROJECT_NAME = "projectName";
     static final String SCHEMA_VERSION = "schemaVersion";
     static final String ENGINE_VERSION = "engineVersion";
+    static final String WORKING_DIRECTORY = "workingDirectory";
+    /** The asset format the engine that last opened the project reads (VK-1690); the editor stamps it on open. */
+    static final String ASSET_FORMAT_VERSION = "assetFormatVersion";
 
     private static final char BYTE_ORDER_MARK = '﻿';
     /** Gson's location, which every syntax error carries: {@code " at line 3 column 8 path $.x"}. */
@@ -98,7 +103,8 @@ public final class ProjectFileReader {
 
         JsonObject root = element.getAsJsonObject();
         return new ProjectFile(projectName(root), optionalString(root, SCHEMA_VERSION),
-                optionalString(root, ENGINE_VERSION), EditorProjectRules.structureProblem(root));
+                optionalString(root, ENGINE_VERSION), EditorProjectRules.structureProblem(root),
+                optionalString(root, WORKING_DIRECTORY), assetFormatVersion(root));
     }
 
     /**
@@ -155,6 +161,22 @@ public final class ProjectFileReader {
             return null;
         }
         return element.getAsString();
+    }
+
+    /**
+     * {@code assetFormatVersion} (VK-1690): its text when it is a string; {@code null} when it is absent or JSON
+     * {@code null}; for any other type, its JSON text, which is never a version, so that a member of the wrong type
+     * reads as malformed instead of as a project no engine has stamped yet.
+     */
+    private static String assetFormatVersion(JsonObject root) {
+        JsonElement element = root.get(ASSET_FORMAT_VERSION);
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+            return element.getAsString();
+        }
+        return element.toString();
     }
 
     /**

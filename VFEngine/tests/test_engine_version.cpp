@@ -91,12 +91,6 @@ namespace
 
     using repo_scan::thisConfiguration;
 
-    std::string assetFormatVersionText()
-    {
-        return std::to_string(AssetFormatVersion::major) + "." + std::to_string(AssetFormatVersion::minor) + "." +
-               std::to_string(AssetFormatVersion::patch);
-    }
-
     std::string stringField(const json& object, const char* key)
     {
         const auto it = object.find(key);
@@ -191,6 +185,15 @@ TEST_SUITE("EngineVersion")
         CHECK(std::string(Version::displayName) == "VertexForge " + numbers);
     }
 
+    // VK-1690: the spelling engine.json and the .vfproj use, which the launcher compares.
+    TEST_CASE("AssetFormatVersion::toString spells AssetFormatVersion's numbers")
+    {
+        const std::string numbers = std::to_string(AssetFormatVersion::major) + "." +
+                                    std::to_string(AssetFormatVersion::minor) + "." +
+                                    std::to_string(AssetFormatVersion::patch);
+        CHECK(AssetFormatVersion::toString() == numbers);
+    }
+
     TEST_CASE("a saved .vfproj carries the engine version from VERSION")
     {
         const auto root = repo_scan::findRepoRoot();
@@ -204,7 +207,7 @@ TEST_SUITE("EngineVersion")
         project.version = "1.0";
         project.workingDirectory = temp.path.string();
         project.startupScene = "Startup.vfScene";
-        project.engineVersion = "VertexForge 0.0.1"; // whatever the file said: a save rewrites it
+        project.engineVersion = "VertexForge 0.0.1"; // an older engine's record: a save raises it (VK-1690)
 
         const fs::path projectFile = temp.path / "EngineVersion.vfproj";
         REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
@@ -213,6 +216,26 @@ TEST_SUITE("EngineVersion")
         const json saved = json::parse(file, nullptr, false);
         REQUIRE_FALSE(saved.is_discarded());
         CHECK(stringField(saved, "engineVersion") == "VertexForge " + parsed->text);
+        CHECK(stringField(saved, "engineVersion") == std::string(Version::displayName));
+    }
+
+    // VK-1690: the launcher compares a project's asset format with the engine's before it opens it.
+    TEST_CASE("a saved .vfproj carries the asset format version")
+    {
+        TempDir temp("VertexForge_EngineVersion_SaveAssetFormat");
+        config::ProjectConfig project;
+        project.projectName = "AssetFormatProject";
+        project.version = "1.0";
+        project.workingDirectory = temp.path.string();
+        project.startupScene = "Startup.vfScene";
+
+        const fs::path projectFile = temp.path / "AssetFormat.vfproj";
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
+
+        std::ifstream file(projectFile);
+        const json saved = json::parse(file, nullptr, false);
+        REQUIRE_FALSE(saved.is_discarded());
+        CHECK(stringField(saved, "assetFormatVersion") == AssetFormatVersion::toString());
         CHECK(stringField(saved, "engineVersion") == std::string(Version::displayName));
     }
 
@@ -253,7 +276,7 @@ TEST_SUITE("EngineVersion")
         CHECK(manifest["manifestVersion"] == 1);
 
         CHECK(stringField(manifest, "engineVersion") == std::string(Version::text));
-        CHECK(stringField(manifest, "assetFormatVersion") == assetFormatVersionText());
+        CHECK(stringField(manifest, "assetFormatVersion") == AssetFormatVersion::toString());
         CHECK(stringField(manifest, "projectSchemaVersion") == config::ProjectSchemaVersion::toString());
         REQUIRE(manifest.contains("pluginApiVersion"));
         REQUIRE(manifest["pluginApiVersion"].is_number_unsigned());

@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 
 /**
  * Asks which engine to use (VK-1681): when Open cannot decide on its own (the project's engine is broken, missing or
@@ -71,22 +72,28 @@ public final class EngineChooserDialog {
     private final Label messageLabel = new Label();
     private final BooleanProperty busy = new SimpleBooleanProperty(false);
     private final boolean canRemember;
+    /** Which working engines are offered for Open (all of them, or those that can open the project, VK-1690). */
+    private final Predicate<EngineOption> offered;
 
     /**
+     * @param header            the dialog's header, or {@code null} for the mode's own
      * @param problem           why the launcher asks; shown at the top
      * @param candidates        the engines that work
      * @param canRemember       whether the project's binding may be written (it is listed and the list is writable)
      * @param rememberByDefault whether the remember box starts ticked
      * @param currentEngineId   the project's current binding (Change Engine…), preselected; or {@code null}
+     * @param offered           which working engines Open lists, also after "Add Engine…"
      */
-    private EngineChooserDialog(Window owner, Mode mode, String title, String problem, List<EngineOption> candidates,
-                                boolean canRemember, boolean rememberByDefault, String currentEngineId,
-                                EngineServices services) {
+    private EngineChooserDialog(Window owner, Mode mode, String title, String header, String problem,
+                                List<EngineOption> candidates, boolean canRemember, boolean rememberByDefault,
+                                String currentEngineId, Predicate<EngineOption> offered, EngineServices services) {
         this.mode = Objects.requireNonNull(mode, "mode");
         this.services = Objects.requireNonNull(services, "services");
         this.canRemember = canRemember;
+        this.offered = Objects.requireNonNull(offered, "offered");
         dialog.setTitle(title);
-        dialog.setHeaderText(mode == Mode.OPEN ? "Choose an engine" : "Choose the engine for this project");
+        dialog.setHeaderText(header != null ? header
+                : mode == Mode.OPEN ? "Choose an engine" : "Choose the engine for this project");
         dialog.initOwner(owner);
         dialog.setResizable(true);
 
@@ -130,16 +137,31 @@ public final class EngineChooserDialog {
     public static Optional<Choice> showForOpen(Window owner, String problem, List<EngineOption> candidates,
                                                boolean canRemember, boolean rememberByDefault,
                                                EngineServices services) {
-        return new EngineChooserDialog(owner, Mode.OPEN, "Open Project", problem, candidates, canRemember,
-                rememberByDefault, null, services).dialog.showAndWait();
+        return showForOpen(owner, null, problem, candidates, canRemember, rememberByDefault, engine -> true,
+                services);
+    }
+
+    /**
+     * As {@link #showForOpen(Window, String, List, boolean, boolean, EngineServices)}, with a header of its own, and
+     * listing only the working engines {@code offered} accepts, also after "Add Engine…": the engines that can open
+     * the project (VK-1690).
+     *
+     * @param header the dialog's header, or {@code null} for "Choose an engine"
+     */
+    public static Optional<Choice> showForOpen(Window owner, String header, String problem,
+                                               List<EngineOption> candidates, boolean canRemember,
+                                               boolean rememberByDefault, Predicate<EngineOption> offered,
+                                               EngineServices services) {
+        return new EngineChooserDialog(owner, Mode.OPEN, "Open Project", header, problem, candidates, canRemember,
+                rememberByDefault, null, offered, services).dialog.showAndWait();
     }
 
     /** Asks which engine a project is bound to from now on; empty when the user cancelled. */
     public static Optional<Choice> showForChange(Window owner, String projectName, EngineOptions options,
                                                  String currentEngineId, EngineServices services) {
-        return new EngineChooserDialog(owner, Mode.CHANGE, "Change Engine",
+        return new EngineChooserDialog(owner, Mode.CHANGE, "Change Engine", null,
                 "Which engine should open \"" + projectName + "\"?", bindable(options), true, true,
-                currentEngineId, services).dialog.showAndWait();
+                currentEngineId, engine -> true, services).dialog.showAndWait();
     }
 
     /** The engines a project can be bound to: those that work and are saved (they have an id). */
@@ -239,9 +261,12 @@ public final class EngineChooserDialog {
             }
             List<EngineOption> candidates = mode == Mode.CHANGE
                     ? bindable(outcome.options())
-                    : outcome.options().usable();
+                    : outcome.options().usable().stream().filter(offered).toList();
             setRows(candidates, outcome.engineId(), false);
-            messageLabel.setText(outcome.existed() ? "This engine is registered already." : "Engine added.");
+            boolean listed = outcome.engineId().isEmpty()
+                    || candidates.stream().anyMatch(engine -> engine.id().equals(outcome.engineId()));
+            messageLabel.setText(!listed ? "The engine was added, but it cannot open this project."
+                    : outcome.existed() ? "This engine is registered already." : "Engine added.");
         });
     }
 

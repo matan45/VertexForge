@@ -19,7 +19,10 @@ public record ProjectStatus(Kind kind, String label, String reason) {
         OK("OK"),
         /** Another editor has the project's folder open (its lock is held, VK-1682). */
         ALREADY_OPEN("Already open"),
-        /** No engine Open could start reads the project's schema version: the editor would exit with code 4. */
+        /**
+         * No working engine this launcher knows can open the project: it was saved by a newer VertexForge, in a newer
+         * project format (the editor would exit with code 4) or with a newer asset format (VK-1690).
+         */
         NEEDS_NEWER_ENGINE("Needs newer VertexForge"),
         /** The file is not a project the editor would open (it would exit with code 3). */
         INVALID("Invalid"),
@@ -57,7 +60,10 @@ public record ProjectStatus(Kind kind, String label, String reason) {
         return new ProjectStatus(Kind.OK, "The project file can be opened");
     }
 
-    /** OK, with a note for the tooltip (a check that could not be made, VK-1686). */
+    /**
+     * OK, with a note for the tooltip: a check that could not be made (VK-1686), or an engine that cannot open the
+     * project while another one can (VK-1690).
+     */
     public static ProjectStatus ok(String note) {
         return new ProjectStatus(Kind.OK, note);
     }

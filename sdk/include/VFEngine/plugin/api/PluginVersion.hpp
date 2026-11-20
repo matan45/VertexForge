@@ -73,6 +73,9 @@ namespace plugin {
     // VK-1687 (no bump): config::ProjectConfig is unchanged (GetCurrentProjectQuery still reports the
     //      resolved workingDirectory); ProjectServiceImpl keeps the authored value in private members.
     //      New types only: events::scene::QueueStartupSceneCommand / StartupSceneResult.
+    // VK-1690 (no bump): config::ProjectConfig is unchanged. New: ProjectSerialization::stampEngineVersions
+    //      (ProjectStamp / ProjectStampStatus), AssetFormatVersion::toString() and a private ProjectServiceImpl
+    //      member; saveProject also writes the .vfproj assetFormatVersion.
     constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
 
 }

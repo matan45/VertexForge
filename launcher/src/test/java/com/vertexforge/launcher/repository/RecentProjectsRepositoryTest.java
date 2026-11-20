@@ -138,6 +138,59 @@ class RecentProjectsRepositoryTest {
     }
 
     @Test
+    void addBoundListsACopyBoundToItsEngineAndReturnsItsEntry() throws Exception {
+        Path original = projectFile("Game");
+        Path copy = projectFile("Game-1.1.0");
+        UUID engine = UUID.fromString("6f1c2a5e-8d3b-4c7a-9e21-0b5d7f3a1c88");
+        RecentProjectsView before = repository.add(original, "Game", LIMIT);
+
+        AddedProject added = repository.addBound(copy, "Game-1.1.0", LIMIT, Optional.of(engine));
+
+        assertFalse(added.existed());
+        assertEquals(copy, added.entry().path());
+        assertEquals("Game-1.1.0", added.entry().name());
+        assertEquals(engine.toString(), added.entry().engineId());
+        assertEquals(2, added.view().entries().size());
+        // The original's entry is left exactly as it was.
+        RecentEntry originalEntry = before.entries().getFirst();
+        assertEquals(originalEntry, newRepository().load().find(originalEntry.id()).orElseThrow());
+        assertEquals(engine.toString(), newRepository().load().find(added.entry().id()).orElseThrow().engineId());
+    }
+
+    @Test
+    void addBoundWithoutAnEngineLeavesTheCopyUnbound() throws Exception {
+        Path copy = projectFile("Copy");
+
+        AddedProject added = repository.addBound(copy, "Copy", LIMIT, Optional.empty());
+
+        assertNull(added.entry().engineId());
+    }
+
+    @Test
+    void theUnknownVersionWarningIsRecordedOnceAndKeptOnReload() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        assertFalse(repository.load().find(id).orElseThrow().unknownVersionWarned());
+
+        RecentProjectsView view = repository.setUnknownVersionWarned(id);
+
+        assertTrue(view.find(id).orElseThrow().unknownVersionWarned());
+        assertTrue(readStore().getAsJsonArray("projects").get(0).getAsJsonObject()
+                .get(RecentEntry.UNKNOWN_VERSION_WARNED).getAsBoolean());
+        String written = Files.readString(storeFile);
+        repository.setUnknownVersionWarned(id);
+        assertEquals(written, Files.readString(storeFile), "recording it again must change nothing");
+        assertTrue(newRepository().load().find(id).orElseThrow().unknownVersionWarned());
+    }
+
+    @Test
+    void recordingTheWarningOfARemovedProjectDoesNothing() throws Exception {
+        UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();
+        repository.remove(id);
+
+        assertTrue(repository.setUnknownVersionWarned(id).isEmpty());
+    }
+
+    @Test
     void addCreatesTheFolderAndWritesVersionTwoWithAllSixFields() throws Exception {
         Path game = projectFile("Game");
 

@@ -1,14 +1,19 @@
 package com.vertexforge.launcher.controller;
 
+import com.vertexforge.launcher.dialog.CopyNameDialog;
+import com.vertexforge.launcher.dialog.CopyNamePrompt;
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
 import com.vertexforge.launcher.dialog.CreateProjectForm;
 import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
 import com.vertexforge.launcher.dialog.EnginesDialog;
+import com.vertexforge.launcher.dialog.FileJobDialog;
 import com.vertexforge.launcher.dialog.McpDialog;
 import com.vertexforge.launcher.dialog.ProjectChooserDialog;
 import com.vertexforge.launcher.dialog.SessionFailureDialog;
 import com.vertexforge.launcher.dialog.SettingsDialog;
+import com.vertexforge.launcher.dialog.VersionDialog;
+import com.vertexforge.launcher.dialog.VersionPrompt;
 import com.vertexforge.launcher.engine.EditorOverride;
 import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineLabels;
@@ -34,10 +39,15 @@ import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.CreationJob;
 import com.vertexforge.launcher.service.EditorExitCode;
+import com.vertexforge.launcher.service.FileJob;
+import com.vertexforge.launcher.service.JobMonitor;
 import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
+import com.vertexforge.launcher.service.ProjectBackupService;
+import com.vertexforge.launcher.service.ProjectCopier;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.service.ProjectNameRules;
 import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.template.TemplateCatalogs;
 import com.vertexforge.launcher.session.EditorSession;
@@ -155,6 +165,8 @@ public class MainController implements Initializable {
     static final String BANNER_REMOVED = "removed";
     static final String BANNER_LOCATE = "locate";
     static final String BANNER_SHOW = "show-in-explorer";
+    /** What Open did before the editor started: a backup, a copy, a cancelled job (VK-1690). */
+    static final String BANNER_VERSION = "version";
 
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
@@ -246,6 +258,9 @@ public class MainController implements Initializable {
 
     /** Adds and opens projects that exist on disk, one request at a time (VK-1685). */
     private final AddExistingFlow addFlow = new AddExistingFlow(new FlowServices(), MainController::runLaterQuietly);
+    /** Opens projects once it is clear that their engine reads them (VK-1690). */
+    private final OpenProjectFlow openFlow = new OpenProjectFlow(new OpenServices(),
+            MainController::runLaterQuietly);
 
     /** A Locate… is checking a picked file or saving the relink (VK-1686); a second one must wait. */
     private final BooleanProperty locating = new SimpleBooleanProperty(false);
@@ -327,16 +342,20 @@ public class MainController implements Initializable {
         return projectsTable;
     }
 
-    /** Asks a creation in progress to stop (the launcher is closing). FX thread. */
+    /**
+     * Asks a creation, a backup or a copy in progress to stop (the launcher is closing; VK-1690 runs its backups and
+     * copies on the creation thread too). FX thread.
+     */
     public void cancelCreation() {
         if (activeJob != null) {
             activeJob.cancel();
         }
+        openFlow.cancelJob();
     }
 
-    /** Whether a creation is in progress. FX thread. */
+    /** Whether a creation, a backup or a copy is in progress. FX thread. */
     public boolean creationRunning() {
-        return activeJob != null;
+        return activeJob != null || openFlow.jobRunning();
     }
 
     private void setupTableColumns() {
@@ -715,7 +734,11 @@ public class MainController implements Initializable {
 
     /** Which editor of this window has a project of the row's folder open. */
     private FolderEditor folderEditor(ProjectViewModel row) {
-        Path project = row.getProjectPath();
+        return folderEditor(row.getProjectPath());
+    }
+
+    /** Which editor of this window has a project of {@code project}'s folder open. */
+    private FolderEditor folderEditor(Path project) {
         if (sessions.find(project).isPresent()) {
             return FolderEditor.THIS_PROJECT;
         }
@@ -844,19 +867,7 @@ public class MainController implements Initializable {
         if (!canShowInExplorer(selected)) {
             return;
         }
-        Path file = selected.getProjectPath();
-        CompletableFuture.runAsync(() -> {
-            try {
-                hub.shell().showInFolder(file);
-            } catch (IOException e) {
-                throw new CompletionException(e);
-            }
-        }).whenComplete((ignored, error) -> {
-            if (error != null) {
-                runLaterQuietly(() -> banners.show(BANNER_SHOW, BannerBar.Kind.ERROR,
-                        "Could not show " + file + " in Explorer: " + describe(error), true));
-            }
-        });
+        showInFolder(selected.getProjectPath());
     }
 
     /** Puts the selected entry's path, as stored and shown, on the clipboard. */
@@ -1019,7 +1030,8 @@ public class MainController implements Initializable {
 
     /**
      * Opens {@code projectFile} with the engine it is bound to (VK-1681): the engines are checked in the background,
-     * {@link LaunchPlan} decides, and the user is asked when it cannot. A project an editor of this window already
+     * {@link LaunchPlan} decides, and the user is asked when it cannot. {@link OpenProjectFlow} then compares the
+     * project with that engine and asks before an upgrade (VK-1690). A project an editor of this window already
      * has open starts nothing (VK-1683). Once the editor is ready, the entry is marked as opened (and bound to its
      * engine on its first open) when it is listed and the list may be written, and the after-launch setting applies.
      *
@@ -1039,43 +1051,14 @@ public class MainController implements Initializable {
             return true;
         }
 
-        UUID id = entry == null ? null : entry.id();
-        String engineId = entry == null ? null : entry.engineId();
         String name = entry != null ? entry.displayName()
                 : fallbackName != null && !fallbackName.isBlank() ? fallbackName : projectName(projectFile);
         McpSetting mcp = entry == null ? McpSetting.DEFAULT : entry.mcp();
 
-        // Disable UI to prevent double-clicks while the engines are checked and the editor starts
+        // Disable UI to prevent double-clicks while the engines are checked and the editor starts; the flow clears it
+        // (through OpenServices.start or release) on every path.
         launching.set(true);
-
-        withEngines(options -> {
-            try {
-                switch (hub.planLaunch(options, engineId)) {
-                    case LaunchPlan.Ready ready ->
-                            startEditor(ready.engine(), projectFile, name, mcp, id, ready.bindTo());
-                    case LaunchPlan.Choose choose -> {
-                        boolean canRemember = id != null && !readOnly.get();
-                        Optional<EngineChooserDialog.Choice> choice = EngineChooserDialog.showForOpen(window(),
-                                choose.problem(), choose.candidates(), canRemember, choose.rememberByDefault(),
-                                engineServices);
-                        if (choice.isEmpty() || choice.get().engine().isEmpty()) {
-                            launching.set(false);
-                            return;
-                        }
-                        EngineOption engine = choice.get().engine().get();
-                        startEditor(engine, projectFile, name, mcp, id,
-                                choice.get().remember() ? engine.id() : Optional.empty());
-                    }
-                }
-            } catch (RuntimeException e) {
-                // Never leave the window disabled; the global handler reports the error.
-                launching.set(false);
-                throw e;
-            }
-        }, error -> {
-            launching.set(false);
-            showErrorDialog("Launch Failed", "Could not check the engines: " + describe(error));
-        });
+        openFlow.open(new OpenProjectFlow.Request(projectFile, entry, name, mcp));
         return true;
     }
 
@@ -1508,6 +1491,148 @@ public class MainController implements Initializable {
                     () -> banners.hide(BANNER_ADD));
             report.refusals().ifPresent(text -> showErrorDialog("Add Existing Project", text));
         }
+    }
+
+    /** What the open flow needs from this window (VK-1690). FX thread, except where a method says otherwise. */
+    private final class OpenServices implements OpenProjectFlow.Services {
+
+        @Override
+        public CompletableFuture<EngineOptions> engines() {
+            // Also refreshes the window's engine column and banners; completes on the FX thread.
+            return engineServices.refresh();
+        }
+
+        @Override
+        public CompletableFuture<ProjectFileCheck> read(Path projectFile, boolean probeLock) {
+            return hub.checkProjectFile(projectFile, probeLock);
+        }
+
+        @Override
+        public FolderEditor folderEditor(Path projectFile) {
+            return MainController.this.folderEditor(projectFile);
+        }
+
+        @Override
+        public boolean readOnly() {
+            return readOnly.get();
+        }
+
+        @Override
+        public Optional<OpenProjectFlow.Picked> chooseEngine(OpenProjectFlow.EnginePrompt prompt) {
+            return EngineChooserDialog.showForOpen(window(), prompt.header(), prompt.problem(), prompt.candidates(),
+                            prompt.canRemember(), prompt.rememberByDefault(), prompt.offered(), engineServices)
+                    .flatMap(choice -> choice.engine()
+                            .map(engine -> new OpenProjectFlow.Picked(engine, choice.remember())));
+        }
+
+        @Override
+        public VersionPrompt.Choice ask(VersionPrompt prompt) {
+            return VersionDialog.show(window(), prompt);
+        }
+
+        @Override
+        public Optional<String> askCopyName(CopyNamePrompt prompt) {
+            return CopyNameDialog.show(window(), prompt,
+                    name -> ProjectNameRules.checkName(name).map(ProjectNameRules.Problem::message));
+        }
+
+        @Override
+        public OpenProjectFlow.JobView showJob(String title, String header, Runnable cancel) {
+            FileJobDialog dialog = FileJobDialog.show(window(), title, header, cancel);
+            return new OpenProjectFlow.JobView() {
+                @Override
+                public void progress(JobMonitor.Phase phase, long done, long total) {
+                    dialog.progress(phase, done, total);
+                }
+
+                @Override
+                public void close() {
+                    dialog.close();
+                }
+            };
+        }
+
+        @Override
+        public FileJob<ProjectBackupService.BackupOutcome> startBackup(ProjectBackupService.BackupRequest request,
+                                                                       FileJob.ProgressListener listener) {
+            // The creation thread runs one disk job at a time, and the launcher's shutdown cancels and waits for it.
+            return FileJob.start(creation, monitor -> hub.backUpProject(request, monitor), listener,
+                    ProjectBackupService.BackupOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectCopier.CopyOutcome> startCopy(ProjectCopier.CopyRequest request,
+                                                            FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.copyProject(request, monitor), listener,
+                    ProjectCopier.CopyOutcome.Failed::new);
+        }
+
+        @Override
+        public CompletableFuture<AddedProject> listCopy(Path projectFile, String name, Optional<UUID> engineId) {
+            CompletableFuture<AddedProject> result = new CompletableFuture<>();
+            runInBackground(() -> hub.listCopy(projectFile, name, engineId), result::complete,
+                    result::completeExceptionally);
+            return result;
+        }
+
+        @Override
+        public void listed(AddedProject added) {
+            applySavedView(added.view());
+            selectById(added.entry().id());
+        }
+
+        @Override
+        public void saveFailed(Throwable error) {
+            showSaveError(error);
+        }
+
+        @Override
+        public void rememberWarned(UUID id) {
+            runInBackground(() -> hub.setUnknownVersionWarned(id), MainController.this::applySavedView,
+                    MainController.this::showSaveError);
+        }
+
+        @Override
+        public void start(EngineOption engine, Path projectFile, String name, McpSetting mcp, UUID id,
+                          Optional<UUID> bindTo) {
+            startEditor(engine, projectFile, name, mcp, id, bindTo);
+        }
+
+        @Override
+        public void release() {
+            launching.set(false);
+        }
+
+        @Override
+        public void error(String title, String message) {
+            showErrorDialog(title, message);
+        }
+
+        @Override
+        public void notice(String message, Path reveal) {
+            if (reveal == null) {
+                banners.show(BANNER_VERSION, BannerBar.Kind.INFO, message, true);
+            } else {
+                banners.show(BANNER_VERSION, BannerBar.Kind.INFO, message, true, "Show in folder",
+                        () -> showInFolder(reveal));
+            }
+        }
+    }
+
+    /** Opens Explorer on {@code file}'s folder with the file selected; off the FX thread. */
+    private void showInFolder(Path file) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                hub.shell().showInFolder(file);
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                runLaterQuietly(() -> banners.show(BANNER_SHOW, BannerBar.Kind.ERROR,
+                        "Could not show " + file + " in Explorer: " + describe(error), true));
+            }
+        });
     }
 
     @FXML

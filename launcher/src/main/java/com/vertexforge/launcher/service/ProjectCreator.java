@@ -10,6 +10,7 @@ import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.template.TemplateException;
 import com.vertexforge.launcher.template.TemplateScanner;
 import com.vertexforge.launcher.util.FileErrors;
+import com.vertexforge.launcher.util.FileTrees;
 import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.TransientIo;
 
@@ -40,7 +41,6 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 /**
  * Creates a project so that it either fully exists or nothing is left behind (VK-1679), from the templates and the
@@ -360,6 +360,11 @@ public class ProjectCreator {
         projectConfig.put("exeIconPath", "");
         // What the engine's own editor writes on every save, so the first save changes nothing here.
         projectConfig.put("engineVersion", blueprint.engine().displayVersion());
+        // VK-1690: the asset format the project's assets will be written in, when the engine's manifest says.
+        String assetFormatVersion = blueprint.engine().assetFormatVersion();
+        if (assetFormatVersion != null) {
+            projectConfig.put("assetFormatVersion", assetFormatVersion);
+        }
         projectConfig.put("lastModified", formatTimestamp(clock.instant()));
 
         return gson.toJson(projectConfig).getBytes(StandardCharsets.UTF_8);
@@ -456,59 +461,11 @@ public class ProjectCreator {
         }
 
         List<IOException> failures = new ArrayList<>();
-        deleteTree(staging, failures);
+        FileTrees.deleteTree(staging, failures);
         for (IOException failure : failures) {
             log.warn("Could not delete part of the temporary folder " + staging + ": " + describe(failure));
         }
         return Files.notExists(staging, LinkOption.NOFOLLOW_LINKS);
-    }
-
-    /** Deletes {@code path} and, when it is a real folder, everything in it first. Never follows a link or junction. */
-    private static void deleteTree(Path path, List<IOException> failures) {
-        BasicFileAttributes attributes;
-        try {
-            attributes = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-        } catch (NoSuchFileException e) {
-            return;
-        } catch (IOException e) {
-            failures.add(e);
-            return;
-        }
-
-        // A junction reads as a folder that is also "other" (a reparse point): it is deleted itself, not entered. A
-        // OneDrive placeholder folder is a reparse point too, but one whose real path is its own: that one is entered.
-        if (attributes.isDirectory() && (!attributes.isOther() || isOwnFolder(path))) {
-            List<Path> children = List.of();
-            try (Stream<Path> listing = Files.list(path)) {
-                children = listing.toList();
-            } catch (IOException e) {
-                failures.add(e);
-            }
-            for (Path child : children) {
-                deleteTree(child, failures);
-            }
-        }
-
-        try {
-            TransientIo.retry(() -> Files.deleteIfExists(path), CLEANUP_ATTEMPTS, CLEANUP_FIRST_DELAY,
-                    CLEANUP_MAX_DELAY, "deleting " + path);
-        } catch (IOException e) {
-            failures.add(e);
-        }
-    }
-
-    /** Whether {@code folder} really lives where it is listed, rather than redirecting elsewhere (a junction). */
-    private static boolean isOwnFolder(Path folder) {
-        Path parent = folder.getParent();
-        Path name = folder.getFileName();
-        if (parent == null || name == null) {
-            return false;
-        }
-        try {
-            return folder.toRealPath().equals(parent.toRealPath().resolve(name));
-        } catch (IOException e) {
-            return false;
-        }
     }
 
     private String formatTimestamp(Instant instant) {

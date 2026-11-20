@@ -1,6 +1,5 @@
 package com.vertexforge.launcher.service;
 
-import com.vertexforge.launcher.engine.EngineManifest;
 import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.engine.EngineOptions;
 import com.vertexforge.launcher.engine.EngineResolver;
@@ -12,6 +11,7 @@ import com.vertexforge.launcher.project.EditorProjectRules;
 import com.vertexforge.launcher.project.ProjectFile;
 import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.SchemaVersion;
+import com.vertexforge.launcher.project.VersionCompatibility;
 import com.vertexforge.launcher.util.SingleFlightChecks;
 
 import java.nio.file.Path;
@@ -26,7 +26,8 @@ import java.util.stream.Collectors;
 
 /**
  * The health of every listed project (VK-1686): the project file (VK-1685's reader and the editor's own rules), the
- * engine it would open with (VK-1681) and the editor's lock on its folder (VK-1682), as one status per row.
+ * engines it could open with (VK-1681, judged by VK-1690's {@link VersionCompatibility}) and the editor's lock on its
+ * folder (VK-1682), as one status per row.
  * <p>
  * It has two halves, because the file and the engines are checked separately and answer in any order:
  * <ul>
@@ -137,15 +138,21 @@ public final class ProjectHealthService implements AutoCloseable {
      * The row's status. The first that applies wins; as in the editor, the file comes before its lock:
      * <ol>
      *   <li>the file is Missing, Unreadable, or not a project file the launcher can read (Invalid);</li>
-     *   <li>its schema version is newer than every engine Open could start reads: Needs newer engine (the editor would
-     *       exit with code 4). Unlike the editor, which reports a member it refuses first (exit code 3), this comes
-     *       before the member rules: a newer schema may define other members, and a newer engine is the remedy either
-     *       way;</li>
-     *   <li>a member the editor refuses, or a schema version it cannot read: Invalid (it would exit with code 3). An
-     *       OLDER schema major is not judged here: the editor refuses it too, and VK-1690 offers to upgrade it;</li>
+     *   <li>no engine Open could offer can open it ({@link VersionCompatibility#openable} is empty) and one of them
+     *       finds it {@link VersionCompatibility.Newer newer}: Needs newer engine, naming the version it needs
+     *       (VK-1690, replacing VK-1686's schema-only rule). Unlike the editor, which reports a member it refuses
+     *       first (exit code 3), this comes before the member rules: a newer project may define other members, and a
+     *       newer engine is the remedy either way;</li>
+     *   <li>a member the editor refuses, or a schema version it cannot read: Invalid (it would exit with code 3);</li>
+     *   <li>no engine can open it and none finds it newer, so each refuses its older schema major: Invalid, in the
+     *       editor's words (exit code 3; no migration exists). After the member rules, as in the editor;</li>
      *   <li>another editor has the folder open: Already open;</li>
-     *   <li>OK.</li>
+     *   <li>OK. When the engine Open starts by itself ({@link EngineResolver}'s Ready engine) cannot open it but
+     *       another can, the tooltip says so: Open then offers one that can.</li>
      * </ol>
+     * The engines Open could offer are {@link VersionCompatibility#targets}: every registered engine that works and a
+     * working override. There is no verdict on the versions without them, or before the engines were checked. An
+     * engine that does not say what it reads ({@link VersionCompatibility.Unknown}) counts as able to open the project.
      *
      * @param check         the file's answer
      * @param engines       the engines as last checked, or {@code null} before the first check answered (no verdict
@@ -170,13 +177,14 @@ public final class ProjectHealthService implements AutoCloseable {
         Optional<String> openElsewhere = openElsewhere(readable.lock(), folderEditor);
 
         Optional<SchemaVersion> schema = file.schema();
-        if (schema.isPresent()) {
-            Optional<ProjectStatus> newer = needsNewerEngine(file, schema.get(), engines, boundEngineId);
-            if (newer.isPresent()) {
-                ProjectStatus status = newer.get();
-                return openElsewhere.map(open -> ProjectStatus.needsNewerEngine(status.label(),
-                        status.reason() + " It is also " + open + ".")).orElse(status);
-            }
+        // Without a schema version the editor can read, the file is Invalid below whatever the engines say.
+        VersionsVerdict versions = schema.isPresent()
+                ? versionsVerdict(file, engines, boundEngineId)
+                : VersionsVerdict.NONE;
+        if (versions.needsNewer() != null) {
+            ProjectStatus status = versions.needsNewer();
+            return openElsewhere.map(open -> ProjectStatus.needsNewerEngine(status.label(),
+                    status.reason() + " It is also " + open + ".")).orElse(status);
         }
         if (file.structureProblem() != null) {
             return ProjectStatus.invalid(file.structureProblem());
@@ -184,13 +192,22 @@ public final class ProjectHealthService implements AutoCloseable {
         if (schema.isEmpty()) {
             return ProjectStatus.invalid(EditorProjectRules.schemaFormatProblem(file.schemaVersion()));
         }
+        if (versions.unsupported() != null) {
+            return ProjectStatus.invalid(versions.unsupported());
+        }
         if (openElsewhere.isPresent()) {
             return ProjectStatus.alreadyOpen("The project is " + openElsewhere.get()
                     + ". Open is available again once that editor has closed it.");
         }
-        if (folderEditor == FolderEditor.NONE && readable.lock() instanceof EditorLockState.Unknown unknown) {
-            return ProjectStatus.ok("The project file can be opened. Could not check whether another editor has it"
-                    + " open: " + unknown.reason() + ".");
+        String lockNote = folderEditor == FolderEditor.NONE
+                && readable.lock() instanceof EditorLockState.Unknown unknown
+                ? "Could not check whether another editor has it open: " + unknown.reason() + "."
+                : null;
+        if (versions.note() != null) {
+            return ProjectStatus.ok(lockNote == null ? versions.note() : versions.note() + " " + lockNote);
+        }
+        if (lockNote != null) {
+            return ProjectStatus.ok("The project file can be opened. " + lockNote);
         }
         return ProjectStatus.ok();
     }
@@ -210,51 +227,102 @@ public final class ProjectHealthService implements AutoCloseable {
     }
 
     /**
-     * Needs newer engine when every engine Open could start reads an older schema major than the project's: the one
-     * {@link EngineResolver} picks, or every candidate it would offer. No verdict without engines, with no engine to
-     * offer, or when an engine's schema version is unknown (VK-1690 then warns on open).
+     * What the engines say about a project's versions (VK-1690): at most one of the three is set.
+     *
+     * @param needsNewer  no engine can open it and one finds it newer: the row's status
+     * @param unsupported no engine can open it and each refuses it: the editor's message for an Invalid row
+     * @param note        another engine can open it, but not the one Open starts by itself: the OK row's tooltip
      */
-    private static Optional<ProjectStatus> needsNewerEngine(ProjectFile file, SchemaVersion schema,
-                                                            EngineOptions engines, String boundEngineId) {
-        if (engines == null) {
-            return Optional.empty();
-        }
-        List<EngineOption> targets = switch (EngineResolver.resolve(engines, boundEngineId)) {
-            case LaunchPlan.Ready ready -> List.of(ready.engine());
-            case LaunchPlan.Choose choose -> choose.candidates();
-        };
-        if (targets.isEmpty()) {
-            return Optional.empty();
-        }
-        for (EngineOption engine : targets) {
-            Optional<SchemaVersion> reads = schemaRead(engine);
-            if (reads.isEmpty() || reads.get().major() >= schema.major()) {
-                return Optional.empty();
-            }
-        }
-
-        String savedBy = file.engineVersion() != null && !file.engineVersion().isBlank()
-                ? file.engineVersion().strip() : "a newer VertexForge";
-        StringBuilder reason = new StringBuilder("Saved by ").append(savedBy)
-                .append(" (project format ").append(schema).append(").");
-        if (targets.size() == 1) {
-            EngineOption engine = targets.getFirst();
-            reason.append(" The engine it opens with (").append(engine.versionText()).append(") reads project format ")
-                    .append(schemaRead(engine).orElseThrow().major()).append(".x.");
-        } else {
-            reason.append(" None of the engines it can open with (")
-                    .append(targets.stream().map(EngineOption::versionText).collect(Collectors.joining(", ")))
-                    .append(") reads project format ").append(schema.major()).append('.');
-        }
-        reason.append(" Use Change Engine… to pick an engine that reads format ").append(schema.major())
-                .append(" (add one with Engines… if none does).");
-        return Optional.of(ProjectStatus.needsNewerEngine(label(file.engineVersion()), reason.toString()));
+    private record VersionsVerdict(ProjectStatus needsNewer, String unsupported, String note) {
+        static final VersionsVerdict NONE = new VersionsVerdict(null, null, null);
     }
 
-    /** The schema version an engine reads ({@code projectSchemaVersion} in its engine.json), when it is known. */
-    private static Optional<SchemaVersion> schemaRead(EngineOption engine) {
-        EngineManifest manifest = engine.health().manifest();
-        return manifest == null ? Optional.empty() : SchemaVersion.parse(manifest.projectSchemaVersion());
+    /**
+     * The D2 row rule. No verdict without engines, or with none Open could offer. When none of them can open the
+     * project, it needs a newer engine if any of them finds it newer, else each refuses its older schema major. When
+     * some can, only the engine {@link EngineResolver} would start by itself is looked at again: if it cannot, the row
+     * says so, and Open offers one that can.
+     */
+    private static VersionsVerdict versionsVerdict(ProjectFile file, EngineOptions engines, String boundEngineId) {
+        if (engines == null) {
+            return VersionsVerdict.NONE;
+        }
+        List<EngineOption> targets = VersionCompatibility.targets(engines);
+        if (targets.isEmpty()) {
+            return VersionsVerdict.NONE;
+        }
+        // VersionCompatibility.openable, with each verdict kept: openable is empty exactly when every target blocks.
+        List<VersionCompatibility.Verdict> verdicts = targets.stream()
+                .map(engine -> VersionCompatibility.check(file, engine))
+                .toList();
+        if (verdicts.stream().allMatch(VersionCompatibility.Verdict::blocksOpen)) {
+            List<VersionCompatibility.Newer> newer = verdicts.stream()
+                    .filter(VersionCompatibility.Newer.class::isInstance)
+                    .map(VersionCompatibility.Newer.class::cast)
+                    .toList();
+            if (newer.isEmpty()) {
+                // Every verdict is Unsupported: the editor's message, for the first engine Open could offer.
+                return new VersionsVerdict(null, verdicts.getFirst().reason(), null);
+            }
+            // The label names the version the verdicts require, never one no newer than the engines' own (a project
+            // whose asset format is newer, saved by the same version, "needs a newer VertexForge").
+            String required = required(newer);
+            return new VersionsVerdict(ProjectStatus.needsNewerEngine(label(required),
+                    needsNewerReason(file, targets, required)), null, null);
+        }
+        if (EngineResolver.resolve(engines, boundEngineId) instanceof LaunchPlan.Ready ready
+                && VersionCompatibility.check(file, ready.engine()).blocksOpen()) {
+            return new VersionsVerdict(null, null, opensWithAnotherNote(file, ready.engine()));
+        }
+        return VersionsVerdict.NONE;
+    }
+
+    /**
+     * The version a project no engine can open needs: the one that saved it, as every
+     * {@link VersionCompatibility.Newer} that names a version names it ({@code "VertexForge " + Pv});
+     * {@link VersionCompatibility#ANY_NEWER} when none does.
+     */
+    private static String required(List<VersionCompatibility.Newer> newer) {
+        return newer.stream()
+                .map(VersionCompatibility.Newer::required)
+                .filter(required -> !required.equals(VersionCompatibility.ANY_NEWER))
+                .findFirst()
+                .orElse(VersionCompatibility.ANY_NEWER);
+    }
+
+    /**
+     * "Saved by VertexForge 1.1.0 (project format 1.0, asset format 1.1.0). The only engine this launcher knows
+     * (1.0.0 Development) cannot open it: it reads project format 1.0 and asset format 1.0.0. Add VertexForge 1.1.0 or
+     * later with Engines…."
+     *
+     * @param targets the engines Open could offer, none of which can open the project
+     */
+    static String needsNewerReason(ProjectFile file, List<EngineOption> targets, String required) {
+        StringBuilder reason = new StringBuilder(VersionCompatibility.describe(file));
+        if (targets.size() == 1) {
+            EngineOption engine = targets.getFirst();
+            reason.append(" The only engine this launcher knows (").append(engine.versionText())
+                    .append(") cannot open it: it ").append(VersionCompatibility.reads(engine)).append('.');
+        } else {
+            reason.append(" None of the engines this launcher knows can open it: ")
+                    .append(targets.stream()
+                            .map(engine -> engine.versionText() + " " + VersionCompatibility.reads(engine))
+                            .collect(Collectors.joining("; ")))
+                    .append('.');
+        }
+        reason.append(required.equals(VersionCompatibility.ANY_NEWER)
+                ? " Add " + VersionCompatibility.ANY_NEWER + " with Engines…."
+                : " Add " + required + " or later with Engines….");
+        return reason.toString();
+    }
+
+    /**
+     * "Saved by VertexForge 1.1.0. The engine it opens with (1.0.0 Development) cannot open it, so Open offers one that
+     * can."
+     */
+    static String opensWithAnotherNote(ProjectFile file, EngineOption engine) {
+        return "Saved by " + VersionCompatibility.savedBy(file) + ". The engine it opens with (" + engine.versionText()
+                + ") cannot open it, so Open offers one that can.";
     }
 
     /** "Needs VertexForge 2.1.0" from the project's {@code engineVersion}, else "Needs newer VertexForge". */

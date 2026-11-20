@@ -2,17 +2,139 @@
 #include "../print/Log.hpp"
 #include "../config/Config.hpp"
 #include "SerializationFileAccess.hpp"
+#include "../resource/AtomicFileReplace.hpp"
 #include <fstream>
 #include <algorithm>
+#include <array>
 #include <charconv>
+#include <cstdint>
+#include <optional>
+#include <string_view>
 #include <chrono>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <filesystem>
 #include <system_error>
+#include <thread>
 
 namespace serialization
 {
+    namespace
+    {
+        using VersionTriple = std::array<std::uint64_t, 3>;
+
+        // MAJOR.MINOR.PATCH, digits only and without leading zeros. With productPrefix (an
+        // engineVersion), spaces, tabs, CRs and LFs around it are ignored and "VertexForge " may come
+        // first; otherwise (an assetFormatVersion) the text must be exactly the version. These are the
+        // launcher's VersionNumber.parseProduct / parse rules, so both read the same texts alike.
+        // Empty for anything else. A part too large for 64 bits saturates: still a (very) new version.
+        std::optional<VersionTriple> parseVersionTriple(std::string_view text, bool productPrefix)
+        {
+            if (productPrefix)
+            {
+                constexpr std::string_view blanks = " \t\r\n";
+                const std::size_t first = text.find_first_not_of(blanks);
+                if (first == std::string_view::npos)
+                {
+                    return std::nullopt;
+                }
+                text = text.substr(first, text.find_last_not_of(blanks) - first + 1);
+                constexpr std::string_view product = "VertexForge ";
+                if (text.starts_with(product))
+                {
+                    text.remove_prefix(product.size());
+                }
+            }
+
+            VersionTriple parts{};
+            for (std::size_t part = 0; part < parts.size(); ++part)
+            {
+                const bool last = part + 1 == parts.size();
+                const std::size_t end = last ? text.size() : text.find('.');
+                if (end == std::string_view::npos || end == 0)
+                {
+                    return std::nullopt;
+                }
+                const std::string_view digits = text.substr(0, end);
+                if (digits.size() > 1 && digits.front() == '0')
+                {
+                    return std::nullopt;
+                }
+                std::uint64_t value = 0;
+                for (const char c : digits)
+                {
+                    if (c < '0' || c > '9')
+                    {
+                        return std::nullopt;
+                    }
+                    const auto digit = static_cast<std::uint64_t>(c - '0');
+                    value = value > (UINT64_MAX - digit) / 10 ? UINT64_MAX : value * 10 + digit;
+                }
+                parts[part] = value;
+                text.remove_prefix(last ? end : end + 1);
+            }
+            return parts;
+        }
+
+        // VK-1690: what a member that records an engine should hold: the stored text when it names a
+        // NEWER version than this engine's, else this engine's value. Absent or unparseable counts as
+        // older. So neither the open stamp nor a save ever lowers the record.
+        std::string newerOf(const std::optional<std::string>& stored, const std::string& mine,
+                            const VersionTriple& mineVersion, bool productPrefix)
+        {
+            if (stored.has_value())
+            {
+                const std::optional<VersionTriple> storedVersion = parseVersionTriple(*stored, productPrefix);
+                if (storedVersion.has_value() && *storedVersion > mineVersion)
+                {
+                    return *stored;
+                }
+            }
+            return mine;
+        }
+
+        constexpr VersionTriple engineVersionTriple()
+        {
+            return {Version::major, Version::minor, Version::patch};
+        }
+
+        constexpr VersionTriple assetFormatVersionTriple()
+        {
+            return {AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch};
+        }
+
+        // The string member of the file at `filename`, read straight from disk; empty when the file,
+        // the JSON or the member is missing or unreadable.
+        std::optional<std::string> storedStringMember(std::string_view filename, const char* key)
+        {
+            try
+            {
+                std::ifstream in(std::filesystem::path{std::string(filename)}, std::ios::binary);
+                if (!in.is_open())
+                {
+                    return std::nullopt;
+                }
+                const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+                const json document = json::parse(text, nullptr, false);
+                if (document.is_discarded() || !document.is_object())
+                {
+                    return std::nullopt;
+                }
+                const auto it = document.find(key);
+                if (it == document.end() || !it->is_string())
+                {
+                    return std::nullopt;
+                }
+                return it->get<std::string>();
+            }
+            catch (...)
+            {
+                return std::nullopt;
+            }
+        }
+    }
+
     ProjectInspection ProjectSerialization::inspectProject(std::string_view filename)
     {
         ProjectInspection inspection;
@@ -184,7 +306,13 @@ namespace serialization
                 projectJson["inputMapping"] = *project.inputMapping;
             }
 
-            projectJson["engineVersion"] = Version::displayName;
+            // VK-1690: never lower what the file records (the open stamp keeps a newer engine's value
+            // in project.engineVersion; the asset format is read from the file being replaced).
+            projectJson["engineVersion"] = newerOf(project.engineVersion, Version::displayName,
+                                                   engineVersionTriple(), true);
+            projectJson["assetFormatVersion"] = newerOf(storedStringMember(filename, "assetFormatVersion"),
+                                                        AssetFormatVersion::toString(),
+                                                        assetFormatVersionTriple(), false);
             projectJson["lastModified"] = getCurrentTimestamp();
 
             if (project.pluginApiVersion.has_value())
@@ -226,6 +354,206 @@ namespace serialization
         {
             vfLogError("Failed to save project file '{}': {}", filename, e.what());
             return false;
+        }
+    }
+
+    ProjectStamp ProjectSerialization::stampEngineVersions(std::string_view filename)
+    {
+        namespace fs = std::filesystem;
+        ProjectStamp stamp;
+        fs::path tempPath;
+
+        // AtomicFileReplace.hpp promises that a failed replace removes the temp file, but
+        // replaceFileAtomically leaves it in place (AtomicFileReplace.cpp): remove it here.
+        const auto removeTemp = [&tempPath]
+        {
+            if (!tempPath.empty())
+            {
+                std::error_code removeError;
+                fs::remove(tempPath, removeError);
+            }
+        };
+        const auto fail = [&stamp, &removeTemp](std::string message)
+        {
+            removeTemp();
+            stamp.status = ProjectStampStatus::Failed;
+            stamp.message = std::move(message);
+            return stamp;
+        };
+
+        try
+        {
+            // The process code page is UTF-8 (VK-1684), so the narrow name converts as UTF-8. Read
+            // straight from disk: the serialization file bridge may serve a packaged copy.
+            const fs::path finalPath{std::string(filename)};
+            tempPath = finalPath;
+            tempPath += ".stamp.tmp";
+
+            std::string original;
+            {
+                std::ifstream in(finalPath, std::ios::binary);
+                if (!in.is_open())
+                {
+                    return fail("the file could not be opened");
+                }
+                original.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                if (in.bad())
+                {
+                    return fail("the file could not be read");
+                }
+            }
+
+            nlohmann::ordered_json document = nlohmann::ordered_json::parse(original, nullptr, false);
+            if (document.is_discarded())
+            {
+                return fail("the file is not valid JSON");
+            }
+            if (!document.is_object())
+            {
+                return fail("the file's root is not a JSON object");
+            }
+
+            const auto storedString = [&document](const char* key) -> std::optional<std::string>
+            {
+                const auto it = document.find(key);
+                if (it == document.end() || !it->is_string())
+                {
+                    return std::nullopt;
+                }
+                return it->get<std::string>();
+            };
+            // A newer engine's record is kept: never lowered.
+            const std::string engineVersion = newerOf(storedString("engineVersion"), Version::displayName,
+                                                      engineVersionTriple(), true);
+            const std::string assetFormatVersion = newerOf(storedString("assetFormatVersion"),
+                                                           AssetFormatVersion::toString(),
+                                                           assetFormatVersionTriple(), false);
+            const auto holds = [&storedString](const char* key, const std::string& expected)
+            {
+                const std::optional<std::string> stored = storedString(key);
+                return stored.has_value() && *stored == expected;
+            };
+            if (holds("engineVersion", engineVersion) && holds("assetFormatVersion", assetFormatVersion))
+            {
+                stamp.engineVersion = engineVersion;
+                stamp.assetFormatVersion = assetFormatVersion;
+                return stamp;
+            }
+
+            // Fail fast on a read-only file (its folder is usually writable, so only the replace
+            // would fail, logging an error on every try). MSVC maps FILE_ATTRIBUTE_READONLY to "no
+            // write bits".
+            std::error_code statusError;
+            const fs::file_status fileStatus = fs::status(finalPath, statusError);
+            if (!statusError && (fileStatus.permissions() & fs::perms::owner_write) == fs::perms::none)
+            {
+                return fail("the file is read-only");
+            }
+
+            // ordered_json cannot insert at a position, so the object is rebuilt in file order.
+            const bool hadAssetFormatVersion = document.contains("assetFormatVersion");
+            bool wroteEngineVersion = false;
+            nlohmann::ordered_json stamped = nlohmann::ordered_json::object();
+            for (auto it = document.begin(); it != document.end(); ++it)
+            {
+                const std::string& key = it.key();
+                if (key == "engineVersion")
+                {
+                    stamped[key] = engineVersion;
+                    wroteEngineVersion = true;
+                    if (!hadAssetFormatVersion)
+                    {
+                        stamped["assetFormatVersion"] = assetFormatVersion;
+                    }
+                }
+                else if (key == "assetFormatVersion")
+                {
+                    stamped[key] = assetFormatVersion;
+                }
+                else
+                {
+                    stamped[key] = std::move(it.value());
+                }
+            }
+            if (!wroteEngineVersion)
+            {
+                stamped["engineVersion"] = engineVersion;
+                // Appended after it, or set in place when the file already had one.
+                stamped["assetFormatVersion"] = assetFormatVersion;
+            }
+
+            // dump() escapes CR and LF inside strings, so every '\n' it emits is a line break.
+            std::string text = stamped.dump(2);
+            if (!original.empty() && original.back() == '\n')
+            {
+                text += '\n';
+            }
+            if (original.find("\r\n") != std::string::npos)
+            {
+                std::string crlf;
+                crlf.reserve(text.size() + text.size() / 8);
+                for (const char c : text)
+                {
+                    if (c == '\n')
+                    {
+                        crlf += '\r';
+                    }
+                    crlf += c;
+                }
+                text = std::move(crlf);
+            }
+            constexpr std::string_view utf8Bom = "\xEF\xBB\xBF";
+            if (std::string_view(original).starts_with(utf8Bom))
+            {
+                text.insert(0, utf8Bom);
+            }
+
+            // A reader holding the file open (the launcher checking its project list) blocks the
+            // replace for a moment: retry, writing the temp file afresh each time.
+            std::string lastError;
+            for (int attempt = 0; attempt < 3; ++attempt)
+            {
+                if (attempt > 0)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+
+                bool written = false;
+                {
+                    std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
+                    if (out.is_open())
+                    {
+                        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+                        out.close();
+                        written = !out.fail();
+                    }
+                }
+                if (!written)
+                {
+                    lastError = "the temporary file beside it could not be written";
+                    removeTemp();
+                    continue;
+                }
+
+                if (::resource::replaceFileAtomically(tempPath, finalPath))
+                {
+                    stamp.status = ProjectStampStatus::Stamped;
+                    stamp.engineVersion = engineVersion;
+                    stamp.assetFormatVersion = assetFormatVersion;
+                    return stamp;
+                }
+                lastError = "the file could not be replaced";
+                removeTemp();
+            }
+            return fail(lastError);
+        }
+        catch (const std::exception& e)
+        {
+            return fail(std::string("the file could not be updated: ") + e.what());
+        }
+        catch (...)
+        {
+            return fail("the file could not be updated");
         }
     }
 

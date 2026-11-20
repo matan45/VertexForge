@@ -147,6 +147,8 @@ namespace handlers
             auto projectServiceImpl = std::make_shared<services::ProjectServiceImpl>();
             // VK-1682: the editor lock follows every project switch (startup, MCP project_open).
             projectServiceImpl->setOpenGuard(projectOpenGuard);
+            // VK-1690: editor only (startup, MCP project_open); the Runtime's ProjectServiceImpl never stamps.
+            projectServiceImpl->setStampEngineVersionOnOpen(true);
             projectService = std::move(projectServiceImpl);
         }
         assetDatabaseService = std::make_shared<services::AssetDatabaseServiceImpl>();

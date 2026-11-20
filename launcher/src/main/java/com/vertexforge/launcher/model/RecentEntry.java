@@ -47,6 +47,11 @@ public record RecentEntry(
     public static final String ENGINE_ID = "engineId";
     /** "Open with MCP" (VK-1683); not one of the six v2 members, so older v2 launchers keep it as an unknown member. */
     public static final String MCP = "mcp";
+    /**
+     * Whether the launcher has warned, once, that it cannot tell whether an engine reads this project (VK-1690); not one
+     * of the six v2 members either.
+     */
+    public static final String UNKNOWN_VERSION_WARNED = "unknownVersionWarned";
 
     public RecentEntry {
         Objects.requireNonNull(id, "id");
@@ -132,6 +137,22 @@ public record RecentEntry(
             return this;
         }
         return with(MCP, stored);
+    }
+
+    /**
+     * Whether the "unknown version" warning was shown for this project (VK-1690); {@code false} unless stored as the
+     * boolean {@code true}.
+     */
+    public boolean unknownVersionWarned() {
+        return bool(raw, UNKNOWN_VERSION_WARNED);
+    }
+
+    /** Records that the "unknown version" warning was shown; returns this entry when it is recorded already. */
+    public RecentEntry withUnknownVersionWarned() {
+        if (unknownVersionWarned()) {
+            return this;
+        }
+        return with(UNKNOWN_VERSION_WARNED, new JsonPrimitive(true));
     }
 
     /**

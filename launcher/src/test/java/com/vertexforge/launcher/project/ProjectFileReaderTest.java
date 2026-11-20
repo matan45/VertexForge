@@ -6,6 +6,7 @@ import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.service.CreationMonitor;
 import com.vertexforge.launcher.service.ProjectCreator;
+import com.vertexforge.launcher.util.VersionNumber;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -92,6 +93,8 @@ class ProjectFileReaderTest {
         // The editor would open what the launcher creates (VK-1686).
         assertNull(project.structureProblem());
         assertEquals(new SchemaVersion(1, 0), project.schema().orElseThrow());
+        // The template's working directory (VK-1689).
+        assertEquals("assets", project.workingDirectory());
     }
 
     @Test
@@ -102,6 +105,46 @@ class ProjectFileReaderTest {
         assertEquals("1.0", project.schemaVersion());
         assertEquals("VertexForge 1.0.0", project.engineVersion());
         assertNull(project.structureProblem());
+        assertEquals(".", project.workingDirectory());
+        // Saved before VK-1690: no engine has stamped its asset format yet.
+        assertNull(project.assetFormatVersion());
+    }
+
+    @Test
+    void theAssetFormatTheEditorStampsReadsBack() throws InvalidProjectFileException {
+        ProjectFile project = ProjectFileReader.parse(engineWrittenWith("assetFormatVersion", "\"1.0.0\""));
+
+        assertEquals("1.0.0", project.assetFormatVersion());
+        assertNull(project.structureProblem());
+    }
+
+    /** A member of another type keeps its JSON text, which is never a version, so it reads as malformed (VK-1690). */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"1", "1.5", "true", "{\"major\": 1}", "[1, 0, 0]"})
+    void anAssetFormatOfAnotherTypeKeepsItsJsonText(String json) throws InvalidProjectFileException {
+        ProjectFile project = ProjectFileReader.parse(engineWrittenWith("assetFormatVersion", json));
+
+        assertEquals(JsonParser.parseString(json).toString(), project.assetFormatVersion());
+        assertTrue(VersionNumber.parse(project.assetFormatVersion()).isEmpty(), project.assetFormatVersion());
+    }
+
+    @Test
+    void anAssetFormatThatIsNullOrAbsentIsNotThere() throws InvalidProjectFileException {
+        assertNull(ProjectFileReader.parse(engineWrittenWith("assetFormatVersion", "null")).assetFormatVersion());
+        assertNull(ProjectFileReader.parse(engineWrittenWith("assetFormatVersion", null)).assetFormatVersion());
+    }
+
+    @Test
+    void theWorkingDirectoryIsKeptAsWritten() throws InvalidProjectFileException {
+        assertEquals("C:\\Games\\Shared Assets",
+                ProjectFileReader.parse(engineWrittenWith("workingDirectory", "\"C:\\\\Games\\\\Shared Assets\""))
+                        .workingDirectory());
+        assertEquals("assets", ProjectFileReader.parse(engineWrittenWith("workingDirectory", "\"assets\""))
+                .workingDirectory());
+        // Of the wrong type it reads as missing, and the editor's own rule says why it would refuse it.
+        ProjectFile wrongType = ProjectFileReader.parse(engineWrittenWith("workingDirectory", "42"));
+        assertNull(wrongType.workingDirectory());
+        assertEquals("Invalid project file: missing or invalid 'workingDirectory' field", wrongType.structureProblem());
     }
 
     @Test

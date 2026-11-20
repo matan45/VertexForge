@@ -37,6 +37,12 @@ struct AssetFormatVersion
     {
         return fileMajor == major && fileMinor == minor && filePatch == patch;
     }
+
+    // "MAJOR.MINOR.PATCH", as engine.json and the .vfproj assetFormatVersion spell it (VK-1690).
+    static std::string toString()
+    {
+        return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+    }
 };
 
 // Asset file version - instance members holding the version read from (or written to) an asset file.

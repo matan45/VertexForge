@@ -9,11 +9,11 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
+import com.vertexforge.launcher.util.VersionNumber;
 
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -199,23 +200,21 @@ public record TemplateManifest(
     }
 
     /**
-     * Compares two {@code MAJOR.MINOR.PATCH} versions numerically.
+     * Compares two {@code MAJOR.MINOR.PATCH} versions numerically ({@link VersionNumber}, whose rule is
+     * {@link #VERSION_PATTERN}'s).
      *
      * @throws IllegalArgumentException when either is not such a version
      */
     static int compareVersions(String a, String b) {
-        if (!VERSION_PATTERN.matcher(a).matches() || !VERSION_PATTERN.matcher(b).matches()) {
+        // As the pattern match did before: a null version is a programming error, not a malformed one.
+        Objects.requireNonNull(a, "a");
+        Objects.requireNonNull(b, "b");
+        Optional<VersionNumber> left = VersionNumber.parse(a);
+        Optional<VersionNumber> right = VersionNumber.parse(b);
+        if (left.isEmpty() || right.isEmpty()) {
             throw new IllegalArgumentException("not MAJOR.MINOR.PATCH: " + a + ", " + b);
         }
-        String[] left = a.split("\\.");
-        String[] right = b.split("\\.");
-        for (int i = 0; i < 3; i++) {
-            int order = new BigInteger(left[i]).compareTo(new BigInteger(right[i]));
-            if (order != 0) {
-                return order;
-            }
-        }
-        return 0;
+        return left.get().compareTo(right.get());
     }
 
     private static Option option(JsonElement element, int index) throws TemplateException {

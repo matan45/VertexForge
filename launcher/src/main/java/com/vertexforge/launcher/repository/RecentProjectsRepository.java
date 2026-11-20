@@ -119,6 +119,32 @@ public class RecentProjectsRepository {
         return new AddedProject(view, entry, added.get().existed());
     }
 
+    /**
+     * As {@link #add(Path, String, int, Optional)}, returning the entry: a copy of a project made by "Open a copy"
+     * (VK-1690), listed under its real path and bound to the engine it opens with, in one write.
+     *
+     * @param path the copy's project file, as its real path
+     */
+    public AddedProject addBound(Path path, String name, int limit, Optional<UUID> engineId)
+            throws StoreWriteException {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(engineId, "engineId");
+        UUID newId = ids.get();
+        AtomicReference<RecentProjects.Added> added = new AtomicReference<>();
+        RecentProjectsView view = change("add " + path, projects -> {
+            RecentProjects.Added result = projects.add(path, name, clock.instant(), newId);
+            added.set(result);
+            RecentProjects bound = engineId
+                    .map(engine -> result.projects().bindEngine(result.id(), engine.toString()))
+                    .orElse(result.projects());
+            return bound.trim(limit, result.id());
+        });
+        UUID id = added.get().id();
+        RecentEntry entry = view.find(id)
+                .orElseThrow(() -> new IllegalStateException("The added project " + id + " is not in the list"));
+        return new AddedProject(view, entry, added.get().existed());
+    }
+
     /** Records that the project was just opened. Does nothing when another launcher removed it meanwhile. */
     public RecentProjectsView markOpened(UUID id) throws StoreWriteException {
         return markOpened(id, Optional.empty());
@@ -146,6 +172,14 @@ public class RecentProjectsRepository {
     public RecentProjectsView setMcp(UUID id, McpSetting setting) throws StoreWriteException {
         Objects.requireNonNull(setting, "setting");
         return change("set MCP of " + id, projects -> projects.setMcp(id, setting));
+    }
+
+    /**
+     * Records that the project's "unknown version" warning was shown (VK-1690). Does nothing when another launcher
+     * removed it meanwhile.
+     */
+    public RecentProjectsView setUnknownVersionWarned(UUID id) throws StoreWriteException {
+        return change("record the version warning of " + id, projects -> projects.setUnknownVersionWarned(id));
     }
 
     /**

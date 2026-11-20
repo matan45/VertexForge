@@ -68,6 +68,10 @@ public class ProjectHub implements AutoCloseable {
     /** Writes the Settings dialog's choices; {@code null} for a hub that cannot save them (tests). */
     private final LauncherSettingsRepository settingsRepository;
     private final ShellOpener shell;
+    /** "Back up and open" (VK-1690). */
+    private final ProjectBackupService backups;
+    /** "Open a copy" (VK-1690). */
+    private final ProjectCopier copier;
     private final int listLimit;
     private final Clock clock;
     /** Reads picked, dropped and command-line projects, each with a timeout (VK-1685). */
@@ -124,6 +128,8 @@ public class ProjectHub implements AutoCloseable {
         this.settings = Objects.requireNonNull(settings, "settings");
         this.shell = new ShellOpener(editorLauncher.processStarter());
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.backups = new ProjectBackupService(clock, SpaceProbe.SYSTEM);
+        this.copier = new ProjectCopier(SpaceProbe.SYSTEM);
         this.listLimit = settings.recentProjectsLimit();
         ProjectInspector reader = Objects.requireNonNull(inspector, "inspector");
         Objects.requireNonNull(pickTimeout, "pickTimeout");
@@ -199,6 +205,14 @@ public class ProjectHub implements AutoCloseable {
     }
 
     /**
+     * As {@link #checkProject}, for any project file: Open reads the file again right before it decides whether the
+     * engine reads the project (VK-1690), since the row's answer may be old. Never completes exceptionally.
+     */
+    public CompletableFuture<ProjectFileCheck> checkProjectFile(Path projectFile, boolean probeLock) {
+        return health.check(projectFile, probeLock);
+    }
+
+    /**
      * Removes the entry from the list; the project on disk is never touched. The removal is what
      * {@link #restoreProject} needs to undo it (VK-1686). Store thread.
      */
@@ -241,6 +255,37 @@ public class ProjectHub implements AutoCloseable {
     /** Sets a project's "Open with MCP" (VK-1683). Store thread. */
     public RecentProjectsView setMcp(UUID id, McpSetting setting) throws StoreWriteException {
         return repository.setMcp(id, setting);
+    }
+
+    /** Records that the project's "unknown version" warning was shown, so it is shown once (VK-1690). Store thread. */
+    public RecentProjectsView setUnknownVersionWarned(UUID id) throws StoreWriteException {
+        return repository.setUnknownVersionWarned(id);
+    }
+
+    /**
+     * Zips the project beside its folder (VK-1690), leaving out the editor's state and the compiled scripts. Blocks
+     * for as long as the backup takes: the window runs it as a {@link FileJob} on its creation thread. Never throws.
+     */
+    public ProjectBackupService.BackupOutcome backUpProject(ProjectBackupService.BackupRequest request,
+                                                           JobMonitor monitor) {
+        return backups.backUp(request, monitor);
+    }
+
+    /**
+     * Copies the project folder beside it under a new name (VK-1690); the original is only read. Blocks for as long as
+     * the copy takes: the window runs it as a {@link FileJob} on its creation thread. Never throws.
+     */
+    public ProjectCopier.CopyOutcome copyProject(ProjectCopier.CopyRequest request, JobMonitor monitor) {
+        return copier.copy(request, monitor);
+    }
+
+    /**
+     * Lists a copy made by "Open a copy" (VK-1690) under its real path, bound to {@code engineId} when given, in one
+     * write; the original's entry is never touched. Store thread.
+     */
+    public AddedProject listCopy(Path projectFile, String name, Optional<UUID> engineId) throws StoreWriteException {
+        Objects.requireNonNull(projectFile, "projectFile");
+        return repository.addBound(canonical(projectFile), name, listLimit, engineId);
     }
 
     /** The settings as last read or saved. Any thread. */

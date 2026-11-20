@@ -27,6 +27,7 @@ namespace services
         std::string authoredWorkingDirectory;
         std::filesystem::path authoredBaseFolder;
         OpenGuard openGuard;
+        bool stampEngineVersionOnOpen = false;
 
         // The working directory to write into a .vfproj that lies in `targetFolder` (absolute).
         std::string workingDirectoryToSave(const std::filesystem::path& targetFolder) const;
@@ -36,6 +37,11 @@ namespace services
         ~ProjectServiceImpl() override = default;
 
         void setOpenGuard(OpenGuard guard);
+        // VK-1690: when enabled, a successful loadProject records in the .vfproj that this engine
+        // opened it (ProjectSerialization::stampEngineVersions: engineVersion and assetFormatVersion
+        // only, never lowering a newer engine's record, nothing written when they already match). A failure is a warning; the project still
+        // opens. The editor enables it; the Runtime leaves it off.
+        void setStampEngineVersionOnOpen(bool enabled);
 
         void registerEventHandlers() override;
 

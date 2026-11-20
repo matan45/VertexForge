@@ -152,10 +152,11 @@ public class LauncherApp extends Application {
             boolean creating = view.controller().creationRunning();
             try {
                 if (!view.shutdown(SHUTDOWN_WAIT)) {
-                    log.warn("A project creation or a recent-projects save was still running after "
+                    log.warn("A project creation, backup or copy, or a recent-projects save was still running after "
                             + SHUTDOWN_WAIT.toSeconds() + " s; the launcher exits as soon as the save finishes"
-                            + (creating ? ". The cancelled creation may leave a temporary \"."
-                                    + "<name>" + ProjectCreator.STAGING_INFIX + "<id>\" folder in its location" : ""));
+                            + (creating ? ". The cancelled job may leave a temporary \"."
+                                    + "<name>" + ProjectCreator.STAGING_INFIX + "<id>\" folder (a creation or a copy)"
+                                    + " or a \"<name>.zip.partial\" file (a backup) beside the project" : ""));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

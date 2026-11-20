@@ -164,6 +164,26 @@ public final class RecentProjects {
         return this;
     }
 
+    /**
+     * Records that the entry's "unknown version" warning was shown (VK-1690); does nothing when the id is gone or it is
+     * recorded already.
+     */
+    public RecentProjects setUnknownVersionWarned(UUID id) {
+        List<RecentEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            RecentEntry entry = next.get(i);
+            if (entry.id().equals(id)) {
+                RecentEntry changed = entry.withUnknownVersionWarned();
+                if (changed == entry) {
+                    return this;
+                }
+                next.set(i, changed);
+                return new RecentProjects(next);
+            }
+        }
+        return this;
+    }
+
     /** Removes the entry; does nothing when the id is gone. Never touches the project on disk. */
     public RecentProjects remove(UUID id) {
         List<RecentEntry> next = new ArrayList<>(entries);

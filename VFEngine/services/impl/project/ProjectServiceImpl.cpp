@@ -3,6 +3,7 @@
 #include "../../events/project/ProjectEvents.hpp"
 #include "serialization/ProjectSerialization.hpp"
 #include "launch/ProjectPathRules.hpp"
+#include "config/Config.hpp"
 #include <filesystem>
 #include <system_error>
 
@@ -65,6 +66,11 @@ namespace services
         openGuard = std::move(guard);
     }
 
+    void ProjectServiceImpl::setStampEngineVersionOnOpen(bool enabled)
+    {
+        stampEngineVersionOnOpen = enabled;
+    }
+
     bool ProjectServiceImpl::loadProject(const std::string& filePath)
     {
         auto project = serialization::ProjectSerialization::loadProject(filePath);
@@ -110,8 +116,8 @@ namespace services
             }
 
             // VK-1682: last, so an accepted switch (the editor lock already moved) is always
-            // followed by the commit below: only assignments and publish (which catches every
-            // subscriber's exception) remain.
+            // followed by the commit below: only assignments, the VK-1690 stamp (which catches
+            // everything) and publish (which catches every subscriber's exception) remain.
             if (openGuard)
             {
                 if (std::optional<std::string> refusal = openGuard(projectFilePath))
@@ -132,8 +138,36 @@ namespace services
         authoredWorkingDirectory = std::move(authored);
         authoredBaseFolder = std::move(baseFolder);
 
+        // VK-1690: the editor records that this engine opened the project, so the launcher can
+        // compare the next engine with it. Only after the commit: a refused switch never writes.
+        if (stampEngineVersionOnOpen)
+        {
+            try
+            {
+                const serialization::ProjectStamp stamp =
+                    serialization::ProjectSerialization::stampEngineVersions(filePath);
+                if (stamp.status == serialization::ProjectStampStatus::Stamped)
+                {
+                    // The notification and MCP project_info report what the file now says: this engine,
+                    // or a newer one whose record the stamp kept.
+                    currentProject->engineVersion = stamp.engineVersion;
+                    vfLogInfo("Marked project {} as opened by {}: it records {} (asset format {})", filePath,
+                              Version::displayName, stamp.engineVersion, stamp.assetFormatVersion);
+                }
+                else if (stamp.status == serialization::ProjectStampStatus::Failed)
+                {
+                    vfLogWarning("Could not mark project {} as opened by {}: {} (the project still opens)",
+                                 filePath, Version::displayName, stamp.message);
+                }
+            }
+            catch (...)
+            {
+                // stampEngineVersions never throws; this guards the assignment and the logging.
+            }
+        }
+
         events::project::ProjectLoadedNotification notification;
-        notification.project = *project;
+        notification.project = *currentProject;
         notification.filePath = filePath;
         events::EventDispatcher::instance().publish(notification);
 

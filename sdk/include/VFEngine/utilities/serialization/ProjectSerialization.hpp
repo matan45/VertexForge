@@ -34,6 +34,24 @@ namespace serialization
         bool ok() const noexcept { return status == ProjectInspectionStatus::Ok; }
     };
 
+    // VK-1690: what stampEngineVersions did to a .vfproj.
+    enum class ProjectStampStatus
+    {
+        Unchanged,  // both members already name this engine: nothing was written
+        Stamped,    // engineVersion and assetFormatVersion now name this engine
+        Failed      // the file is as it was; message says why
+    };
+
+    struct ProjectStamp
+    {
+        ProjectStampStatus status = ProjectStampStatus::Unchanged;
+        std::string message;  // why it failed; empty otherwise; never the path
+        // What the file records once the call succeeded (Unchanged or Stamped): this engine's values,
+        // or a NEWER engine's that it kept (a stamp never lowers the record). Empty after Failed.
+        std::string engineVersion;
+        std::string assetFormatVersion;
+    };
+
     class VF_SERIALIZATION_API ProjectSerialization
     {
     public:
@@ -43,6 +61,16 @@ namespace serialization
         static std::optional<config::ProjectConfig> loadProject(std::string_view filename);
         static bool saveProject(const config::ProjectConfig& project, std::string_view filename);
         static bool validateProject(std::string_view filename);
+        // VK-1690: records in a .vfproj that this engine opened it. Sets engineVersion to
+        // Version::displayName and assetFormatVersion to AssetFormatVersion::toString(), each unless
+        // the file already names a NEWER version there (never lowered: the launcher must keep older
+        // engines away from content a newer one may have written), and keeps every other member, the
+        // member order, the line endings and a UTF-8 BOM. A missing assetFormatVersion goes right
+        // after engineVersion; a missing engineVersion goes at the end. Writes nothing when both
+        // already hold what they should. Otherwise the file is replaced atomically through
+        // the sibling <file>.stamp.tmp (up to 3 tries), which is never left behind. Never throws; the
+        // caller reports the result (only resource::replaceFileAtomically logs its own errors).
+        static ProjectStamp stampEngineVersions(std::string_view filename);
 
     private:
         // Empty when the structure is valid, otherwise why not.

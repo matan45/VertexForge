@@ -20,14 +20,18 @@ import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.project.EditorLockProbe;
 import com.vertexforge.launcher.project.EditorLockState;
 import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectFile;
 import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.ProjectFileReader;
+import com.vertexforge.launcher.project.VersionCompatibility;
 import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsCodec;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
+import com.vertexforge.launcher.service.JobMonitor;
+import com.vertexforge.launcher.service.ProjectBackupService;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.settings.LauncherSettings;
@@ -73,6 +77,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
+import java.util.zip.ZipFile;
 
 /**
  * {@code --self-test}: proves that a build, above all the packaged app image, has every class, module and resource
@@ -181,7 +186,35 @@ public final class SelfTest {
                 environment.configDir().resolve(EngineRegistryRepository.FILE_NAME)));
         check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects"), engine[0]));
         check("existing project", () -> checkExistingProject(hub));
+        check("project backup", () -> checkProjectBackup(hub));
         return hub;
+    }
+
+    /**
+     * "Back up and open" end to end on the created project (VK-1690): the zip is written beside the project folder,
+     * never inside it, verified, and holds the project file; so the packaged image has what the backup needs
+     * ({@code java.util.zip}, {@code FileStore}).
+     */
+    private static void checkProjectBackup(ProjectHub hub) throws Exception {
+        Path projectFile = hub.listProjects().entries().getFirst().path();
+        ProjectFile project = ProjectFileReader.read(projectFile);
+        ProjectBackupService.BackupOutcome outcome = hub.backUpProject(new ProjectBackupService.BackupRequest(
+                projectFile, project.workingDirectory(), VersionCompatibility.savedVersion(project).orElse(null)),
+                JobMonitor.NONE);
+        if (!(outcome instanceof ProjectBackupService.BackupOutcome.Done done)) {
+            throw new IllegalStateException("the backup gave " + outcome);
+        }
+        Path folder = projectFile.getParent();
+        if (!Files.isRegularFile(done.zip()) || !folder.getParent().equals(done.zip().getParent())) {
+            throw new IllegalStateException("the backup is not a file beside the project folder: " + done.zip());
+        }
+        String entry = folder.getFileName() + "/" + projectFile.getFileName();
+        try (ZipFile zip = new ZipFile(done.zip().toFile())) {
+            if (zip.getEntry(entry) == null) {
+                throw new IllegalStateException("the backup has no " + entry);
+            }
+        }
+        Files.delete(done.zip());
     }
 
     /**

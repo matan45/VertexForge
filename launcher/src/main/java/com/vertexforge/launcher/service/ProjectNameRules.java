@@ -105,8 +105,20 @@ public final class ProjectNameRules {
      * @param blueprint the files the project starts with
      */
     public static Optional<Problem> checkPathLength(Path location, String name, ProjectBlueprint blueprint) {
-        int deepestPath = location.normalize().resolve(name).toString().length() + 1
-                + blueprint.deepestRelativeLength(name);
+        return checkPathLength(location, name, blueprint.deepestRelativeLength(name));
+    }
+
+    /**
+     * {@link #checkPathLength(Path, String, ProjectBlueprint)} for a project whose deepest file or folder is already
+     * known (VK-1690: a copy of an existing project).
+     *
+     * @param location              an absolute folder
+     * @param name                  a name that passed {@link #checkName}
+     * @param deepestRelativeLength the length, in characters, of the project's deepest file or folder relative to its
+     *                              project folder
+     */
+    public static Optional<Problem> checkPathLength(Path location, String name, int deepestRelativeLength) {
+        int deepestPath = location.normalize().resolve(name).toString().length() + 1 + deepestRelativeLength;
         int allowed = MAX_PATH_CHARS - PATH_MARGIN;
         if (deepestPath <= allowed) {
             return Optional.empty();

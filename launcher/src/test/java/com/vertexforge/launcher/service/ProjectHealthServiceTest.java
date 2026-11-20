@@ -262,20 +262,43 @@ class ProjectHealthServiceTest {
         return new ProjectFileCheck.Readable(new ProjectFile("Game", schema, engineVersion), lock);
     }
 
+    /** A project naming its asset format too (VK-1690); {@code null} leaves it out, as before the editor stamped it. */
+    private static ProjectFileCheck.Readable readable(String schema, String engineVersion, String assetFormatVersion,
+                                                      EditorLockState lock) {
+        return new ProjectFileCheck.Readable(new ProjectFile("Game", schema, engineVersion, null, ".",
+                assetFormatVersion), lock);
+    }
+
     private static ProjectFileCheck.Readable readable(String schema) {
         return readable(schema, "VertexForge 2.1.0", EditorLockState.FREE);
     }
 
-    /** An OK engine whose engine.json says it reads {@code projectSchemaVersion}; {@code null} leaves it out. */
+    /** An OK engine 1.0.0 whose engine.json says it reads {@code projectSchemaVersion}; {@code null} leaves it out. */
     private static EngineOption engine(UUID id, String projectSchemaVersion, boolean isDefault) throws Exception {
+        return engine(id, "1.0.0", projectSchemaVersion, null, isDefault);
+    }
+
+    /** An OK engine whose engine.json names these versions; {@code null} leaves a member out. */
+    private static EngineOption engine(UUID id, String engineVersion, String projectSchemaVersion,
+                                       String assetFormatVersion, boolean isDefault) throws Exception {
         String schema = projectSchemaVersion == null ? "" : ", \"projectSchemaVersion\": \"" + projectSchemaVersion
                 + "\"";
-        EngineManifest manifest = EngineManifest.parse("{\"manifestVersion\": 1, \"engineVersion\": \"1.0.0\","
-                + " \"configuration\": \"Development\", \"editorExe\": \"Editor.exe\", \"workingDirectory\": \".\""
-                + schema + "}");
+        String assets = assetFormatVersion == null ? "" : ", \"assetFormatVersion\": \"" + assetFormatVersion + "\"";
+        EngineManifest manifest = EngineManifest.parse("{\"manifestVersion\": 1, \"engineVersion\": \""
+                + engineVersion + "\", \"configuration\": \"Development\", \"editorExe\": \"Editor.exe\","
+                + " \"workingDirectory\": \".\"" + schema + assets + "}");
         Path exe = ROOT.resolve(id.toString()).resolve("Editor.exe");
         return new EngineOption(Optional.of(id), exe, exe.toString(), EngineHealth.ok(manifest, ROOT), false,
                 isDefault, false);
+    }
+
+    /** The working {@code VERTEXFORGE_EDITOR_PATH} override, with an engine.json naming these versions. */
+    private static EngineOption override(String engineVersion, String projectSchemaVersion,
+                                         String assetFormatVersion) throws Exception {
+        EngineOption engine = engine(UUID.randomUUID(), engineVersion, projectSchemaVersion, assetFormatVersion,
+                false);
+        Path exe = ROOT.resolve("override").resolve("Editor.exe");
+        return new EngineOption(Optional.empty(), exe, exe.toString(), engine.health(), false, false, true);
     }
 
     /** An OK engine without an engine.json (an engine built before VK-1680). */
@@ -286,9 +309,13 @@ class ProjectHealthServiceTest {
     }
 
     private static EngineOptions options(UUID defaultId, EngineOption... engines) {
+        return optionsWithOverride(defaultId, null, engines);
+    }
+
+    private static EngineOptions optionsWithOverride(UUID defaultId, EngineOption override, EngineOption... engines) {
         EngineRegistryView registry = new EngineRegistryView(List.of(), Optional.ofNullable(defaultId), StoreStatus.OK,
                 Optional.empty(), "", 0);
-        return new EngineOptions(registry, Optional.empty(), Arrays.asList(engines));
+        return new EngineOptions(registry, Optional.ofNullable(override), Arrays.asList(engines));
     }
 
     private static ProjectStatus evaluate(ProjectFileCheck check, EngineOptions options) {
@@ -305,9 +332,51 @@ class ProjectHealthServiceTest {
         assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
         assertEquals("Needs VertexForge 2.1.0", status.label());
         assertFalse(status.isOk(), "Open is disabled");
-        assertEquals("Saved by VertexForge 2.1.0 (project format 2.0). The engine it opens with (1.0.0 Development)"
-                + " reads project format 1.x. Use Change Engine… to pick an engine that reads format 2 (add one with"
-                + " Engines… if none does).", status.reason());
+        assertEquals("Saved by VertexForge 2.1.0 (project format 2.0, asset format 1.0.0). The only engine this"
+                + " launcher knows (1.0.0 Development) cannot open it: it reads project format 1.0. Add VertexForge"
+                + " 2.1.0 or later with Engines….", status.reason());
+    }
+
+    /** VK-1690 AC2: a project 1.1.0 in asset format 1.1.0, and only a 1.0.0 engine registered. */
+    @Test
+    void aProjectInANewerAssetFormatNeedsTheVersionThatSavedIt() throws Exception {
+        EngineOptions options = options(A, engine(A, "1.0.0", "1.0", "1.0.0", true));
+
+        ProjectStatus status = evaluate(readable("1.0", "VertexForge 1.1.0", "1.1.0", EditorLockState.FREE), options);
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+        assertEquals("Needs VertexForge 1.1.0", status.label());
+        assertEquals("Saved by VertexForge 1.1.0 (project format 1.0, asset format 1.1.0). The only engine this"
+                + " launcher knows (1.0.0 Development) cannot open it: it reads project format 1.0 and asset format"
+                + " 1.0.0. Add VertexForge 1.1.0 or later with Engines….", status.reason());
+    }
+
+    /**
+     * A newer asset format saved by the engine's own version (a development build that changed the format) needs a
+     * newer VertexForge, never "VertexForge 1.0.0" next to a 1.0.0 engine.
+     */
+    @Test
+    void aNewerAssetFormatFromTheSameVersionNeedsANewerVertexForge() throws Exception {
+        EngineOptions options = options(A, engine(A, "1.0.0", "1.0", "1.0.0", true));
+
+        ProjectStatus status = evaluate(readable("1.0", "VertexForge 1.0.0", "1.1.0", EditorLockState.FREE), options);
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+        assertEquals("Needs newer VertexForge", status.label());
+    }
+
+    /** The product version blocks too, even with the same formats (VK-1690: a newer major.minor). */
+    @Test
+    void aNewerProductMajorOrMinorNeedsANewerEngine() throws Exception {
+        EngineOptions options = options(A, engine(A, "1.0.0", "1.0", "1.0.0", true));
+
+        ProjectStatus status = evaluate(readable("1.0", "VertexForge 1.1.0", "1.0.0", EditorLockState.FREE), options);
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+        assertEquals("Needs VertexForge 1.1.0", status.label());
+        // Only the patch: it opens.
+        assertEquals(Kind.OK,
+                evaluate(readable("1.0", "VertexForge 1.0.9", "1.0.0", EditorLockState.FREE), options).kind());
     }
 
     @Test
@@ -320,17 +389,55 @@ class ProjectHealthServiceTest {
                 options).label());
         ProjectStatus unknown = evaluate(readable("2.0", null, EditorLockState.FREE), options);
         assertEquals("Needs newer VertexForge", unknown.label());
-        assertTrue(unknown.reason().startsWith("Saved by a newer VertexForge (project format 2.0)."),
-                unknown.reason());
+        assertTrue(unknown.reason().startsWith("Saved by an unknown VertexForge (project format 2.0, asset format"
+                + " 1.0.0)."), unknown.reason());
+        assertTrue(unknown.reason().endsWith(" Add a newer VertexForge with Engines…."), unknown.reason());
     }
 
     @Test
-    void aNewerMinorOrAnOlderProjectOpens() throws Exception {
+    void aNewerMinorOpensAndAnOlderMajorIsInvalidInTheEditorsWords() throws Exception {
         EngineOptions options = options(A, engine(A, "1.0", true));
 
-        assertEquals(Kind.OK, evaluate(readable("1.9"), options).kind());
-        // An older major is the editor's to refuse (VK-1690 offers a backup and upgrade then).
-        assertEquals(Kind.OK, evaluate(readable("0.5"), options).kind());
+        assertEquals(Kind.OK, evaluate(readable("1.9", "VertexForge 1.0.0", EditorLockState.FREE), options).kind());
+        // The editor refuses an older major (exit code 3) and no migration exists.
+        ProjectStatus older = evaluate(readable("0.5", "VertexForge 1.0.0", EditorLockState.FREE), options);
+        assertEquals(Kind.INVALID, older.kind());
+        assertEquals("Project schema version 0.5 is older than this engine supports (1.0)", older.reason());
+    }
+
+    @Test
+    void whenEveryEngineRefusesAnOlderSchemaTheFirstOnesWordsShow() throws Exception {
+        EngineOptions options = options(null, engine(A, "1.0.0", "1.0", "1.0.0", false),
+                engine(B, "2.0.0", "2.0", "1.0.0", false));
+
+        ProjectStatus status = evaluate(readable("0.5", "VertexForge 1.0.0", EditorLockState.FREE), options);
+
+        assertEquals(ProjectStatus.invalid("Project schema version 0.5 is older than this engine supports (1.0)"),
+                status);
+    }
+
+    /** As in the editor, a member it refuses is reported before an older schema. */
+    @Test
+    void aMemberTheEditorRefusesComesBeforeAnOlderSchema() throws Exception {
+        ProjectFileCheck check = new ProjectFileCheck.Readable(new ProjectFile("Game", "0.5", "VertexForge 1.0.0",
+                "Invalid project file: 'startupScene' cannot be empty"), EditorLockState.FREE);
+
+        assertEquals(ProjectStatus.invalid("Invalid project file: 'startupScene' cannot be empty"),
+                evaluate(check, options(A, engine(A, "1.0", true))));
+    }
+
+    @Test
+    void anEngineThatFindsItNewerOutweighsOneThatRefusesItsOlderSchema() throws Exception {
+        EngineOptions options = options(null, engine(A, "1.0.0", "1.0", "1.0.0", false),
+                engine(B, "3.0.0", "3.0", "1.0.0", false));
+
+        ProjectStatus status = evaluate(readable("2.0"), options);
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+        assertEquals("Saved by VertexForge 2.1.0 (project format 2.0, asset format 1.0.0). None of the engines this"
+                + " launcher knows can open it: 1.0.0 Development reads project format 1.0 and asset format 1.0.0;"
+                + " 3.0.0 Development reads project format 3.0 and asset format 1.0.0. Add VertexForge 2.1.0 or later"
+                + " with Engines….", status.reason());
     }
 
     @Test
@@ -341,32 +448,112 @@ class ProjectHealthServiceTest {
 
     @Test
     void anEngineThatDoesNotSayWhatItReadsGivesNoVerdict() throws Exception {
-        assertEquals(Kind.OK, evaluate(readable("2.0"), options(A, engine(A, null, true))).kind());
-        assertEquals(Kind.OK, evaluate(readable("2.0"), options(A, engine(A, "garbled", true))).kind());
-        assertEquals(Kind.OK, evaluate(readable("2.0"), options(null, engineWithoutManifest(A))).kind());
+        ProjectFileCheck check = readable("2.0", "VertexForge 1.0.0", EditorLockState.FREE);
+
+        assertEquals(ProjectStatus.ok(), evaluate(check, options(A, engine(A, null, true))));
+        assertEquals(ProjectStatus.ok(), evaluate(check, options(A, engine(A, "garbled", true))));
+        assertEquals(ProjectStatus.ok(), evaluate(check, options(null, engineWithoutManifest(A))));
+    }
+
+    /** An engine that cannot tell counts as able to open the project, as VK-1686 decided. */
+    @Test
+    void anEngineThatCannotTellCountsAsAbleToOpenIt() throws Exception {
+        EngineOptions options = options(null, engine(A, "1.0", false), engineWithoutManifest(B));
+
+        assertEquals(ProjectStatus.ok(), evaluate(readable("2.0"), options));
     }
 
     @Test
-    void everyEngineOpenCouldOfferMustBeOlder() throws Exception {
-        // No default and two engines: Open would ask, offering both.
-        EngineOptions oneReadsIt = options(null, engine(A, "1.0", false), engine(B, "2.0", false));
+    void aProjectNeedsANewerEngineOnlyWhenNoEngineCanOpenIt() throws Exception {
+        // No default and two engines: Open would ask; one of them can open it.
+        EngineOptions oneReadsIt = options(null, engine(A, "1.0", false),
+                engine(B, "2.1.0", "2.0", null, false));
         EngineOptions noneReadsIt = options(null, engine(A, "1.0", false), engine(B, "1.3", false));
 
-        assertEquals(Kind.OK, evaluate(readable("2.0"), oneReadsIt).kind());
+        assertEquals(ProjectStatus.ok(), evaluate(readable("2.0"), oneReadsIt));
         ProjectStatus status = evaluate(readable("2.0"), noneReadsIt);
         assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
-        assertTrue(status.reason().contains("None of the engines it can open with (1.0.0 Development, 1.0.0"
-                + " Development) reads project format 2."), status.reason());
+        assertTrue(status.reason().contains(" None of the engines this launcher knows can open it: 1.0.0 Development"
+                + " reads project format 1.0; 1.0.0 Development reads project format 1.3. Add VertexForge 2.1.0 or"
+                + " later with Engines…."), status.reason());
+    }
+
+    /** D2: Open stays enabled when another engine can open the project, and the row says what Open will do. */
+    @Test
+    void aBoundProjectWhoseEngineCannotOpenItIsOkWithANote() throws Exception {
+        EngineOptions options = options(B, engine(A, "1.0", false), engine(B, "2.1.0", "2.0", null, true));
+
+        ProjectStatus boundToOld = ProjectHealthService.evaluate(readable("2.0"), options, A.toString(),
+                FolderEditor.NONE);
+        assertEquals(ProjectStatus.ok("Saved by VertexForge 2.1.0. The engine it opens with (1.0.0 Development) cannot"
+                + " open it, so Open offers one that can."), boundToOld);
+        assertEquals(ProjectStatus.ok(),
+                ProjectHealthService.evaluate(readable("2.0"), options, B.toString(), FolderEditor.NONE));
+        // Unbound, it opens with the default, which can open it.
+        assertEquals(ProjectStatus.ok(), evaluate(readable("2.0"), options));
     }
 
     @Test
-    void aBoundProjectIsJudgedByItsOwnEngine() throws Exception {
-        EngineOptions options = options(B, engine(A, "1.0", false), engine(B, "2.0", true));
+    void theNoteKeepsTheLockThatCouldNotBeChecked() throws Exception {
+        EngineOptions options = options(B, engine(A, "1.0", false), engine(B, "2.1.0", "2.0", null, true));
 
-        assertEquals(Kind.NEEDS_NEWER_ENGINE,
-                ProjectHealthService.evaluate(readable("2.0"), options, A.toString(), FolderEditor.NONE).kind());
-        assertEquals(Kind.OK,
-                ProjectHealthService.evaluate(readable("2.0"), options, B.toString(), FolderEditor.NONE).kind());
+        ProjectStatus status = ProjectHealthService.evaluate(readable("2.0", "VertexForge 2.1.0",
+                new EditorLockState.Unknown("Access denied")), options, A.toString(), FolderEditor.NONE);
+
+        assertEquals(ProjectStatus.ok("Saved by VertexForge 2.1.0. The engine it opens with (1.0.0 Development) cannot"
+                + " open it, so Open offers one that can. Could not check whether another editor has it open: Access"
+                + " denied."), status);
+    }
+
+    @Test
+    void aProjectThatIsAlreadyOpenSaysSoRatherThanTheNote() throws Exception {
+        EngineOptions options = options(B, engine(A, "1.0", false), engine(B, "2.1.0", "2.0", null, true));
+
+        ProjectStatus status = ProjectHealthService.evaluate(readable("2.0", "VertexForge 2.1.0",
+                new EditorLockState.Held(OptionalLong.of(5))), options, A.toString(), FolderEditor.NONE);
+
+        assertEquals(Kind.ALREADY_OPEN, status.kind());
+    }
+
+    /** The override opens every project, so it is the engine the note names, and it is offered like the others. */
+    @Test
+    void theOverrideIsOneOfTheEnginesOpenCouldOffer() throws Exception {
+        EngineOption oldOverride = override("1.0.0", "1.0", "1.0.0");
+        EngineOption current = engine(A, "1.1.0", "1.0", "1.1.0", true);
+        ProjectFileCheck project = readable("1.0", "VertexForge 1.1.0", "1.1.0", EditorLockState.FREE);
+
+        assertEquals(ProjectStatus.ok("Saved by VertexForge 1.1.0. The engine it opens with (1.0.0 Development) cannot"
+                + " open it, so Open offers one that can."), evaluate(project, optionsWithOverride(A, oldOverride,
+                current)));
+        ProjectStatus alone = evaluate(project, optionsWithOverride(null, oldOverride));
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, alone.kind());
+        assertTrue(alone.reason().contains(" The only engine this launcher knows (1.0.0 Development) cannot open it:"),
+                alone.reason());
+        // A newer override opens what the registered engines cannot.
+        assertEquals(ProjectStatus.ok(), evaluate(project, optionsWithOverride(null,
+                override("1.1.0", "1.0", "1.1.0"), engine(A, "1.0.0", "1.0", "1.0.0", true))));
+    }
+
+    /** A broken engine cannot be started, so it never counts as able to open the project. */
+    @Test
+    void aBrokenEngineIsNotOffered() throws Exception {
+        EngineOption current = engine(B, "1.1.0", "1.0", "1.1.0", false);
+        Path exe = ROOT.resolve(B.toString()).resolve("Editor.exe");
+        EngineOption broken = new EngineOption(Optional.of(B), exe, exe.toString(),
+                EngineHealth.broken("gone", current.health().manifest()), false, false, false);
+
+        ProjectStatus status = evaluate(readable("1.0", "VertexForge 1.1.0", "1.1.0", EditorLockState.FREE),
+                options(A, engine(A, "1.0.0", "1.0", "1.0.0", true), broken));
+
+        assertEquals(Kind.NEEDS_NEWER_ENGINE, status.kind());
+    }
+
+    /** VK-1690 AC1: an older project opens; the version dialog comes with Open. */
+    @Test
+    void anOlderProjectOpens() throws Exception {
+        EngineOptions options = options(A, engine(A, "1.1.0", "1.0", "1.1.0", true));
+
+        assertEquals(ProjectStatus.ok(), evaluate(readable("1.0", "VertexForge 1.0.0", EditorLockState.FREE), options));
     }
 
     @Test

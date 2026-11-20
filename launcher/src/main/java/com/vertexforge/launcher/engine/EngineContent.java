@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * What an engine install offers for creating a project (VK-1689): its version and the content folders its
@@ -20,6 +21,9 @@ import java.util.UUID;
  * @param label         the engine as the launcher shows it ({@link EngineOption#label()})
  * @param path          the editor's path, for display
  * @param override      whether it comes from {@code VERTEXFORGE_EDITOR_PATH}
+ * @param assetFormatVersion the binary asset format the engine writes ({@code MAJOR.MINOR.PATCH}), which a new
+ *                      {@code .vfproj} records (VK-1690); {@code null} when the manifest does not say, or says
+ *                      something that is not such a version
  */
 public record EngineContent(
         Optional<UUID> engineId,
@@ -30,11 +34,19 @@ public record EngineContent(
         Optional<Path> vfxLibraryDir,
         String label,
         String path,
-        boolean override
+        boolean override,
+        String assetFormatVersion
 ) {
     /** The product name the editor writes before its version ({@code Version::displayName}, Config.hpp). */
     public static final String PRODUCT_NAME = "VertexForge";
 
+    /** {@code MAJOR.MINOR.PATCH} without leading zeros, as {@code tools/engine_version.lua} writes it. */
+    private static final Pattern VERSION_PATTERN = Pattern.compile("(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){2}");
+
+    /**
+     * @throws IllegalArgumentException when {@code assetFormatVersion} is given but is not a {@code MAJOR.MINOR.PATCH}
+     *                                  version ({@link #of} leaves such a manifest value out instead)
+     */
     public EngineContent {
         engineId = engineId == null ? Optional.empty() : engineId;
         Objects.requireNonNull(engineVersion, "engineVersion");
@@ -44,6 +56,18 @@ public record EngineContent(
         vfxLibraryDir = vfxLibraryDir == null ? Optional.empty() : vfxLibraryDir;
         label = label == null ? engineVersion : label;
         path = path == null ? "" : path;
+        if (assetFormatVersion != null && !isVersion(assetFormatVersion)) {
+            throw new IllegalArgumentException("assetFormatVersion \"" + assetFormatVersion
+                    + "\" is not a MAJOR.MINOR.PATCH version");
+        }
+    }
+
+    /** Content whose asset format is not known: a new project then records none. */
+    public EngineContent(Optional<UUID> engineId, String engineVersion, Path templatesDir, Path scriptLibDir,
+                         Optional<Path> examplesDir, Optional<Path> vfxLibraryDir, String label, String path,
+                         boolean override) {
+        this(engineId, engineVersion, templatesDir, scriptLibDir, examplesDir, vfxLibraryDir, label, path, override,
+                null);
     }
 
     /**
@@ -73,9 +97,16 @@ public record EngineContent(
         if (templates.isEmpty() || library.isEmpty()) {
             return Optional.empty();
         }
+        // The manifest reads assetFormatVersion leniently (any string); only a real version is carried on.
+        String assetFormatVersion = manifest.assetFormatVersion();
         return Optional.of(new EngineContent(option.id(), manifest.engineVersion(), templates.get(), library.get(),
                 manifest.examplesDirIn(dir), manifest.vfxLibraryDirIn(dir), option.label(), option.pathText(),
-                option.override()));
+                option.override(), assetFormatVersion != null && isVersion(assetFormatVersion)
+                        ? assetFormatVersion : null));
+    }
+
+    private static boolean isVersion(String text) {
+        return VERSION_PATTERN.matcher(text).matches();
     }
 
     /** Why {@link #of} gives nothing for {@code option}; empty when it gives content. */
