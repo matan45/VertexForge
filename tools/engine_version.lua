@@ -25,6 +25,13 @@ local engineManifestVersion = 1
 local templatesRel = "assets/templates"
 local scriptLibRel = "assets/scripts/lib"
 
+-- The two content folders the manifest records, relative to the content root. tools/package_release.lua
+-- copies them from the repo root to the same paths under dist/VertexForge, so a release manifest always
+-- points at the folders it ships (VK-1688).
+function vfEngineContentPaths()
+   return { templatesDir = templatesRel, scriptLibDir = scriptLibRel }
+end
+
 local function repoPath(rel)
    return path.join(repoRoot, rel)
 end
