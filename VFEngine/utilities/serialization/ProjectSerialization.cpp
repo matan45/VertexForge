@@ -94,9 +94,13 @@ namespace serialization
             return mine;
         }
 
-        constexpr VersionTriple engineVersionTriple()
+        // This engine's MAJOR.MINOR.PATCH, read from Version::text (the generated "1.0.0"): the engine
+        // Version's numbers are identity only and are never read outside the version tests
+        // (test_asset_format_version). test_engine_version pins that the text is a valid triple.
+        VersionTriple engineVersionTriple()
         {
-            return {Version::major, Version::minor, Version::patch};
+            static const VersionTriple triple = parseVersionTriple(Version::text, false).value_or(VersionTriple{});
+            return triple;
         }
 
         constexpr VersionTriple assetFormatVersionTriple()

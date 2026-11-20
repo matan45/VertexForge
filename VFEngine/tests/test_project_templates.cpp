@@ -448,8 +448,10 @@ TEST_SUITE("ProjectTemplates")
 
             const auto minimum = parseVersion(stringOf(m, "minimumEngineVersion"));
             REQUIRE_MESSAGE(minimum.has_value(), "minimumEngineVersion must be MAJOR.MINOR.PATCH");
-            const std::array<uint32_t, 3> engine{Version::major, Version::minor, Version::patch};
-            CHECK_MESSAGE(*minimum <= engine, "the template needs a newer engine than this one (" << Version::text << ")");
+            // Read through Version::text: only the version tests read the engine Version's numbers.
+            const auto engine = parseVersion(Version::text);
+            REQUIRE_MESSAGE(engine.has_value(), "Version::text is not MAJOR.MINOR.PATCH: " << Version::text);
+            CHECK_MESSAGE(*minimum <= *engine, "the template needs a newer engine than this one (" << Version::text << ")");
 
             const std::string workingDirectory = stringOf(m, "workingDirectory");
             const std::string startupScene = stringOf(m, "startupScene");
