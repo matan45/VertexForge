@@ -45,6 +45,11 @@ Note the Editor stays a `ConsoleApp` in all three configs (console logs always v
 - The Editor postbuild (`premake5 --file=../../tools/engine_version.lua --vfconfig=<Config> engine-manifest`) writes `engine.json` beside `Editor.exe`. It fails the build when VERSION and the generated header disagree. `tools/package_release.lua` rewrites it for `dist/VertexForge`.
   - Fields: `manifestVersion` (1), `engineVersion`, `assetFormatVersion`, `projectSchemaVersion`, `pluginApiVersion`, `configuration`, `gitCommit` (40-hex or null), `editorExe`, `workingDirectory`, `templatesDir`, `scriptLibDir`, `launchContract` (VK-1683: `launch::editorLaunchContract` in `EditorArguments.hpp`; bump it whenever the launcher may pass a flag or an argument value an older, strict editor would reject or receive damaged; 1 = `--console`, 2 = arguments may hold any Unicode character, VK-1684).
   - Paths are relative to the manifest. `workingDirectory` is `../../../../VFEngine/editor` in dev (the editor loads `../../resources` from its working directory) and `.` in the release folder. `templatesDir` (`assets/templates`) and `scriptLibDir` (`assets/scripts/lib`) resolve to the same strings in both, because the release folder mirrors the repo layout.
+- **`premake5 package-release [--skip-launcher]`** (VK-1688, `tools/package_release.lua`) builds `dist/VertexForge`:
+  - It ships `plugins/<Name>/`: the top-level `.vfplugin`, the Release DLL from `bin/<Name>/Release/x64`, and the plugin's `assets/` and `resources/` like the game exporter. It never ships the `plugins/<Name>/*.dll` postbuild copy or `plugins/data/`.
+  - It ships `assets/{scripts/lib, scripts/game/examples, vfx/library, templates if present}` at the repo's paths under the bundle root (lib and templates via `vfEngineContentPaths()` in `engine_version.lua`, which the manifest records), each verified byte-identical to the repo.
+  - Every failure exits 1: a launcher build without `--skip-launcher`, a missing Release exe or plugin DLL, an enabled plugin's API mismatch, or a Release `engine.json` that no longer matches the sources. `dist/VertexForge` is replaced only after a verified build in `dist/.VertexForge-staging`, by rename.
+  - Copies are made writable: jpackage leaves the launcher exe read-only, CopyFileW keeps that flag, and premake's `os.rmdir` stops at the first file it cannot delete.
 
 ## Tests
 

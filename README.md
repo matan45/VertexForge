@@ -66,13 +66,15 @@ To run in `Debug` or `Release` configurations:
 
 ## Packaging a Release Distribution
 
-To produce a single, ready-to-ship folder containing everything needed to distribute the engine — the **Editor**, **Runtime**, plugin **SDK**, **resources**, **Tests**, and the **Java launcher** (as a self-contained app-image with a bundled JRE) — use the `package-release` premake action.
+To produce a single, ready-to-ship folder containing everything needed to distribute the engine — the **Editor**, **Runtime**, plugin **SDK**, **resources**, **Tests**, the **plugins**, the engine **content** projects copy from (script library, example scripts, VFX library), and the **Java launcher** (as a self-contained app-image with a bundled JRE) — use the `package-release` premake action.
 
 > This packages the *engine/editor distribution*. It is different from the in-editor **Game Export**, which packages an individual game into a `.vfpak`.
 
 ### Prerequisites
-- The Release binaries must already be built.
-- **JDK 25** on your `PATH` or in `JAVA_HOME` (to build the launcher app-image). The Maven wrapper (`launcher/mvnw.cmd`) downloads the pinned Maven version on first use, and the build runs the launcher's unit tests. If the JDK is missing or a launcher test fails, the native bundle is still produced and the launcher step is skipped with a warning.
+- The Release binaries must already be built, plugins included (the package ships each plugin's Release DLL from `bin/<Name>/Release/x64/`, never the copy of the last-built configuration in `plugins/<Name>/`).
+- **JDK 25** on your `PATH` or in `JAVA_HOME` (to build the launcher app-image). The Maven wrapper (`launcher/mvnw.cmd`) downloads the pinned Maven version on first use, and the build runs the launcher's unit tests. If the JDK is missing or a launcher test fails, packaging fails; pass `--skip-launcher` to package without the launcher.
+
+Any failure exits non-zero. The package is assembled and verified in `dist/.VertexForge-staging/` and only then swapped in, so a failed run leaves an existing `dist/VertexForge/` as it was; if the swap itself cannot complete, the error says where the previous package is. Close any Editor, Runtime or launcher running from `dist/VertexForge/` first. The Release build must match the current sources (`bin/Editor/Release/x64/engine.json` is compared with them), so re-run `premake5 vs2022` and rebuild Release after changing `VERSION` or the plugin API.
 
 ### Steps
 1. Build the engine in Release:
@@ -82,6 +84,8 @@ To produce a single, ready-to-ship folder containing everything needed to distri
 2. Assemble the distribution:
     ```bash
     premake5 package-release
+    # or, without a JDK (ships no launcher):
+    premake5 package-release --skip-launcher
     ```
 
 This writes everything under `dist/VertexForge/`:
@@ -95,10 +99,16 @@ dist/VertexForge/
 │   ├── Runtime/Release/x64/        # Runtime.exe + all DLLs
 │   ├── Runtime/resources/          # editor/, shaders/, ibl/  (resolved as ../../resources/ by Runtime.exe)
 │   └── Tests/Release/x64/          # Tests.exe + DLLs
-└── sdk/                            # plugin headers, deps, lib/Release/imgui.lib, project template
+├── sdk/                            # plugin headers, deps, lib/Release/imgui.lib, project template
+├── plugins/<Name>/                 # <Name>.vfplugin + the Release <Name>.dll (+ the plugin's assets/, resources/), found by the Editor four levels up
+└── assets/
+    ├── scripts/lib/                # the mType script library (byte-identical to the repo's)
+    ├── scripts/game/examples/      # the example scripts
+    ├── vfx/library/                # the VFX library projects copy into assets/vfx/library
+    └── templates/                  # project templates, once the repo has them
 ```
 
-Run `dist/VertexForge/VertexForge Launcher/VertexForge Launcher.exe` to start the launcher, which in turn launches the bundled Editor. End users of the distribution do **not** need Java installed.
+Run `dist/VertexForge/VertexForge Launcher/VertexForge Launcher.exe` to start the launcher, which in turn launches the bundled Editor (with `--skip-launcher`, run `dist/VertexForge/bin/Editor/Release/x64/Editor.exe`). End users of the distribution do **not** need Java installed. The command ends with a summary of what was copied.
 
 ## Features
 - **Modular Engine Architecture**: Split into `Core`, `Graphics`, `Runtime`, and `Utilities` projects for flexible development.
