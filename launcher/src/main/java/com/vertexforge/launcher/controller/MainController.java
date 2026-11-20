@@ -10,6 +10,7 @@ import com.vertexforge.launcher.dialog.ProjectChooserDialog;
 import com.vertexforge.launcher.dialog.SessionFailureDialog;
 import com.vertexforge.launcher.dialog.SettingsDialog;
 import com.vertexforge.launcher.engine.EditorOverride;
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineLabels;
 import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.engine.EngineOptions;
@@ -37,6 +38,8 @@ import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateCatalogs;
 import com.vertexforge.launcher.session.EditorSession;
 import com.vertexforge.launcher.session.EditorSessions;
 import com.vertexforge.launcher.session.LaunchRequest;
@@ -1515,11 +1518,9 @@ public class MainController implements Initializable {
         Window owner = projectsTable.getScene().getWindow();
 
         // The dialog checks, creates and shows progress itself (VK-1679); it ends with the creation to follow up on.
+        // It reads the engines and their templates itself too (VK-1689).
         List<CreationJob> started = new ArrayList<>();
-        // Until the engines have been checked, offer to open the new project; Open then says what is missing.
-        boolean engineAvailable = engineOptions == null || engineOptions.anyUsable();
-        Optional<CreateProjectForm.Result> result =
-                CreateProjectDialog.show(owner, createServices(started), engineAvailable);
+        Optional<CreateProjectForm.Result> result = CreateProjectDialog.show(owner, createServices(started));
         if (result.isPresent()) {
             followCreation(result.get());
         } else if (!started.isEmpty()) {
@@ -1532,8 +1533,20 @@ public class MainController implements Initializable {
     private CreateProjectForm.Services createServices(List<CreationJob> started) {
         return new CreateProjectForm.Services() {
             @Override
-            public CompletableFuture<LocationCheck> checkLocation(Path location, String name) {
-                return hub.checkLocation(location, name);
+            public CompletableFuture<EngineOptions> engines() {
+                // Also refreshes the window's engine column and banners; completes on the FX thread.
+                return engineServices.refresh();
+            }
+
+            @Override
+            public CompletableFuture<TemplateCatalogs.Answer> templates(EngineContent engine) {
+                return hub.listTemplates(engine);
+            }
+
+            @Override
+            public CompletableFuture<LocationCheck> checkLocation(Path location, String name,
+                                                                  ProjectBlueprint blueprint) {
+                return hub.checkLocation(location, name, blueprint);
             }
 
             @Override

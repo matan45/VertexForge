@@ -1,8 +1,14 @@
 package com.vertexforge.launcher;
 
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.env.ProcessStarter;
+import com.vertexforge.launcher.service.CreateRequest;
+import com.vertexforge.launcher.template.Placeholders;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateException;
+import com.vertexforge.launcher.template.TemplateManifest;
 import com.vertexforge.launcher.util.LauncherLog;
 
 import java.io.ByteArrayOutputStream;
@@ -17,12 +23,16 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -30,6 +40,35 @@ import java.util.stream.Stream;
 public final class TestSupport {
 
     public static final Instant T0 = Instant.parse("2026-01-02T03:04:05Z");
+
+    /** The registered id of the engine {@link #engineContent} describes. */
+    public static final UUID FAKE_ENGINE_ID = UUID.fromString("6f1c2a5e-8d3b-4c7a-9e21-0b5d7f3a1c88");
+    /** The fake engine's version. */
+    public static final String FAKE_ENGINE_VERSION = "1.0.0";
+    /** The template every fake engine has (VK-1689). */
+    public static final String TEMPLATE = "empty";
+    /** The files of the fake engine's script library, relative to it, with their content (one with CRLF). */
+    public static final Map<String, String> FAKE_LIBRARY = fakeLibrary();
+    /** The fake template's {@code project/} files, relative to the project folder, before the name is filled in. */
+    public static final Map<String, String> FAKE_PAYLOAD = fakePayload();
+
+    private static Map<String, String> fakeLibrary() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("core/Array.mt", "public class Array {\r\n}\r\n");
+        files.put("engine/Log.mt", "public class Log {\n}\n");
+        files.put("engine/oop/Behaviour.mt", "public class Behaviour {\n}\n");
+        return java.util.Collections.unmodifiableMap(files);
+    }
+
+    private static Map<String, String> fakePayload() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put(".gitignore", "/.vertexforge/\n/assets/scripts/compiled/\n");
+        files.put("assets/scripts/scripts.mtproj", "<Project Name=\"{{PROJECT_NAME}}\" Version=\"1.0.0\">\n"
+                + "  <Output Directory=\"compiled\" />\n</Project>\n");
+        files.put("assets/scripts/game/Main.mt", "@Script\npublic class Main {\n"
+                + "    string greeting = \"Hello from {{PROJECT_NAME}}!\";\n}\n");
+        return java.util.Collections.unmodifiableMap(files);
+    }
 
     private TestSupport() {
     }
@@ -192,7 +231,9 @@ public final class TestSupport {
                   "editorExe": "Editor.exe",
                   "workingDirectory": "%s",
                   "templatesDir": "../../../../assets/templates",
-                  "scriptLibDir": "../../../../assets/scripts/lib"%s
+                  "scriptLibDir": "../../../../assets/scripts/lib",
+                  "examplesDir": "../../../../assets/scripts/game/examples",
+                  "vfxLibraryDir": "../../../../assets/vfx/library"%s
                 }
                 """.formatted(configuration, workingDirectory,
                 launchContract == null ? "" : ",\n  \"launchContract\": " + launchContract);
@@ -241,6 +282,92 @@ public final class TestSupport {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * An engine's project content laid out as in this repository's {@code assets/} (VK-1689), written under
+     * {@code root}: the {@code empty} template ({@link #FAKE_PAYLOAD}, both options), the {@link #FAKE_LIBRARY},
+     * one example and one effect. Writing it again over the same root is harmless.
+     *
+     * @return the content of a registered engine ({@link #FAKE_ENGINE_ID}) whose folders are these
+     */
+    public static EngineContent engineContent(Path root) {
+        writeEngineContent(root);
+        Path assets = root.resolve("assets");
+        return new EngineContent(Optional.of(FAKE_ENGINE_ID), FAKE_ENGINE_VERSION, assets.resolve("templates"),
+                assets.resolve("scripts/lib"), Optional.of(assets.resolve("scripts/game/examples")),
+                Optional.of(assets.resolve("vfx/library")), FAKE_ENGINE_VERSION + " Development", "fake", false);
+    }
+
+    /** Writes what {@link #engineContent} describes, without the record. */
+    public static void writeEngineContent(Path root) {
+        try {
+            Path assets = root.resolve("assets");
+            Path template = Files.createDirectories(assets.resolve("templates").resolve(TEMPLATE));
+            Files.writeString(template.resolve("template.json"), """
+                    {
+                      "formatVersion": 1,
+                      "id": "empty",
+                      "name": "Empty",
+                      "description": "A test template.",
+                      "minimumEngineVersion": "1.0.0",
+                      "workingDirectory": "assets",
+                      "startupScene": "scenes/Main.vfScene",
+                      "scriptLibrary": "assets/scripts/lib",
+                      "options": [
+                        {"id": "examples", "name": "Include examples", "default": false,
+                         "target": "assets/scripts/game/examples"},
+                        {"id": "vfxLibrary", "name": "Include VFX library", "default": false,
+                         "target": "assets/vfx/library"}
+                      ]
+                    }
+                    """, StandardCharsets.UTF_8);
+            for (Map.Entry<String, String> file : FAKE_PAYLOAD.entrySet()) {
+                write(template.resolve("project").resolve(file.getKey()), file.getValue());
+            }
+            for (Map.Entry<String, String> file : FAKE_LIBRARY.entrySet()) {
+                write(assets.resolve("scripts/lib").resolve(file.getKey()), file.getValue());
+            }
+            write(assets.resolve("scripts/game/examples/PlayerMovement.mt"), "public class PlayerMovement {\n}\n");
+            write(assets.resolve("vfx/library/sparks.vfVFX"), "{}\n");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * A blueprint for a project holding these files (project-relative targets), made without touching the disk: for
+     * the checks that only need the path budget and the file count.
+     */
+    public static ProjectBlueprint blueprint(String... targets) {
+        EngineContent engine = new EngineContent(Optional.of(FAKE_ENGINE_ID), FAKE_ENGINE_VERSION,
+                Path.of("templates").toAbsolutePath(), Path.of("lib").toAbsolutePath(), Optional.empty(),
+                Optional.empty(), "fake", "fake", false);
+        try {
+            TemplateManifest template = TemplateManifest.parse("""
+                    {"formatVersion": 1, "id": "empty", "name": "Empty", "minimumEngineVersion": "1.0.0",
+                     "workingDirectory": "assets", "startupScene": "scenes/Main.vfScene",
+                     "scriptLibrary": "assets/scripts/lib"}
+                    """);
+            List<ProjectBlueprint.Entry> entries = new ArrayList<>();
+            for (String target : targets) {
+                entries.add(new ProjectBlueprint.Entry(Path.of("source").toAbsolutePath(), target,
+                        Placeholders.Fill.NONE, null));
+            }
+            return ProjectBlueprint.of(engine, template, entries);
+        } catch (TemplateException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Creating {@code name} in {@code location} from the fake engine's {@code empty} template, with these options. */
+    public static CreateRequest request(String name, Path location, EngineContent engine, String... options) {
+        return new CreateRequest(name, location, engine, TEMPLATE, Set.of(options));
+    }
+
+    private static void write(Path file, String content) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
     /** A clock that moves one second forward on every read, so consecutive timestamps never tie. */

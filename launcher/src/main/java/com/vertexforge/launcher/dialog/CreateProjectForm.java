@@ -1,12 +1,23 @@
 package com.vertexforge.launcher.dialog;
 
+import com.vertexforge.launcher.engine.EditorOverride;
+import com.vertexforge.launcher.engine.EngineContent;
+import com.vertexforge.launcher.engine.EngineOption;
+import com.vertexforge.launcher.engine.EngineOptions;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.CreationJob;
 import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.service.ProjectNameRules;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateCatalog;
+import com.vertexforge.launcher.template.TemplateCatalogs;
+import com.vertexforge.launcher.template.TemplateException;
+import com.vertexforge.launcher.template.TemplateManifest;
+import com.vertexforge.launcher.template.TemplateOptionKind;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.ReadOnlyDoubleProperty;
@@ -16,14 +27,20 @@ import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleBooleanProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
@@ -34,10 +51,13 @@ import java.util.function.Consumer;
  * Everything the Create Project dialog does, without its controls (VK-1679), so it runs in unit tests without the
  * JavaFX toolkit: the properties are plain {@code javafx.beans} ones and the timers are injected.
  * <p>
- * The name is checked on every keystroke. Once it and the location are right as text, the location is checked on disk
- * in the background, 300 ms after the last keystroke; only the latest check's answer is used. Create starts a
- * {@link CreationJob} and the dialog stays open: it shows progress, a failure stays in the dialog to be fixed, and
- * Cancel waits for the creation to clean up (at most {@link #CANCEL_GRACE}; after that the window takes over).
+ * The dialog first reads the engines and offers those that can create projects (VK-1689), preselecting the one a new
+ * project would open with; choosing an engine reads its templates, choosing a template shows its options. The name is
+ * checked on every keystroke. Once it and the location are right as text and the engine's content is read, the
+ * location is checked on disk in the background, 300 ms after the last change; only the latest check's answer is
+ * used. Create starts a {@link CreationJob} and the dialog stays open: it shows progress, a failure stays in the dialog
+ * to be fixed, and Cancel waits for the creation to clean up (at most {@link #CANCEL_GRACE}; after that the window
+ * takes over).
  * <p>
  * Everything here runs on the FX thread (in tests, the test thread); {@code fxThread} brings answers back to it.
  */
@@ -55,10 +75,20 @@ public final class CreateProjectForm {
     static final String CANCELLING = "Cancelling…";
     static final String NO_LOCATION = "Choose a location for the project.";
     static final String INVALID_LOCATION = "The location is not a valid path.";
+    static final String READING_ENGINES = "Checking the engines…";
+    static final String READING_TEMPLATES = "Reading the engine's templates…";
+    static final String CHOOSE_ENGINE = "Choose the engine to create the project with.";
+    static final String CHOOSE_TEMPLATE = "Choose a template.";
+    static final String ENGINE_PROMPT = "Choose an engine";
+    static final String NO_ENGINE_PROMPT = "No engine can create projects";
+    static final String TEMPLATE_PROMPT = "Choose a template";
+    static final String NO_TEMPLATE_PROMPT = "No templates";
 
     public enum State {
         /** Nothing typed yet. */
         EDITING,
+        /** Right as text; the engines or the chosen engine's templates are still being read. */
+        LOADING,
         /** Right as text; the location is being checked on disk. */
         CHECKING,
         /** Create is possible. */
@@ -75,9 +105,15 @@ public final class CreateProjectForm {
         CLOSED
     }
 
-    /** What the form needs from the rest of the launcher. Both methods return at once. */
+    /** What the form needs from the rest of the launcher. Every method returns at once. */
     public interface Services {
-        CompletableFuture<LocationCheck> checkLocation(Path location, String name);
+        /** The engines, freshly checked. */
+        CompletableFuture<EngineOptions> engines();
+
+        /** What {@code engine} offers for new projects; never completes exceptionally. */
+        CompletableFuture<TemplateCatalogs.Answer> templates(EngineContent engine);
+
+        CompletableFuture<LocationCheck> checkLocation(Path location, String name, ProjectBlueprint blueprint);
 
         CreationJob startCreation(CreateRequest request, CreationJob.ProgressListener listener);
     }
@@ -108,14 +144,28 @@ public final class CreateProjectForm {
 
     private final Services services;
     private final Executor fxThread;
-    private final boolean editorAvailable;
     private final Timer debounce;
     private final Timer slowNotice;
     private final Timer cancelGrace;
 
     private final StringProperty name = new SimpleStringProperty(this, "name", "");
     private final StringProperty location = new SimpleStringProperty(this, "location", "");
-    private final BooleanProperty openAfterCreate = new SimpleBooleanProperty(this, "openAfterCreate");
+    private final BooleanProperty openAfterCreate = new SimpleBooleanProperty(this, "openAfterCreate", true);
+    private final ObservableList<EngineChoice> engines = FXCollections.observableArrayList();
+    private final ObjectProperty<EngineChoice> engine = new SimpleObjectProperty<>(this, "engine");
+    private final ObservableList<TemplateCatalog.Template> templates = FXCollections.observableArrayList();
+    private final ObjectProperty<TemplateCatalog.Template> template = new SimpleObjectProperty<>(this, "template");
+    private final ObservableList<OptionChoice> options = FXCollections.observableArrayList();
+    // One read-only view of each list, kept here: a view follows its list through a weak listener, so a view made
+    // per call could be collected together with every listener the dialog added to it.
+    private final ObservableList<EngineChoice> enginesView = FXCollections.unmodifiableObservableList(engines);
+    private final ObservableList<TemplateCatalog.Template> templatesView =
+            FXCollections.unmodifiableObservableList(templates);
+    private final ObservableList<OptionChoice> optionsView = FXCollections.unmodifiableObservableList(options);
+    private final ReadOnlyStringWrapper enginePrompt = new ReadOnlyStringWrapper(this, "enginePrompt", READING_ENGINES);
+    private final ReadOnlyStringWrapper templatePrompt = new ReadOnlyStringWrapper(this, "templatePrompt", "");
+    private final ReadOnlyStringWrapper templateDescription = new ReadOnlyStringWrapper(this, "templateDescription", "");
+    private final ReadOnlyStringWrapper note = new ReadOnlyStringWrapper(this, "note", "");
     private final ReadOnlyObjectWrapper<State> state = new ReadOnlyObjectWrapper<>(this, "state", State.EDITING);
     private final ReadOnlyStringWrapper error = new ReadOnlyStringWrapper(this, "error", "");
     private final ReadOnlyStringWrapper warnings = new ReadOnlyStringWrapper(this, "warnings", "");
@@ -132,6 +182,8 @@ public final class CreateProjectForm {
     private long generation;
     /** The location of the latest check, as a path; set whenever the text is right. */
     private Path checkedLocation;
+    /** The files of the latest check; set whenever the engine's content allows a project. */
+    private ProjectBlueprint checkedBlueprint;
     /** The location the latest check found fine, for the folder chooser. */
     private Path readyLocation;
     private CreationJob job;
@@ -141,19 +193,33 @@ public final class CreateProjectForm {
     /** The latest {done, total} from the creation thread, waiting for the FX thread; null when none is waiting. */
     private final AtomicReference<int[]> pendingProgress = new AtomicReference<>();
 
-    public CreateProjectForm(Services services, Timers timers, Executor fxThread, boolean editorAvailable) {
+    /** The engines as last checked; {@code null} until they are. */
+    private EngineOptions engineOptions;
+    private boolean enginesLoading = true;
+    /** Why no engine can be offered; {@code null} when one can. */
+    private String engineProblem;
+    /** Bumped by every engine change, so that the templates of an engine no longer chosen are ignored. */
+    private long contentGeneration;
+    private boolean templatesLoading;
+    /** The chosen engine's templates as read; {@code null} while none are. */
+    private TemplateCatalog catalog;
+    /** Why the chosen engine's templates cannot be used; {@code null} when they can. */
+    private String templatesProblem;
+
+    public CreateProjectForm(Services services, Timers timers, Executor fxThread) {
         this.services = Objects.requireNonNull(services, "services");
         this.fxThread = Objects.requireNonNull(fxThread, "fxThread");
         Objects.requireNonNull(timers, "timers");
-        this.editorAvailable = editorAvailable;
         this.debounce = timers.create(DEBOUNCE, this::startCheck);
         this.slowNotice = timers.create(SLOW_NOTICE, this::showSlowNotice);
         this.cancelGrace = timers.create(CANCEL_GRACE, this::stopWaitingForCancel);
 
-        openAfterCreate.set(editorAvailable);
         name.addListener((observable, was, now) -> inputChanged());
         location.addListener((observable, was, now) -> inputChanged());
+        engine.addListener((observable, was, now) -> engineChanged());
+        template.addListener((observable, was, now) -> templateChanged());
         setState(State.EDITING);
+        loadEngines();
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -174,6 +240,50 @@ public final class CreateProjectForm {
         return openAfterCreate;
     }
 
+    /** The engines projects can be created from, as last checked. Read-only for the dialog. */
+    public ObservableList<EngineChoice> engines() {
+        return enginesView;
+    }
+
+    /** The engine the project is created from; {@code null} while none is chosen. */
+    public ObjectProperty<EngineChoice> engineProperty() {
+        return engine;
+    }
+
+    /** The chosen engine's usable templates. Read-only for the dialog. */
+    public ObservableList<TemplateCatalog.Template> templates() {
+        return templatesView;
+    }
+
+    /** The template the project is created from; {@code null} while none is chosen. */
+    public ObjectProperty<TemplateCatalog.Template> templateProperty() {
+        return template;
+    }
+
+    /** The chosen template's options this launcher can add, in the template's order. Read-only for the dialog. */
+    public ObservableList<OptionChoice> options() {
+        return optionsView;
+    }
+
+    /** What the engine picker shows while no engine is chosen. */
+    public ReadOnlyStringProperty enginePromptProperty() {
+        return enginePrompt.getReadOnlyProperty();
+    }
+
+    /** What the template picker shows while no template is chosen. */
+    public ReadOnlyStringProperty templatePromptProperty() {
+        return templatePrompt.getReadOnlyProperty();
+    }
+
+    public ReadOnlyStringProperty templateDescriptionProperty() {
+        return templateDescription.getReadOnlyProperty();
+    }
+
+    /** Something to know about the chosen engine: an active override, or an engine the project can't be bound to. */
+    public ReadOnlyStringProperty noteProperty() {
+        return note.getReadOnlyProperty();
+    }
+
     public ReadOnlyObjectProperty<State> stateProperty() {
         return state.getReadOnlyProperty();
     }
@@ -192,7 +302,7 @@ public final class CreateProjectForm {
         return warnings.getReadOnlyProperty();
     }
 
-    /** What is going on: checking, creating, cancelling. */
+    /** What is going on: reading the engines, checking, creating, cancelling. */
     public ReadOnlyStringProperty statusProperty() {
         return status.getReadOnlyProperty();
     }
@@ -206,7 +316,7 @@ public final class CreateProjectForm {
         return inputsEnabled.getReadOnlyProperty();
     }
 
-    /** The checkbox can be used: the inputs are, and an editor was found to open the project with. */
+    /** The checkbox can be used: the inputs are, and an engine is chosen to open the project with. */
     public ReadOnlyBooleanProperty openAfterCreateEnabledProperty() {
         return openAfterCreateEnabled.getReadOnlyProperty();
     }
@@ -251,6 +361,11 @@ public final class CreateProjectForm {
         if (state.get() != State.READY && state.get() != State.FAILED) {
             return;
         }
+        EngineChoice chosenEngine = engine.get();
+        TemplateCatalog.Template chosenTemplate = template.get();
+        if (chosenEngine == null || chosenTemplate == null) {
+            return;
+        }
         generation++;
         debounce.stop();
         slowNotice.stop();
@@ -262,7 +377,8 @@ public final class CreateProjectForm {
 
         CreationJob started;
         try {
-            started = services.startCreation(new CreateRequest(name.get(), checkedLocation), this::progressFromWorker);
+            started = services.startCreation(new CreateRequest(name.get(), checkedLocation, chosenEngine.content(),
+                    chosenTemplate.id(), chosenOptionIds()), this::progressFromWorker);
         } catch (RuntimeException e) {
             fail("Could not start creating the project: " + describe(e));
             return;
@@ -291,6 +407,178 @@ public final class CreateProjectForm {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Engines, templates and options (VK-1689)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private void loadEngines() {
+        CompletableFuture<EngineOptions> answer;
+        try {
+            answer = services.engines();
+        } catch (RuntimeException e) {
+            applyEngines(null, e);
+            return;
+        }
+        answer.whenComplete((checked, failure) -> fxThread.execute(() -> applyEngines(checked, failure)));
+    }
+
+    private void applyEngines(EngineOptions checked, Throwable failure) {
+        if (state.get() == State.CLOSED) {
+            return;
+        }
+        enginesLoading = false;
+        if (failure != null || checked == null) {
+            engineProblem = "The engines could not be checked: " + describe(failure);
+            enginePrompt.set(NO_ENGINE_PROMPT);
+            refresh();
+            return;
+        }
+        engineOptions = checked;
+        List<EngineChoice> choices = EngineChoice.from(checked);
+        engineProblem = choices.isEmpty() ? EngineChoice.noChoiceReason(checked) : null;
+        enginePrompt.set(choices.isEmpty() ? NO_ENGINE_PROMPT : ENGINE_PROMPT);
+        engines.setAll(choices);
+        EngineChoice first = EngineChoice.preselect(checked, choices).orElse(null);
+        if (Objects.equals(engine.get(), first)) {
+            engineChanged();
+        } else {
+            engine.set(first);
+        }
+    }
+
+    /** A new engine is chosen (or none): forget the last one's templates and read the new one's. */
+    private void engineChanged() {
+        if (isFinal()) {
+            return;
+        }
+        contentGeneration++;
+        catalog = null;
+        templatesProblem = null;
+        templatesLoading = false;
+        templates.clear();
+        template.set(null);
+        options.clear();
+        updateNote();
+
+        EngineChoice chosen = engine.get();
+        if (chosen == null) {
+            templatePrompt.set("");
+            refresh();
+            return;
+        }
+        templatesLoading = true;
+        templatePrompt.set(READING_TEMPLATES);
+        long asked = contentGeneration;
+        refresh();
+
+        CompletableFuture<TemplateCatalogs.Answer> answer;
+        try {
+            answer = services.templates(chosen.content());
+        } catch (RuntimeException e) {
+            applyTemplates(asked, null, e);
+            return;
+        }
+        answer.whenComplete((read, failure) -> fxThread.execute(() -> applyTemplates(asked, read, failure)));
+    }
+
+    private void applyTemplates(long asked, TemplateCatalogs.Answer read, Throwable failure) {
+        if (asked != contentGeneration || isFinal()) {
+            return;
+        }
+        templatesLoading = false;
+        if (failure != null || read == null) {
+            templatesProblem = "The engine's templates could not be read: " + describe(failure);
+        } else if (read.problem() != null) {
+            templatesProblem = read.problem();
+        } else {
+            catalog = read.catalog();
+            templatesProblem = catalog.templates().isEmpty() ? noTemplatesReason(catalog) : null;
+        }
+        List<TemplateCatalog.Template> usable = catalog == null ? List.of() : catalog.templates();
+        templatePrompt.set(usable.isEmpty() ? NO_TEMPLATE_PROMPT : TEMPLATE_PROMPT);
+        templates.setAll(usable);
+        TemplateCatalog.Template first = usable.stream()
+                .filter(candidate -> candidate.id().equals(TemplateCatalog.DEFAULT_TEMPLATE))
+                .findFirst()
+                .orElse(usable.isEmpty() ? null : usable.getFirst());
+        if (Objects.equals(template.get(), first)) {
+            templateChanged();
+        } else {
+            template.set(first);
+        }
+    }
+
+    /** A new template is chosen (or none): offer its options, each ticked as the template says when it is available. */
+    private void templateChanged() {
+        if (isFinal()) {
+            return;
+        }
+        options.clear();
+        TemplateCatalog.Template chosen = template.get();
+        templateDescription.set(chosen == null ? "" : chosen.manifest().description());
+        if (chosen != null && catalog != null) {
+            for (TemplateManifest.Option option : chosen.manifest().options()) {
+                Optional<TemplateOptionKind> kind = TemplateOptionKind.forId(option.id());
+                if (kind.isEmpty()) {
+                    // An option this launcher cannot add.
+                    continue;
+                }
+                OptionChoice choice = new OptionChoice(option, catalog.unavailableReason(kind.get()).orElse(null));
+                choice.selectedProperty().addListener((observable, was, now) -> refresh());
+                options.add(choice);
+            }
+        }
+        refresh();
+    }
+
+    private void updateNote() {
+        EngineChoice chosen = engine.get();
+        Optional<EngineOption> override = engineOptions == null ? Optional.empty() : engineOptions.activeOverride();
+        if (chosen == null) {
+            note.set("");
+        } else if (chosen.content().override()) {
+            note.set(EditorOverride.ENV_VAR + " is set: the project opens with this editor while it is, and is not"
+                    + " bound to an engine.");
+        } else if (override.isPresent()) {
+            note.set(EditorOverride.ENV_VAR + " is set: the project opens with " + override.get().pathText()
+                    + " until it is unset.");
+        } else if (chosen.content().engineId().isEmpty()) {
+            note.set("This engine is not in the engine list, so the project is not bound to it: it opens with the"
+                    + " default engine.");
+        } else {
+            note.set("");
+        }
+    }
+
+    private static String noTemplatesReason(TemplateCatalog read) {
+        String text = read.engine().label() + " has no project template this launcher can use.";
+        return read.notes().isEmpty() ? text : text + " " + read.notes().getFirst();
+    }
+
+    /** The ids of the ticked options that can be added, in the template's order. */
+    private Set<String> chosenOptionIds() {
+        Set<String> ids = new LinkedHashSet<>();
+        for (OptionChoice choice : options) {
+            if (choice.chosen()) {
+                ids.add(choice.id());
+            }
+        }
+        return ids;
+    }
+
+    /** The engine's content changed: check again, unless nothing has been typed yet. */
+    private void refresh() {
+        openAfterCreateEnabled.set(inputsEnabled.get() && engine.get() != null);
+        if (state.get() != State.EDITING) {
+            inputChanged();
+        }
+    }
+
+    private boolean isFinal() {
+        State current = state.get();
+        return current == State.CLOSED;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Checking
     // -----------------------------------------------------------------------------------------------------------------
 
@@ -308,6 +596,18 @@ public final class CreateProjectForm {
         Optional<String> problem = problemAsText();
         if (problem.isPresent()) {
             error.set(problem.get());
+            setState(State.INVALID);
+            return;
+        }
+        if (enginesLoading || templatesLoading) {
+            error.set("");
+            status.set(enginesLoading ? READING_ENGINES : READING_TEMPLATES);
+            setState(State.LOADING);
+            return;
+        }
+        Optional<String> contentProblem = problemWithContent();
+        if (contentProblem.isPresent()) {
+            error.set(contentProblem.get());
             setState(State.INVALID);
             return;
         }
@@ -341,6 +641,29 @@ public final class CreateProjectForm {
         return Optional.empty();
     }
 
+    /** What keeps the chosen engine, template and options from making a project; sets {@link #checkedBlueprint}. */
+    private Optional<String> problemWithContent() {
+        if (engineProblem != null) {
+            return Optional.of(engineProblem);
+        }
+        if (engine.get() == null) {
+            return Optional.of(CHOOSE_ENGINE);
+        }
+        if (templatesProblem != null) {
+            return Optional.of(templatesProblem);
+        }
+        TemplateCatalog.Template chosen = template.get();
+        if (chosen == null || catalog == null) {
+            return Optional.of(CHOOSE_TEMPLATE);
+        }
+        try {
+            checkedBlueprint = catalog.blueprint(chosen.id(), chosenOptionIds());
+        } catch (TemplateException e) {
+            return Optional.of(e.getMessage());
+        }
+        return Optional.empty();
+    }
+
     private void startCheck() {
         if (state.get() != State.CHECKING) {
             return;
@@ -349,7 +672,7 @@ public final class CreateProjectForm {
         slowNotice.restart();
         CompletableFuture<LocationCheck> answer;
         try {
-            answer = services.checkLocation(checkedLocation, name.get());
+            answer = services.checkLocation(checkedLocation, name.get(), checkedBlueprint);
         } catch (RuntimeException e) {
             applyCheck(asked, null, e);
             return;
@@ -419,7 +742,7 @@ public final class CreateProjectForm {
         boolean cancelled = state.get() == State.CANCELLING;
 
         if (failure == null && outcome != null && outcome.created()) {
-            close(new Result(finishedJob, !cancelled && openAfterCreate.get() && editorAvailable));
+            close(new Result(finishedJob, !cancelled && openAfterCreate.get()));
             return;
         }
         if (failure == null && outcome != null && outcome.result().cancelled()) {
@@ -450,6 +773,7 @@ public final class CreateProjectForm {
 
     private void close(Result closedWith) {
         generation++;
+        contentGeneration++;
         debounce.stop();
         slowNotice.stop();
         cancelGrace.stop();
@@ -461,12 +785,12 @@ public final class CreateProjectForm {
     private void setState(State next) {
         state.set(next);
         boolean editable = switch (next) {
-            case EDITING, CHECKING, READY, INVALID, FAILED -> true;
+            case EDITING, LOADING, CHECKING, READY, INVALID, FAILED -> true;
             case CREATING, CANCELLING, CLOSED -> false;
         };
         inputsEnabled.set(editable);
-        openAfterCreateEnabled.set(editable && editorAvailable);
-        // FAILED is only ever reached from READY, so its name and location were found fine before.
+        openAfterCreateEnabled.set(editable && engine.get() != null);
+        // FAILED is only ever reached from READY, so its inputs were found fine before.
         createEnabled.set(next == State.READY || next == State.FAILED);
         cancelEnabled.set(next != State.CANCELLING && next != State.CLOSED);
         busy.set(next == State.CREATING || next == State.CANCELLING);

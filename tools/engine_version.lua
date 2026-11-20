@@ -24,12 +24,20 @@ local engineManifestVersion = 1
 -- tree, dist/VertexForge in the release bundle, which mirrors the repo layout).
 local templatesRel = "assets/templates"
 local scriptLibRel = "assets/scripts/lib"
+-- The sources of the project templates' "Include examples" and "Include VFX library" options (VK-1689).
+local examplesRel = "assets/scripts/game/examples"
+local vfxLibraryRel = "assets/vfx/library"
 
--- The two content folders the manifest records, relative to the content root. tools/package_release.lua
+-- The four content folders the manifest records, relative to the content root. tools/package_release.lua
 -- copies them from the repo root to the same paths under dist/VertexForge, so a release manifest always
 -- points at the folders it ships (VK-1688).
 function vfEngineContentPaths()
-   return { templatesDir = templatesRel, scriptLibDir = scriptLibRel }
+   return {
+      templatesDir = templatesRel,
+      scriptLibDir = scriptLibRel,
+      examplesDir = examplesRel,
+      vfxLibraryDir = vfxLibraryRel
+   }
 end
 
 local function repoPath(rel)
@@ -202,6 +210,8 @@ function vfWriteEngineManifest(m)
       { "workingDirectory",     jsonString(relative(m.workingDir)) },
       { "templatesDir",         jsonString(relative(path.join(m.contentRoot, templatesRel))) },
       { "scriptLibDir",         jsonString(relative(path.join(m.contentRoot, scriptLibRel))) },
+      { "examplesDir",          jsonString(relative(path.join(m.contentRoot, examplesRel))) },
+      { "vfxLibraryDir",        jsonString(relative(path.join(m.contentRoot, vfxLibraryRel))) },
    }
    local lines = {}
    for i, field in ipairs(fields) do

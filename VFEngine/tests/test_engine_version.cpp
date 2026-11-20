@@ -236,10 +236,11 @@ TEST_SUITE("EngineVersion")
         INFO("manifest " << manifestPath.string() << " (rebuild the Editor " << thisConfiguration()
                          << " if it is stale)");
 
-        // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, still manifestVersion 1).
+        // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, examplesDir and
+        // vfxLibraryDir by VK-1689, still manifestVersion 1: the launcher ignores members it does not know).
         const char* keys[] = {"manifestVersion", "engineVersion", "assetFormatVersion", "projectSchemaVersion",
                               "pluginApiVersion", "launchContract", "configuration", "gitCommit", "editorExe",
-                              "workingDirectory", "templatesDir", "scriptLibDir"};
+                              "workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir"};
         CHECK(manifest.size() == std::size(keys));
         for (const char* key : keys)
         {
@@ -272,7 +273,7 @@ TEST_SUITE("EngineVersion")
         CHECK(fs::exists(manifestDir / editorExe));
 
         // Paths are relative to the manifest, with forward slashes.
-        for (const char* key : {"workingDirectory", "templatesDir", "scriptLibDir"})
+        for (const char* key : {"workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir"})
         {
             CAPTURE(key);
             const std::string value = stringField(manifest, key);
@@ -287,11 +288,19 @@ TEST_SUITE("EngineVersion")
         // The editor loads engine resources from "../../resources/" relative to its working directory.
         CHECK(fs::exists(workingDirectory / ".." / ".." / "resources" / "shaders"));
 
-        const fs::path scriptLibDir = fs::weakly_canonical(manifestDir / stringField(manifest, "scriptLibDir"), ec);
-        CHECK(fs::equivalent(scriptLibDir, *root / "assets" / "scripts" / "lib", ec));
-
-        // The templates folder arrives with VK-1689; compare the resolved path, not the folder.
-        const fs::path templatesDir = fs::weakly_canonical(manifestDir / stringField(manifest, "templatesDir"), ec);
-        CHECK(templatesDir == fs::weakly_canonical(*root / "assets" / "templates", ec));
+        // The content folders the launcher creates projects from (VK-1689): each resolves to the repo's own.
+        const std::pair<const char*, fs::path> contentFolders[] = {
+            {"scriptLibDir", *root / "assets" / "scripts" / "lib"},
+            {"templatesDir", *root / "assets" / "templates"},
+            {"examplesDir", *root / "assets" / "scripts" / "game" / "examples"},
+            {"vfxLibraryDir", *root / "assets" / "vfx" / "library"},
+        };
+        for (const auto& [key, expected] : contentFolders)
+        {
+            CAPTURE(key);
+            const fs::path folder = fs::weakly_canonical(manifestDir / stringField(manifest, key), ec);
+            CHECK(fs::is_directory(folder, ec));
+            CHECK(fs::equivalent(folder, expected, ec));
+        }
     }
 }

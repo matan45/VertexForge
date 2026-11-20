@@ -2,6 +2,7 @@ package com.vertexforge.launcher.project;
 
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.model.ProjectCreationResult;
+import com.vertexforge.launcher.service.CreationMonitor;
 import com.vertexforge.launcher.service.ProjectCreator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -72,7 +73,8 @@ class ProjectInspectorTest {
     void aProjectTheLauncherCreatedIsFoundFromItsFolder() throws IOException {
         Path parent = Files.createDirectory(tempDir.resolve("parent"));
         ProjectCreationResult created = new ProjectCreator(TestSupport.fixedClock(),
-                TestSupport.log(tempDir.resolve(".logs")).log).createProject("Tom & Jerry's Game", parent);
+                TestSupport.log(tempDir.resolve(".logs")).log).create(TestSupport.request("Tom & Jerry's Game", parent,
+                TestSupport.engineContent(tempDir.resolve("engine"))), CreationMonitor.NONE);
         assertTrue(created.success(), created::errorMessage);
 
         PickedProject.Found found = found(created.projectPath().getParent());

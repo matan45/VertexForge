@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
  *   "pluginApiVersion": 25, "configuration": "Development", "gitCommit": "599a8a30…" or null,
  *   "editorExe": "Editor.exe", "workingDirectory": "../../../../VFEngine/editor",
  *   "templatesDir": "../../../../assets/templates", "scriptLibDir": "../../../../assets/scripts/lib",
+ *   "examplesDir": "../../../../assets/scripts/game/examples", "vfxLibraryDir": "../../../../assets/vfx/library",
  *   "launchContract": 2 }
  * </pre>
  * Paths are relative to the manifest's folder. The members the launcher needs to start the editor are required and
@@ -48,7 +49,9 @@ import java.util.regex.Pattern;
  * @param workingDirectory     the folder the editor must start in, relative to the manifest's folder
  * @param templatesDir         the project templates folder, or {@code null} (VK-1689)
  * @param scriptLibDir         the mType script library folder, or {@code null} (VK-1689)
- * @param launchContract       the editor launch-contract revision ({@code launch::editorLaunchContract}, VK-1683), or
+ * @param examplesDir          the example scripts a new project may include, or {@code null} (VK-1689)
+ * @param vfxLibraryDir        the VFX library a new project may include, or {@code null} (VK-1689)
+ * @param launchContract      the editor launch-contract revision ({@code launch::editorLaunchContract}, VK-1683), or
  *                             {@code null} for an editor built before the field existed: the launcher then passes only
  *                             the arguments every editor accepts. 1 adds {@code --console}; 2 means the arguments
  *                             may hold any Unicode character (the editor runs in the UTF-8 code page, VK-1684).
@@ -65,6 +68,8 @@ public record EngineManifest(
         String workingDirectory,
         String templatesDir,
         String scriptLibDir,
+        String examplesDir,
+        String vfxLibraryDir,
         Integer launchContract
 ) {
     public static final String FILE_NAME = "engine.json";
@@ -82,6 +87,8 @@ public record EngineManifest(
     static final String WORKING_DIRECTORY = "workingDirectory";
     static final String TEMPLATES_DIR = "templatesDir";
     static final String SCRIPT_LIB_DIR = "scriptLibDir";
+    static final String EXAMPLES_DIR = "examplesDir";
+    static final String VFX_LIBRARY_DIR = "vfxLibraryDir";
     static final String LAUNCH_CONTRACT = "launchContract";
     /** The first contract revision with {@code --console} (VK-1683). */
     public static final int CONSOLE_FLAG_CONTRACT = 1;
@@ -164,6 +171,8 @@ public record EngineManifest(
                 workingDirectory,
                 optionalString(root, TEMPLATES_DIR),
                 optionalString(root, SCRIPT_LIB_DIR),
+                optionalString(root, EXAMPLES_DIR),
+                optionalString(root, VFX_LIBRARY_DIR),
                 launchContract(root.get(LAUNCH_CONTRACT)));
     }
 
@@ -234,6 +243,16 @@ public record EngineManifest(
     /** The mType script library folder for a manifest in {@code dir} (VK-1689); empty when unknown. */
     public Optional<Path> scriptLibDirIn(Path dir) {
         return resolveIn(dir, scriptLibDir);
+    }
+
+    /** The example scripts folder for a manifest in {@code dir} (VK-1689); empty when unknown. */
+    public Optional<Path> examplesDirIn(Path dir) {
+        return resolveIn(dir, examplesDir);
+    }
+
+    /** The VFX library folder for a manifest in {@code dir} (VK-1689); empty when unknown. */
+    public Optional<Path> vfxLibraryDirIn(Path dir) {
+        return resolveIn(dir, vfxLibraryDir);
     }
 
     /** {@code 1.0.0 Development}. */

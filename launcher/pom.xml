@@ -115,8 +115,8 @@
                     <systemPropertyVariables>
                         <!-- Backstop: a test that reaches LauncherEnvironment.system() never touches the real ~/.vertexforge. -->
                         <user.home>${project.build.directory}/test-home</user.home>
-                        <!-- The folder pack-script-lib zips; ScriptLibraryResourceTest compares the two. -->
-                        <vertexforge.scriptLibDir>${project.basedir}/../assets/scripts/lib</vertexforge.scriptLibDir>
+                        <!-- The repo root, whose assets/ RealEngineContentTest creates a project from (VK-1689). -->
+                        <vertexforge.repoRoot>${project.basedir}/..</vertexforge.repoRoot>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -194,29 +194,6 @@
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>${maven-antrun-plugin.version}</version>
                 <executions>
-                    <!--
-                        Packs ../assets/scripts/lib byte for byte into templates/script-library.zip (VK-1676),
-                        which ProjectCreator extracts into every new project's scripts/lib.
-                        The launcher build therefore needs the full repo checkout.
-                    -->
-                    <execution>
-                        <id>pack-script-lib</id>
-                        <phase>process-resources</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <delete file="${project.build.outputDirectory}/templates/script-library.zip"/>
-                                <!-- filesonly: with no directory entries, whenempty fails unless at least one file is packed. -->
-                                <zip destfile="${project.build.outputDirectory}/templates/script-library.zip"
-                                     filesonly="true" whenempty="fail" encoding="UTF-8">
-                                    <fileset dir="${project.basedir}/../assets/scripts/lib"
-                                             erroronmissingdir="true" defaultexcludes="no"/>
-                                </zip>
-                            </target>
-                        </configuration>
-                    </execution>
                     <!--
                         jpackage copies its whole input folder into the app image and puts every jar in it on the
                         classpath. Give it only the shaded jar: target/ also holds classes/, test output and

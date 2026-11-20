@@ -6,6 +6,7 @@ import com.google.gson.JsonPrimitive;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
 import com.vertexforge.launcher.engine.EditorOverride;
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineHealth;
 import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.engine.EngineOptions;
@@ -35,6 +36,8 @@ import com.vertexforge.launcher.settings.LauncherSettingsRepository;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.store.StoreWriteException.Reason;
+import com.vertexforge.launcher.template.TemplateCatalog;
+import com.vertexforge.launcher.template.TemplateCatalogs;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +80,11 @@ class ProjectHubTest {
     private RecordingStarter starter;
     private final List<ProjectHub> hubs = new ArrayList<>();
     private ProjectHub hub;
+    /**
+     * The content every project here is created from (VK-1689), with no engine id: like a project made from the
+     * override, it stays unbound until its first open, which is what the VK-1681 binding tests below need.
+     */
+    private EngineContent engine;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -84,6 +92,9 @@ class ProjectHubTest {
         configDir = root.resolve("config");
         projectsDir = Files.createDirectories(root.resolve("projects"));
         starter = new RecordingStarter(FakeProcess.running(), null);
+        EngineContent registered = TestSupport.engineContent(root.resolve("engine-content"));
+        engine = new EngineContent(Optional.empty(), registered.engineVersion(), registered.templatesDir(),
+                registered.scriptLibDir(), registered.examplesDir(), registered.vfxLibraryDir(), "unbound", "", false);
         hub = hub(Map.of());
     }
 
@@ -137,7 +148,7 @@ class ProjectHubTest {
 
     @Test
     void aCreatedProjectIsListedAndStoredUnderItsRealPath() {
-        CreateOutcome outcome = hub.createProject("Game", projectsDir);
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", projectsDir, engine));
 
         assertTrue(outcome.created(), () -> outcome.result().errorMessage());
         assertTrue(outcome.listed());
@@ -150,10 +161,55 @@ class ProjectHubTest {
     }
 
     @Test
+    void aCreatedProjectIsBoundToTheEngineItWasCreatedFrom() {
+        EngineContent bound = TestSupport.engineContent(root.resolve("engine-content"));
+
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", projectsDir, bound));
+
+        assertTrue(outcome.listed(), () -> outcome.result().errorMessage());
+        assertEquals(TestSupport.FAKE_ENGINE_ID.toString(), listed(hub, "Game").engineId());
+    }
+
+    @Test
+    void aProjectCreatedFromAnEngineWithoutAnIdIsLeftUnbound() {
+        EngineContent unregistered = new EngineContent(Optional.empty(), engine.engineVersion(),
+                engine.templatesDir(), engine.scriptLibDir(), engine.examplesDir(), engine.vfxLibraryDir(),
+                "override", "", true);
+
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", projectsDir, unregistered));
+
+        assertTrue(outcome.listed(), () -> outcome.result().errorMessage());
+        assertNull(listed(hub, "Game").engineId());
+    }
+
+    @Test
+    void theTemplatesOfAnEngineAreReadInTheBackground() throws Exception {
+        TemplateCatalogs.Answer answer = hub.listTemplates(engine).get(10, TimeUnit.SECONDS);
+
+        assertNull(answer.problem());
+        assertEquals(List.of(TestSupport.TEMPLATE), answer.catalog().templates().stream()
+                .map(TemplateCatalog.Template::id).toList());
+        assertEquals(TestSupport.FAKE_LIBRARY.size(), answer.catalog().library().size());
+    }
+
+    @Test
+    void anEngineWhoseTemplatesAreGoneIsAnsweredWithTheReason() throws Exception {
+        EngineContent gone = new EngineContent(engine.engineId(), engine.engineVersion(),
+                root.resolve("no-templates"), engine.scriptLibDir(), Optional.empty(), Optional.empty(), "gone", "",
+                false);
+
+        TemplateCatalogs.Answer answer = hub.listTemplates(gone).get(10, TimeUnit.SECONDS);
+
+        assertNull(answer.catalog());
+        assertTrue(answer.problem().startsWith("The templates of gone could not be read: The templates folder "),
+                answer.problem());
+    }
+
+    @Test
     void aFailedCreationAddsNothing() throws IOException {
         Path blocker = Files.writeString(root.resolve("blocker"), "file");
 
-        CreateOutcome outcome = hub.createProject("Game", blocker);
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", blocker, engine));
 
         assertFalse(outcome.created());
         assertFalse(outcome.listed());
@@ -163,7 +219,7 @@ class ProjectHubTest {
 
     @Test
     void creatingTheFilesNeverTouchesTheList() {
-        ProjectCreationResult result = hub.createProjectFiles(new CreateRequest("Game", projectsDir),
+        ProjectCreationResult result = hub.createProjectFiles(TestSupport.request("Game", projectsDir, engine),
                 CreationMonitor.NONE);
 
         assertTrue(result.success(), result::errorMessage);
@@ -173,10 +229,10 @@ class ProjectHubTest {
 
     @Test
     void listingACreatedProjectUsesItsRealPath() {
-        ProjectCreationResult result = hub.createProjectFiles(new CreateRequest("Game", projectsDir),
+        ProjectCreationResult result = hub.createProjectFiles(TestSupport.request("Game", projectsDir, engine),
                 CreationMonitor.NONE);
 
-        CreateOutcome outcome = hub.listCreated(result, "Game");
+        CreateOutcome outcome = hub.listCreated(result, TestSupport.request("Game", projectsDir, engine));
 
         assertTrue(outcome.listed());
         assertEquals(projectsDir.resolve("Game/Game.vfproj"), outcome.projectPath());
@@ -185,8 +241,10 @@ class ProjectHubTest {
 
     @Test
     void aFailedOrCancelledCreationIsNeverListed() {
-        CreateOutcome failed = hub.listCreated(ProjectCreationResult.failure("no"), "Game");
-        CreateOutcome cancelled = hub.listCreated(ProjectCreationResult.cancelled(null), "Game");
+        CreateOutcome failed = hub.listCreated(ProjectCreationResult.failure("no"),
+                TestSupport.request("Game", projectsDir, engine));
+        CreateOutcome cancelled = hub.listCreated(ProjectCreationResult.cancelled(null),
+                TestSupport.request("Game", projectsDir, engine));
 
         assertFalse(failed.created() || failed.listed());
         assertFalse(cancelled.created() || cancelled.listed());
@@ -197,7 +255,7 @@ class ProjectHubTest {
     void aRelativeLocationCreatesAndListsNothing() {
         Path relative = Path.of("vk1679-hub-relative-" + UUID.randomUUID());
 
-        CreateOutcome outcome = hub.createProject("Game", relative);
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", relative, engine));
 
         assertFalse(outcome.created());
         assertFalse(Files.exists(relative));
@@ -206,8 +264,8 @@ class ProjectHubTest {
 
     @Test
     void aLocationCheckAnswersInTheBackground() throws Exception {
-        assertTrue(hub.checkLocation(projectsDir, "Game").get(5, TimeUnit.SECONDS).ok());
-        assertFalse(hub.checkLocation(projectsDir, "CON").get(5, TimeUnit.SECONDS).ok());
+        assertTrue(hub.checkLocation(projectsDir, "Game", TestSupport.blueprint("a.mt")).get(5, TimeUnit.SECONDS).ok());
+        assertFalse(hub.checkLocation(projectsDir, "CON", TestSupport.blueprint("a.mt")).get(5, TimeUnit.SECONDS).ok());
     }
 
     @Test
@@ -217,7 +275,7 @@ class ProjectHubTest {
         Files.writeString(store, "{\"version\": 3, \"projects\": []}");
         byte[] newer = Files.readAllBytes(store);
 
-        CreateOutcome outcome = hub.createProject("Game", projectsDir);
+        CreateOutcome outcome = hub.createProject(TestSupport.request("Game", projectsDir, engine));
 
         assertTrue(outcome.created());
         assertFalse(outcome.listed());
@@ -228,8 +286,8 @@ class ProjectHubTest {
 
     @Test
     void theNewestProjectComesFirstAndOpeningMovesAProjectToTheTop() throws StoreWriteException {
-        hub.createProject("First", projectsDir);
-        hub.createProject("Second", projectsDir);
+        hub.createProject(TestSupport.request("First", projectsDir, engine));
+        hub.createProject(TestSupport.request("Second", projectsDir, engine));
         assertEquals(List.of("Second", "First"), names(hub.listProjects()));
 
         RecentProjectsView view = hub.markOpened(listed(hub, "First").id());
@@ -240,8 +298,8 @@ class ProjectHubTest {
 
     @Test
     void removeDropsTheProjectFromTheListButNotFromTheDisk() throws StoreWriteException {
-        hub.createProject("Keep", projectsDir);
-        hub.createProject("Drop", projectsDir);
+        hub.createProject(TestSupport.request("Keep", projectsDir, engine));
+        hub.createProject(TestSupport.request("Drop", projectsDir, engine));
 
         hub.removeProject(listed(hub, "Drop").id());
 
@@ -252,12 +310,12 @@ class ProjectHubTest {
     /** Replaces the VK-1677 characterization: a missing project now stays listed, with a Missing status. */
     @Test
     void aMissingProjectStaysListedAndShowsAsMissing() throws Exception {
-        hub.createProject("Game", projectsDir);
-        hub.createProject("Gone", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
+        hub.createProject(TestSupport.request("Gone", projectsDir, engine));
         Files.delete(projectsDir.resolve("Gone/Gone.vfproj"));
 
         RecentProjectsView view = hub.listProjects();
-        hub.createProject("Later", projectsDir);
+        hub.createProject(TestSupport.request("Later", projectsDir, engine));
         RecentProjectsView afterASave = hub(Map.of()).listProjects();
 
         assertEquals(List.of("Gone", "Game"), names(view));
@@ -270,8 +328,8 @@ class ProjectHubTest {
     void twoHubsOnOneStoreKeepEachOthersProjects() {
         ProjectHub other = hub(Map.of());
 
-        hub.createProject("Mine", projectsDir);
-        other.createProject("Theirs", projectsDir);
+        hub.createProject(TestSupport.request("Mine", projectsDir, engine));
+        other.createProject(TestSupport.request("Theirs", projectsDir, engine));
 
         // Each hub has its own clock, so the two may tie on time: compare as sets.
         assertEquals(Set.of("Mine", "Theirs"), Set.copyOf(names(hub.listProjects())));
@@ -281,7 +339,7 @@ class ProjectHubTest {
     @Test
     void aRemoveIsNotUndoneByAHubThatHadAStaleList() throws StoreWriteException {
         ProjectHub other = hub(Map.of());
-        hub.createProject("Shared", projectsDir);
+        hub.createProject(TestSupport.request("Shared", projectsDir, engine));
         UUID shared = listed(other, "Shared").id();
 
         hub.removeProject(shared);
@@ -296,9 +354,9 @@ class ProjectHubTest {
         Files.writeString(configDir.resolve(LauncherSettingsRepository.FILE_NAME), "{\"recentProjectsLimit\": 2}");
         ProjectHub limited = hub(Map.of());
 
-        limited.createProject("A", projectsDir);
-        limited.createProject("B", projectsDir);
-        limited.createProject("C", projectsDir);
+        limited.createProject(TestSupport.request("A", projectsDir, engine));
+        limited.createProject(TestSupport.request("B", projectsDir, engine));
+        limited.createProject(TestSupport.request("C", projectsDir, engine));
 
         assertEquals(2, limited.listLimit());
         assertEquals(List.of("C", "B"), names(limited.listProjects()));
@@ -342,7 +400,7 @@ class ProjectHubTest {
         Path repo = root.resolve("repo");
         Path editor = TestSupport.devEngine(repo);
         UUID id = addEngine(hub, editor.resolveSibling("engine.json"));
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         RecentEntry game = listed(hub, "Game");
 
         EngineOptions options = checked(hub);
@@ -370,7 +428,7 @@ class ProjectHubTest {
     void aDeletedEngineIsBrokenAndItsProjectAsksForAnother() throws Exception {
         Path deleted = TestSupport.devEngine(root.resolve("old"));
         UUID oldId = addEngine(hub, deleted);
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         hub.markOpened(listed(hub, "Game").id(), Optional.of(oldId));
         UUID otherId = addEngine(hub, TestSupport.devEngine(root.resolve("new")));
         Files.delete(deleted);
@@ -437,7 +495,7 @@ class ProjectHubTest {
 
     @Test
     void launchGoesThroughTheInjectedProcessStarter() throws Exception {
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         Path editor = TestSupport.fakeEditor(root.resolve("custom"));
         addEngine(hub, editor);
         Path project = projectsDir.resolve("Game/Game.vfproj");
@@ -462,7 +520,7 @@ class ProjectHubTest {
         Path editor = TestSupport.devEngine(repo);
         TestSupport.writeManifest(editor.getParent(), "Development", "../../../../VFEngine/editor", 1);
         addEngine(hub, editor.resolveSibling("engine.json"));
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         RecentEntry game = listed(hub, "Game");
         LaunchPlan.Ready ready = assertInstanceOf(LaunchPlan.Ready.class, hub.planLaunch(checked(hub), null));
 
@@ -490,7 +548,7 @@ class ProjectHubTest {
     /** VK-1683: "Open with MCP" is stored on the entry and survives an open. */
     @Test
     void anEntrysMcpSettingIsSavedAndKept() throws Exception {
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         RecentEntry game = listed(hub, "Game");
 
         hub.setMcp(game.id(), new McpSetting(true, 7979));
@@ -572,7 +630,7 @@ class ProjectHubTest {
 
     @Test
     void aCreatedProjectAddedAgainIsAlreadyListed() throws Exception {
-        CreateOutcome created = hub.createProject("Game", projectsDir);
+        CreateOutcome created = hub.createProject(TestSupport.request("Game", projectsDir, engine));
 
         AddedProject added = hub.addExisting(found(hub, created.projectPath().getParent()));
 
@@ -659,10 +717,10 @@ class ProjectHubTest {
     /** AC: "A renamed project folder shows Missing; after Locate… it shows OK with its history kept." */
     @Test
     void aRenamedProjectFolderIsMissingAndLocateBringsItBackWithItsHistory() throws Exception {
-        UUID engine = addEngine(hub, TestSupport.devEngine(root.resolve("repo")));
-        hub.createProject("Game", projectsDir);
+        UUID registered = addEngine(hub, TestSupport.devEngine(root.resolve("repo")));
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         UUID id = listed(hub, "Game").id();
-        hub.bindEngine(id, engine);
+        hub.bindEngine(id, registered);
         hub.setMcp(id, new McpSetting(true, 7901));
         hub.markOpened(id);
         pinInTheFile(id);
@@ -685,7 +743,7 @@ class ProjectHubTest {
         assertEquals(TestSupport.real(projectsDir.resolve("Game Moved/Game.vfproj")), after.path());
         assertTrue(after.pinned());
         assertEquals(before.lastOpened(), after.lastOpened());
-        assertEquals(engine.toString(), after.engineId());
+        assertEquals(registered.toString(), after.engineId());
         assertEquals(new McpSetting(true, 7901), after.mcp());
         assertEquals(Kind.OK, status(hub, after).kind());
     }
@@ -693,8 +751,8 @@ class ProjectHubTest {
     /** AC: "Remove followed by Undo restores the entry, and no file is ever deleted (tested on a temp project)." */
     @Test
     void removeThenUndoRestoresTheEntryAndNeverTouchesTheProject() throws Exception {
-        hub.createProject("Keep", projectsDir);
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Keep", projectsDir, engine));
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         RecentEntry before = listed(hub, "Game");
         Map<String, String> files = TestSupport.treeSnapshot(projectsDir);
 
@@ -714,7 +772,7 @@ class ProjectHubTest {
     @Test
     void aProjectSavedByANewerEngineNeedsThatVersion() throws Exception {
         addEngine(hub, TestSupport.devEngine(root.resolve("repo")));
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         Files.writeString(projectsDir.resolve("Game/Game.vfproj"),
                 TestSupport.projectJson("Game", "2.0", "VertexForge 2.1.0"));
 
@@ -726,7 +784,7 @@ class ProjectHubTest {
 
     @Test
     void aProjectTheEditorWouldRefuseIsInvalidWithTheEditorsReason() throws Exception {
-        hub.createProject("Game", projectsDir);
+        hub.createProject(TestSupport.request("Game", projectsDir, engine));
         Path file = projectsDir.resolve("Game/Game.vfproj");
         JsonObject project = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
         project.remove("startupScene");

@@ -73,11 +73,25 @@ public class RecentProjectsRepository {
      * list to {@code limit}, never dropping the new entry or a pinned one.
      */
     public RecentProjectsView add(Path path, String name, int limit) throws StoreWriteException {
+        return add(path, name, limit, Optional.empty());
+    }
+
+    /**
+     * As {@link #add(Path, String, int)}, and, when {@code engineId} is given, binds the entry to that engine in the
+     * same write (a project just created from that engine's templates, VK-1689). Without one the entry's binding is
+     * left as it is.
+     */
+    public RecentProjectsView add(Path path, String name, int limit, Optional<UUID> engineId)
+            throws StoreWriteException {
         Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(engineId, "engineId");
         UUID newId = ids.get();
         return change("add " + path, projects -> {
             RecentProjects.Added added = projects.add(path, name, clock.instant(), newId);
-            return added.projects().trim(limit, added.id());
+            RecentProjects bound = engineId
+                    .map(engine -> added.projects().bindEngine(added.id(), engine.toString()))
+                    .orElse(added.projects());
+            return bound.trim(limit, added.id());
         });
     }
 

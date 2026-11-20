@@ -4,6 +4,10 @@ import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
 import com.vertexforge.launcher.dialog.CreateProjectForm.Result;
 import com.vertexforge.launcher.dialog.CreateProjectForm.State;
+import com.vertexforge.launcher.engine.EngineContent;
+import com.vertexforge.launcher.engine.EngineOptions;
+import com.vertexforge.launcher.engine.EngineResolver;
+import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.ProcessStarter;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
@@ -12,6 +16,9 @@ import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.service.ProjectNameRules;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateCatalogs;
+import com.vertexforge.launcher.template.TemplateScanner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,9 +35,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -49,9 +58,21 @@ class CreateProjectFormTest {
     private final ManualTimers timers = new ManualTimers();
     private final List<PendingCheck> checks = new ArrayList<>();
     private final List<Result> closedWith = new ArrayList<>();
+    /** The engines as the real hub checked them: one registered dev engine with content (VK-1689). */
+    private EngineOptions engineOptions;
+    /** What {@code engines()} answers; a test may swap in a pending or empty answer before building a form. */
+    private CompletableFuture<EngineOptions> enginesAnswer;
+    /** When set, {@code templates()} answers with this instead of reading the engine. */
+    private CompletableFuture<TemplateCatalogs.Answer> templatesAnswer;
+    /** When set, every {@code templates()} call gets a pending answer of its own, kept here. */
+    private boolean pendingTemplates;
+    private final List<CompletableFuture<TemplateCatalogs.Answer>> pendingTemplateAnswers = new ArrayList<>();
+    private final List<EngineContent> templateReads = new ArrayList<>();
+    private final List<CreateRequest> requests = new ArrayList<>();
 
     /** A location check the test answers by hand. */
-    private record PendingCheck(Path location, String name, CompletableFuture<LocationCheck> answer) {
+    private record PendingCheck(Path location, String name, ProjectBlueprint blueprint,
+                                CompletableFuture<LocationCheck> answer) {
     }
 
     /** Runs nothing until told to. */
@@ -124,20 +145,44 @@ class CreateProjectFormTest {
 
     private final CreateProjectForm.Services services = new CreateProjectForm.Services() {
         @Override
-        public CompletableFuture<LocationCheck> checkLocation(Path location, String name) {
+        public CompletableFuture<EngineOptions> engines() {
+            return enginesAnswer;
+        }
+
+        @Override
+        public CompletableFuture<TemplateCatalogs.Answer> templates(EngineContent engine) {
+            templateReads.add(engine);
+            if (pendingTemplates) {
+                CompletableFuture<TemplateCatalogs.Answer> answer = new CompletableFuture<>();
+                pendingTemplateAnswers.add(answer);
+                return answer;
+            }
+            if (templatesAnswer != null) {
+                return templatesAnswer;
+            }
+            try {
+                return CompletableFuture.completedFuture(TemplateCatalogs.Answer.of(TemplateScanner.SYSTEM.scan(engine)));
+            } catch (IOException e) {
+                return CompletableFuture.completedFuture(TemplateCatalogs.Answer.failed(e.getMessage()));
+            }
+        }
+
+        @Override
+        public CompletableFuture<LocationCheck> checkLocation(Path location, String name, ProjectBlueprint blueprint) {
             CompletableFuture<LocationCheck> answer = new CompletableFuture<>();
-            checks.add(new PendingCheck(location, name, answer));
+            checks.add(new PendingCheck(location, name, blueprint, answer));
             return answer;
         }
 
         @Override
         public CreationJob startCreation(CreateRequest request, CreationJob.ProgressListener listener) {
+            requests.add(request);
             return CreationJob.start(hub, request, creation, store, listener);
         }
     };
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() throws Exception {
         Path root = TestSupport.real(tempDir);
         projectsDir = Files.createDirectories(root.resolve("projects"));
         ProcessStarter noProcesses = builder -> {
@@ -145,6 +190,14 @@ class CreateProjectFormTest {
         };
         hub = ProjectHub.create(TestSupport.environment(root.resolve("config"),
                 new TickingClock(TestSupport.T0), Map.of(), noProcesses), TestSupport.log(root.resolve("logs")).log);
+
+        // A registered dev engine whose engine.json names the fake content (VK-1689).
+        Path repo = root.resolve("repo");
+        TestSupport.writeEngineContent(repo);
+        PickedEngine picked = hub.inspectEngine(TestSupport.devEngine(repo)).get(10, TimeUnit.SECONDS);
+        hub.addEngine(assertInstanceOf(PickedEngine.Usable.class, picked, picked::toString));
+        engineOptions = hub.checkEngines(hub.listEngines()).get(10, TimeUnit.SECONDS);
+        enginesAnswer = CompletableFuture.completedFuture(engineOptions);
     }
 
     @AfterEach
@@ -153,8 +206,8 @@ class CreateProjectFormTest {
     }
 
     /** A form whose answers come back on the calling thread, as they would on the FX thread. */
-    private CreateProjectForm form(boolean editorAvailable) {
-        CreateProjectForm form = new CreateProjectForm(services, timers, Runnable::run, editorAvailable);
+    private CreateProjectForm form() {
+        CreateProjectForm form = new CreateProjectForm(services, timers, Runnable::run);
         form.setOnClosed(closedWith::add);
         return form;
     }
@@ -167,8 +220,8 @@ class CreateProjectFormTest {
         checks.getLast().answer().complete(answer);
     }
 
-    private CreateProjectForm readyForm(boolean editorAvailable) {
-        CreateProjectForm form = form(editorAvailable);
+    private CreateProjectForm readyForm() {
+        CreateProjectForm form = form();
         typeAndCheck(form, "Game", LocationCheck.ok(List.of()));
         assertEquals(State.READY, form.getState());
         return form;
@@ -180,7 +233,7 @@ class CreateProjectFormTest {
 
     @Test
     void itStartsQuietWithCreateDisabled() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
 
         assertEquals(State.EDITING, form.getState());
         assertEquals("", form.errorProperty().get());
@@ -193,7 +246,7 @@ class CreateProjectFormTest {
 
     @Test
     void aNameRuleShowsAtOnceWithoutTouchingTheDisk() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.locationProperty().set(projectsDir.toString());
 
         form.nameProperty().set("CON");
@@ -206,7 +259,7 @@ class CreateProjectFormTest {
 
     @Test
     void theNameIsNeverTrimmed() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.locationProperty().set(projectsDir.toString());
 
         form.nameProperty().set("Game ");
@@ -217,7 +270,7 @@ class CreateProjectFormTest {
 
     @Test
     void aRelativeOrEmptyLocationIsRefusedAsText() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         assertEquals(CreateProjectForm.NO_LOCATION, form.errorProperty().get());
 
@@ -230,7 +283,7 @@ class CreateProjectFormTest {
 
     @Test
     void theDiskIsCheckedOnlyOnceTypingPauses() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set("  " + projectsDir + "  ");
 
@@ -254,7 +307,7 @@ class CreateProjectFormTest {
 
     @Test
     void anAnswerToAnOlderCheckIsIgnored() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set(projectsDir.toString());
         timers.debounce().fire();
@@ -272,7 +325,7 @@ class CreateProjectFormTest {
 
     @Test
     void aSlowLocationSaysSoAndStillGetsItsAnswer() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set(projectsDir.toString());
         timers.debounce().fire();
@@ -288,7 +341,7 @@ class CreateProjectFormTest {
 
     @Test
     void aCheckThatFailsIsShownAsAnError() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set(projectsDir.toString());
         timers.debounce().fire();
@@ -301,7 +354,7 @@ class CreateProjectFormTest {
 
     @Test
     void editingAReadyFormChecksAgain() {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
 
         form.nameProperty().set("Game2");
 
@@ -312,7 +365,7 @@ class CreateProjectFormTest {
 
     @Test
     void createDoesNothingUnlessTheFormIsReady() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set(projectsDir.toString());
 
@@ -323,12 +376,161 @@ class CreateProjectFormTest {
     }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // Engines, templates and options (VK-1689)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    @Test
+    void theEngineANewProjectWouldOpenWithIsPreselectedWithItsEmptyTemplate() {
+        CreateProjectForm form = form();
+
+        assertEquals(1, form.engines().size());
+        assertEquals(form.engines().getFirst(), form.engineProperty().get());
+        assertEquals(List.of(form.engines().getFirst().content()), templateReads);
+        assertEquals("empty", form.templateProperty().get().id());
+        assertEquals("A test template.", form.templateDescriptionProperty().get());
+        assertEquals(List.of("examples", "vfxLibrary"), form.options().stream().map(OptionChoice::id).toList());
+        assertTrue(form.options().stream().allMatch(OptionChoice::available));
+        assertTrue(form.options().stream().noneMatch(option -> option.selectedProperty().get()),
+                "the template ticks neither by default");
+        assertEquals("", form.noteProperty().get());
+        assertEquals(State.EDITING, form.getState(), "nothing typed yet");
+    }
+
+    @Test
+    void whileTheEnginesAreReadTheFormWaitsWithCreateDisabled() {
+        enginesAnswer = new CompletableFuture<>();
+        CreateProjectForm form = form();
+        assertEquals(CreateProjectForm.READING_ENGINES, form.enginePromptProperty().get());
+
+        form.nameProperty().set("Game");
+        form.locationProperty().set(projectsDir.toString());
+
+        assertEquals(State.LOADING, form.getState());
+        assertEquals(CreateProjectForm.READING_ENGINES, form.statusProperty().get());
+        assertFalse(form.createEnabledProperty().get());
+        assertTrue(form.inputsEnabledProperty().get(), "the name and location stay editable");
+        assertFalse(timers.debounce().running(), "the location waits for the engine");
+
+        enginesAnswer.complete(engineOptions);
+
+        assertEquals(State.CHECKING, form.getState());
+        assertTrue(timers.debounce().running());
+        timers.debounce().fire();
+        assertEquals(1, checks.size());
+        assertEquals(TestSupport.FAKE_PAYLOAD.size() + TestSupport.FAKE_LIBRARY.size() + 2,
+                checks.getFirst().blueprint().fileCount(), "the check gets the chosen files");
+    }
+
+    @Test
+    void withoutAnEngineNothingCanBeCreated() {
+        enginesAnswer = CompletableFuture.completedFuture(
+                new EngineOptions(engineOptions.registry(), java.util.Optional.empty(), List.of()));
+        CreateProjectForm form = form();
+
+        form.nameProperty().set("Game");
+        form.locationProperty().set(projectsDir.toString());
+
+        assertEquals(State.INVALID, form.getState());
+        assertEquals(EngineResolver.NO_ENGINE, form.errorProperty().get());
+        assertEquals(CreateProjectForm.NO_ENGINE_PROMPT, form.enginePromptProperty().get());
+        assertFalse(form.openAfterCreateEnabledProperty().get());
+        assertTrue(checks.isEmpty());
+    }
+
+    @Test
+    void anEngineCheckThatFailsIsShownAsAnError() {
+        enginesAnswer = CompletableFuture.failedFuture(new IllegalStateException("engines.json is locked"));
+        CreateProjectForm form = form();
+
+        form.nameProperty().set("Game");
+        form.locationProperty().set(projectsDir.toString());
+
+        assertEquals(State.INVALID, form.getState());
+        assertEquals("The engines could not be checked: engines.json is locked", form.errorProperty().get());
+    }
+
+    @Test
+    void templatesThatCannotBeReadAreShownAsAnError() {
+        templatesAnswer = CompletableFuture.completedFuture(TemplateCatalogs.Answer.failed("The templates are gone."));
+        CreateProjectForm form = form();
+
+        form.nameProperty().set("Game");
+        form.locationProperty().set(projectsDir.toString());
+
+        assertEquals(State.INVALID, form.getState());
+        assertEquals("The templates are gone.", form.errorProperty().get());
+        assertEquals(CreateProjectForm.NO_TEMPLATE_PROMPT, form.templatePromptProperty().get());
+        assertTrue(form.templates().isEmpty());
+    }
+
+    @Test
+    void anAnswerForAnEngineChoiceThatWasReplacedIsIgnored() throws Exception {
+        pendingTemplates = true;
+        CreateProjectForm form = form();
+        EngineChoice chosen = form.engineProperty().get();
+
+        form.engineProperty().set(null);
+        form.engineProperty().set(chosen);
+        assertEquals(2, pendingTemplateAnswers.size(), "choosing the engine again reads its templates again");
+        TemplateCatalogs.Answer read = TemplateCatalogs.Answer.of(TemplateScanner.SYSTEM.scan(chosen.content()));
+
+        pendingTemplateAnswers.getFirst().complete(read);
+        assertTrue(form.templates().isEmpty(), "the first read's answer is out of date");
+        assertEquals(CreateProjectForm.READING_TEMPLATES, form.templatePromptProperty().get());
+
+        pendingTemplateAnswers.getLast().complete(read);
+        assertEquals("empty", form.templateProperty().get().id());
+        assertEquals(2, form.options().size());
+    }
+
+    @Test
+    void tickingAnOptionChecksAgainAndTheProjectGetsItsFiles() {
+        CreateProjectForm form = readyForm();
+        OptionChoice examples = form.options().getFirst();
+
+        examples.selectedProperty().set(true);
+
+        assertEquals(State.CHECKING, form.getState());
+        timers.debounce().fire();
+        assertEquals(TestSupport.FAKE_PAYLOAD.size() + TestSupport.FAKE_LIBRARY.size() + 1 + 2,
+                checks.getLast().blueprint().fileCount());
+        checks.getLast().answer().complete(LocationCheck.ok(List.of()));
+        assertEquals(State.READY, form.getState());
+
+        form.create();
+        creation.runAll();
+        store.runAll();
+
+        assertEquals(Set.of("examples"), requests.getLast().options());
+        assertTrue(Files.isRegularFile(projectsDir.resolve("Game/assets/scripts/game/examples/PlayerMovement.mt")));
+        assertFalse(Files.exists(projectsDir.resolve("Game/assets/vfx")));
+    }
+
+    @Test
+    void anOptionTheEngineCannotProvideIsOfferedDisabledWithItsReason() throws Exception {
+        EngineContent full = form().engineProperty().get().content();
+        EngineContent withoutVfx = new EngineContent(full.engineId(), full.engineVersion(), full.templatesDir(),
+                full.scriptLibDir(), full.examplesDir(), java.util.Optional.empty(), full.label(), full.path(), false);
+        templatesAnswer = CompletableFuture.completedFuture(
+                TemplateCatalogs.Answer.of(TemplateScanner.SYSTEM.scan(withoutVfx)));
+
+        CreateProjectForm form = form();
+        OptionChoice vfx = form.options().getLast();
+
+        assertEquals("vfxLibrary", vfx.id());
+        assertFalse(vfx.available());
+        assertTrue(vfx.unavailableReason().orElseThrow().contains("vfxLibraryDir"), vfx.unavailableReason().get());
+        vfx.selectedProperty().set(true);
+        assertFalse(vfx.chosen(), "an option that is not available is never added");
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // Creating
     // -----------------------------------------------------------------------------------------------------------------
 
     @Test
     void createKeepsTheDialogOpenAndClosesItWithTheProject() {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
 
         form.create();
         assertEquals(State.CREATING, form.getState());
@@ -355,21 +557,23 @@ class CreateProjectFormTest {
     }
 
     @Test
-    void withoutAnEditorTheProjectIsNotOpened() {
-        CreateProjectForm form = readyForm(false);
-        assertFalse(form.openAfterCreateProperty().get());
-        assertFalse(form.openAfterCreateEnabledProperty().get());
+    void theRequestCarriesTheChosenEngineTemplateAndOptions() {
+        CreateProjectForm form = readyForm();
 
         form.create();
         creation.runAll();
         store.runAll();
 
-        assertFalse(form.result().openAfterCreate());
+        CreateRequest request = requests.getLast();
+        assertEquals(form.engines().getFirst().content(), request.engine());
+        assertEquals("empty", request.templateId());
+        assertEquals(Set.of(), request.options());
+        assertTrue(Files.isRegularFile(projectsDir.resolve("Game/assets/scripts/game/Main.mt")));
     }
 
     @Test
     void untickingTheBoxIsRespected() {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
         form.openAfterCreateProperty().set(false);
 
         form.create();
@@ -381,7 +585,7 @@ class CreateProjectFormTest {
 
     @Test
     void aFailureStaysInTheDialogForAnotherTry() throws IOException {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
         // Something fills the folder between the check and the creation.
         Files.createDirectory(projectsDir.resolve("Game"));
         Files.writeString(projectsDir.resolve("Game/keep.txt"), "mine");
@@ -403,7 +607,7 @@ class CreateProjectFormTest {
 
     @Test
     void createTriesAgainStraightAfterAFailure() throws IOException {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
         Path blocker = Files.createDirectory(projectsDir.resolve("Game"));
         Files.writeString(blocker.resolve("keep.txt"), "mine");
         form.create();
@@ -426,7 +630,7 @@ class CreateProjectFormTest {
 
     @Test
     void cancelWaitsForTheCreationToCleanUp() {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
         form.create();
 
         form.cancel();
@@ -447,7 +651,7 @@ class CreateProjectFormTest {
 
     @Test
     void aCancelThatTakesTooLongHandsTheCreationToTheWindow() {
-        CreateProjectForm form = readyForm(true);
+        CreateProjectForm form = readyForm();
         form.create();
         form.cancel();
 
@@ -467,7 +671,7 @@ class CreateProjectFormTest {
 
     @Test
     void cancelBeforeCreatingClosesWithNothing() {
-        CreateProjectForm form = form(true);
+        CreateProjectForm form = form();
         form.nameProperty().set("Game");
         form.locationProperty().set(projectsDir.toString());
         timers.debounce().fire();

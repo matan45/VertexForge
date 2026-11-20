@@ -1,6 +1,7 @@
 package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.engine.EngineCatalog;
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineListing;
 import com.vertexforge.launcher.engine.EngineOptions;
 import com.vertexforge.launcher.engine.EngineRegistryRepository;
@@ -30,6 +31,9 @@ import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
 import com.vertexforge.launcher.store.StoreWriteException;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateCatalogs;
+import com.vertexforge.launcher.template.TemplateScanner;
 import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.SingleFlightChecks;
 
@@ -59,6 +63,8 @@ public class ProjectHub implements AutoCloseable {
     private final EditorLauncher editorLauncher;
     private final ProjectHealthService health;
     private final LocationChecker locationChecker;
+    /** Reads what each engine offers for new projects, with a timeout (VK-1689). */
+    private final TemplateCatalogs templates;
     /** Writes the Settings dialog's choices; {@code null} for a hub that cannot save them (tests). */
     private final LauncherSettingsRepository settingsRepository;
     private final ShellOpener shell;
@@ -74,7 +80,7 @@ public class ProjectHub implements AutoCloseable {
                       EngineCatalog engines, EditorLauncher editorLauncher,
                       ProjectHealthService health, int listLimit, Clock clock) {
         this(repository, projectCreator, engines, editorLauncher, health,
-                new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED), listLimit, clock);
+                new LocationChecker(LocationWarnings.none()), listLimit, clock);
     }
 
     /** A hub with the default settings for everything but the list's cap, which it cannot save. */
@@ -113,6 +119,7 @@ public class ProjectHub implements AutoCloseable {
         this.editorLauncher = Objects.requireNonNull(editorLauncher, "editorLauncher");
         this.health = Objects.requireNonNull(health, "health");
         this.locationChecker = Objects.requireNonNull(locationChecker, "locationChecker");
+        this.templates = new TemplateCatalogs(TemplateScanner.SYSTEM, TemplateCatalogs.DEFAULT_TIMEOUT);
         this.settingsRepository = settingsRepository;
         this.settings = Objects.requireNonNull(settings, "settings");
         this.shell = new ShellOpener(editorLauncher.processStarter());
@@ -167,7 +174,7 @@ public class ProjectHub implements AutoCloseable {
                 editorLauncher,
                 new ProjectHealthService(PathProbe.system(), EditorLockProbe.system()::probe,
                         ProjectHealthService.DEFAULT_TIMEOUT),
-                new LocationChecker(LocationWarnings.forEnvironment(environment), ProjectTemplate.BUNDLED),
+                new LocationChecker(LocationWarnings.forEnvironment(environment)),
                 settingsRepository,
                 settings,
                 environment.clock(),
@@ -273,14 +280,15 @@ public class ProjectHub implements AutoCloseable {
     }
 
     /**
-     * Creates a project and, when that succeeds, adds it to the recent list under its canonical path. A project that
-     * was created but could not be listed is reported through {@link CreateOutcome#listError()}.
+     * Creates a project and, when that succeeds, adds it to the recent list under its canonical path, bound to the
+     * request's engine. A project that was created but could not be listed is reported through
+     * {@link CreateOutcome#listError()}.
      * <p>
      * Both steps run on the calling thread. The window runs them on two threads instead ({@link CreationJob}), so that
      * a slow creation never holds up the list.
      */
-    public CreateOutcome createProject(String name, Path location) {
-        return listCreated(createProjectFiles(new CreateRequest(name, location), CreationMonitor.NONE), name);
+    public CreateOutcome createProject(CreateRequest request) {
+        return listCreated(createProjectFiles(request, CreationMonitor.NONE), request);
     }
 
     /** Creates the project's files (VK-1679); never touches the recent list. Never throws. */
@@ -289,20 +297,31 @@ public class ProjectHub implements AutoCloseable {
     }
 
     /**
-     * Adds a project {@link #createProjectFiles} just created to the recent list, under its canonical path. A failed or
-     * cancelled creation adds nothing.
+     * Adds a project {@link #createProjectFiles} just created for {@code request} to the recent list, under its
+     * canonical path, and binds it to the engine it was created from (VK-1689) in the same write, so it opens with the
+     * engine whose library it carries. An engine without an id (the override, an unsaved bundled engine) binds
+     * nothing. A failed or cancelled creation adds nothing.
      */
-    public CreateOutcome listCreated(ProjectCreationResult result, String name) {
+    public CreateOutcome listCreated(ProjectCreationResult result, CreateRequest request) {
         if (!result.success()) {
             return CreateOutcome.failed(result);
         }
 
         Path projectPath = canonical(result.projectPath());
         try {
-            return CreateOutcome.listed(result, projectPath, repository.add(projectPath, name, listLimit));
+            return CreateOutcome.listed(result, projectPath,
+                    repository.add(projectPath, request.name(), listLimit, request.engine().engineId()));
         } catch (StoreWriteException e) {
             return CreateOutcome.notListed(result, projectPath, e);
         }
+    }
+
+    /**
+     * What {@code engine} offers for new projects: its templates, script library and option folders, read in the
+     * background with a timeout. Never completes exceptionally.
+     */
+    public CompletableFuture<TemplateCatalogs.Answer> listTemplates(EngineContent engine) {
+        return templates.list(engine);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -330,9 +349,13 @@ public class ProjectHub implements AutoCloseable {
         return repository.addExisting(found.file(), found.project().projectName(), listLimit);
     }
 
-    /** Whether a project called {@code name} can be created in {@code location}, checked in the background. */
-    public CompletableFuture<LocationChecker.LocationCheck> checkLocation(Path location, String name) {
-        return locationChecker.check(location, name);
+    /**
+     * Whether a project called {@code name}, holding the files of {@code blueprint}, can be created in
+     * {@code location}, checked in the background.
+     */
+    public CompletableFuture<LocationChecker.LocationCheck> checkLocation(Path location, String name,
+                                                                          ProjectBlueprint blueprint) {
+        return locationChecker.check(location, name, blueprint);
     }
 
     /** The real path of a file that was just created, so it is listed under one spelling; else absolute + normalized. */
@@ -412,12 +435,13 @@ public class ProjectHub implements AutoCloseable {
         return clock;
     }
 
-    /** Stops the status, location, pick, engine and session threads. Running editors are never touched. */
+    /** Stops the status, location, template, pick, engine and session threads. Running editors are never touched. */
     @Override
     public void close() {
         pickChecks.close();
         health.close();
         locationChecker.close();
+        templates.close();
         engines.close();
         editorLauncher.close();
     }

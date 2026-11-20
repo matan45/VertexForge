@@ -4,22 +4,27 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.project.ProjectFiles;
+import com.vertexforge.launcher.template.LibraryManifest;
+import com.vertexforge.launcher.template.Placeholders;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+import com.vertexforge.launcher.template.TemplateException;
+import com.vertexforge.launcher.template.TemplateScanner;
+import com.vertexforge.launcher.util.FileErrors;
 import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.TransientIo;
-import com.vertexforge.launcher.util.ZipExtractor;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.AccessDeniedException;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Clock;
 import java.time.Duration;
@@ -32,12 +37,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
- * Creates a project so that it either fully exists or nothing is left behind (VK-1679).
+ * Creates a project so that it either fully exists or nothing is left behind (VK-1679), from the templates and the
+ * script library of the engine the request names (VK-1689).
  * <p>
  * Everything is checked before anything is written. The project is then built in a sibling staging folder
  * ({@code .<name>.creating-<uuid>}) and renamed into place in one step that never replaces anything. A failure or a
@@ -47,9 +54,10 @@ import java.util.stream.Stream;
  */
 public class ProjectCreator {
 
-    // Packed from assets/scripts/lib at build time (pom.xml, pack-script-lib).
-    public static final String LIBRARY_ZIP_RESOURCE = "/templates/script-library.zip";
-    public static final String SCENE_TEMPLATE_RESOURCE = "/templates/Main.vfScene";
+    /** {@code schemaVersion} of the {@code .vfproj} files this launcher writes; every engine opens schema 1. */
+    public static final String PROJECT_SCHEMA_VERSION = "1.0";
+    /** A new project's own {@code version}. */
+    public static final String INITIAL_PROJECT_VERSION = "0.1.0";
     /** Between the dot plus the project name and the UUID in a staging folder's name. */
     public static final String STAGING_INFIX = ".creating-";
 
@@ -62,8 +70,6 @@ public class ProjectCreator {
     private static final int CLEANUP_ATTEMPTS = 5;
     private static final Duration CLEANUP_FIRST_DELAY = Duration.ofMillis(50);
     private static final Duration CLEANUP_MAX_DELAY = Duration.ofMillis(500);
-
-    private static final String ENGINE_VERSION = "VertexForge 1.0.0";
 
     /** What is at the project folder's path before anything is written. */
     enum TargetState {
@@ -86,7 +92,7 @@ public class ProjectCreator {
         }
     }
 
-    /** Thrown from inside the writes when the user cancels; an IOException so that it passes through ZipExtractor. */
+    /** Thrown from inside the writes when the user cancels; an IOException so that it leaves the copy loop at once. */
     private static final class CreationCancelled extends IOException {
         CreationCancelled() {
             super("cancelled");
@@ -100,22 +106,22 @@ public class ProjectCreator {
     private final DirectoryMover mover;
     private final Duration commitFirstDelay;
     private final Duration commitMaxDelay;
-    private final ProjectTemplate.Source templates;
+    private final TemplateScanner scanner;
 
     public ProjectCreator(Clock clock, LauncherLog log) {
         this(clock, log, UUID::randomUUID, DirectoryMover.SYSTEM, COMMIT_FIRST_DELAY, COMMIT_MAX_DELAY,
-                ProjectTemplate.BUNDLED);
+                TemplateScanner.SYSTEM);
     }
 
     ProjectCreator(Clock clock, LauncherLog log, Supplier<UUID> ids, DirectoryMover mover, Duration commitFirstDelay,
-                   Duration commitMaxDelay, ProjectTemplate.Source templates) {
+                   Duration commitMaxDelay, TemplateScanner scanner) {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.log = Objects.requireNonNull(log, "log");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.mover = Objects.requireNonNull(mover, "mover");
         this.commitFirstDelay = Objects.requireNonNull(commitFirstDelay, "commitFirstDelay");
         this.commitMaxDelay = Objects.requireNonNull(commitMaxDelay, "commitMaxDelay");
-        this.templates = Objects.requireNonNull(templates, "templates");
+        this.scanner = Objects.requireNonNull(scanner, "scanner");
         // disableHtmlEscaping: keeps "Tom & Jerry's Game" readable in the .vfproj instead of \u0026 and \u0027.
         this.gson = new GsonBuilder()
                 .setPrettyPrinting()
@@ -124,32 +130,24 @@ public class ProjectCreator {
     }
 
     /**
-     * Creates a new project with the specified name at the given location, watched by nobody.
+     * Creates the project, reporting every file to {@code monitor} and stopping when it asks to. Never throws.
      * <p>
-     * Creates the following structure:
+     * The project holds its {@code .vfproj}, the template's {@code project/} files, the engine's script library with
+     * its {@link LibraryManifest}, and the folders of the chosen options. For the engine's {@code empty} template:
      * <pre>
-     * {projectName}/
-     * ├── {projectName}.vfproj
-     * ├── scenes/
-     * │   └── Main.vfScene
-     * ├── assets/
-     * └── scripts/
-     *     ├── scripts.mtproj
-     *     ├── game/
-     *     │   └── Main.mt
-     *     ├── compiled/
-     *     └── lib/
+     * {name}/
+     * ├── {name}.vfproj          workingDirectory "assets", startupScene "scenes/Main.vfScene"
+     * ├── .gitignore
+     * └── assets/
+     *     ├── scripts/
+     *     │   ├── scripts.mtproj
+     *     │   ├── game/Main.mt
+     *     │   ├── game/examples/ ("Include examples")
+     *     │   └── lib/           (the engine's library + .vflib.json)
+     *     └── vfx/library/       ("Include VFX library")
      * </pre>
-     *
-     * @param projectName     the name of the project, exactly as typed
-     * @param parentDirectory the absolute folder the project folder goes into
-     * @return the result of the creation operation
+     * The editor builds the startup scene when it first opens the project (VK-1687).
      */
-    public ProjectCreationResult createProject(String projectName, Path parentDirectory) {
-        return create(new CreateRequest(projectName, parentDirectory), CreationMonitor.NONE);
-    }
-
-    /** Creates the project, reporting every file to {@code monitor} and stopping when it asks to. Never throws. */
     public ProjectCreationResult create(CreateRequest request, CreationMonitor monitor) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(monitor, "monitor");
@@ -171,13 +169,16 @@ public class ProjectCreator {
             return ProjectCreationResult.failure("The project name can't be used as a folder name: " + e.getReason());
         }
 
-        ProjectTemplate template;
+        // Read the engine again: the dialog's read may be minutes old, and what is copied is what is read here.
+        ProjectBlueprint blueprint;
         try {
-            template = templates.load();
-        } catch (IOException e) {
-            return ProjectCreationResult.failure(describe(e));
+            blueprint = scanner.scan(request.engine()).blueprint(request.templateId(), request.options());
+        } catch (TemplateException e) {
+            return ProjectCreationResult.failure(e.getMessage());
+        } catch (IOException | RuntimeException e) {
+            return ProjectCreationResult.failure("Could not read the engine's templates: " + describe(e));
         }
-        Optional<ProjectNameRules.Problem> lengthProblem = ProjectNameRules.checkPathLength(location, name, template);
+        Optional<ProjectNameRules.Problem> lengthProblem = ProjectNameRules.checkPathLength(location, name, blueprint);
         if (lengthProblem.isPresent()) {
             return ProjectCreationResult.failure(lengthProblem.get().message());
         }
@@ -206,7 +207,7 @@ public class ProjectCreator {
 
         // 8-9
         try {
-            writeProject(name, staging, template, new Progress(monitor, template.fileCount()));
+            writeProject(name, staging, blueprint, new Progress(monitor, blueprint.fileCount()));
             if (monitor.cancelRequested()) {
                 throw new CreationCancelled();
             }
@@ -311,146 +312,57 @@ public class ProjectCreator {
         }
     }
 
-    private void writeProject(String name, Path projectDir, ProjectTemplate template, Progress progress)
+    private void writeProject(String name, Path projectDir, ProjectBlueprint blueprint, Progress progress)
             throws IOException {
-        createDirectoryStructure(projectDir);
-
-        createProjectFile(name, projectDir.resolve(name + ProjectFiles.EXTENSION));
-        progress.fileWritten();
-        createStartupScene(projectDir.resolve("scenes"));
-        progress.fileWritten();
-        createScriptProject(name, projectDir.resolve("scripts"));
-        progress.fileWritten();
-        createMainScript(projectDir.resolve("scripts").resolve("game"));
+        writeNew(projectDir.resolve(name + ProjectFiles.EXTENSION), projectFile(name, blueprint));
         progress.fileWritten();
 
-        extractLibrary(projectDir.resolve("scripts").resolve("lib"), progress);
-    }
-
-    private void createDirectoryStructure(Path projectDir) throws IOException {
-        // Inside the staging folder, which this creation made itself.
-        Files.createDirectories(projectDir.resolve("scenes"));
-        Files.createDirectories(projectDir.resolve("assets"));
-        Files.createDirectories(projectDir.resolve("scripts").resolve("game"));
-        Files.createDirectories(projectDir.resolve("scripts").resolve("compiled"));
-        Files.createDirectories(projectDir.resolve("scripts").resolve("lib"));
-    }
-
-    private void createProjectFile(String projectName, Path projectFile) throws IOException {
-        // Use LinkedHashMap to preserve field order in JSON
-        Map<String, Object> projectConfig = new LinkedHashMap<>();
-        projectConfig.put("schemaVersion", "1.0");
-        projectConfig.put("projectName", projectName);
-        projectConfig.put("version", "0.1.0");
-        projectConfig.put("workingDirectory", ".");
-        projectConfig.put("startupScene", "scenes/Main.vfScene");
-        projectConfig.put("exeIconPath", "");
-        projectConfig.put("engineVersion", ENGINE_VERSION);
-        projectConfig.put("lastModified", formatTimestamp(clock.instant()));
-
-        String json = gson.toJson(projectConfig);
-        Files.writeString(projectFile, json);
-    }
-
-    private void createStartupScene(Path scenesDir) throws IOException {
-        Path sceneFile = scenesDir.resolve("Main.vfScene");
-
-        try (InputStream templateStream = getClass().getResourceAsStream(SCENE_TEMPLATE_RESOURCE)) {
-            if (templateStream == null) {
-                throw new IOException("Scene template not found: " + SCENE_TEMPLATE_RESOURCE);
+        // Hashed from the bytes written, so the baseline always matches the project even when the engine's library
+        // changes under the copy.
+        Map<String, String> libraryHashes = new TreeMap<>();
+        for (ProjectBlueprint.Entry entry : blueprint.entries()) {
+            byte[] content = Files.readAllBytes(entry.source());
+            try {
+                content = Placeholders.fill(entry.fill(), content, name);
+            } catch (CharacterCodingException e) {
+                throw new IOException(entry.source() + " is not valid UTF-8 text");
             }
-            Files.copy(templateStream, sceneFile);
+            writeNew(projectDir.resolve(entry.target()), content);
+            if (entry.libraryPath() != null) {
+                libraryHashes.put(entry.libraryPath(), LibraryManifest.hash(content));
+            }
+            progress.fileWritten();
         }
-    }
 
-    private void createScriptProject(String projectName, Path scriptsDir) throws IOException {
-        Path mtprojFile = scriptsDir.resolve("scripts.mtproj");
-
-        String xml = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <Project Name="%s" Version="1.0.0">
-                  <Source>
-                    <Include>game/**/*.mt</Include>
-                  </Source>
-                  <Output Directory="compiled" />
-                  <Imports>
-                    <SearchPath>lib</SearchPath>
-                  </Imports>
-                </Project>
-                """.formatted(xmlAttribute(projectName));
-
-        Files.writeString(mtprojFile, xml);
+        writeNew(projectDir.resolve(blueprint.libraryManifestTarget()),
+                LibraryManifest.toJson(blueprint.engine().engineVersion(), libraryHashes));
+        progress.fileWritten();
     }
 
     /**
-     * Escapes a value for a double-quoted XML attribute. {@code '} needs no escape there and is left as it is: mType's
-     * mtproj parser does not decode entities, so every escape it does not need would reach it as literal text.
+     * Writes a file that must not exist yet, creating its folders (all inside the staging folder, which this creation
+     * made itself). Never {@code Files.copy}: it keeps a source's read-only flag, which would stop a cancelled creation
+     * from deleting its staging folder.
      */
-    static String xmlAttribute(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '&' -> escaped.append("&amp;");
-                case '<' -> escaped.append("&lt;");
-                case '>' -> escaped.append("&gt;");
-                case '"' -> escaped.append("&quot;");
-                default -> escaped.append(c);
-            }
-        }
-        return escaped.toString();
+    private static void writeNew(Path file, byte[] content) throws IOException {
+        Files.createDirectories(file.getParent());
+        Files.write(file, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
     }
 
-    private void createMainScript(Path gameDir) throws IOException {
-        Path mainScript = gameDir.resolve("Main.mt");
+    private byte[] projectFile(String projectName, ProjectBlueprint blueprint) {
+        // Use LinkedHashMap to preserve field order in JSON
+        Map<String, Object> projectConfig = new LinkedHashMap<>();
+        projectConfig.put("schemaVersion", PROJECT_SCHEMA_VERSION);
+        projectConfig.put("projectName", projectName);
+        projectConfig.put("version", INITIAL_PROJECT_VERSION);
+        projectConfig.put("workingDirectory", blueprint.template().workingDirectory());
+        projectConfig.put("startupScene", blueprint.template().startupScene());
+        projectConfig.put("exeIconPath", "");
+        // What the engine's own editor writes on every save, so the first save changes nothing here.
+        projectConfig.put("engineVersion", blueprint.engine().displayVersion());
+        projectConfig.put("lastModified", formatTimestamp(clock.instant()));
 
-        // The closing delimiter sits at the content's own indentation, so no line gains a stray leading space.
-        String content = """
-                import * from "engine/Log.mt";
-                import * from "engine/Entity.mt";
-
-                @Script
-                public class Main {
-                    private int selfId;
-
-                    constructor() {
-                        // initialization code
-                    }
-
-                    public function onStart(): void {
-                        this.selfId = Entity::self();
-                        Log::info("Hello from Main script!");
-                    }
-
-                    public function onUpdate(float deltaTime): void {
-                        // Called every frame
-                    }
-
-                    public function onFixedUpdate(float fixedDeltaTime): void {
-                        // Called at fixed time intervals (after each physics step)
-                    }
-
-                    public function onLateUpdate(float deltaTime): void {
-                        // Called after all onUpdate calls (e.g. camera follow)
-                    }
-
-                    public function onDestroy(): void {
-                        // Called when script is destroyed
-                    }
-                }
-                """;
-
-        Files.writeString(mainScript, content);
-    }
-
-    private void extractLibrary(Path libDir, Progress progress) throws IOException {
-        try (InputStream resourceStream = getClass().getResourceAsStream(LIBRARY_ZIP_RESOURCE)) {
-            if (resourceStream == null) {
-                throw ProjectTemplate.missingLibrary();
-            }
-
-            ZipExtractor.extract(resourceStream, libDir, file -> progress.fileWritten());
-        }
+        return gson.toJson(projectConfig).getBytes(StandardCharsets.UTF_8);
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -603,27 +515,8 @@ public class ProjectCreator {
         return DateTimeFormatter.ISO_INSTANT.format(instant.atOffset(ZoneOffset.UTC));
     }
 
-    /**
-     * A short reason for the UI. Java's file exceptions often carry only the path (the Windows reason is in the type),
-     * so the common types get words of their own.
-     */
+    /** A short reason for the UI ({@link FileErrors#describe}). */
     static String describe(Throwable error) {
-        if (error instanceof FileSystemException fileError && fileError.getReason() == null
-                && fileError.getFile() != null) {
-            String what = switch (fileError) {
-                case NoSuchFileException ignored -> "not found";
-                case AccessDeniedException ignored -> "access denied";
-                case FileAlreadyExistsException ignored -> "already exists";
-                case DirectoryNotEmptyException ignored -> "the folder is not empty";
-                default -> null;
-            };
-            if (what != null) {
-                return fileError.getFile() + ": " + what;
-            }
-        }
-        if (error.getMessage() != null) {
-            return error.getMessage();
-        }
-        return error.getClass().getSimpleName();
+        return FileErrors.describe(error);
     }
 }

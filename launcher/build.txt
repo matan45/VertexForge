@@ -2,8 +2,9 @@ Build (from launcher/, with JDK 25 on PATH or in JAVA_HOME; the wrapper download
 mvnw.cmd verify                  (compile, unit tests, shaded jar)
 mvnw.cmd jpackage:jpackage       (app image in target/dist/VertexForge Launcher/)
 
-Note: package packs ../assets/scripts/lib into templates/script-library.zip, so build from the full repo checkout.
-IntelliJ: delegate build/run to Maven, or run "mvnw.cmd process-resources" before launching, or project creation fails.
+Note: the launcher carries no project templates. New projects are made from the selected engine's own templates and
+script library, the folders its engine.json names (VK-1689). The unit tests read the repo's assets/ (RealEngineContentTest),
+so run them from the full repo checkout.
 
 Self-test (CI runs this on the packaged image; exit code 0 = pass, 1 = fail):
 "target/dist/VertexForge Launcher/VertexForge Launcher.exe" --self-test --self-test-report=self-test.txt

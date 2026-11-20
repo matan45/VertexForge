@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 public final class EngineResolver {
 
-    static final String NO_ENGINE = "No working engine is registered. Add an engine (its Editor.exe or "
+    public static final String NO_ENGINE = "No working engine is registered. Add an engine (its Editor.exe or "
             + EngineManifest.FILE_NAME + "), or set " + EditorOverride.ENV_VAR + ".";
 
     private EngineResolver() {

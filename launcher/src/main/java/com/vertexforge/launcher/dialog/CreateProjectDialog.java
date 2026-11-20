@@ -1,18 +1,24 @@
 package com.vertexforge.launcher.dialog;
 
+import com.vertexforge.launcher.template.TemplateCatalog;
 import com.vertexforge.launcher.ui.MainView;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.collections.ListChangeListener;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -20,15 +26,20 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Window;
 import javafx.stage.WindowEvent;
+import javafx.util.Callback;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * The Create Project dialog (VK-1679). It only shows {@link CreateProjectForm}, which holds all of its behaviour:
  * nothing here touches the file system on the FX thread, so an unreachable folder can never freeze it.
+ * <p>
+ * The project is made from the chosen engine's template and script library (VK-1689): Engine, Template and the
+ * template's options sit below the name and location.
  * <p>
  * Create does not close the dialog: the project is created while it stays open, a failure is shown in it, and Cancel
  * (or the close button) stops a creation in progress before the dialog closes.
@@ -56,6 +67,11 @@ public class CreateProjectDialog {
     private final CreateProjectForm form;
     private final TextField projectNameField;
     private final TextField projectLocationField;
+    private final ComboBox<EngineChoice> engineBox;
+    private final ComboBox<TemplateCatalog.Template> templateBox;
+    private final Label templateDescriptionLabel;
+    private final VBox optionsBox;
+    private final Label noteLabel;
     private final CheckBox openAfterCreateBox;
     private final Label validationLabel;
     private final Label warningLabel;
@@ -63,12 +79,17 @@ public class CreateProjectDialog {
     private final ProgressBar progressBar;
     private final Window owner;
 
-    public CreateProjectDialog(Window owner, CreateProjectForm.Services services, boolean editorAvailable) {
+    public CreateProjectDialog(Window owner, CreateProjectForm.Services services) {
         this.owner = owner;
-        this.form = new CreateProjectForm(services, FX_TIMERS, Platform::runLater, editorAvailable);
+        this.form = new CreateProjectForm(services, FX_TIMERS, Platform::runLater);
         this.dialog = new Dialog<>();
         this.projectNameField = new TextField();
         this.projectLocationField = new TextField();
+        this.engineBox = new ComboBox<>();
+        this.templateBox = new ComboBox<>();
+        this.templateDescriptionLabel = new Label();
+        this.optionsBox = new VBox(6);
+        this.noteLabel = new Label();
         this.openAfterCreateBox = new CheckBox("Open in the editor after creating");
         this.validationLabel = new Label();
         this.warningLabel = new Label();
@@ -93,9 +114,8 @@ public class CreateProjectDialog {
      *
      * @return how it ended; empty only if it closed without going through the form
      */
-    public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services,
-                                                          boolean editorAvailable) {
-        return new CreateProjectDialog(owner, services, editorAvailable).showAndWait();
+    public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services) {
+        return new CreateProjectDialog(owner, services).showAndWait();
     }
 
     public Optional<CreateProjectForm.Result> showAndWait() {
@@ -154,7 +174,33 @@ public class CreateProjectDialog {
         grid.add(locationLabel, 0, 1);
         grid.add(locationBox, 1, 1);
 
-        grid.add(openAfterCreateBox, 1, 2);
+        // Engine and template (VK-1689): the project starts with the chosen engine's template and script library.
+        Label engineLabel = new Label("Engine:");
+        engineLabel.getStyleClass().add("form-label");
+        engineBox.setMaxWidth(Double.MAX_VALUE);
+        configureCells(engineBox, choice -> choice.label() + "  —  " + choice.path());
+        grid.add(engineLabel, 0, 2);
+        grid.add(engineBox, 1, 2);
+
+        Label templateLabel = new Label("Template:");
+        templateLabel.getStyleClass().add("form-label");
+        templateBox.setMaxWidth(Double.MAX_VALUE);
+        configureCells(templateBox, template -> template.manifest().name());
+        templateDescriptionLabel.getStyleClass().add("creation-status");
+        noteLabel.getStyleClass().add("validation-warning");
+        VBox templateDetails = new VBox(8, templateBox, templateDescriptionLabel, optionsBox, noteLabel);
+        grid.add(templateLabel, 0, 3);
+        grid.add(templateDetails, 1, 3);
+        for (Label label : new Label[]{templateDescriptionLabel, noteLabel}) {
+            label.setWrapText(true);
+            label.setMaxWidth(380);
+            label.visibleProperty().bind(label.textProperty().isNotEmpty());
+            label.managedProperty().bind(label.visibleProperty());
+        }
+        optionsBox.visibleProperty().bind(Bindings.isNotEmpty(optionsBox.getChildren()));
+        optionsBox.managedProperty().bind(optionsBox.visibleProperty());
+
+        grid.add(openAfterCreateBox, 1, 4);
 
         // Messages: an error blocks Create, warnings never do, the status says what is going on.
         validationLabel.getStyleClass().add("validation-error");
@@ -171,9 +217,60 @@ public class CreateProjectDialog {
         }
         progressBar.visibleProperty().bind(form.busyProperty());
         progressBar.managedProperty().bind(progressBar.visibleProperty());
-        grid.add(messages, 0, 3, 2, 1);
+        grid.add(messages, 0, 5, 2, 1);
 
         return grid;
+    }
+
+    /** Shows each item, and the selected one, as {@code text} gives it. */
+    private static <T> void configureCells(ComboBox<T> box, Function<T, String> text) {
+        Callback<javafx.scene.control.ListView<T>, ListCell<T>> cells = list -> new ListCell<>() {
+            @Override
+            protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : text.apply(item));
+            }
+        };
+        box.setCellFactory(cells);
+        // The button cell shows the prompt text while nothing is selected, as ComboBox's own button cell does.
+        box.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? box.getPromptText() : text.apply(item));
+            }
+        });
+        box.promptTextProperty().addListener((observable, was, now) -> {
+            if (box.getValue() == null) {
+                box.getButtonCell().setText(now);
+            }
+        });
+    }
+
+    /** One checkbox per option the template offers; an option the engine can't provide is disabled, with why. */
+    private void rebuildOptions() {
+        optionsBox.getChildren().clear();
+        for (OptionChoice option : form.options()) {
+            CheckBox box = new CheckBox(option.name());
+            box.selectedProperty().bindBidirectional(option.selectedProperty());
+            if (option.available()) {
+                box.disableProperty().bind(form.inputsEnabledProperty().not());
+                if (!option.description().isEmpty()) {
+                    box.setTooltip(new Tooltip(option.description()));
+                }
+            } else {
+                box.setDisable(true);
+            }
+            optionsBox.getChildren().add(box);
+            // A disabled control shows no tooltip, so the reason is a line of its own.
+            option.unavailableReason().ifPresent(reason -> {
+                Label why = new Label("Not available: " + reason);
+                why.getStyleClass().add("creation-status");
+                why.setWrapText(true);
+                why.setMaxWidth(380);
+                optionsBox.getChildren().add(why);
+            });
+        }
     }
 
     private void bindToForm(Button createButton, Button cancelButton) {
@@ -181,8 +278,21 @@ public class CreateProjectDialog {
         projectLocationField.textProperty().bindBidirectional(form.locationProperty());
         openAfterCreateBox.selectedProperty().bindBidirectional(form.openAfterCreateProperty());
 
+        engineBox.setItems(form.engines());
+        engineBox.valueProperty().bindBidirectional(form.engineProperty());
+        engineBox.promptTextProperty().bind(form.enginePromptProperty());
+        templateBox.setItems(form.templates());
+        templateBox.valueProperty().bindBidirectional(form.templateProperty());
+        templateBox.promptTextProperty().bind(form.templatePromptProperty());
+        templateDescriptionLabel.textProperty().bind(form.templateDescriptionProperty());
+        noteLabel.textProperty().bind(form.noteProperty());
+        form.options().addListener((ListChangeListener<OptionChoice>) change -> rebuildOptions());
+        rebuildOptions();
+
         projectNameField.disableProperty().bind(form.inputsEnabledProperty().not());
         projectLocationField.disableProperty().bind(form.inputsEnabledProperty().not());
+        engineBox.disableProperty().bind(form.inputsEnabledProperty().not());
+        templateBox.disableProperty().bind(form.inputsEnabledProperty().not());
         openAfterCreateBox.disableProperty().bind(form.openAfterCreateEnabledProperty().not());
         createButton.disableProperty().bind(form.createEnabledProperty().not());
         cancelButton.disableProperty().bind(form.cancelEnabledProperty().not());
@@ -228,6 +338,9 @@ public class CreateProjectDialog {
         warningLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
         statusLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
         progressBar.visibleProperty().addListener((observable, was, now) -> resizeToContent());
+        templateDescriptionLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        noteLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        optionsBox.getChildren().addListener((ListChangeListener<javafx.scene.Node>) change -> resizeToContent());
     }
 
     private void resizeToContent() {

@@ -1,5 +1,7 @@
 package com.vertexforge.launcher.service;
 
+import com.vertexforge.launcher.TestSupport;
+import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.service.ProjectNameRules.Problem;
 import com.vertexforge.launcher.service.ProjectNameRules.Rule;
 import org.junit.jupiter.api.Test;
@@ -104,9 +106,10 @@ class ProjectNameRulesTest {
         int allowed = ProjectNameRules.MAX_PATH_CHARS - ProjectNameRules.PATH_MARGIN;
         String name = "Game";
         // Pick a library file that makes the deepest path exactly the allowed length, then one character more.
-        int base = location.toString().length() + 1 + name.length() + 1 + "scripts/lib/".length();
-        ProjectTemplate atLimit = ProjectTemplate.of(List.of("d".repeat(allowed - base)));
-        ProjectTemplate overLimit = ProjectTemplate.of(List.of("d".repeat(allowed - base + 1)));
+        String library = "assets/scripts/lib/";
+        int base = location.toString().length() + 1 + name.length() + 1 + library.length();
+        ProjectBlueprint atLimit = TestSupport.blueprint(library + "d".repeat(allowed - base));
+        ProjectBlueprint overLimit = TestSupport.blueprint(library + "d".repeat(allowed - base + 1));
 
         assertEquals(Optional.empty(), ProjectNameRules.checkPathLength(location, name, atLimit));
         Problem problem = ProjectNameRules.checkPathLength(location, name, overLimit).orElseThrow();
@@ -118,7 +121,7 @@ class ProjectNameRulesTest {
     void aLongNameMakesTheProjectFileTheDeepestFile() {
         Path location = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
         int allowed = ProjectNameRules.MAX_PATH_CHARS - ProjectNameRules.PATH_MARGIN;
-        ProjectTemplate shallow = ProjectTemplate.of(List.of("a.mt"));
+        ProjectBlueprint shallow = TestSupport.blueprint("a.mt");
         // location \ name \ name.vfproj  ==  location + 1 + n + 1 + n + 7
         int fixed = location.toString().length() + 2 + ".vfproj".length();
         int longest = (allowed - fixed) / 2;

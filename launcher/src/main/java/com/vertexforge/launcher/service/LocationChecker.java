@@ -1,6 +1,7 @@
 package com.vertexforge.launcher.service;
 
-import java.io.IOException;
+import com.vertexforge.launcher.template.ProjectBlueprint;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -76,8 +77,8 @@ public final class LocationChecker implements AutoCloseable {
     private final ConcurrentHashMap<Path, CompletableFuture<Optional<String>>> folders = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<TargetKey, CompletableFuture<LocationCheck>> targets = new ConcurrentHashMap<>();
 
-    public LocationChecker(LocationWarnings warnings, ProjectTemplate.Source templates) {
-        this(ProjectCreator::inspectLocation, defaultTargetProbe(warnings, templates));
+    public LocationChecker(LocationWarnings warnings) {
+        this(ProjectCreator::inspectLocation, defaultTargetProbe(warnings));
     }
 
     LocationChecker(FolderProbe folderProbe, TargetProbe targetProbe) {
@@ -92,12 +93,15 @@ public final class LocationChecker implements AutoCloseable {
     }
 
     /**
-     * Whether a project called {@code name} can be created in {@code location}. Returns at once; the answer arrives on
-     * one of the checker's threads (or at once, when the name or the location is wrong as text).
+     * Whether a project called {@code name}, holding the files of {@code blueprint}, can be created in
+     * {@code location}. Returns at once; the answer arrives on one of the checker's threads (or at once, when the name
+     * or the location is wrong as text). The path budget is checked once the folder has answered, before the
+     * project's own path is looked at.
      */
-    public CompletableFuture<LocationCheck> check(Path location, String name) {
+    public CompletableFuture<LocationCheck> check(Path location, String name, ProjectBlueprint blueprint) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(blueprint, "blueprint");
         Optional<ProjectNameRules.Problem> nameProblem = ProjectNameRules.checkName(name);
         if (nameProblem.isPresent()) {
             return CompletableFuture.completedFuture(LocationCheck.refused(nameProblem.get().message()));
@@ -109,11 +113,24 @@ public final class LocationChecker implements AutoCloseable {
         Path folder = location.normalize();
         return shared(folders, folder, () -> folderProbe.probe(folder),
                 error -> Optional.of("Could not check the folder: " + ProjectCreator.describe(error)))
-                .thenCompose(problem -> problem.isPresent()
-                        ? CompletableFuture.completedFuture(LocationCheck.refused(problem.get()))
-                        : shared(targets, new TargetKey(folder, name), () -> targetProbe.probe(folder, name),
-                        error -> LocationCheck.refused("Could not check the location: "
-                                + ProjectCreator.describe(error))));
+                .thenCompose(problem -> {
+                    if (problem.isPresent()) {
+                        return CompletableFuture.completedFuture(LocationCheck.refused(problem.get()));
+                    }
+                    Optional<ProjectNameRules.Problem> tooLong;
+                    try {
+                        tooLong = ProjectNameRules.checkPathLength(folder, name, blueprint);
+                    } catch (RuntimeException e) {
+                        return CompletableFuture.completedFuture(LocationCheck.refused(
+                                "Could not check the location: " + ProjectCreator.describe(e)));
+                    }
+                    if (tooLong.isPresent()) {
+                        return CompletableFuture.completedFuture(LocationCheck.refused(tooLong.get().message()));
+                    }
+                    return shared(targets, new TargetKey(folder, name), () -> targetProbe.probe(folder, name),
+                            error -> LocationCheck.refused("Could not check the location: "
+                                    + ProjectCreator.describe(error)));
+                });
     }
 
     /** How many folders and project paths are being checked right now (for tests). */
@@ -160,20 +177,9 @@ public final class LocationChecker implements AutoCloseable {
         return mine.copy();
     }
 
-    private static TargetProbe defaultTargetProbe(LocationWarnings warnings, ProjectTemplate.Source templates) {
+    private static TargetProbe defaultTargetProbe(LocationWarnings warnings) {
         Objects.requireNonNull(warnings, "warnings");
-        Objects.requireNonNull(templates, "templates");
         return (location, name) -> {
-            ProjectTemplate template;
-            try {
-                template = templates.load();
-            } catch (IOException e) {
-                return LocationCheck.refused(ProjectCreator.describe(e));
-            }
-            Optional<ProjectNameRules.Problem> tooLong = ProjectNameRules.checkPathLength(location, name, template);
-            if (tooLong.isPresent()) {
-                return LocationCheck.refused(tooLong.get().message());
-            }
             ProjectCreator.TargetInspection target = ProjectCreator.inspectTarget(location, name);
             if (target.refused()) {
                 return LocationCheck.refused(target.problem());

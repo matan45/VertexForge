@@ -35,6 +35,7 @@ class SelfTestTest {
         try {
             List<RecentEntry> projects = hub.listProjects().entries();
             assertEquals(1, projects.size());
+            assertTrue(projects.getFirst().engineId() != null, "the project is bound to the engine it was created from");
             // Created projects are listed by real path; the CI temp folder is an 8.3 short path.
             assertTrue(projects.getFirst().path().startsWith(TestSupport.real(tempDir)), projects.toString());
             assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json")));

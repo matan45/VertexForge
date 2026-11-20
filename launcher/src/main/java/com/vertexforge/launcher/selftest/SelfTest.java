@@ -5,6 +5,7 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.controller.MainController;
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineManifest;
 import com.vertexforge.launcher.engine.EngineOption;
 import com.vertexforge.launcher.engine.EngineOptions;
@@ -26,15 +27,18 @@ import com.vertexforge.launcher.repository.RecentProjectsCodec;
 import com.vertexforge.launcher.repository.RecentProjectsRepository;
 import com.vertexforge.launcher.repository.RecentProjectsView;
 import com.vertexforge.launcher.service.CreateOutcome;
-import com.vertexforge.launcher.service.ProjectCreator;
+import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
+import com.vertexforge.launcher.template.LibraryManifest;
+import com.vertexforge.launcher.template.TemplateCatalog;
+import com.vertexforge.launcher.template.TemplateCatalogs;
+import com.vertexforge.launcher.template.TemplateOptionKind;
 import com.vertexforge.launcher.ui.MainView;
 import com.vertexforge.launcher.util.LauncherLog;
-import com.vertexforge.launcher.util.ZipExtractor;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -44,10 +48,7 @@ import javafx.scene.Parent;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -64,6 +65,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -71,15 +73,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 /**
  * {@code --self-test}: proves that a build, above all the packaged app image, has every class, module and resource
  * the launcher needs (VK-1677). It starts the JavaFX toolkit, loads the real main window and stylesheet, runs a
- * recent-projects store and a zip round trip and creates a project from the bundled templates, all inside a temp
- * folder: it never shows a window, never starts a process and never touches {@code ~/.vertexforge}.
+ * recent-projects store round trip, registers a fake engine and creates a project from that engine's templates and
+ * script library (VK-1689), all inside a temp folder: it never shows a window, never starts a process and never
+ * touches {@code ~/.vertexforge}.
  * <p>
  * Exit code 0 means pass and 1 means fail. {@code SELF-TEST PASS} goes to stdout and the failure reason to stderr;
  * with {@code --self-test-report=<file>} both also go to that file, which is the reliable channel for the packaged
@@ -102,9 +102,9 @@ public final class SelfTest {
     private static final List<String> REQUIRED_RESOURCES = List.of(
             MainView.FXML_RESOURCE,
             MainView.STYLESHEET_RESOURCE,
-            "/images/icon.png",
-            ProjectCreator.SCENE_TEMPLATE_RESOURCE,
-            ProjectCreator.LIBRARY_ZIP_RESOURCE);
+            "/images/icon.png");
+    /** The name of the project the self-test creates. */
+    static final String PROJECT_NAME = "SelfTest";
 
     private SelfTest() {
         // Utility class - prevent instantiation
@@ -175,11 +175,12 @@ public final class SelfTest {
 
         check("resources", SelfTest::checkResources);
         check("store round trip", () -> checkStoreRoundTrip(workDir.resolve("store"), environment.clock(), log));
-        check("zip round trip", () -> checkZipRoundTrip(workDir.resolve("zip")));
-        check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects")));
-        check("existing project", () -> checkExistingProject(hub));
-        check("engine registry", () -> checkEngineRegistry(hub, workDir.resolve("engines"),
+        // The engine first: the project is created from its templates and bound to it (VK-1689).
+        EngineOption[] engine = new EngineOption[1];
+        check("engine registry", () -> engine[0] = checkEngineRegistry(hub, workDir.resolve("engines"),
                 environment.configDir().resolve(EngineRegistryRepository.FILE_NAME)));
+        check("project creation", () -> checkProjectCreation(hub, workDir.resolve("projects"), engine[0]));
+        check("existing project", () -> checkExistingProject(hub));
         return hub;
     }
 
@@ -200,24 +201,15 @@ public final class SelfTest {
                 DriveTypes.unknown());
     }
 
-    private static void checkResources() throws IOException {
+    private static void checkResources() {
         for (String resource : REQUIRED_RESOURCES) {
             if (SelfTest.class.getResource(resource) == null) {
                 throw new IllegalStateException("missing resource " + resource);
             }
         }
-        try (InputStream in = SelfTest.class.getResourceAsStream(ProjectCreator.LIBRARY_ZIP_RESOURCE);
-             ZipInputStream zip = new ZipInputStream(in)) {
-            int files = 0;
-            ZipEntry entry;
-            while ((entry = zip.getNextEntry()) != null) {
-                if (!entry.isDirectory()) {
-                    files++;
-                }
-            }
-            if (files == 0) {
-                throw new IllegalStateException(ProjectCreator.LIBRARY_ZIP_RESOURCE + " holds no files");
-            }
+        // Projects are made from the engine's own templates (VK-1689): the launcher must carry none of its own.
+        if (SelfTest.class.getResource("/templates/") != null) {
+            throw new IllegalStateException("the launcher still carries a templates/ resource folder");
         }
     }
 
@@ -286,29 +278,6 @@ public final class SelfTest {
         }
     }
 
-    private static void checkZipRoundTrip(Path targetDir) throws IOException {
-        Map<String, byte[]> files = new LinkedHashMap<>();
-        files.put("a.txt", "alpha".getBytes(StandardCharsets.UTF_8));
-        files.put("nested/b.mt", "beta\r\n".getBytes(StandardCharsets.UTF_8));
-
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
-            for (Map.Entry<String, byte[]> file : files.entrySet()) {
-                zip.putNextEntry(new ZipEntry(file.getKey()));
-                zip.write(file.getValue());
-                zip.closeEntry();
-            }
-        }
-        Files.createDirectories(targetDir);
-        ZipExtractor.extract(new ByteArrayInputStream(bytes.toByteArray()), targetDir);
-
-        for (Map.Entry<String, byte[]> file : files.entrySet()) {
-            if (!Arrays.equals(file.getValue(), Files.readAllBytes(targetDir.resolve(file.getKey())))) {
-                throw new IllegalStateException("zip round trip changed " + file.getKey());
-            }
-        }
-    }
-
     /**
      * The project the creation check made reads back through the project file reader (VK-1685), and adding its
      * folder again finds the listed entry instead of adding a second one, so the list still holds exactly one.
@@ -320,7 +289,7 @@ public final class SelfTest {
         }
         Path projectFile = listed.getFirst().path();
         String name = ProjectFileReader.read(projectFile).projectName();
-        if (!"SelfTest".equals(name)) {
+        if (!PROJECT_NAME.equals(name)) {
             throw new IllegalStateException("the project file reads back as \"" + name + "\"");
         }
 
@@ -335,9 +304,30 @@ public final class SelfTest {
         }
     }
 
-    private static void checkProjectCreation(ProjectHub hub, Path projectsDir) throws Exception {
+    /**
+     * A project made from the fake engine's {@code empty} template with both options (VK-1689): its files are the
+     * engine's, its placeholders are filled, its {@code .vfproj} carries the engine's version, and its list entry is
+     * bound to the engine.
+     */
+    private static void checkProjectCreation(ProjectHub hub, Path projectsDir, EngineOption engine) throws Exception {
         Files.createDirectories(projectsDir);
-        CreateOutcome outcome = hub.createProject("SelfTest", projectsDir);
+        EngineContent content = EngineContent.of(engine).orElseThrow(() -> new IllegalStateException(
+                "the fake engine offers nothing to create projects from: " + engine.health()));
+        TemplateCatalogs.Answer answer = hub.listTemplates(content).get(UI_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        if (answer.catalog() == null) {
+            throw new IllegalStateException("the fake engine's templates could not be read: " + answer.problem());
+        }
+        TemplateCatalog catalog = answer.catalog();
+        if (catalog.find(TemplateCatalog.DEFAULT_TEMPLATE).isEmpty()
+                || catalog.unavailableReason(TemplateOptionKind.EXAMPLES).isPresent()
+                || catalog.unavailableReason(TemplateOptionKind.VFX_LIBRARY).isPresent()) {
+            throw new IllegalStateException("the fake engine's catalog is incomplete: " + catalog.notes()
+                    + " " + catalog.unavailableOptions());
+        }
+
+        CreateOutcome outcome = hub.createProject(new CreateRequest(PROJECT_NAME, projectsDir, content,
+                TemplateCatalog.DEFAULT_TEMPLATE, Set.of(TemplateOptionKind.EXAMPLES.id(),
+                TemplateOptionKind.VFX_LIBRARY.id())));
         if (!outcome.created()) {
             throw new IllegalStateException("project creation failed: " + outcome.result().errorMessage());
         }
@@ -350,6 +340,11 @@ public final class SelfTest {
         if (listed.size() != 1 || !outcome.projectPath().equals(listed.getFirst().path())) {
             throw new IllegalStateException("the recent list did not round-trip the new project: " + listed);
         }
+        if (!content.engineId().map(UUID::toString).equals(Optional.ofNullable(listed.getFirst().engineId()))) {
+            throw new IllegalStateException("the new project is not bound to the engine it was created from: "
+                    + listed.getFirst().engineId());
+        }
+        checkCreatedFiles(outcome.projectPath(), content);
 
         // The health check reads the file and the folder's editor lock (VK-1686): what the launcher creates is a
         // project the editor accepts, no editor has it open, and the check created nothing in it.
@@ -367,25 +362,95 @@ public final class SelfTest {
         if (Files.exists(EditorLockProbe.lockFile(outcome.projectPath().getParent()).getParent())) {
             throw new IllegalStateException("the health check created the editor's state folder");
         }
+    }
 
-        try (Stream<Path> lib = Files.walk(outcome.projectPath().resolveSibling("scripts").resolve("lib"))) {
-            if (lib.noneMatch(Files::isRegularFile)) {
-                throw new IllegalStateException("the script library was not extracted");
+    /** The fake engine's files arrived as the template lays them out, with the placeholders filled in. */
+    private static void checkCreatedFiles(Path projectFile, EngineContent content) throws IOException {
+        Path project = projectFile.getParent();
+        JsonObject vfproj = JsonParser.parseString(Files.readString(projectFile, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        if (!"assets".equals(vfproj.get("workingDirectory").getAsString())
+                || !content.displayVersion().equals(vfproj.get("engineVersion").getAsString())) {
+            throw new IllegalStateException("the .vfproj does not follow the template and the engine: " + vfproj);
+        }
+        String main = Files.readString(project.resolve("assets/scripts/game/Main.mt"), StandardCharsets.UTF_8);
+        String mtproj = Files.readString(project.resolve("assets/scripts/scripts.mtproj"), StandardCharsets.UTF_8);
+        if (!main.contains("Hello from " + PROJECT_NAME) || !mtproj.contains("Name=\"" + PROJECT_NAME + "\"")) {
+            throw new IllegalStateException("the template's placeholders were not filled in");
+        }
+        for (Map.Entry<String, String> file : FAKE_LIBRARY.entrySet()) {
+            byte[] copied = Files.readAllBytes(project.resolve("assets/scripts/lib").resolve(file.getKey()));
+            if (!Arrays.equals(file.getValue().getBytes(StandardCharsets.UTF_8), copied)) {
+                throw new IllegalStateException("the script library file " + file.getKey() + " changed in the copy");
             }
         }
+        JsonObject libraryManifest = JsonParser.parseString(Files.readString(
+                project.resolve("assets/scripts/lib").resolve(LibraryManifest.FILE_NAME), StandardCharsets.UTF_8))
+                .getAsJsonObject();
+        if (libraryManifest.get("formatVersion").getAsInt() != LibraryManifest.FORMAT_VERSION
+                || libraryManifest.getAsJsonObject("files").size() != FAKE_LIBRARY.size()) {
+            throw new IllegalStateException("the library manifest is wrong: " + libraryManifest);
+        }
+        if (!Files.isRegularFile(project.resolve("assets/scripts/game/examples/Example.mt"))
+                || !Files.isRegularFile(project.resolve("assets/vfx/library/spark.vfVFX"))) {
+            throw new IllegalStateException("the options' files were not copied");
+        }
+    }
+
+    /** The fake engine's script library: two files, one with CRLF line endings. */
+    private static final Map<String, String> FAKE_LIBRARY = fakeLibrary();
+
+    private static Map<String, String> fakeLibrary() {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put("engine/Log.mt", "public class Log {\r\n}\r\n");
+        files.put("engine/oop/Behaviour.mt", "public class Behaviour {\n}\n");
+        return files;
+    }
+
+    /**
+     * The content of a fake engine laid out like this repository's {@code assets/}: an {@code empty} template, a
+     * two-file script library, one example and one effect.
+     */
+    private static void writeFakeContent(Path root) throws IOException {
+        Path template = Files.createDirectories(root.resolve("assets/templates/empty"));
+        Files.writeString(template.resolve("template.json"), """
+                {"formatVersion": 1, "id": "empty", "name": "Empty", "minimumEngineVersion": "1.0.0",
+                 "workingDirectory": "assets", "startupScene": "scenes/Main.vfScene",
+                 "scriptLibrary": "assets/scripts/lib",
+                 "options": [
+                   {"id": "examples", "name": "Include examples", "target": "assets/scripts/game/examples"},
+                   {"id": "vfxLibrary", "name": "Include VFX library", "target": "assets/vfx/library"}]}
+                """, StandardCharsets.UTF_8);
+        Path scripts = Files.createDirectories(template.resolve("project/assets/scripts/game")).getParent();
+        Files.writeString(scripts.resolve("scripts.mtproj"),
+                "<Project Name=\"{{PROJECT_NAME}}\" Version=\"1.0.0\"></Project>\n", StandardCharsets.UTF_8);
+        Files.writeString(scripts.resolve("game/Main.mt"), "string hello = \"Hello from {{PROJECT_NAME}}\";\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(template.resolve("project/.gitignore"), "/.vertexforge/\n", StandardCharsets.UTF_8);
+        for (Map.Entry<String, String> file : FAKE_LIBRARY.entrySet()) {
+            Path target = root.resolve("assets/scripts/lib").resolve(file.getKey());
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, file.getValue(), StandardCharsets.UTF_8);
+        }
+        Files.writeString(Files.createDirectories(root.resolve("assets/scripts/game/examples")).resolve("Example.mt"),
+                "public class Example {\n}\n", StandardCharsets.UTF_8);
+        Files.writeString(Files.createDirectories(root.resolve("assets/vfx/library")).resolve("spark.vfVFX"), "{}\n",
+                StandardCharsets.UTF_8);
     }
 
     /**
      * The engine registry end to end (VK-1681): a fake Development build laid out like this repository's
      * ({@code bin/Editor/Development/x64} with an {@code engine.json} whose working directory is
-     * {@code ../../../../VFEngine/editor}) is added through its manifest, checks OK, starts in that working directory,
-     * opens an unbound project and binds it; {@code engines.json} is version 1 with no temp file left behind.
+     * {@code ../../../../VFEngine/editor}, and the content folders of VK-1689) is added through its manifest, checks
+     * OK, starts in that working directory, opens an unbound project and binds it; {@code engines.json} is version 1
+     * with no temp file left behind. Returns the engine as checked.
      */
-    static void checkEngineRegistry(ProjectHub hub, Path root, Path enginesFile) throws Exception {
+    static EngineOption checkEngineRegistry(ProjectHub hub, Path root, Path enginesFile) throws Exception {
         Path exeDir = Files.createDirectories(root.resolve("bin/Editor/Development/x64"));
         Path workingDir = Files.createDirectories(root.resolve("VFEngine/editor"));
         Path editor = Files.writeString(exeDir.resolve("Editor.exe"), "not a real editor");
         editor.toFile().setExecutable(true);
+        writeFakeContent(root);
         JsonObject manifest = new JsonObject();
         manifest.addProperty("manifestVersion", 1);
         manifest.addProperty("engineVersion", "1.0.0");
@@ -393,6 +458,10 @@ public final class SelfTest {
         manifest.add("gitCommit", JsonNull.INSTANCE);
         manifest.addProperty("editorExe", "Editor.exe");
         manifest.addProperty("workingDirectory", "../../../../VFEngine/editor");
+        manifest.addProperty("templatesDir", "../../../../assets/templates");
+        manifest.addProperty("scriptLibDir", "../../../../assets/scripts/lib");
+        manifest.addProperty("examplesDir", "../../../../assets/scripts/game/examples");
+        manifest.addProperty("vfxLibraryDir", "../../../../assets/vfx/library");
         Files.writeString(exeDir.resolve(EngineManifest.FILE_NAME), manifest.toString(), StandardCharsets.UTF_8);
 
         PickedEngine picked = hub.inspectEngine(exeDir.resolve(EngineManifest.FILE_NAME))
@@ -431,6 +500,7 @@ public final class SelfTest {
                 throw new IllegalStateException("temporary files were left behind: " + left);
             }
         }
+        return engine;
     }
 
     /**

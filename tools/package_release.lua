@@ -20,9 +20,9 @@
 --     sdk/                            plugin headers + deps + lib/Release/imgui.lib + template
 --     plugins/<Name>/                 <Name>.vfplugin + the Release <Name>.dll (+ assets/, resources/)
 --     assets/scripts/lib/             the mType script library projects copy
---     assets/scripts/game/examples/   the example scripts (quoted by the MCP primer)
+--     assets/scripts/game/examples/   the example scripts (quoted by the MCP primer; "Include examples")
 --     assets/vfx/library/             the VFX library projects copy into assets/vfx/library
---     assets/templates/               project templates, once the repo has them (VK-1689)
+--     assets/templates/               the project templates the launcher creates projects from (VK-1689)
 --
 -- Editor/Runtime resolve engine assets via "../../resources/" relative to the exe
 -- (cwd = the x64/ folder), so resources live at bin/<App>/resources/, two levels
@@ -312,9 +312,9 @@ function vfPackageRelease()
    -- manifestField: the engine.json field that must resolve to the shipped copy.
    local contentTrees = {
       { rel = content.scriptLibDir, required = true, manifestField = "scriptLibDir" },
-      { rel = "assets/scripts/game/examples", required = true },
-      { rel = "assets/vfx/library", required = true },
-      { rel = content.templatesDir, required = false, manifestField = "templatesDir" },
+      { rel = content.examplesDir, required = true, manifestField = "examplesDir" },
+      { rel = content.vfxLibraryDir, required = true, manifestField = "vfxLibraryDir" },
+      { rel = content.templatesDir, required = true, manifestField = "templatesDir" },
    }
    for _, tree in ipairs(contentTrees) do
       tree.present = os.isdir(tree.rel) and #os.matchfiles(path.join(tree.rel, "**")) > 0
@@ -451,6 +451,18 @@ function vfPackageRelease()
    for _, tree in ipairs(contentTrees) do
       if tree.present then
          verifyTree(tree.rel, path.join(staging, tree.rel))
+      end
+   end
+   -- A template's project/.gitignore is checked by name too: verifyTree compares the file lists that
+   -- os.matchfiles returns, so a dot file skipped on both sides would pass it unnoticed (VK-1689).
+   for _, templateDir in ipairs(os.matchdirs(path.join(content.templatesDir, "*"))) do
+      local gitignore = path.join(templateDir, "project/.gitignore")
+      if os.isfile(gitignore) then
+         local staged = path.join(staging, gitignore)
+         if not os.isfile(staged) then
+            fail(staged .. " is missing: the package must ship every template's project/.gitignore")
+         end
+         verifyFile(gitignore, staged)
       end
    end
    for _, p in ipairs(plugins) do

@@ -105,7 +105,7 @@ dist/VertexForge/
     ├── scripts/lib/                # the mType script library (byte-identical to the repo's)
     ├── scripts/game/examples/      # the example scripts
     ├── vfx/library/                # the VFX library projects copy into assets/vfx/library
-    └── templates/                  # project templates, once the repo has them
+    └── templates/                  # the project templates new projects are made from (VK-1689)
 ```
 
 Run `dist/VertexForge/VertexForge Launcher/VertexForge Launcher.exe` to start the launcher, which in turn launches the bundled Editor (with `--skip-launcher`, run `dist/VertexForge/bin/Editor/Release/x64/Editor.exe`). End users of the distribution do **not** need Java installed. The command ends with a summary of what was copied.

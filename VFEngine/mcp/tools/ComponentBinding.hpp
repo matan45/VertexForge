@@ -1,13 +1,16 @@
 #pragma once
 
+#include "AssetFieldSupport.hpp"
 #include "../protocol/ArgReader.hpp"
 
+#include "asset/AssetDatabase.hpp"
 #include "asset/AssetRef.hpp"
 #include "data/EntityHandle.hpp"
 
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -99,8 +102,11 @@ namespace mcp::tools
     // ------------------------------------------------------------------
 
     // Assets are exchanged as paths: absolute, or relative to the project working
-    // directory. "guid:<hex>" is accepted too (and returned for assets whose
-    // file can no longer be resolved). "" clears the reference.
+    // directory (where assets_list reports from), which assetFromJson resolves
+    // before the asset database lookup: AssetRef::fromPath alone would resolve
+    // against the .vfproj folder, a different folder when workingDirectory is
+    // "assets" (VK-1689). "guid:<hex>" is accepted too (and returned for assets
+    // whose file can no longer be resolved). "" clears the reference.
     inline nlohmann::json assetToJson(const asset::AssetRef& ref)
     {
         if (!ref.isValid())
@@ -128,9 +134,32 @@ namespace mcp::tools
         }
 
         static constexpr std::string_view guidPrefix = "guid:";
-        asset::AssetRef ref = text.starts_with(guidPrefix)
-            ? asset::AssetRef::fromHexString(text.substr(guidPrefix.size()))
-            : asset::AssetRef::fromPath(text);
+        asset::AssetRef ref;
+        if (text.starts_with(guidPrefix))
+        {
+            ref = asset::AssetRef::fromHexString(text.substr(guidPrefix.size()));
+        }
+        else
+        {
+            const std::filesystem::path file = agentAssetPath(text);
+            std::error_code ec;
+            if (std::filesystem::is_regular_file(file, ec))
+            {
+                ref = asset::AssetRef::fromPath(file.string());
+            }
+            else
+            {
+                // A missing file is never handed to AssetRef::fromPath, which would register it (and write a
+                // .vfmeta) by extension alone. An asset the database already holds still resolves: an undo
+                // replays a get() snapshot whose file may have been deleted since.
+                asset::AssetDatabase& database = asset::AssetDatabase::instance();
+                if (const std::optional<asset::AssetGUID> guid =
+                        database.getGUID(database.resolveAssetPath(file.string())))
+                {
+                    ref = asset::AssetRef::fromGUID(*guid);
+                }
+            }
+        }
         if (!ref.isValid())
         {
             throw ArgError(std::string("field '") + key + "': asset not found or not an engine asset: " + text +

@@ -2,6 +2,7 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
+import com.vertexforge.launcher.template.ProjectBlueprint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +34,8 @@ class LocationCheckerTest {
     private final AtomicInteger folderProbes = new AtomicInteger();
     private final AtomicInteger targetProbes = new AtomicInteger();
     private LocationChecker checker;
+    /** A project with one short file: no path is ever too long for it. */
+    private final ProjectBlueprint blueprint = TestSupport.blueprint("assets/scripts/game/Main.mt");
 
     @AfterEach
     void tearDown() {
@@ -65,10 +68,10 @@ class LocationCheckerTest {
 
         // Typing a name while the folder hangs: every keystroke's check returns at once...
         List<CompletableFuture<LocationCheck>> checks = assertTimeoutPreemptively(Duration.ofSeconds(1), () -> List.of(
-                checker.check(share, "G"),
-                checker.check(share, "Ga"),
-                checker.check(share, "Gam"),
-                checker.check(share, "Game")));
+                checker.check(share, "G", blueprint),
+                checker.check(share, "Ga", blueprint),
+                checker.check(share, "Gam", blueprint),
+                checker.check(share, "Game", blueprint)));
 
         // ...and they all wait on ONE folder probe; no project path is probed while the folder is stuck.
         waitFor(() -> folderProbes.get() == 1);
@@ -90,7 +93,7 @@ class LocationCheckerTest {
     void aFolderProblemIsTheAnswerAndTheProjectPathIsNotProbed() throws Exception {
         checker = new LocationChecker(location -> Optional.of("The folder is gone."), this::countedTarget);
 
-        LocationCheck check = checker.check(tempDir, "Game").get(5, TimeUnit.SECONDS);
+        LocationCheck check = checker.check(tempDir, "Game", blueprint).get(5, TimeUnit.SECONDS);
 
         assertFalse(check.ok());
         assertEquals(Optional.of("The folder is gone."), check.error());
@@ -104,8 +107,8 @@ class LocationCheckerTest {
             return Optional.empty();
         }, this::countedTarget);
 
-        CompletableFuture<LocationCheck> badName = checker.check(tempDir, "CON");
-        CompletableFuture<LocationCheck> relative = checker.check(Path.of("relative"), "Game");
+        CompletableFuture<LocationCheck> badName = checker.check(tempDir, "CON", blueprint);
+        CompletableFuture<LocationCheck> relative = checker.check(Path.of("relative"), "Game", blueprint);
 
         assertTrue(badName.isDone() && relative.isDone());
         assertEquals(ProjectNameRules.checkName("CON").orElseThrow().message(), badName.get().error().orElseThrow());
@@ -119,7 +122,7 @@ class LocationCheckerTest {
             throw new IllegalStateException("probe broke");
         }, this::countedTarget);
 
-        LocationCheck check = checker.check(tempDir, "Game").get(5, TimeUnit.SECONDS);
+        LocationCheck check = checker.check(tempDir, "Game", blueprint).get(5, TimeUnit.SECONDS);
 
         assertEquals(Optional.of("Could not check the folder: probe broke"), check.error());
         waitFor(() -> checker.inFlightCount() == 0);
@@ -127,17 +130,17 @@ class LocationCheckerTest {
 
     @Test
     void theRealChecksAgreeWithTheCreator() throws Exception {
-        checker = new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED);
+        checker = new LocationChecker(LocationWarnings.none());
         Path folder = TestSupport.real(tempDir);
         Path full = Files.createDirectory(folder.resolve("Full"));
         Files.writeString(full.resolve("x.txt"), "x");
         Files.createDirectory(folder.resolve("Empty"));
 
-        assertEquals(LocationCheck.ok(List.of()), checker.check(folder, "Game").get(5, TimeUnit.SECONDS));
-        assertEquals(LocationCheck.ok(List.of()), checker.check(folder, "Empty").get(5, TimeUnit.SECONDS));
-        assertTrue(checker.check(folder, "Full").get(5, TimeUnit.SECONDS).error().orElseThrow()
+        assertEquals(LocationCheck.ok(List.of()), checker.check(folder, "Game", blueprint).get(5, TimeUnit.SECONDS));
+        assertEquals(LocationCheck.ok(List.of()), checker.check(folder, "Empty", blueprint).get(5, TimeUnit.SECONDS));
+        assertTrue(checker.check(folder, "Full", blueprint).get(5, TimeUnit.SECONDS).error().orElseThrow()
                 .contains("isn't empty"));
-        assertTrue(checker.check(folder.resolve("missing"), "Game").get(5, TimeUnit.SECONDS).error().orElseThrow()
+        assertTrue(checker.check(folder.resolve("missing"), "Game", blueprint).get(5, TimeUnit.SECONDS).error().orElseThrow()
                 .contains("doesn't exist"));
         assertEquals(Set.of("Empty", "Full"), TestSupport.fileNames(folder), "checking never writes");
     }
@@ -146,11 +149,24 @@ class LocationCheckerTest {
     void anAbsentDriveIsAnsweredNotHung() throws Exception {
         Optional<Path> absentRoot = TestSupport.absentDriveRoot();
         assumeTrue(absentRoot.isPresent(), "every drive letter from D to Z is in use");
-        checker = new LocationChecker(LocationWarnings.none(), ProjectTemplate.BUNDLED);
+        checker = new LocationChecker(LocationWarnings.none());
 
-        LocationCheck check = checker.check(absentRoot.get().resolve("Projects"), "Game").get(10, TimeUnit.SECONDS);
+        LocationCheck check = checker.check(absentRoot.get().resolve("Projects"), "Game", blueprint).get(10, TimeUnit.SECONDS);
 
         assertFalse(check.ok());
+    }
+
+    @Test
+    void aPathTooLongIsRefusedOnceTheFolderAnsweredWithoutProbingTheProjectPath() throws Exception {
+        checker = new LocationChecker(location -> Optional.empty(), this::countedTarget);
+        ProjectBlueprint deep = TestSupport.blueprint("assets/" + "d".repeat(ProjectNameRules.MAX_PATH_CHARS) + ".mt");
+
+        LocationCheck check = checker.check(tempDir, "Game", deep).get(5, TimeUnit.SECONDS);
+
+        assertFalse(check.ok());
+        assertTrue(check.error().orElseThrow().startsWith("This location and name make a path too long"),
+                check.error().orElseThrow());
+        assertEquals(0, targetProbes.get());
     }
 
     private static void waitFor(BooleanSupplier condition) throws InterruptedException {

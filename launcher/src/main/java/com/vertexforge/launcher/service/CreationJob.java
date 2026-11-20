@@ -29,12 +29,12 @@ public final class CreationJob {
         void progress(int done, int total);
     }
 
-    private final String name;
+    private final CreateRequest request;
     private final AtomicBoolean cancelRequested = new AtomicBoolean();
     private final CompletableFuture<CreateOutcome> outcome = new CompletableFuture<>();
 
-    private CreationJob(String name) {
-        this.name = name;
+    private CreationJob(CreateRequest request) {
+        this.request = request;
     }
 
     /**
@@ -49,7 +49,7 @@ public final class CreationJob {
         Objects.requireNonNull(store, "store");
         Objects.requireNonNull(listener, "listener");
 
-        CreationJob job = new CreationJob(request.name());
+        CreationJob job = new CreationJob(request);
         try {
             creation.execute(() -> job.run(hub, request, store, listener));
         } catch (RejectedExecutionException e) {
@@ -60,7 +60,7 @@ public final class CreationJob {
 
     /** The project's name as typed. */
     public String name() {
-        return name;
+        return request.name();
     }
 
     /**
@@ -127,7 +127,7 @@ public final class CreationJob {
     private void list(ProjectHub hub, ProjectCreationResult created) {
         CreateOutcome listed = null;
         try {
-            listed = hub.listCreated(created, name);
+            listed = hub.listCreated(created, request);
         } catch (RuntimeException e) {
             listed = notListed(created, "Could not add the project to the list: " + e, e);
         } finally {

@@ -1,5 +1,7 @@
 package com.vertexforge.launcher.service;
 
+import com.vertexforge.launcher.template.ProjectBlueprint;
+
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Locale;
@@ -98,12 +100,13 @@ public final class ProjectNameRules {
      * Whether the project's deepest file fits in {@link #MAX_PATH_CHARS} with {@link #PATH_MARGIN} to spare: the
      * engine is not long-path aware, so a file it cannot reach would break the project later, not now.
      *
-     * @param location an absolute folder
-     * @param name     a name that passed {@link #checkName}
+     * @param location  an absolute folder
+     * @param name      a name that passed {@link #checkName}
+     * @param blueprint the files the project starts with
      */
-    public static Optional<Problem> checkPathLength(Path location, String name, ProjectTemplate template) {
+    public static Optional<Problem> checkPathLength(Path location, String name, ProjectBlueprint blueprint) {
         int deepestPath = location.normalize().resolve(name).toString().length() + 1
-                + template.deepestRelativeLength(name);
+                + blueprint.deepestRelativeLength(name);
         int allowed = MAX_PATH_CHARS - PATH_MARGIN;
         if (deepestPath <= allowed) {
             return Optional.empty();

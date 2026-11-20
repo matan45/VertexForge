@@ -1,0 +1,4 @@
+# The editor's lock file, Play-mode saves and config (VK-1682, VK-1684).
+/.vertexforge/
+# Compiled scripts: the editor rebuilds them from assets/scripts/game.
+/assets/scripts/compiled/

@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.model.ProjectCreationResult;
+import com.vertexforge.launcher.service.CreationMonitor;
 import com.vertexforge.launcher.service.ProjectCreator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -79,7 +80,8 @@ class ProjectFileReaderTest {
         Path parent = Files.createDirectory(tempDir.resolve("parent"));
         ProjectCreator creator = new ProjectCreator(TestSupport.fixedClock(),
                 TestSupport.log(tempDir.resolve(".logs")).log);
-        ProjectCreationResult created = creator.createProject("Tom & Jerry's Game", parent);
+        ProjectCreationResult created = creator.create(TestSupport.request("Tom & Jerry's Game", parent,
+                TestSupport.engineContent(tempDir.resolve("engine"))), CreationMonitor.NONE);
         assertTrue(created.success(), created::errorMessage);
 
         ProjectFile project = ProjectFileReader.read(created.projectPath());

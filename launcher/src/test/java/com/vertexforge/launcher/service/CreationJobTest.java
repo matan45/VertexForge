@@ -2,6 +2,7 @@ package com.vertexforge.launcher.service;
 
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.TickingClock;
+import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.service.EditorLauncherTest.FakeProcess;
 import com.vertexforge.launcher.service.EditorLauncherTest.RecordingStarter;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +30,7 @@ class CreationJobTest {
     Path tempDir;
 
     private Path projectsDir;
+    private EngineContent engine;
     private ProjectHub hub;
     private final QueueExecutor creation = new QueueExecutor();
     private final QueueExecutor store = new QueueExecutor();
@@ -53,6 +55,7 @@ class CreationJobTest {
     void setUp() throws IOException {
         Path root = TestSupport.real(tempDir);
         projectsDir = Files.createDirectories(root.resolve("projects"));
+        engine = TestSupport.engineContent(root.resolve("engine-content"));
         hub = ProjectHub.create(TestSupport.environment(root.resolve("config"),
                 new TickingClock(TestSupport.T0), Map.of(), new RecordingStarter(FakeProcess.running(), null)),
                 TestSupport.log(root.resolve("logs")).log);
@@ -66,7 +69,7 @@ class CreationJobTest {
     @Test
     void theFilesAreWrittenOnTheCreationThreadAndTheListAddOnTheStoreThread() {
         List<int[]> progress = new ArrayList<>();
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), creation, store,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), creation, store,
                 (done, total) -> progress.add(new int[]{done, total}));
 
         assertEquals(1, creation.queued.size());
@@ -91,7 +94,7 @@ class CreationJobTest {
 
     @Test
     void aCancelBeforeTheCreationRunsWritesNothing() {
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), creation, store,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), creation, store,
                 CreationJob.ProgressListener.NONE);
 
         job.cancel();
@@ -110,7 +113,7 @@ class CreationJobTest {
         Files.createDirectory(projectsDir.resolve("Game"));
         Files.writeString(projectsDir.resolve("Game/keep.txt"), "mine");
 
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), creation, store,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), creation, store,
                 CreationJob.ProgressListener.NONE);
         creation.runAll();
 
@@ -126,7 +129,7 @@ class CreationJobTest {
             throw new RejectedExecutionException("shut down");
         };
 
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), creation, closed,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), creation, closed,
                 CreationJob.ProgressListener.NONE);
         creation.runAll();
 
@@ -143,7 +146,7 @@ class CreationJobTest {
             throw new RejectedExecutionException("shut down");
         };
 
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), closed, store,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), closed, store,
                 CreationJob.ProgressListener.NONE);
 
         CreateOutcome outcome = job.outcome().join();
@@ -154,7 +157,7 @@ class CreationJobTest {
 
     @Test
     void aListenerThatThrowsFailsTheCreationCleanly() {
-        CreationJob job = CreationJob.start(hub, new CreateRequest("Game", projectsDir), creation, store,
+        CreationJob job = CreationJob.start(hub, TestSupport.request("Game", projectsDir, engine), creation, store,
                 (done, total) -> {
                     throw new IllegalStateException("listener broke");
                 });

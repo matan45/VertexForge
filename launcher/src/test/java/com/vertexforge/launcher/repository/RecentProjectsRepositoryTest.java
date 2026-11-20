@@ -114,6 +114,30 @@ class RecentProjectsRepositoryTest {
     }
 
     @Test
+    void addWithAnEngineBindsTheEntryInTheSameWrite() throws Exception {
+        Path game = projectFile("Game");
+        UUID engine = UUID.fromString("6f1c2a5e-8d3b-4c7a-9e21-0b5d7f3a1c88");
+
+        RecentProjectsView view = repository.add(game, "Game", LIMIT, Optional.of(engine));
+
+        assertEquals(engine.toString(), view.entries().getFirst().engineId());
+        assertEquals(engine.toString(), newRepository().load().entries().getFirst().engineId());
+    }
+
+    @Test
+    void addWithoutAnEngineLeavesAnExistingBindingAsItIs() throws Exception {
+        Path game = projectFile("Game");
+        UUID engine = UUID.randomUUID();
+        repository.add(game, "Game", LIMIT, Optional.of(engine));
+
+        RecentProjectsView view = repository.add(game, "Game again", LIMIT, Optional.empty());
+
+        assertEquals(1, view.entries().size());
+        assertEquals(engine.toString(), view.entries().getFirst().engineId());
+        assertEquals("Game again", view.entries().getFirst().name());
+    }
+
+    @Test
     void addCreatesTheFolderAndWritesVersionTwoWithAllSixFields() throws Exception {
         Path game = projectFile("Game");
 

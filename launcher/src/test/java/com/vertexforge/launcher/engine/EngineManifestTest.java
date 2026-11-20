@@ -34,7 +34,9 @@ class EngineManifestTest {
               "editorExe": "Editor.exe",
               "workingDirectory": "../../../../VFEngine/editor",
               "templatesDir": "../../../../assets/templates",
-              "scriptLibDir": "../../../../assets/scripts/lib"
+              "scriptLibDir": "../../../../assets/scripts/lib",
+              "examplesDir": "../../../../assets/scripts/game/examples",
+              "vfxLibraryDir": "../../../../assets/vfx/library"
             }
             """;
 
@@ -72,6 +74,8 @@ class EngineManifestTest {
         assertEquals(tempDir.resolve("repo/VFEngine/editor"), manifest.workingDirectoryIn(exeDir));
         assertEquals(Optional.of(tempDir.resolve("repo/assets/templates")), manifest.templatesDirIn(exeDir));
         assertEquals(Optional.of(tempDir.resolve("repo/assets/scripts/lib")), manifest.scriptLibDirIn(exeDir));
+        assertEquals(Optional.of(tempDir.resolve("repo/assets/scripts/game/examples")), manifest.examplesDirIn(exeDir));
+        assertEquals(Optional.of(tempDir.resolve("repo/assets/vfx/library")), manifest.vfxLibraryDirIn(exeDir));
     }
 
     @Test
@@ -95,6 +99,8 @@ class EngineManifestTest {
         assertNull(manifest.assetFormatVersion());
         assertNull(manifest.projectSchemaVersion());
         assertEquals(Optional.empty(), manifest.templatesDirIn(tempDir));
+        assertEquals(Optional.empty(), manifest.examplesDirIn(tempDir));
+        assertEquals(Optional.empty(), manifest.vfxLibraryDirIn(tempDir));
     }
 
     @Test
