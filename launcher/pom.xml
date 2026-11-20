@@ -359,6 +359,58 @@
                                             <arg value="--dest"/>
                                             <arg value="${project.build.directory}/dist"/>
                                         </exec>
+
+                                        <!--
+                                            6. The UTF-8 code page (VK-1693): src/jpackage/utf8-code-page.manifest is
+                                               merged into the exe's manifest with the Windows SDK's mt.exe (the newest
+                                               under Windows Kits\10\bin, or -Dvf.mt=<path>), then read back. Without it
+                                               the launcher cannot start from a folder the system's ANSI code page
+                                               cannot spell, which a per-user install under such a user name is.
+                                               jpackage leaves the exe read-only; so does this step.
+                                        -->
+                                        <property environment="vf.env"/>
+                                        <condition property="vf.windowsKits" value="${vf.env.ProgramFiles(x86)}\Windows Kits\10\bin"
+                                                   else="C:\Program Files (x86)\Windows Kits\10\bin">
+                                            <isset property="vf.env.ProgramFiles(x86)"/>
+                                        </condition>
+                                        <pathconvert property="vf.mt">
+                                            <last count="1">
+                                                <sort>
+                                                    <fileset dir="${vf.windowsKits}" includes="*/x64/mt.exe" erroronmissingdir="false"/>
+                                                </sort>
+                                            </last>
+                                        </pathconvert>
+                                        <fail message="mt.exe (Windows SDK) was not found under ${vf.windowsKits}: install the Windows SDK (Visual Studio's C++ workload has it) or pass -Dvf.mt=&lt;path to mt.exe&gt;">
+                                            <condition>
+                                                <not>
+                                                    <available file="${vf.mt}" type="file"/>
+                                                </not>
+                                            </condition>
+                                        </fail>
+                                        <property name="vf.exe" location="${project.build.directory}/dist/VertexForge Launcher/VertexForge Launcher.exe"/>
+                                        <property name="vf.exe.manifest" location="${project.build.directory}/launcher-exe.manifest"/>
+                                        <attrib file="${vf.exe}" readonly="false"/>
+                                        <exec executable="${vf.mt}" failonerror="true">
+                                            <arg value="-nologo"/>
+                                            <arg value="-inputresource:${vf.exe};#1"/>
+                                            <arg value="-manifest"/>
+                                            <arg value="${project.basedir}/src/jpackage/utf8-code-page.manifest"/>
+                                            <arg value="-outputresource:${vf.exe};#1"/>
+                                        </exec>
+                                        <exec executable="${vf.mt}" failonerror="true">
+                                            <arg value="-nologo"/>
+                                            <arg value="-inputresource:${vf.exe};#1"/>
+                                            <arg value="-out:${vf.exe.manifest}"/>
+                                        </exec>
+                                        <attrib file="${vf.exe}" readonly="true"/>
+                                        <fail message="${vf.exe} has no UTF-8 activeCodePage after mt.exe (see ${vf.exe.manifest})">
+                                            <condition>
+                                                <not>
+                                                    <resourcecontains resource="${vf.exe.manifest}" substring="UTF-8&lt;/activeCodePage&gt;"/>
+                                                </not>
+                                            </condition>
+                                        </fail>
+                                        <echo level="info" message="Merged the UTF-8 code page into the launcher exe (${vf.mt})"/>
                                     </target>
                                 </configuration>
                             </execution>

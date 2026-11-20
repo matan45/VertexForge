@@ -165,6 +165,7 @@ public final class SelfTest {
                 check("module layout", () -> checkModuleLayout(SelfTest.class.getModule(), ModuleLayer.boot(),
                         LauncherEnvironment.systemAppVersion(), LauncherEnvironment.systemJavaHome(),
                         LauncherEnvironment.systemLauncherExecutable()));
+                check("code page", () -> checkCodePage(LauncherEnvironment.systemPathEncoding()));
             }
             ProjectHub hub = runCoreChecks(workDir);
             toolkitStarted = startToolkit();
@@ -630,6 +631,19 @@ public final class SelfTest {
         if (imageRoot == null || !Files.isDirectory(imageRoot.resolve("app"))
                 || !Files.isDirectory(imageRoot.resolve("runtime"))) {
             throw new IllegalStateException("the launcher exe " + exe + " is not at the root of its app image");
+        }
+    }
+
+    /**
+     * The packaged launcher runs in the UTF-8 code page (VK-1693): its exe carries the activeCodePage manifest the
+     * image profile merges in, so jpackage's native launcher hands the JVM its runtime folder, its options and
+     * {@code main}'s arguments without loss. Without it the launcher cannot start from a folder the system's ANSI code
+     * page cannot spell, and a {@code .vfproj} double-clicked in such a folder arrives as a path full of {@code ?}.
+     */
+    static void checkCodePage(String pathEncoding) {
+        if (!"UTF-8".equals(pathEncoding)) {
+            throw new IllegalStateException("the launcher runs in the code page " + pathEncoding + ", not UTF-8: its"
+                    + " exe lacks the activeCodePage manifest (launcher/pom.xml, src/jpackage/utf8-code-page.manifest)");
         }
     }
 

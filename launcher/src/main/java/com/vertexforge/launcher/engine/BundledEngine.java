@@ -4,14 +4,16 @@ import java.nio.file.Path;
 import java.util.Optional;
 
 /**
- * Where the engine that ships with a packaged launcher lives (VK-1681). {@code tools/package_release.lua} lays the
- * release folder out as
+ * Where the engine that ships with a packaged launcher lives (VK-1681). {@code tools/package_release.lua} makes the
+ * release folder the launcher's own jpackage app image (VK-1693), because {@code jpackage --type msi} installs an app
+ * image as the install folder and needs its launcher at the root:
  * <pre>
- * VertexForge/
- *   VertexForge Launcher/VertexForge Launcher.exe   the jpackage app image (its exe is jpackage.app-path)
- *   bin/Editor/Release/x64/Editor.exe               + engine.json
+ * VertexForge/                                    dist/VertexForge, or %LOCALAPPDATA%\Programs\VertexForge
+ *   VertexForge Launcher.exe                      jpackage.app-path (app/ and runtime/ beside it)
+ *   bin/Editor/Release/x64/Editor.exe             + engine.json
  * </pre>
- * so the bundled editor is found from the launcher's own exe, whatever folder the launcher was started from.
+ * so the bundled editor is found from the launcher's own exe, whatever folder the launcher was started from. The
+ * earlier layout, with the app image in a {@code VertexForge Launcher/} subfolder, is not looked for.
  */
 public final class BundledEngine {
 
@@ -23,12 +25,11 @@ public final class BundledEngine {
     }
 
     /**
-     * Where the bundled editor would be for a launcher started from {@code launcherExecutable}; empty when the path
-     * is too short to have a release folder above the app image. Never touches the file system.
+     * Where the bundled editor would be for a launcher started from {@code launcherExecutable}: below the folder that
+     * holds the exe. Empty when the path is a root and names no exe. Never touches the file system.
      */
     public static Optional<Path> expectedExecutable(Path launcherExecutable) {
-        Path imageRoot = launcherExecutable.toAbsolutePath().normalize().getParent();
-        Path packageRoot = imageRoot == null ? null : imageRoot.getParent();
+        Path packageRoot = launcherExecutable.toAbsolutePath().normalize().getParent();
         if (packageRoot == null) {
             return Optional.empty();
         }

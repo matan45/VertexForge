@@ -84,8 +84,9 @@ class EngineCatalogTest {
         assertArrayEquals(written, Files.readAllBytes(catalog.file()), "a registered bundled engine is not rewritten");
     }
 
+    /** The image Maven builds holds no engine: only tools/package_release.lua puts bin/ into it (VK-1693). */
     @Test
-    void aPackagedImageWithoutAnEngineBesideItRegistersNothing() throws Exception {
+    void theRawAppImageRegistersNoEngine() throws Exception {
         Path image = Files.createDirectories(root.resolve("launcher/target/dist/VertexForge Launcher"));
         Path launcher = Files.writeString(image.resolve("VertexForge Launcher.exe"), "fake");
 

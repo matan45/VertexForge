@@ -97,6 +97,14 @@ class SelfTestTest {
     }
 
     @Test
+    void theCodePageCheckWantsUtf8() {
+        SelfTest.checkCodePage("UTF-8");
+
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkCodePage("Cp1252"));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkCodePage(""));
+    }
+
+    @Test
     void theModuleLayoutCheckRefusesTheClasspath() {
         // The unit tests run from the classpath, where the launcher is in the unnamed module: exactly what the app
         // image must never do (VK-1692).

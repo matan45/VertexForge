@@ -5,8 +5,10 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Clock;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.UnaryOperator;
 
 /**
@@ -22,8 +24,9 @@ import java.util.function.UnaryOperator;
  *                           {@link #systemWorkingDirectory()}, to resolve relative command-line paths (VK-1685).
  * @param env                environment-variable lookup; returns {@code null} for an unset variable
  * @param processStarter     starts the editor process
- * @param nativeCharset      the system's ANSI code page ({@code native.encoding}): an editor older than VK-1684 only
- *                           receives paths this charset can encode, and parts of its output are in it
+ * @param nativeCharset      the system's ANSI code page: an editor older than VK-1684 only receives paths this charset
+ *                           can encode, and parts of its output are in it. Read from the registry on Windows
+ *                           ({@link #systemAnsiCharset()}), because the packaged launcher itself runs in UTF-8 (VK-1693)
  * @param driveTypes         tells local drives from network ones (VK-1679)
  */
 public record LauncherEnvironment(
@@ -53,8 +56,9 @@ public record LauncherEnvironment(
 
     /**
      * The real machine. This is the only place in the launcher that reads {@code user.home},
-     * {@code jpackage.app-path}, {@code jpackage.app-version}, {@code java.home}, {@code native.encoding} or the process
-     * environment; {@code user.dir} is read only by {@link #systemWorkingDirectory()}.
+     * {@code jpackage.app-path}, {@code jpackage.app-version}, {@code java.home}, {@code native.encoding},
+     * {@code sun.jnu.encoding}, the system code page or the process environment; {@code user.dir} is read only by
+     * {@link #systemWorkingDirectory()}.
      */
     public static LauncherEnvironment system() {
         return new LauncherEnvironment(
@@ -63,8 +67,35 @@ public record LauncherEnvironment(
                 systemLauncherExecutable(),
                 System::getenv,
                 ProcessStarter.system(),
-                nativeCharset(System.getProperty("native.encoding")),
+                systemAnsiCharset(),
                 DriveTypes.system());
+    }
+
+    /**
+     * The system's ANSI code page, the one an editor older than VK-1684 runs in. On Windows it is read from the
+     * registry ({@link WindowsCodePage}): the packaged launcher's exe asks for the UTF-8 code page (VK-1693), so its
+     * own {@code native.encoding} says UTF-8. Elsewhere, or when the registry cannot be read, {@code native.encoding}.
+     */
+    public static Charset systemAnsiCharset() {
+        boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+        if (windows) {
+            OptionalInt codePage = WindowsCodePage.systemAnsiCodePage();
+            if (codePage.isPresent()) {
+                Optional<Charset> charset = WindowsCodePage.charsetFor(codePage.getAsInt());
+                if (charset.isPresent()) {
+                    return charset.get();
+                }
+            }
+        }
+        return nativeCharset(System.getProperty("native.encoding"));
+    }
+
+    /**
+     * The encoding this JVM converts file names, arguments and its options with ({@code sun.jnu.encoding}): the
+     * process's own code page. The packaged launcher's is UTF-8 (VK-1693, checked by the packaged self-test).
+     */
+    public static String systemPathEncoding() {
+        return System.getProperty("sun.jnu.encoding", "");
     }
 
     /** This process's launcher exe, from {@link #APP_PATH_PROPERTY}; see {@link #launcherExecutable(String)}. */

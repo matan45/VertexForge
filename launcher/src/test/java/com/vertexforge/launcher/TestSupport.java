@@ -263,18 +263,17 @@ public final class TestSupport {
     }
 
     /**
-     * A release folder as {@code tools/package_release.lua} lays it out: the launcher app image
-     * {@code VertexForge Launcher/} (with {@code app/} and {@code runtime/}) beside
+     * A release folder as {@code tools/package_release.lua} lays it out (VK-1693): the folder is the launcher's app
+     * image, {@code VertexForge Launcher.exe} with {@code app/} and {@code runtime/}, beside
      * {@code bin/Editor/Release/x64/Editor.exe} and its {@code engine.json} (working directory {@code "."}).
      *
      * @return the launcher's exe
      */
     public static Path packagedLauncher(Path releaseRoot) {
         try {
-            Path image = Files.createDirectories(releaseRoot.resolve("VertexForge Launcher"));
-            Files.createDirectories(image.resolve("app"));
-            Files.createDirectories(image.resolve("runtime"));
-            Path launcher = Files.writeString(image.resolve("VertexForge Launcher.exe"), "fake launcher");
+            Files.createDirectories(releaseRoot.resolve("app"));
+            Files.createDirectories(releaseRoot.resolve("runtime"));
+            Path launcher = Files.writeString(releaseRoot.resolve("VertexForge Launcher.exe"), "fake launcher");
             Path exeDir = releaseRoot.resolve("bin/Editor/Release/x64");
             fakeEditor(exeDir);
             writeManifest(exeDir, "Release", ".");

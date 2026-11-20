@@ -15,17 +15,25 @@ class BundledEngineTest {
     private static final Path ROOT = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
 
     @Test
-    void theBundledEditorIsBesideTheAppImageInTheReleaseFolder() {
+    void theBundledEditorIsBelowTheLaunchersFolderInTheReleaseFolder() {
         Path release = ROOT.resolve("dist/VertexForge");
-        Path launcher = release.resolve("VertexForge Launcher/VertexForge Launcher.exe");
+        Path launcher = release.resolve("VertexForge Launcher.exe");
 
         assertEquals(Optional.of(release.resolve("bin/Editor/Release/x64/Editor.exe")),
                 BundledEngine.expectedExecutable(launcher));
     }
 
     @Test
+    void anInstalledLauncherFindsTheEditorItWasInstalledWith() {
+        Path install = ROOT.resolve("AppData/Local/Programs/VertexForge");
+
+        assertEquals(Optional.of(install.resolve("bin/Editor/Release/x64/Editor.exe")),
+                BundledEngine.expectedExecutable(install.resolve("VertexForge Launcher.exe")));
+    }
+
+    @Test
     void itDependsOnlyOnTheLaunchersOwnExeNeverOnTheWorkingDirectory() {
-        Path launcher = ROOT.resolve("Elsewhere/VertexForge/VertexForge Launcher/VertexForge Launcher.exe");
+        Path launcher = ROOT.resolve("Elsewhere/VertexForge/VertexForge Launcher.exe");
 
         Path expected = BundledEngine.expectedExecutable(launcher).orElseThrow();
 
@@ -33,10 +41,25 @@ class BundledEngineTest {
     }
 
     @Test
-    void anExeTooCloseToTheRootHasNoReleaseFolder() {
+    void theNestedLayoutBeforeVK1693IsNotLookedFor() {
+        Path release = ROOT.resolve("dist/VertexForge");
+        Path launcher = release.resolve("VertexForge Launcher/VertexForge Launcher.exe");
+
+        assertEquals(Optional.of(release.resolve("VertexForge Launcher/bin/Editor/Release/x64/Editor.exe")),
+                BundledEngine.expectedExecutable(launcher));
+    }
+
+    @Test
+    void aLauncherAtADriveRootHasItsReleaseFolderThere() {
         Path root = ROOT.getRoot();
 
-        assertEquals(Optional.empty(), BundledEngine.expectedExecutable(root.resolve("Launcher.exe")));
+        assertEquals(Optional.of(root.resolve("bin/Editor/Release/x64/Editor.exe")),
+                BundledEngine.expectedExecutable(root.resolve("VertexForge Launcher.exe")));
+    }
+
+    @Test
+    void aRootNamesNoLauncher() {
+        assertEquals(Optional.empty(), BundledEngine.expectedExecutable(ROOT.getRoot()));
     }
 
     @Test
