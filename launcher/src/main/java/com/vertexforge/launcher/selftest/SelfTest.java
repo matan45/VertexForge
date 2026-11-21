@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.vertexforge.launcher.Launcher;
 import com.vertexforge.launcher.controller.MainController;
+import com.vertexforge.launcher.dialog.DialogFactory;
 import com.vertexforge.launcher.engine.EngineContent;
 import com.vertexforge.launcher.engine.EngineManifest;
 import com.vertexforge.launcher.engine.EngineOption;
@@ -39,6 +40,9 @@ import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.service.ScriptLibraryStatusService;
 import com.vertexforge.launcher.service.ScriptLibraryUpdater;
 import com.vertexforge.launcher.settings.LauncherSettings;
+import com.vertexforge.launcher.settings.LauncherSettingsRepository;
+import com.vertexforge.launcher.settings.LauncherState;
+import com.vertexforge.launcher.settings.LauncherStateRepository;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.template.LibraryManifest;
@@ -53,8 +57,13 @@ import javafx.collections.ObservableList;
 import javafx.css.CssParser;
 import javafx.css.Stylesheet;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.paint.Color;
+import javafx.scene.paint.Paint;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -198,6 +207,8 @@ public final class SelfTest {
         // Read for projects without a .vflib.json (VK-1691), which the self-test's own project is not.
         check("legacy library hashes", LegacyLibraryHashes::bundled);
         check("store round trip", () -> checkStoreRoundTrip(workDir.resolve("store"), environment.clock(), log));
+        check("launcher settings", () -> checkSettingsRoundTrip(workDir.resolve("settings"), environment.clock(), log));
+        check("launcher state", () -> checkStateRoundTrip(workDir.resolve("state"), environment.clock(), log));
         // The engine first: the project is created from its templates and bound to it (VK-1689).
         EngineOption[] engine = new EngineOption[1];
         check("engine registry", () -> engine[0] = checkEngineRegistry(hub, workDir.resolve("engines"),
@@ -388,6 +399,46 @@ public final class SelfTest {
         }
         if (!Files.isRegularFile(dir.resolve(RecentProjectsRepository.FILE_NAME + ".lock"))) {
             throw new IllegalStateException("the store never created its lock file");
+        }
+    }
+
+    /**
+     * The settings file end to end (VK-1694): every member the Settings dialog writes is read back as written, and a
+     * member this build does not know survives the save.
+     */
+    static void checkSettingsRoundTrip(Path dir, Clock clock, LauncherLog log) throws IOException, StoreWriteException {
+        Files.createDirectories(dir);
+        Path file = dir.resolve(LauncherSettingsRepository.FILE_NAME);
+        Files.writeString(file, "{\"version\": 1, \"futureSetting\": \"kept\"}", StandardCharsets.UTF_8);
+        LauncherSettingsRepository repository = new LauncherSettingsRepository(file, clock, log);
+        LauncherSettings wanted = new LauncherSettings(42, LauncherSettings.AfterLaunch.STAY, false,
+                Optional.of(dir.resolve("Projects").toAbsolutePath()), 7);
+
+        repository.save(wanted);
+
+        LauncherSettings reread = new LauncherSettingsRepository(file, clock, log).load();
+        if (!wanted.equals(reread)) {
+            throw new IllegalStateException("the settings came back as " + reread + " instead of " + wanted);
+        }
+        JsonObject written = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+        if (!written.has("futureSetting") || !"kept".equals(written.get("futureSetting").getAsString())) {
+            throw new IllegalStateException("a member this build does not know was lost: " + written);
+        }
+    }
+
+    /** What the launcher remembers by itself (VK-1694): the window and the list's sort come back from their own file. */
+    static void checkStateRoundTrip(Path dir, Clock clock, LauncherLog log) {
+        Path file = dir.resolve(LauncherStateRepository.FILE_NAME);
+        LauncherState.SavedWindow window = new LauncherState.SavedWindow(-1200.5, 40, 1100, 720, true);
+        List<LauncherState.SortKey> sort = List.of(new LauncherState.SortKey("name", false));
+        LauncherStateRepository repository = new LauncherStateRepository(file, clock, log);
+        if (!repository.saveWindow(window) || !repository.saveProjectSort(sort)) {
+            throw new IllegalStateException("the launcher state could not be written to " + file);
+        }
+
+        LauncherState reread = new LauncherStateRepository(file, clock, log).load();
+        if (!reread.window().equals(Optional.of(window)) || !reread.projectSort().equals(sort)) {
+            throw new IllegalStateException("the launcher state came back as " + reread);
         }
     }
 
@@ -812,6 +863,7 @@ public final class SelfTest {
                 root.applyCss();
                 requireNoCssErrors(cssErrors);
             });
+            check("dialog style", () -> checkDialogStyle(cssErrors));
         } catch (CheckFailure failure) {
             loaded[0].shutdownNow();
             throw failure;
@@ -820,8 +872,33 @@ public final class SelfTest {
     }
 
     /**
+     * Every dialog gets the launcher look through {@link DialogFactory} (VK-1694): a dialog pane is styled without
+     * CSS errors and has the dark background, and a message box carries the style class and the stylesheet.
+     */
+    private static void checkDialogStyle(List<CssParser.ParseError> cssErrors) throws IOException {
+        DialogPane pane = DialogFactory.pane();
+        new Scene(pane);
+        pane.applyCss();
+        requireNoCssErrors(cssErrors);
+        Paint background = pane.getBackground() == null || pane.getBackground().getFills().isEmpty()
+                ? null
+                : pane.getBackground().getFills().getFirst().getFill();
+        if (!Color.web("#2b2b2b").equals(background)) {
+            throw new IllegalStateException("a launcher dialog's background is " + background + ", not #2b2b2b");
+        }
+        Alert alert = DialogFactory.alert(Alert.AlertType.INFORMATION, null, "Self-test", "Self-test");
+        DialogPane alertPane = alert.getDialogPane();
+        if (!alertPane.getStyleClass().contains(DialogFactory.LAUNCHER_DIALOG)
+                || !alertPane.getStylesheets().contains(MainView.stylesheet().toExternalForm())) {
+            throw new IllegalStateException("a message box does not have the launcher look: "
+                    + alertPane.getStyleClass() + ", " + alertPane.getStylesheets());
+        }
+    }
+
+    /**
      * The table shows the project the core checks created, and every column has a value for it. This is what catches
-     * a column bound to a property its row does not have (the blank Last Opened column of VK-1678).
+     * a column bound to a property its row does not have (the blank Last Opened column of VK-1678). The search narrows
+     * the table and a column sort holds (VK-1694: the table's own sort policy would undo it on the sorted list).
      */
     private static void checkProjectTable(MainController controller) throws CheckFailure {
         check("project table", () -> {
@@ -836,6 +913,21 @@ public final class SelfTest {
                     throw new IllegalStateException("the \"" + column.getText() + "\" column is empty");
                 }
             }
+            controller.setSearchQuery("no project is called this");
+            if (!table.getItems().isEmpty()) {
+                throw new IllegalStateException("the search did not filter the table: " + table.getItems().size()
+                        + " rows");
+            }
+            controller.setSearchQuery("");
+            if (table.getItems().size() != 1) {
+                throw new IllegalStateException("clearing the search left " + table.getItems().size() + " rows");
+            }
+            TableColumn<ProjectViewModel, ?> nameColumn = table.getColumns().getFirst();
+            table.getSortOrder().setAll(List.of(nameColumn));
+            if (table.getSortOrder().size() != 1 || table.getItems().size() != 1) {
+                throw new IllegalStateException("a sort by " + nameColumn.getText() + " was undone");
+            }
+            table.getSortOrder().clear();
             String formatted = ProjectViewModel.formatLastOpened(Instant.now(), ZoneId.systemDefault());
             if (formatted.isBlank() || ProjectViewModel.UNKNOWN_DATE.equals(formatted)) {
                 throw new IllegalStateException("the Last Opened format produced \"" + formatted + "\"");

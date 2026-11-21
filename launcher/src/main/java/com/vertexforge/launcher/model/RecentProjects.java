@@ -147,6 +147,25 @@ public final class RecentProjects {
         return this;
     }
 
+    /**
+     * Pins the entry to the top of the list or unpins it (VK-1694); a pinned entry is never trimmed. Does nothing when
+     * the id is gone or the entry is already so.
+     */
+    public RecentProjects setPinned(UUID id, boolean pinned) {
+        List<RecentEntry> next = new ArrayList<>(entries);
+        for (int i = 0; i < next.size(); i++) {
+            RecentEntry entry = next.get(i);
+            if (entry.id().equals(id)) {
+                if (entry.pinned() == pinned) {
+                    return this;
+                }
+                next.set(i, entry.withPinned(pinned));
+                return new RecentProjects(next);
+            }
+        }
+        return this;
+    }
+
     /** Sets the entry's "Open with MCP" (VK-1683); does nothing when the id is gone or nothing changes. */
     public RecentProjects setMcp(UUID id, McpSetting setting) {
         List<RecentEntry> next = new ArrayList<>(entries);

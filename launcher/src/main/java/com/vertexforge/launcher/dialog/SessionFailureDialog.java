@@ -49,15 +49,12 @@ public final class SessionFailureDialog {
         Objects.requireNonNull(report, "report");
         Objects.requireNonNull(actions, "actions");
 
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Editor Failed");
+        Dialog<Void> dialog = DialogFactory.dialog(owner, "Editor Failed");
         dialog.setHeaderText(report.outcome().headline(projectName));
-        dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("session-failure-dialog");
         pane.getButtonTypes().addAll(OPEN_LOG, OPEN_CRASH_FOLDER, COPY, ButtonType.CLOSE);
         pane.setContent(createContent(report));

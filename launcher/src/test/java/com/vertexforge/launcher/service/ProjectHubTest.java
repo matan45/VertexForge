@@ -33,6 +33,8 @@ import com.vertexforge.launcher.session.LaunchRequest;
 import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
+import com.vertexforge.launcher.settings.LauncherState;
+import com.vertexforge.launcher.settings.LauncherStateRepository;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.store.StoreWriteException.Reason;
@@ -531,18 +533,107 @@ class ProjectHubTest {
         assertEquals("--console", starter.started.getFirst().command().getLast());
     }
 
-    /** VK-1683: the Settings dialog's choices are saved, and the hub uses them at once. */
+    /** VK-1683, VK-1694: the Settings dialog's choices are saved, used at once, and kept across restarts. */
     @Test
-    void savedSettingsAreKeptAndUsed() throws Exception {
+    void settingsPersistAcrossRestarts() throws Exception {
         assertTrue(hub.canSaveSettings());
+        LauncherSettings wanted = new LauncherSettings(12, LauncherSettings.AfterLaunch.STAY, false,
+                Optional.of(projectsDir), 9);
 
-        hub.saveSettings(LauncherSettings.AfterLaunch.STAY, false);
+        assertEquals(wanted, hub.saveSettings(wanted));
 
-        assertEquals(LauncherSettings.AfterLaunch.STAY, hub.settings().afterLaunch());
-        assertFalse(hub.settings().showEditorConsole());
-        LauncherSettings reread = hub(Map.of()).settings();
-        assertEquals(LauncherSettings.AfterLaunch.STAY, reread.afterLaunch());
-        assertFalse(reread.showEditorConsole());
+        assertEquals(wanted, hub.settings());
+        assertEquals(12, hub.listLimit());
+        assertEquals(wanted, hub(Map.of()).settings());
+    }
+
+    /** VK-1694: a cap lowered in Settings applies to the next add without a restart. */
+    @Test
+    void aLoweredCapAppliesWithoutARestart() throws Exception {
+        hub.createProject(TestSupport.request("A", projectsDir, engine));
+        hub.createProject(TestSupport.request("B", projectsDir, engine));
+
+        hub.saveSettings(new LauncherSettings(2));
+        hub.createProject(TestSupport.request("C", projectsDir, engine));
+
+        assertEquals(2, hub.listLimit());
+        assertEquals(List.of("C", "B"), names(hub.listProjects()));
+    }
+
+    /** VK-1694: Save trims the list to a lowered cap at once; pinned projects stay, and no files are touched. */
+    @Test
+    void trimProjectsRemovesTheOldestUnpinnedAtOnce() throws Exception {
+        hub.createProject(TestSupport.request("A", projectsDir, engine));
+        hub.createProject(TestSupport.request("B", projectsDir, engine));
+        hub.createProject(TestSupport.request("C", projectsDir, engine));
+        hub.createProject(TestSupport.request("D", projectsDir, engine));
+        hub.setPinned(listed(hub, "A").id(), true);
+
+        hub.saveSettings(new LauncherSettings(2));
+        RecentProjectsView trimmed = hub.trimProjects();
+
+        assertEquals(List.of("D", "A"), names(trimmed));
+        assertTrue(listed(hub(Map.of()), "A").pinned());
+        assertTrue(Files.isRegularFile(projectsDir.resolve("B/B.vfproj")), "the project on disk stays");
+    }
+
+    /** VK-1694: fewer logs to keep prunes the logs folder at once, newest kept. */
+    @Test
+    void loweringTheLogRetentionPrunesTheLogsAtOnce() throws Exception {
+        Path logs = Files.createDirectories(configDir.resolve("logs"));
+        for (int i = 0; i < 5; i++) {
+            Path log = Files.writeString(logs.resolve("Game-" + i + ".log"), "log " + i);
+            Files.setLastModifiedTime(log, java.nio.file.attribute.FileTime.from(TestSupport.T0.plusSeconds(i)));
+        }
+
+        hub.saveSettings(new LauncherSettings(50, LauncherSettings.AfterLaunch.MINIMIZE, true, Optional.empty(), 2));
+
+        assertEquals(Set.of("Game-3.log", "Game-4.log"), TestSupport.fileNames(logs));
+    }
+
+    /** VK-1694: without a logs folder yet, a lowered retention has nothing to prune and says nothing. */
+    @Test
+    void loweringTheLogRetentionBeforeAnyLaunchIsQuiet() throws Exception {
+        TestSupport.CapturedLog captured = TestSupport.log(root.resolve("quiet-log"));
+        ProjectHub quiet = ProjectHub.create(TestSupport.environment(configDir, Optional.empty(),
+                new TickingClock(TestSupport.T0), Map.of(), starter), captured.log);
+        hubs.add(quiet);
+
+        quiet.saveSettings(new LauncherSettings(50, LauncherSettings.AfterLaunch.MINIMIZE, true, Optional.empty(), 1));
+
+        assertFalse(Files.exists(configDir.resolve("logs")));
+        assertFalse(captured.console().contains("launch logs"), captured.console());
+    }
+
+    /** VK-1694: a settings file written by a newer launcher is never overwritten, so Settings cannot save. */
+    @Test
+    void aNewerSettingsFileCannotBeSaved() throws Exception {
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve(LauncherSettingsRepository.FILE_NAME), "{\"version\": 9}");
+        ProjectHub newer = hub(Map.of());
+
+        assertFalse(newer.canSaveSettings());
+        assertEquals(Reason.NEWER_VERSION, assertThrows(StoreWriteException.class,
+                () -> newer.saveSettings(LauncherSettings.DEFAULTS)).reason());
+        assertTrue(hub.canSaveSettings(), "a hub that read no file can save");
+    }
+
+    /** VK-1694: the window and the list's sort are remembered in their own file, across restarts. */
+    @Test
+    void theLauncherStateIsRememberedAcrossRestarts() {
+        assertEquals(LauncherState.EMPTY, hub.launcherState());
+        LauncherState.SavedWindow window = new LauncherState.SavedWindow(100, 50, 1100, 720, true);
+        List<LauncherState.SortKey> sort = List.of(new LauncherState.SortKey("name", false));
+
+        hub.saveWindowState(window);
+        hub.saveProjectSort(sort);
+
+        LauncherState reread = hub(Map.of()).launcherState();
+        assertEquals(Optional.of(window), reread.window());
+        assertEquals(sort, reread.projectSort());
+        assertTrue(Files.isRegularFile(configDir.resolve(LauncherStateRepository.FILE_NAME)));
+        assertFalse(Files.exists(configDir.resolve(LauncherSettingsRepository.FILE_NAME)),
+                "remembering never writes the settings file");
     }
 
     /** VK-1683: "Open with MCP" is stored on the entry and survives an open. */

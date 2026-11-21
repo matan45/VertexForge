@@ -275,6 +275,53 @@ class RecentProjectsRepositoryTest {
         assertEquals(List.of("Added", "Newer", "Pinned"), names(view));
     }
 
+    // --- VK-1694: pinning, and trimming to a lowered cap at once ------------------------------------------------------
+
+    @Test
+    void aPinIsSavedAndAnUnpinToo() throws Exception {
+        repository.add(projectFile("Game"), "Game", LIMIT);
+        UUID id = repository.load().entries().getFirst().id();
+
+        repository.setPinned(id, true);
+        assertTrue(newRepository().load().find(id).orElseThrow().pinned());
+
+        repository.setPinned(id, false);
+        assertFalse(newRepository().load().find(id).orElseThrow().pinned());
+    }
+
+    @Test
+    void trimDropsTheOldestUnpinnedEntriesAndKeepsUnknownMembers() throws Exception {
+        writeStore("""
+                {"version": 2, "future": 1, "projects": [
+                  {"id": "%s", "name": "Pinned", "path": %s, "lastOpened": "2020-01-01T00:00:00Z", "pinned": true},
+                  {"id": "%s", "name": "Old", "path": %s, "lastOpened": "2021-01-01T00:00:00Z", "pinned": false},
+                  {"id": "%s", "name": "Middle", "path": %s, "lastOpened": "2023-01-01T00:00:00Z", "pinned": false,
+                   "colour": "red"},
+                  {"id": "%s", "name": "Newer", "path": %s, "lastOpened": "2025-01-01T00:00:00Z", "pinned": false}]}
+                """.formatted(UUID.randomUUID(), quote(root.resolve("P.vfproj")), UUID.randomUUID(),
+                quote(root.resolve("O.vfproj")), UUID.randomUUID(), quote(root.resolve("M.vfproj")),
+                UUID.randomUUID(), quote(root.resolve("N.vfproj"))));
+
+        RecentProjectsView view = repository.trim(3);
+
+        assertEquals(List.of("Newer", "Middle", "Pinned"), names(view));
+        assertEquals(1, readStore().get("future").getAsInt());
+        assertTrue(Files.readString(storeFile).contains("\"colour\": \"red\""));
+        // A pinned entry is never removed, whatever the cap.
+        assertEquals(List.of("Pinned"), names(repository.trim(1)));
+        assertThrows(IllegalArgumentException.class, () -> repository.trim(0));
+    }
+
+    @Test
+    void aTrimOfANewerFileIsRefused() throws Exception {
+        writeStore("{\"version\": 9, \"projects\": []}");
+
+        assertEquals(Reason.NEWER_VERSION, assertThrows(StoreWriteException.class, () -> repository.trim(5))
+                .reason());
+        assertEquals(Reason.NEWER_VERSION, assertThrows(StoreWriteException.class,
+                () -> repository.setPinned(UUID.randomUUID(), true)).reason());
+    }
+
     // --- AC1: nothing is ever dropped at load ------------------------------------------------------------------------
 
     @Test

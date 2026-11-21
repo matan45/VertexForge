@@ -1,12 +1,15 @@
 package com.vertexforge.launcher;
 
 import com.vertexforge.launcher.controller.MainController;
+import com.vertexforge.launcher.dialog.DialogFactory;
 import com.vertexforge.launcher.env.LauncherEnvironment;
 import com.vertexforge.launcher.instance.InstanceMessage;
 import com.vertexforge.launcher.instance.SingleInstance;
 import com.vertexforge.launcher.service.ProjectCreator;
 import com.vertexforge.launcher.service.ProjectHub;
+import com.vertexforge.launcher.settings.LauncherState;
 import com.vertexforge.launcher.ui.MainView;
+import com.vertexforge.launcher.ui.WindowStateKeeper;
 import com.vertexforge.launcher.util.GlobalExceptionHandler;
 import com.vertexforge.launcher.util.LauncherLog;
 import javafx.application.Application;
@@ -18,6 +21,7 @@ import javafx.stage.Stage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.concurrent.RejectedExecutionException;
 
 
 public class LauncherApp extends Application {
@@ -42,6 +46,8 @@ public class LauncherApp extends Application {
     private MainView.Loaded view;
     /** The main window once it is showing; the owner of every error dialog. */
     private volatile Stage mainStage;
+    /** Puts the window back where it was and remembers where it goes (VK-1694). */
+    private WindowStateKeeper windowKeeper;
 
     public static void main(String[] args) {
         launch(args);
@@ -62,7 +68,7 @@ public class LauncherApp extends Application {
             log.warn("The launcher was started without " + Launcher.class.getName()
                     + ", so it ignores its command line and does not check for a running launcher");
         }
-        GlobalExceptionHandler.install(log, () -> mainStage);
+        GlobalExceptionHandler.install(log, () -> mainStage, DialogFactory::showException);
     }
 
     @Override
@@ -73,9 +79,11 @@ public class LauncherApp extends Application {
             Scene scene = MainView.createScene(view.root());
 
             primaryStage.setTitle(APP_TITLE);
-            primaryStage.setMinWidth(MIN_WIDTH);
-            primaryStage.setMinHeight(MIN_HEIGHT);
             primaryStage.setScene(scene);
+            // Where it was last time, on a screen that is still there (VK-1694); also sets the minimum size, which a
+            // small screen (a laptop at 200 % scaling) lowers.
+            windowKeeper = WindowStateKeeper.restore(primaryStage, hub.launcherState().window(), MIN_WIDTH, MIN_HEIGHT,
+                    this::saveWindowLater);
 
             loadApplicationIcon(primaryStage);
             // From the moment the window is closing, a second launcher is told to start on its own (VK-1685).
@@ -83,6 +91,7 @@ public class LauncherApp extends Application {
 
             primaryStage.show();
             mainStage = primaryStage;
+            windowKeeper.afterShown();
             takeRequests(view.controller());
 
         } catch (IOException e) {
@@ -109,6 +118,18 @@ public class LauncherApp extends Application {
             instance.inbox().attach(message -> Platform.runLater(() -> controller.handleRequests(message)));
         } else {
             controller.handleRequests(ownRequests);
+        }
+    }
+
+    /** Hands the window's bounds to the store thread (VK-1694); dropped once that thread has stopped. */
+    private void saveWindowLater(LauncherState.SavedWindow window) {
+        if (view == null || hub == null) {
+            return;
+        }
+        try {
+            view.background().execute(() -> hub.saveWindowState(window));
+        } catch (RejectedExecutionException e) {
+            // The launcher is closing and the store thread has already stopped.
         }
     }
 
@@ -145,6 +166,14 @@ public class LauncherApp extends Application {
         // First: a second launcher started now becomes the running one instead of waiting for this one to finish.
         if (instance != null) {
             instance.release();
+        }
+        // What the launcher remembers (VK-1694): queued on the store thread, which the wait below lets finish. This
+        // also runs after the Close after-launch setting, which ends the launcher while it is minimized.
+        if (windowKeeper != null) {
+            windowKeeper.saveNow();
+        }
+        if (view != null) {
+            view.controller().saveSortNow();
         }
         // A creation in progress is cancelled and cleans up after itself; a save on the store thread is let finish
         // rather than cut off. The store thread is not a daemon, so the process only ends once that work is done.

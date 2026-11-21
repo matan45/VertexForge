@@ -37,14 +37,11 @@ public final class LibraryUpdateDialog {
      */
     public static Optional<Boolean> show(Window owner, LibraryUpdatePrompt prompt) {
         Objects.requireNonNull(prompt, "prompt");
-        Dialog<Boolean> dialog = new Dialog<>();
-        dialog.setTitle(prompt.title());
+        Dialog<Boolean> dialog = DialogFactory.dialog(owner, prompt.title());
         dialog.setHeaderText(prompt.header());
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("library-update-dialog");
         ButtonType update = new ButtonType("Update", ButtonBar.ButtonData.OK_DONE);
         pane.getButtonTypes().setAll(update, ButtonType.CANCEL);

@@ -44,7 +44,7 @@ import java.util.function.Consumer;
  */
 public final class EnginesDialog {
 
-    private final Dialog<ButtonType> dialog = new Dialog<>();
+    private final Dialog<ButtonType> dialog;
     private final EngineServices services;
     private final TableView<EngineOption> table = new TableView<>();
     private final Label overrideLabel = new Label();
@@ -55,13 +55,11 @@ public final class EnginesDialog {
 
     private EnginesDialog(Window owner, EngineOptions current, EngineServices services) {
         this.services = Objects.requireNonNull(services, "services");
-        dialog.setTitle("Engines");
+        dialog = DialogFactory.dialog(owner, "Engines");
         dialog.setHeaderText("VertexForge engine installs");
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("engines-dialog");
         pane.setContent(createContent());
         pane.getButtonTypes().add(ButtonType.CLOSE);
@@ -77,6 +75,21 @@ public final class EnginesDialog {
         EnginesDialog engines = new EnginesDialog(owner, current, services);
         // A fresh check: an engine may have been built, moved or deleted since the window last looked.
         engines.run(services.refresh(), engines::showOptions);
+        engines.dialog.showAndWait();
+    }
+
+    /**
+     * As {@link #show}, then Add Engine… at once (the first-run screen's "Add Engine…", VK-1694): its file chooser opens
+     * once the engines have been read again and the list may be changed, and what it adds shows in the dialog.
+     */
+    public static void showAdding(Window owner, EngineOptions current, EngineServices services) {
+        EnginesDialog engines = new EnginesDialog(owner, current, services);
+        engines.run(services.refresh(), options -> {
+            engines.showOptions(options);
+            if (!options.registry().readOnly()) {
+                engines.onAdd();
+            }
+        });
         engines.dialog.showAndWait();
     }
 
@@ -247,7 +260,7 @@ public final class EnginesDialog {
                 ? "No listed project uses it."
                 : bound + (bound == 1 ? " listed project uses it" : " listed projects use it")
                         + "; they will ask for another engine the next time they are opened.";
-        Alert confirm = DialogStyle.alert(Alert.AlertType.CONFIRMATION, dialog.getDialogPane().getScene().getWindow(),
+        Alert confirm = DialogFactory.alert(Alert.AlertType.CONFIRMATION, dialog.getDialogPane().getScene().getWindow(),
                 "Remove Engine", "Remove " + selected.label() + " (" + selected.pathText() + ") from the list?\n\n"
                         + usage + "\nThe engine's files are not touched.");
         Optional<ButtonType> answer = confirm.showAndWait();

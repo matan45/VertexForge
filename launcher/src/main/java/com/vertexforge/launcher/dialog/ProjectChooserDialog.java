@@ -32,14 +32,11 @@ public final class ProjectChooserDialog {
 
     /** Shows the folder's project files; empty when the user cancelled. */
     public static Optional<PickedProject.Found> show(Window owner, PickedProject.Choose choose) {
-        Dialog<PickedProject.Found> dialog = new Dialog<>();
-        dialog.setTitle("Add Existing Project");
+        Dialog<PickedProject.Found> dialog = DialogFactory.dialog(owner, "Add Existing Project");
         dialog.setHeaderText("Which project do you want to add?");
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getButtonTypes().addAll(ADD, ButtonType.CANCEL);
 
         Label folderLabel = new Label(choose.folder() + " holds " + choose.candidates().size() + " project files.");

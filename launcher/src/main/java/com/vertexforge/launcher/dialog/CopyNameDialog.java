@@ -36,14 +36,11 @@ public final class CopyNameDialog {
     public static Optional<String> show(Window owner, CopyNamePrompt prompt, Function<String, Optional<String>> check) {
         Objects.requireNonNull(prompt, "prompt");
         Objects.requireNonNull(check, "check");
-        Dialog<String> dialog = new Dialog<>();
-        dialog.setTitle("Open a Copy");
+        Dialog<String> dialog = DialogFactory.dialog(owner, "Open a Copy");
         dialog.setHeaderText("Copy \"" + prompt.projectName() + "\" and open the copy");
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("copy-name-dialog");
         pane.getButtonTypes().addAll(COPY, ButtonType.CANCEL);
 

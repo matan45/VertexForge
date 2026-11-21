@@ -64,7 +64,7 @@ public final class EngineChooserDialog {
     private static final ButtonType CHOOSE = new ButtonType("Open", ButtonBar.ButtonData.OK_DONE);
     private static final ButtonType USE = new ButtonType("Use", ButtonBar.ButtonData.OK_DONE);
 
-    private final Dialog<Choice> dialog = new Dialog<>();
+    private final Dialog<Choice> dialog;
     private final Mode mode;
     private final EngineServices services;
     private final ListView<Row> list = new ListView<>();
@@ -91,15 +91,13 @@ public final class EngineChooserDialog {
         this.services = Objects.requireNonNull(services, "services");
         this.canRemember = canRemember;
         this.offered = Objects.requireNonNull(offered, "offered");
-        dialog.setTitle(title);
+        dialog = DialogFactory.dialog(owner, title);
         dialog.setHeaderText(header != null ? header
                 : mode == Mode.OPEN ? "Choose an engine" : "Choose the engine for this project");
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
         ButtonType confirm = mode == Mode.OPEN ? CHOOSE : USE;
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("engine-chooser-dialog");
         pane.getButtonTypes().addAll(confirm, ButtonType.CANCEL);
         pane.setContent(createContent(problem));

@@ -34,13 +34,10 @@ public final class McpDialog {
 
     /** Asks for the project's setting; empty when the user cancelled. */
     public static Optional<McpSetting> show(Window owner, String projectName, McpSetting current) {
-        Dialog<McpSetting> dialog = new Dialog<>();
-        dialog.setTitle("MCP");
+        Dialog<McpSetting> dialog = DialogFactory.dialog(owner, "MCP");
         dialog.setHeaderText("MCP for \"" + projectName + "\"");
-        dialog.initOwner(owner);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getButtonTypes().addAll(SAVE, ButtonType.CANCEL);
 
         CheckBox enabledBox = new CheckBox("Open with MCP, so an AI agent can control the editor");

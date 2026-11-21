@@ -30,6 +30,8 @@ import com.vertexforge.launcher.session.SessionStart;
 import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
 import com.vertexforge.launcher.settings.LauncherSettingsRepository;
+import com.vertexforge.launcher.settings.LauncherState;
+import com.vertexforge.launcher.settings.LauncherStateRepository;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.template.TemplateCatalogs;
@@ -38,10 +40,12 @@ import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.SingleFlightChecks;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -76,12 +80,18 @@ public class ProjectHub implements AutoCloseable {
     private final ScriptLibraryUpdater libraryUpdater;
     /** The project list's "Library outdated" tags (VK-1691). */
     private final ScriptLibraryStatusService libraryStatus;
-    private final int listLimit;
+    /** Where the window and the list's sort are remembered (VK-1694); {@code null} for a hub that keeps nothing. */
+    private final LauncherStateRepository stateRepository;
     private final Clock clock;
     /** Reads picked, dropped and command-line projects, each with a timeout (VK-1685). */
     private final SingleFlightChecks<Path, PickAnswer> pickChecks;
-    /** The settings as last read or saved; written on the store thread, read on any. */
+    /**
+     * The settings as last read or saved; written on the store thread, read on any. The list's cap is read from here
+     * on every add, so a cap changed in Settings applies at once (VK-1694).
+     */
     private volatile LauncherSettings settings;
+    /** What was remembered at startup (VK-1694). */
+    private final LauncherState state;
 
     /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
@@ -109,17 +119,21 @@ public class ProjectHub implements AutoCloseable {
                       ProjectHealthService health, LocationChecker locationChecker,
                       LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock) {
         this(repository, projectCreator, engines, editorLauncher, health, locationChecker, settingsRepository,
-                settings, clock, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
+                settings, null, clock, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
     }
 
     /**
-     * @param inspector   reads the projects picked with "Add Existing…", dropped or given on the command line (VK-1685)
-     * @param pickTimeout how long one such read may take before it is refused
+     * @param stateRepository where the window and the list's sort are remembered (VK-1694), or {@code null} to
+     *                        remember nothing; it is read here, once
+     * @param inspector       reads the projects picked with "Add Existing…", dropped or given on the command line
+     *                        (VK-1685)
+     * @param pickTimeout     how long one such read may take before it is refused
      */
     ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                EngineCatalog engines, EditorLauncher editorLauncher,
                ProjectHealthService health, LocationChecker locationChecker,
-               LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock,
+               LauncherSettingsRepository settingsRepository, LauncherSettings settings,
+               LauncherStateRepository stateRepository, Clock clock,
                ProjectInspector inspector, Duration pickTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
@@ -136,7 +150,8 @@ public class ProjectHub implements AutoCloseable {
         this.copier = new ProjectCopier(SpaceProbe.SYSTEM);
         this.libraryUpdater = new ScriptLibraryUpdater(clock, SpaceProbe.SYSTEM, EditorLockProbe.system());
         this.libraryStatus = new ScriptLibraryStatusService(ScriptLibraryStatusService.DEFAULT_TIMEOUT);
-        this.listLimit = settings.recentProjectsLimit();
+        this.stateRepository = stateRepository;
+        this.state = stateRepository == null ? LauncherState.EMPTY : stateRepository.load();
         ProjectInspector reader = Objects.requireNonNull(inspector, "inspector");
         Objects.requireNonNull(pickTimeout, "pickTimeout");
         this.pickChecks = new SingleFlightChecks<>("vf-project-pick-", pickTimeout,
@@ -157,9 +172,10 @@ public class ProjectHub implements AutoCloseable {
 
     /**
      * Wires the hub for an environment: the recent list lives in {@code configDir/recent-projects.json}, the settings
-     * (the list's cap, the launch behaviour) in {@code configDir/launcher-settings.json}, the engines in
+     * (the list's cap, the launch behaviour, VK-1694's preferences) in {@code configDir/launcher-settings.json}, what
+     * the launcher remembers by itself in {@code configDir/launcher-state.json} (VK-1694), the engines in
      * {@code configDir/engines.json} and the per-launch logs in {@code configDir/logs/} (VK-1683). Reads only the
-     * (small, local) settings file.
+     * (small, local) settings and state files.
      */
     public static ProjectHub create(LauncherEnvironment environment, LauncherLog log) {
         return create(environment, log, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
@@ -172,6 +188,8 @@ public class ProjectHub implements AutoCloseable {
         LauncherSettingsRepository settingsRepository = new LauncherSettingsRepository(
                 configDir.resolve(LauncherSettingsRepository.FILE_NAME), environment.clock(), log);
         LauncherSettings settings = settingsRepository.load();
+        LauncherStateRepository stateRepository = new LauncherStateRepository(
+                configDir.resolve(LauncherStateRepository.FILE_NAME), environment.clock(), log);
         RecentProjectsRepository repository = new RecentProjectsRepository(
                 RecentProjectsRepository.openStore(configDir.resolve(RecentProjectsRepository.FILE_NAME),
                         environment.clock(), log),
@@ -189,6 +207,7 @@ public class ProjectHub implements AutoCloseable {
                 new LocationChecker(LocationWarnings.forEnvironment(environment)),
                 settingsRepository,
                 settings,
+                stateRepository,
                 environment.clock(),
                 inspector,
                 pickTimeout);
@@ -256,6 +275,19 @@ public class ProjectHub implements AutoCloseable {
     /** Binds a project to an engine; {@code null} makes it follow the default engine again (VK-1681). */
     public RecentProjectsView bindEngine(UUID id, UUID engineId) throws StoreWriteException {
         return repository.bindEngine(id, engineId);
+    }
+
+    /** Pins a project to the top of the list or unpins it (VK-1694). Store thread. */
+    public RecentProjectsView setPinned(UUID id, boolean pinned) throws StoreWriteException {
+        return repository.setPinned(id, pinned);
+    }
+
+    /**
+     * Removes the oldest unpinned entries beyond the list's cap at once (a cap lowered in Settings, VK-1694); pinned
+     * entries are always kept and no project on disk is touched. Store thread.
+     */
+    public RecentProjectsView trimProjects() throws StoreWriteException {
+        return repository.trim(listLimit());
     }
 
     /** Sets a project's "Open with MCP" (VK-1683). Store thread. */
@@ -333,7 +365,7 @@ public class ProjectHub implements AutoCloseable {
      */
     public AddedProject listCopy(Path projectFile, String name, Optional<UUID> engineId) throws StoreWriteException {
         Objects.requireNonNull(projectFile, "projectFile");
-        return repository.addBound(canonical(projectFile), name, listLimit, engineId);
+        return repository.addBound(canonical(projectFile), name, listLimit(), engineId);
     }
 
     /** The settings as last read or saved. Any thread. */
@@ -342,24 +374,52 @@ public class ProjectHub implements AutoCloseable {
     }
 
     /**
-     * Saves the launch behaviour (VK-1683) and returns the settings as written. Store thread.
+     * Saves the settings (VK-1683, VK-1694) and returns them as written; they apply at once. Fewer logs to keep prunes
+     * the logs folder now rather than at the next launch (a running editor's log is never deleted). The list is not
+     * trimmed to a lowered cap here: that is {@link #trimProjects}. Store thread.
      *
      * @throws IllegalStateException when this hub cannot save settings
      */
-    public LauncherSettings saveSettings(LauncherSettings.AfterLaunch afterLaunch, boolean showEditorConsole)
-            throws StoreWriteException {
+    public LauncherSettings saveSettings(LauncherSettings wanted) throws StoreWriteException {
+        Objects.requireNonNull(wanted, "wanted");
         if (settingsRepository == null) {
             throw new IllegalStateException("This launcher cannot save its settings");
         }
-        LauncherSettings saved = settingsRepository.save(afterLaunch, showEditorConsole);
-        // The list's cap is read once at startup; keep it as the list uses it.
-        settings = new LauncherSettings(listLimit, saved.afterLaunch(), saved.showEditorConsole());
-        return settings;
+        int keptBefore = settings.logRetention();
+        LauncherSettings saved = settingsRepository.save(wanted);
+        settings = saved;
+        // Before the first launch there is no logs folder, and nothing to prune.
+        if (saved.logRetention() < keptBefore && Files.isDirectory(editorLauncher.logs().directory())) {
+            editorLauncher.logs().prune(saved.logRetention());
+        }
+        return saved;
     }
 
-    /** Whether {@link #saveSettings} may be called. */
+    /**
+     * Whether the Settings dialog may save: this hub has a settings file, and that file was not written by a newer
+     * launcher (which this version never overwrites, VK-1694). Never touches the disk.
+     */
     public boolean canSaveSettings() {
-        return settingsRepository != null;
+        return settingsRepository != null && !settingsRepository.newerFile();
+    }
+
+    /** What the launcher remembered at startup: the window and the list's sort (VK-1694). Any thread. */
+    public LauncherState launcherState() {
+        return state;
+    }
+
+    /** Remembers the main window's bounds (VK-1694); a failure is only a warning. Store thread. */
+    public void saveWindowState(LauncherState.SavedWindow window) {
+        if (stateRepository != null) {
+            stateRepository.saveWindow(window);
+        }
+    }
+
+    /** Remembers the project list's sort (VK-1694); a failure is only a warning. Store thread. */
+    public void saveProjectSort(List<LauncherState.SortKey> sort) {
+        if (stateRepository != null) {
+            stateRepository.saveProjectSort(sort);
+        }
     }
 
     /** Where the per-launch logs are kept ({@code ~/.vertexforge/logs}). */
@@ -403,7 +463,7 @@ public class ProjectHub implements AutoCloseable {
         Path projectPath = canonical(result.projectPath());
         try {
             return CreateOutcome.listed(result, projectPath,
-                    repository.add(projectPath, request.name(), listLimit, request.engine().engineId()));
+                    repository.add(projectPath, request.name(), listLimit(), request.engine().engineId()));
         } catch (StoreWriteException e) {
             return CreateOutcome.notListed(result, projectPath, e);
         }
@@ -439,7 +499,7 @@ public class ProjectHub implements AutoCloseable {
      */
     public AddedProject addExisting(PickedProject.Found found) throws StoreWriteException {
         Objects.requireNonNull(found, "found");
-        return repository.addExisting(found.file(), found.project().projectName(), listLimit);
+        return repository.addExisting(found.file(), found.project().projectName(), listLimit());
     }
 
     /**
@@ -513,9 +573,9 @@ public class ProjectHub implements AutoCloseable {
         return editorLauncher.newSession(start, events, listener);
     }
 
-    /** How many projects the list keeps. */
+    /** How many projects the list keeps, as the settings say now (VK-1694). Any thread. */
     public int listLimit() {
-        return listLimit;
+        return settings.recentProjectsLimit();
     }
 
     /** The time zone the UI shows times in. */

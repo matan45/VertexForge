@@ -174,6 +174,22 @@ public class RecentProjectsRepository {
         return change("set MCP of " + id, projects -> projects.setMcp(id, setting));
     }
 
+    /** Pins the project to the top of the list or unpins it (VK-1694). Does nothing when it was removed meanwhile. */
+    public RecentProjectsView setPinned(UUID id, boolean pinned) throws StoreWriteException {
+        return change((pinned ? "pin " : "unpin ") + id, projects -> projects.setPinned(id, pinned));
+    }
+
+    /**
+     * Removes the oldest unpinned entries until at most {@code limit} remain (a lowered cap, VK-1694); pinned entries
+     * are always kept, and the projects on disk are never touched.
+     */
+    public RecentProjectsView trim(int limit) throws StoreWriteException {
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be at least 1");
+        }
+        return change("trim to " + limit, projects -> projects.trim(limit, null));
+    }
+
     /**
      * Records that the project's "unknown version" warning was shown (VK-1690). Does nothing when another launcher
      * removed it meanwhile.

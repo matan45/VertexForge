@@ -28,14 +28,11 @@ public final class VersionDialog {
     /** Asks the question and waits for the answer; {@link VersionPrompt.Choice#CANCEL} when the window is closed. */
     public static VersionPrompt.Choice show(Window owner, VersionPrompt prompt) {
         Objects.requireNonNull(prompt, "prompt");
-        Dialog<VersionPrompt.Choice> dialog = new Dialog<>();
-        dialog.setTitle(prompt.title());
+        Dialog<VersionPrompt.Choice> dialog = DialogFactory.dialog(owner, prompt.title());
         dialog.setHeaderText(prompt.header());
-        dialog.initOwner(owner);
         dialog.setResizable(true);
 
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("version-dialog");
         // Insertion order is kept: buttons that share a ButtonData keep the order they were added in.
         Map<ButtonType, VersionPrompt.Choice> types = new LinkedHashMap<>();

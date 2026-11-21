@@ -1,7 +1,6 @@
 package com.vertexforge.launcher.dialog;
 
 import com.vertexforge.launcher.template.TemplateCatalog;
-import com.vertexforge.launcher.ui.MainView;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -29,7 +28,6 @@ import javafx.stage.WindowEvent;
 import javafx.util.Callback;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Function;
@@ -77,12 +75,10 @@ public class CreateProjectDialog {
     private final Label warningLabel;
     private final Label statusLabel;
     private final ProgressBar progressBar;
-    private final Window owner;
 
     public CreateProjectDialog(Window owner, CreateProjectForm.Services services) {
-        this.owner = owner;
         this.form = new CreateProjectForm(services, FX_TIMERS, Platform::runLater);
-        this.dialog = new Dialog<>();
+        this.dialog = DialogFactory.dialog(owner, "Create New Project");
         this.projectNameField = new TextField();
         this.projectLocationField = new TextField();
         this.engineBox = new ComboBox<>();
@@ -115,7 +111,18 @@ public class CreateProjectDialog {
      * @return how it ended; empty only if it closed without going through the form
      */
     public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services) {
-        return new CreateProjectDialog(owner, services).showAndWait();
+        return show(owner, services, Optional.empty());
+    }
+
+    /**
+     * As {@link #show(Window, CreateProjectForm.Services)}, starting in {@code initialLocation} (the Settings dialog's
+     * default location, VK-1694). The form checks it like a typed location, so a folder that is gone is reported.
+     */
+    public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services,
+                                                          Optional<Path> initialLocation) {
+        CreateProjectDialog dialog = new CreateProjectDialog(owner, services);
+        initialLocation.ifPresent(location -> dialog.form.locationProperty().set(location.toString()));
+        return dialog.showAndWait();
     }
 
     public Optional<CreateProjectForm.Result> showAndWait() {
@@ -123,21 +130,13 @@ public class CreateProjectDialog {
     }
 
     private void configureDialog() {
-        dialog.setTitle("Create New Project");
         dialog.setHeaderText("Create a new VertexForge project");
-        dialog.initOwner(owner);
         dialog.setResizable(false);
     }
 
     private DialogPane createDialogPane() {
-        DialogPane dialogPane = new DialogPane();
-        dialogPane.getStyleClass().addAll(DialogStyle.LAUNCHER_DIALOG, "create-project-dialog");
-        // A dialog is a window of its own: it does not get the main window's stylesheet unless it is given it.
-        try {
-            dialogPane.getStylesheets().add(MainView.stylesheet().toExternalForm());
-        } catch (IOException e) {
-            // The self-test fails a build without the stylesheet; the dialog still works unstyled.
-        }
+        DialogPane dialogPane = DialogFactory.pane();
+        dialogPane.getStyleClass().add("create-project-dialog");
         dialogPane.setContent(createFormGrid());
         dialogPane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         return dialogPane;

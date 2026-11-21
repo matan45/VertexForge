@@ -4,6 +4,7 @@ import com.vertexforge.launcher.dialog.CopyNameDialog;
 import com.vertexforge.launcher.dialog.CopyNamePrompt;
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
 import com.vertexforge.launcher.dialog.CreateProjectForm;
+import com.vertexforge.launcher.dialog.DialogFactory;
 import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
 import com.vertexforge.launcher.dialog.EnginesDialog;
@@ -14,6 +15,7 @@ import com.vertexforge.launcher.dialog.McpDialog;
 import com.vertexforge.launcher.dialog.ProjectChooserDialog;
 import com.vertexforge.launcher.dialog.SessionFailureDialog;
 import com.vertexforge.launcher.dialog.SettingsDialog;
+import com.vertexforge.launcher.dialog.SettingsForm;
 import com.vertexforge.launcher.dialog.VersionDialog;
 import com.vertexforge.launcher.dialog.VersionPrompt;
 import com.vertexforge.launcher.engine.EditorOverride;
@@ -64,9 +66,11 @@ import com.vertexforge.launcher.session.SessionReport;
 import com.vertexforge.launcher.session.SessionStart;
 import com.vertexforge.launcher.session.StartResult;
 import com.vertexforge.launcher.settings.LauncherSettings;
+import com.vertexforge.launcher.settings.LauncherState;
 import com.vertexforge.launcher.store.StoreStatus;
 import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.ui.BannerBar;
+import com.vertexforge.launcher.viewmodel.ProjectOrder;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import com.vertexforge.launcher.viewmodel.StatusDisplay;
 import javafx.application.Platform;
@@ -74,16 +78,15 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
-import javafx.collections.FXCollections;
+import javafx.beans.value.WeakChangeListener;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.css.PseudoClass;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
@@ -95,17 +98,22 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.SVGPath;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
@@ -122,6 +130,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -174,6 +183,8 @@ public class MainController implements Initializable {
     /** What Open did before the editor started: a backup, a copy, a cancelled job (VK-1690). */
     static final String BANNER_VERSION = "version";
     static final String BANNER_LIBRARY = "script-library";
+    /** The list has projects but no engine can open them (VK-1694). */
+    static final String BANNER_NO_ENGINE = "no-engine";
 
     private static final PseudoClass DROP_TARGET = PseudoClass.getPseudoClass("drop-target");
     private static final PseudoClass MISSING_ROW = PseudoClass.getPseudoClass("missing");
@@ -205,6 +216,26 @@ public class MainController implements Initializable {
     @FXML
     private VBox emptyStatePane;
 
+    /** The empty screen's "Add an engine" part (VK-1694). */
+    @FXML
+    private VBox noEngineBox;
+
+    @FXML
+    private Label noEngineText;
+
+    @FXML
+    private Button addEngineButton;
+
+    @FXML
+    private Button emptyCreateButton;
+
+    @FXML
+    private Button emptyAddButton;
+
+    /** Why the empty screen's buttons are disabled: the list is read-only (VK-1694). */
+    @FXML
+    private Label readOnlyHint;
+
     @FXML
     private VBox projectsTablePane;
 
@@ -234,7 +265,18 @@ public class MainController implements Initializable {
     @FXML
     private Button settingsButton;
 
-    private final ObservableList<ProjectViewModel> projectsList = FXCollections.observableArrayList();
+    /** Refresh; F5 presses it (VK-1694). */
+    @FXML
+    private Button refreshButton;
+
+    /** Filters the list as you type (VK-1694). */
+    @FXML
+    private TextField searchField;
+
+    /** Every listed row, and the search's sorted view of them that the table shows (VK-1694). */
+    private final ProjectTableModel tableModel = new ProjectTableModel();
+    /** Every listed row, whether the search shows it or not: the checks and every lookup work on it. */
+    private final ObservableList<ProjectViewModel> projectsList = tableModel.source();
     private final ProjectHub hub;
     private final Executor background;
     private final Executor creation;
@@ -290,6 +332,17 @@ public class MainController implements Initializable {
 
     private BannerBar banners;
 
+    /** The table's placeholder while the search hides nothing: "Loading…", or why the list could not be read. */
+    private Node listPlaceholder;
+    /** Remembers the table's sort (VK-1694); set in {@link #initialize}. */
+    private TableSortMemory<ProjectViewModel> sortMemory;
+    /** The window's shortcuts are installed once the table is in a scene (VK-1694). */
+    private boolean shortcutsInstalled;
+    /** The list has been read at least once, so the empty screen may say it is empty (VK-1694). */
+    private boolean listRead;
+    /** The engines' first check has answered (or failed), so the empty screen may say whether one works (VK-1694). */
+    private boolean enginesChecked;
+
     public MainController(ProjectHub hub, Executor background, Executor creation) {
         this.hub = Objects.requireNonNull(hub, "hub");
         this.background = Objects.requireNonNull(background, "background");
@@ -307,9 +360,13 @@ public class MainController implements Initializable {
         setupDropTarget();
         setupRequestQueue();
         setupFocusRecheck();
+        setupSearch();
+        setupShortcuts();
+        // Before the first read, so the list is shown sorted at once.
+        setupSortMemory();
 
         // Until the first read answers, show the (empty) table with a loading note rather than "no projects".
-        projectsTable.setPlaceholder(new Label("Loading…"));
+        setListPlaceholder(new Label("Loading…"));
         showEmptyState(false);
         reload();
     }
@@ -352,6 +409,18 @@ public class MainController implements Initializable {
         return projectsTable;
     }
 
+    /** Types {@code text} into the search box (the self-test's check of the filter, VK-1694). FX thread. */
+    public void setSearchQuery(String text) {
+        searchField.setText(text);
+    }
+
+    /** Saves a sort the user chose that is still waiting for its delay: the launcher is closing (VK-1694). FX thread. */
+    public void saveSortNow() {
+        if (sortMemory != null) {
+            sortMemory.saveNow();
+        }
+    }
+
     /**
      * Asks a creation, a backup or a copy in progress to stop (the launcher is closing; VK-1690 runs its backups and
      * copies on the creation thread too). FX thread.
@@ -371,6 +440,8 @@ public class MainController implements Initializable {
 
     private void setupTableColumns() {
         nameColumn.setCellValueFactory(cell -> cell.getValue().nameProperty());
+        // A pin before the name of a pinned project (VK-1694).
+        nameColumn.setCellFactory(column -> new NameCell());
         engineColumn.setCellValueFactory(cell -> cell.getValue().engineTextProperty());
         pathColumn.setCellValueFactory(cell -> cell.getValue().pathTextProperty());
 
@@ -415,9 +486,15 @@ public class MainController implements Initializable {
     }
 
     private void setupTableBehavior() {
-        projectsTable.setItems(projectsList);
+        projectsTable.setItems(tableModel.sorted());
         projectsTable.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         projectsTable.disableProperty().bind(launching);
+        // Pinned projects stay on top under any column sort (VK-1694). The default policy refuses a SortedList whose
+        // comparator is not bound to the table's own, and would undo the header click.
+        projectsTable.setSortPolicy(table -> {
+            tableModel.applyComparator(ProjectOrder.pinnedFirst(table.getComparator()));
+            return true;
+        });
 
         // Double-click to open project
         projectsTable.setOnMouseClicked(event -> {
@@ -426,10 +503,12 @@ public class MainController implements Initializable {
             }
         });
 
-        // Enter key to open project
+        // Enter opens the project; Delete removes it from the list, which the banner can undo (VK-1694).
         projectsTable.setOnKeyPressed(event -> {
             if (event.getCode() == KeyCode.ENTER) {
                 openSelectedProject();
+            } else if (event.getCode() == KeyCode.DELETE) {
+                removeSelectedProject();
             }
         });
 
@@ -439,6 +518,10 @@ public class MainController implements Initializable {
 
     private void setupContextMenu() {
         ContextMenu contextMenu = new ContextMenu();
+
+        // VK-1694: a pinned project stays at the top of the list and is never trimmed.
+        MenuItem pinItem = new MenuItem("Pin to Top");
+        pinItem.setOnAction(e -> togglePinOfSelected());
 
         // VK-1686: where the project is, and fixing an entry whose project moved.
         MenuItem showItem = new MenuItem("Show in Explorer");
@@ -465,11 +548,13 @@ public class MainController implements Initializable {
         removeItem.setOnAction(e -> removeSelectedProject());
         removeItem.disableProperty().bind(readOnly);
 
-        contextMenu.getItems().addAll(showItem, copyPathItem, new SeparatorMenuItem(), locateItem, changeEngineItem,
-                updateLibraryItem, mcpItem, new SeparatorMenuItem(), removeItem);
+        contextMenu.getItems().addAll(pinItem, new SeparatorMenuItem(), showItem, copyPathItem, new SeparatorMenuItem(),
+                locateItem, changeEngineItem, updateLibraryItem, mcpItem, new SeparatorMenuItem(), removeItem);
         // These depend on the row's status, which changes in the background; each handler checks again.
         contextMenu.setOnShowing(event -> {
             ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+            pinItem.setText(selected != null && selected.isPinned() ? "Unpin" : "Pin to Top");
+            pinItem.setDisable(selected == null || readOnly.get());
             showItem.setDisable(!canShowInExplorer(selected));
             copyPathItem.setDisable(selected == null || isBlank(selected.getEntry().rawPath()));
             locateItem.setDisable(!canLocate(selected));
@@ -526,6 +611,53 @@ public class MainController implements Initializable {
         }
     }
 
+    /** The Name column's cell: the project's name, after a pin when the project is pinned (VK-1694). */
+    private static final class NameCell extends TableCell<ProjectViewModel, String> {
+        private final SVGPath pin = pinGlyph();
+        private final ChangeListener<Boolean> pinListener = (observable, was, now) -> showPin(now);
+        /** Weak: a cell the table drops without emptying it first must not stay registered on its last row. */
+        private final WeakChangeListener<Boolean> weakPinListener = new WeakChangeListener<>(pinListener);
+        private ProjectViewModel watched;
+
+        @Override
+        protected void updateItem(String name, boolean empty) {
+            super.updateItem(name, empty);
+            // A recycled cell stops following its previous row.
+            if (watched != null) {
+                watched.pinnedProperty().removeListener(weakPinListener);
+                watched = null;
+            }
+            setText(empty ? null : name);
+            ProjectViewModel row = empty ? null : rowAt(getTableView(), getIndex());
+            if (row == null) {
+                showPin(false);
+            } else {
+                watched = row;
+                row.pinnedProperty().addListener(weakPinListener);
+                showPin(row.isPinned());
+            }
+        }
+
+        private static ProjectViewModel rowAt(TableView<ProjectViewModel> table, int index) {
+            if (table == null || index < 0 || index >= table.getItems().size()) {
+                return null;
+            }
+            return table.getItems().get(index);
+        }
+
+        private void showPin(boolean pinned) {
+            setGraphic(pinned ? pin : null);
+        }
+    }
+
+    /** A small push pin, 12 by 12 pixels, styled by {@code .pin-glyph}. */
+    private static SVGPath pinGlyph() {
+        SVGPath pin = new SVGPath();
+        pin.setContent("M4 0H8V1H7V4L9 6V7H6.5V11L6 12L5.5 11V7H3V6L5 4V1H4Z");
+        pin.getStyleClass().add("pin-glyph");
+        return pin;
+    }
+
     private void setupSelectionListener() {
         projectsTable.getSelectionModel().selectedItemProperty().addListener((observable, previous, selected) -> {
             if (previous != null) {
@@ -548,6 +680,12 @@ public class MainController implements Initializable {
         createProjectButton.disableProperty().bind(creating.or(readOnly));
         addExistingButton.disableProperty().bind(readOnly.or(launching).or(choosingEngine)
                 .or(addFlow.busyProperty()));
+        // The empty screen's buttons do what the sidebar's do, under the same rules (VK-1694).
+        emptyCreateButton.disableProperty().bind(createProjectButton.disableProperty());
+        emptyAddButton.disableProperty().bind(addExistingButton.disableProperty());
+        addEngineButton.disableProperty().bind(enginesButton.disableProperty());
+        readOnlyHint.visibleProperty().bind(readOnly);
+        readOnlyHint.managedProperty().bind(readOnly);
     }
 
     /**
@@ -632,6 +770,109 @@ public class MainController implements Initializable {
         }
     }
 
+    /**
+     * The search box filters the list as you type (VK-1694): every word must occur in a project's name, path or
+     * engine. Enter opens the selected match, Down moves into the list, and Esc clears the box (or, when it is
+     * already empty, goes back to the list).
+     */
+    private void setupSearch() {
+        searchField.textProperty().addListener((observable, was, now) -> applySearch(now));
+        searchField.setOnAction(event -> openSelectedProject());
+        searchField.addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.ESCAPE) {
+                if (searchField.getText().isEmpty()) {
+                    projectsTable.requestFocus();
+                } else {
+                    searchField.clear();
+                }
+                event.consume();
+            } else if (event.getCode() == KeyCode.DOWN && !tableModel.sorted().isEmpty()) {
+                if (projectsTable.getSelectionModel().isEmpty()) {
+                    projectsTable.getSelectionModel().selectFirst();
+                }
+                projectsTable.requestFocus();
+                event.consume();
+            }
+        });
+    }
+
+    /**
+     * Filters the rows. The selected project stays selected while it matches; otherwise the first match is selected,
+     * so that Enter opens it. A hidden row is never left selected: Open and Delete would act on a row nobody sees.
+     */
+    private void applySearch(String query) {
+        ProjectViewModel previous = projectsTable.getSelectionModel().getSelectedItem();
+        tableModel.setQuery(query);
+        if (previous != null && tableModel.isVisible(previous)) {
+            projectsTable.getSelectionModel().select(previous);
+        } else if (tableModel.filtering() && !tableModel.sorted().isEmpty()) {
+            projectsTable.getSelectionModel().selectFirst();
+        } else {
+            projectsTable.getSelectionModel().clearSelection();
+        }
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            projectsTable.scrollTo(selected);
+        }
+        updatePlaceholder();
+    }
+
+    /**
+     * The window's shortcuts (VK-1694): Ctrl+N creates a project, Ctrl+O adds an existing one, Ctrl+F goes to the search
+     * box and F5 refreshes. They press the buttons, so they do what the buttons do and nothing while a button is
+     * disabled. Enter and Delete belong to the list (and Enter to the search box), so typing is never taken from a field.
+     */
+    private void setupShortcuts() {
+        createProjectButton.setTooltip(new Tooltip("Create a new project (Ctrl+N)"));
+        addExistingButton.setTooltip(new Tooltip("Add a project that is already on disk (Ctrl+O)"));
+        refreshButton.setTooltip(new Tooltip("Check every project and engine again (F5)"));
+        searchField.setTooltip(new Tooltip("Filter by name, path or engine (Ctrl+F); Esc clears"));
+        projectsTable.sceneProperty().addListener((observable, was, scene) -> installShortcuts(scene));
+        installShortcuts(projectsTable.getScene());
+    }
+
+    private void installShortcuts(Scene scene) {
+        if (scene == null || shortcutsInstalled) {
+            return;
+        }
+        shortcutsInstalled = true;
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN),
+                createProjectButton::fire);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN),
+                addExistingButton::fire);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), this::focusSearch);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), refreshButton::fire);
+    }
+
+    /** Ctrl+F: the search box, with its text selected; nothing while the list is not shown. */
+    private void focusSearch() {
+        if (projectsTablePane.isVisible() && !searchField.isDisabled()) {
+            searchField.requestFocus();
+            searchField.selectAll();
+        }
+    }
+
+    /** Puts the remembered sort back and remembers every sort the user chooses from now on (VK-1694). */
+    private void setupSortMemory() {
+        Map<String, TableColumn<ProjectViewModel, ?>> columns = new LinkedHashMap<>();
+        columns.put(ProjectSort.NAME, nameColumn);
+        columns.put(ProjectSort.STATUS, statusColumn);
+        columns.put(ProjectSort.ENGINE, engineColumn);
+        columns.put(ProjectSort.PATH, pathColumn);
+        columns.put(ProjectSort.LAST_OPENED, lastOpenedColumn);
+        sortMemory = new TableSortMemory<>(projectsTable, columns, this::saveSortLater);
+        sortMemory.restore(hub.launcherState().projectSort());
+    }
+
+    /** Hands a sort to the store thread; dropped when the launcher has already stopped it. */
+    private void saveSortLater(List<LauncherState.SortKey> sort) {
+        try {
+            background.execute(() -> hub.saveProjectSort(sort));
+        } catch (RejectedExecutionException e) {
+            // The store thread has stopped: the launcher is closing.
+        }
+    }
+
     private static List<Path> toPaths(List<File> files) {
         List<Path> paths = new ArrayList<>(files.size());
         for (File file : files) {
@@ -668,7 +909,8 @@ public class MainController implements Initializable {
             reloadInFlight = false;
             // Nothing is known about the file, so nothing may write it until a Refresh reads it.
             readOnly.set(true);
-            projectsTable.setPlaceholder(new Label("The recent-projects list could not be read"));
+            setListPlaceholder(new Label("The recent-projects list could not be read"));
+            updateEmptyState();
             banners.show(BANNER_READ_ONLY, BannerBar.Kind.ERROR,
                     "The recent-projects list could not be read: " + describe(error) + ". Press Refresh to try again.",
                     false);
@@ -697,32 +939,36 @@ public class MainController implements Initializable {
 
         List<ProjectViewModel> rows = new ArrayList<>(view.entries().size());
         List<ProjectViewModel> toCheck = new ArrayList<>();
-        for (RecentEntry entry : view.entries()) {
-            ProjectViewModel row = existing.get(entry.id());
-            if (row != null && row.matches(entry)) {
-                row.update(entry);
-                if (recheckAll) {
+        // One sort for the whole read, not one per changed row (VK-1694).
+        tableModel.batch(() -> {
+            for (RecentEntry entry : view.entries()) {
+                ProjectViewModel row = existing.get(entry.id());
+                if (row != null && row.matches(entry)) {
+                    row.update(entry);
+                    if (recheckAll) {
+                        toCheck.add(row);
+                    }
+                } else {
+                    row = new ProjectViewModel(entry);
                     toCheck.add(row);
                 }
-            } else {
-                row = new ProjectViewModel(entry);
-                toCheck.add(row);
+                // The entry's binding may have changed (a first open binds it), and with it the engine it opens with.
+                applyEngineLabel(row);
+                applyHealth(row);
+                // A rebuilt row still shows the editor running on its project (VK-1683).
+                row.setSessionPhase(sessions.find(row.getProjectPath()).map(EditorSessions.Live::phase).orElse(null));
+                rows.add(row);
             }
-            // The entry's binding may have changed (a first open binds it), and with it the engine it opens with.
-            applyEngineLabel(row);
-            applyHealth(row);
-            // A rebuilt row still shows the editor running on its project (VK-1683).
-            row.setSessionPhase(sessions.find(row.getProjectPath()).map(EditorSessions.Live::phase).orElse(null));
-            rows.add(row);
-        }
 
-        projectsList.setAll(rows);
-        // Keeps a sort the user chose by clicking a column header; without one, the list's own order stays.
-        projectsTable.sort();
-        showEmptyState(rows.isEmpty());
+            // The table shows them through the search, pinned first and in the user's column sort (VK-1694).
+            tableModel.setAll(rows);
+        });
+        listRead = true;
+        updateEmptyState();
         if (selectedId != null) {
             selectById(selectedId);
         }
+        updatePlaceholder();
 
         for (ProjectViewModel row : toCheck) {
             check(row);
@@ -845,6 +1091,31 @@ public class MainController implements Initializable {
                         + " and a new list was started.", true);
     }
 
+    /**
+     * The empty screen and the no-engine banner (VK-1694): with no projects, the screen offers Create Project and Add
+     * Existing… and, when no engine works, Add Engine…; above a list with projects, a banner offers Add Engine…. Nothing
+     * is said about the engines before their first check has answered.
+     */
+    private void updateEmptyState() {
+        EmptyStates.EmptyState state = EmptyStates.of(listRead, enginesChecked, projectsList.size(),
+                engineOptions);
+        showEmptyState(state.showEmptyScreen());
+        boolean noEngine = state.problem().noEngine();
+        noEngineBox.setVisible(noEngine);
+        noEngineBox.setManaged(noEngine);
+        noEngineText.setText(EmptyStates.message(state.problem()));
+        if (state.engineBanner()) {
+            String message = EmptyStates.message(state.problem());
+            // Only a new message replaces the banner, so it does not flicker on every engine check.
+            if (!message.equals(banners.messageOf(BANNER_NO_ENGINE))) {
+                banners.show(BANNER_NO_ENGINE, BannerBar.Kind.WARNING, message, false, "Add Engine…",
+                        this::onAddEngine);
+            }
+        } else {
+            banners.hide(BANNER_NO_ENGINE);
+        }
+    }
+
     private void showEmptyState(boolean show) {
         emptyStatePane.setVisible(show);
         emptyStatePane.setManaged(show);
@@ -852,28 +1123,67 @@ public class MainController implements Initializable {
         projectsTablePane.setManaged(!show);
     }
 
-    private void selectById(UUID id) {
-        for (ProjectViewModel row : projectsList) {
-            if (row.getId().equals(id)) {
-                projectsTable.getSelectionModel().select(row);
-                return;
-            }
+    /** The table's placeholder when the search hides nothing (VK-1694). */
+    private void setListPlaceholder(Node placeholder) {
+        listPlaceholder = placeholder;
+        updatePlaceholder();
+    }
+
+    /** "No projects match …" while the search hides every listed project; else the list's own placeholder. */
+    private void updatePlaceholder() {
+        if (tableModel.filtering() && !projectsList.isEmpty() && tableModel.sorted().isEmpty()) {
+            projectsTable.setPlaceholder(new Label("No projects match \"" + tableModel.query().strip() + "\""));
+        } else {
+            projectsTable.setPlaceholder(listPlaceholder);
         }
     }
 
-    private void selectByPath(Path projectPath) {
-        for (ProjectViewModel row : projectsList) {
-            if (projectPath.equals(row.getProjectPath())) {
-                projectsTable.getSelectionModel().select(row);
-                projectsTable.scrollTo(row);
-                return;
-            }
+    /** Selects the row with this id when the search shows it; a hidden row is never selected (VK-1694). */
+    private void selectById(UUID id) {
+        rowById(id).filter(tableModel::isVisible).ifPresent(row -> projectsTable.getSelectionModel().select(row));
+    }
+
+    /**
+     * Selects the row with this id and scrolls to it. A project that was just added, created, relinked or put back must
+     * be seen, so the search is cleared first when it hides the row (VK-1694).
+     */
+    private void revealById(UUID id) {
+        rowById(id).ifPresent(this::reveal);
+    }
+
+    private void revealByPath(Path projectPath) {
+        projectsList.stream()
+                .filter(row -> projectPath.equals(row.getProjectPath()))
+                .findFirst()
+                .ifPresent(this::reveal);
+    }
+
+    private void reveal(ProjectViewModel row) {
+        if (!tableModel.isVisible(row)) {
+            searchField.clear();
         }
+        projectsTable.getSelectionModel().select(row);
+        projectsTable.scrollTo(row);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
     // Actions
     // ---------------------------------------------------------------------------------------------------------------
+
+    /** Pins the selected project to the top of the list, or unpins it (VK-1694). */
+    private void togglePinOfSelected() {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (selected == null || readOnly.get()) {
+            return;
+        }
+        UUID id = selected.getId();
+        boolean pin = !selected.isPinned();
+        runInBackground(() -> hub.setPinned(id, pin), view -> {
+            applySavedView(view);
+            // The row moved to its new place in the list; keep it in view.
+            rowById(id).filter(tableModel::isVisible).ifPresent(projectsTable::scrollTo);
+        }, this::showSaveError);
+    }
 
     /**
      * Removes the selected entry from the list (never the project on disk) and offers to undo it (VK-1686). Only the
@@ -916,8 +1226,7 @@ public class MainController implements Initializable {
         runInBackground(() -> hub.restoreProject(removal), view -> {
             applySavedView(view);
             if (view.find(id).isPresent()) {
-                selectById(id);
-                projectsTable.scrollTo(projectsTable.getSelectionModel().getSelectedItem());
+                revealById(id);
             } else {
                 banners.show(BANNER_REMOVED, BannerBar.Kind.INFO, "\"" + name + "\" is already in the list again,"
                         + " so it was not put back a second time.", true);
@@ -1066,11 +1375,11 @@ public class MainController implements Initializable {
             case RELINKED -> {
                 // A new path makes a new row, which starts as Checking and is checked.
                 banners.hide(BANNER_LOCATE);
-                selectById(id);
+                revealById(id);
             }
             case UNCHANGED -> {
                 banners.hide(BANNER_LOCATE);
-                selectById(id);
+                revealById(id);
                 rowById(id).ifPresent(this::check);
             }
             case GONE -> banners.show(BANNER_LOCATE, BannerBar.Kind.WARNING,
@@ -1087,12 +1396,7 @@ public class MainController implements Initializable {
 
     /** Asks an OK/Cancel question; {@code true} for OK. */
     private boolean confirm(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.initOwner(window());
-        return alert.showAndWait().filter(ButtonType.OK::equals).isPresent();
+        return DialogFactory.confirm(window(), title, message);
     }
 
     private void openSelectedProject() {
@@ -1160,7 +1464,9 @@ public class MainController implements Initializable {
                             + mcp.port() + ", so the MCP server of \"" + name + "\" cannot start. Give one of them"
                             + " another port (right-click the project, then MCP…).", true));
         }
-        LaunchRequest request = new LaunchRequest(engine, projectFile, name, mcp, hub.settings().showEditorConsole());
+        LauncherSettings settings = hub.settings();
+        LaunchRequest request = new LaunchRequest(engine, projectFile, name, mcp, settings.showEditorConsole(),
+                settings.logRetention());
         hub.launch(request).whenComplete((result, error) -> Platform.runLater(() -> {
             launching.set(false);
             if (error != null || result == null) {
@@ -1456,14 +1762,45 @@ public class MainController implements Initializable {
         if (launching.get() || choosingEngine.get()) {
             return;
         }
-        LauncherSettings current = hub.settings();
-        Optional<SettingsDialog.Result> chosen = SettingsDialog.show(window(), current, hub.canSaveSettings(),
-                hub.sessionLogsDirectory());
-        chosen.ifPresent(result -> runInBackground(
-                () -> hub.saveSettings(result.afterLaunch(), result.showEditorConsole()),
-                saved -> banners.hide(BANNER_SETTINGS),
-                error -> banners.show(BANNER_SETTINGS, BannerBar.Kind.ERROR,
-                        "Could not save the settings: " + describe(error), true)));
+        int pinned = (int) projectsList.stream().filter(row -> row.getEntry().pinned()).count();
+        SettingsForm form = new SettingsForm(hub.settings(), hub.canSaveSettings(), readOnly.get(),
+                projectsList.size(), pinned, engineOptions);
+        SettingsDialog.show(window(), form, hub.sessionLogsDirectory(), this::openLogsFolder)
+                .ifPresent(this::applySettings);
+    }
+
+    /**
+     * Saves what the Settings dialog chose (VK-1694): the settings file first; once it is saved, the list is trimmed to a
+     * lowered cap and the default engine is written to the engines file. A failed save changes nothing.
+     */
+    private void applySettings(SettingsForm.Result result) {
+        runInBackground(() -> hub.saveSettings(result.settings()), saved -> {
+            banners.hide(BANNER_SETTINGS);
+            if (result.projectsToRemove() > 0 && !readOnly.get()) {
+                runInBackground(hub::trimProjects, this::applySavedView, this::showSaveError);
+            }
+            // Its failure shows the engines' own banner.
+            result.defaultEngine().ifPresent(change -> engineServices.setDefault(change.engineId().orElse(null)));
+        }, error -> banners.show(BANNER_SETTINGS, BannerBar.Kind.ERROR,
+                "Could not save the settings, so nothing was changed: " + describe(error), true));
+    }
+
+    /** Opens the per-launch logs folder in Explorer, creating it first; off the FX thread, a failure is a banner. */
+    private void openLogsFolder() {
+        Path folder = hub.sessionLogsDirectory();
+        CompletableFuture.runAsync(() -> {
+            try {
+                Files.createDirectories(folder);
+                hub.shell().open(folder);
+            } catch (IOException e) {
+                throw new CompletionException(e);
+            }
+        }).whenComplete((ignored, error) -> {
+            if (error != null) {
+                runLaterQuietly(() -> banners.show(BANNER_SETTINGS, BannerBar.Kind.ERROR,
+                        "Could not open the logs folder " + folder + ": " + describe(error), true));
+            }
+        });
     }
 
     @FXML
@@ -1544,8 +1881,7 @@ public class MainController implements Initializable {
         @Override
         public void added(AddedProject added) {
             applySavedView(added.view());
-            selectById(added.entry().id());
-            projectsTable.scrollTo(projectsTable.getSelectionModel().getSelectedItem());
+            revealById(added.entry().id());
         }
 
         @Override
@@ -1653,7 +1989,7 @@ public class MainController implements Initializable {
         @Override
         public void listed(AddedProject added) {
             applySavedView(added.view());
-            selectById(added.entry().id());
+            revealById(added.entry().id());
         }
 
         @Override
@@ -1844,7 +2180,8 @@ public class MainController implements Initializable {
         // The dialog checks, creates and shows progress itself (VK-1679); it ends with the creation to follow up on.
         // It reads the engines and their templates itself too (VK-1689).
         List<CreationJob> started = new ArrayList<>();
-        Optional<CreateProjectForm.Result> result = CreateProjectDialog.show(owner, createServices(started));
+        Optional<CreateProjectForm.Result> result = CreateProjectDialog.show(owner, createServices(started),
+                hub.settings().defaultProjectLocation());
         if (result.isPresent()) {
             followCreation(result.get());
         } else if (!started.isEmpty()) {
@@ -1957,7 +2294,7 @@ public class MainController implements Initializable {
         }
 
         applySavedView(outcome.view());
-        selectByPath(outcome.projectPath());
+        revealByPath(outcome.projectPath());
     }
 
     /** A change was saved: clear an old save error and show the list as written. */
@@ -1977,12 +2314,7 @@ public class MainController implements Initializable {
     }
 
     private void showErrorDialog(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.initOwner(projectsTable.getScene().getWindow());
-        alert.showAndWait();
+        DialogFactory.error(window(), title, message);
     }
 
     @FXML
@@ -2001,6 +2333,15 @@ public class MainController implements Initializable {
             return;
         }
         EnginesDialog.show(window(), engineOptions, engineServices);
+    }
+
+    /** "Add Engine…" of the empty screen and of the no-engine banner: the Engines dialog, adding at once (VK-1694). */
+    @FXML
+    private void onAddEngine() {
+        if (launching.get() || choosingEngine.get()) {
+            return;
+        }
+        EnginesDialog.showAdding(window(), engineOptions, engineServices);
     }
 
     /** Binds the selected project to another engine, or back to the default one. */
@@ -2036,8 +2377,13 @@ public class MainController implements Initializable {
     private void reloadEngines() {
         withEngines(options -> {
             // Shown by withEngines.
-        }, error -> banners.show(BANNER_ENGINES_CHECK, BannerBar.Kind.ERROR,
-                "The engines could not be checked: " + describe(error) + ". Press Refresh to try again.", true));
+        }, error -> {
+            banners.show(BANNER_ENGINES_CHECK, BannerBar.Kind.ERROR,
+                    "The engines could not be checked: " + describe(error) + ". Press Refresh to try again.", true);
+            // The empty screen no longer waits for an answer; it says nothing about the engines.
+            enginesChecked = true;
+            updateEmptyState();
+        });
     }
 
     /**
@@ -2076,11 +2422,16 @@ public class MainController implements Initializable {
         engineOptions = options;
         banners.hide(BANNER_ENGINES_CHECK);
         showOverrideBanner(options);
-        for (ProjectViewModel row : projectsList) {
-            applyEngineLabel(row);
-            // Whether its schema needs a newer engine depends on the engines (VK-1686).
-            applyHealth(row);
-        }
+        enginesChecked = true;
+        // One sort for all the rows, not one per changed row (VK-1694).
+        tableModel.batch(() -> {
+            for (ProjectViewModel row : projectsList) {
+                applyEngineLabel(row);
+                // Whether its schema needs a newer engine depends on the engines (VK-1686).
+                applyHealth(row);
+            }
+        });
+        updateEmptyState();
     }
 
     private void applyEngineLabel(ProjectViewModel row) {

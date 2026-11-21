@@ -3,7 +3,6 @@ package com.vertexforge.launcher.dialog;
 import com.vertexforge.launcher.service.JobMonitor;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
-import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.DialogPane;
@@ -32,7 +31,8 @@ public final class FileJobDialog {
     private record Progress(JobMonitor.Phase phase, long done, long total) {
     }
 
-    private final Stage stage = new Stage();
+    /** Built by {@link #build}, before anything else uses it. */
+    private Stage stage;
     private final ProgressBar bar = new ProgressBar(ProgressBar.INDETERMINATE_PROGRESS);
     private final Label status = new Label("Starting…");
     private final AtomicReference<Progress> pending = new AtomicReference<>();
@@ -74,8 +74,7 @@ public final class FileJobDialog {
     }
 
     private void build(Window owner, String title, String header) {
-        DialogPane pane = new DialogPane();
-        DialogStyle.apply(pane);
+        DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("file-job-dialog");
         pane.setHeaderText(header);
         pane.getButtonTypes().add(ButtonType.CANCEL);
@@ -90,13 +89,8 @@ public final class FileJobDialog {
         cancelButton = (Button) pane.lookupButton(ButtonType.CANCEL);
         cancelButton.setOnAction(event -> requestCancel());
 
-        stage.setTitle(title);
-        if (owner != null) {
-            stage.initOwner(owner);
-        }
-        stage.initModality(Modality.WINDOW_MODAL);
+        stage = DialogFactory.stage(owner, Modality.WINDOW_MODAL, title, pane);
         stage.setResizable(false);
-        stage.setScene(new Scene(pane));
         stage.setOnCloseRequest(event -> {
             event.consume();
             requestCancel();
