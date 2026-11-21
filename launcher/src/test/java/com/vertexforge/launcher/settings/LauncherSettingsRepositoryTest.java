@@ -1,7 +1,10 @@
 package com.vertexforge.launcher.settings;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.vertexforge.launcher.TestSupport;
 import com.vertexforge.launcher.TestSupport.CapturedLog;
+import com.vertexforge.launcher.session.SessionLogs;
 import com.vertexforge.launcher.store.StoreWriteException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +15,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -142,34 +146,141 @@ class LauncherSettingsRepositoryTest {
     }
 
     @Test
-    void saveWritesOnlyItsMembersAndKeepsTheOthers() throws Exception {
+    void saveWritesEveryMemberItOwnsAndKeepsTheOthers() throws Exception {
         write("{\"version\": 1, \"recentProjectsLimit\": 20, \"theme\": \"dark\"}");
+        Path location = tempDir.resolve("Projects").toAbsolutePath();
+        LauncherSettings wanted = new LauncherSettings(30, LauncherSettings.AfterLaunch.STAY, false,
+                Optional.of(location), 7);
 
-        LauncherSettings saved = repository().save(LauncherSettings.AfterLaunch.STAY, false);
+        LauncherSettings saved = repository().save(wanted);
 
-        assertEquals(new LauncherSettings(20, LauncherSettings.AfterLaunch.STAY, false), saved);
+        assertEquals(wanted, saved);
         assertEquals(saved, load());
-        String text = Files.readString(file);
-        assertTrue(text.contains("\"theme\": \"dark\""), text);
-        assertTrue(text.contains("\"afterLaunch\": \"stay\""), text);
-        assertTrue(text.contains("\"showEditorConsole\": false"), text);
+        JsonObject root = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        assertEquals("dark", root.get("theme").getAsString());
+        assertEquals(1, root.get("version").getAsInt());
+        assertEquals(30, root.get("recentProjectsLimit").getAsInt());
+        assertEquals("stay", root.get("afterLaunch").getAsString());
+        assertFalse(root.get("showEditorConsole").getAsBoolean());
+        assertEquals(location.toString(), root.get("defaultProjectLocation").getAsString());
+        assertEquals(7, root.get("logRetention").getAsInt());
     }
 
     @Test
     void saveCreatesTheFile() throws Exception {
-        repository().save(LauncherSettings.AfterLaunch.CLOSE, true);
+        repository().save(new LauncherSettings(LauncherSettings.DEFAULT_RECENT_PROJECTS_LIMIT,
+                LauncherSettings.AfterLaunch.CLOSE, true));
 
         assertEquals(new LauncherSettings(LauncherSettings.DEFAULT_RECENT_PROJECTS_LIMIT,
                 LauncherSettings.AfterLaunch.CLOSE, true), load());
     }
 
     @Test
+    void anUnsetLocationRemovesItsMember() throws Exception {
+        write("{\"version\": 1, \"defaultProjectLocation\": \"" + jsonText(tempDir.toAbsolutePath()) + "\"}");
+        assertTrue(load().defaultProjectLocation().isPresent());
+
+        repository().save(LauncherSettings.DEFAULTS);
+
+        assertFalse(Files.readString(file).contains("defaultProjectLocation"));
+        assertEquals(Optional.empty(), load().defaultProjectLocation());
+    }
+
+    @Test
     void aNewerFileIsNeverOverwritten() throws IOException {
         write("{\"version\": 9, \"afterLaunch\": \"stay\"}");
         byte[] before = Files.readAllBytes(file);
+        LauncherSettingsRepository repository = repository();
+        assertFalse(repository.newerFile(), "nothing read yet");
 
         assertThrows(StoreWriteException.class,
-                () -> repository().save(LauncherSettings.AfterLaunch.CLOSE, true));
+                () -> repository.save(new LauncherSettings(10, LauncherSettings.AfterLaunch.CLOSE, true)));
         assertArrayEquals(before, Files.readAllBytes(file));
+        assertTrue(repository.newerFile(), "the refused save says why");
+    }
+
+    /** VK-1694: the Settings dialog knows without reading the file again that it cannot save. */
+    @Test
+    void aNewerFileIsReportedByItsReadAndClearedByASave() throws Exception {
+        write("{\"version\": 9}");
+        LauncherSettingsRepository repository = repository();
+
+        repository.load();
+        assertTrue(repository.newerFile());
+
+        write("{\"version\": 1}");
+        repository.save(LauncherSettings.DEFAULTS);
+        assertFalse(repository.newerFile());
+    }
+
+    // --- VK-1694: default project location and log retention ---------------------------------------------------------
+
+    private static String jsonText(Path path) {
+        return path.toString().replace("\\", "\\\\");
+    }
+
+    @Test
+    void theNewMembersHaveTheirDefaultsWhenAbsent() throws IOException {
+        write("{\"version\": 1}");
+
+        LauncherSettings settings = load();
+
+        assertEquals(Optional.empty(), settings.defaultProjectLocation());
+        assertEquals(LauncherSettings.DEFAULT_LOG_RETENTION, settings.logRetention());
+        assertEquals("", log.console());
+    }
+
+    @Test
+    void anAbsoluteLocationAndARetentionAreRead() throws IOException {
+        Path location = tempDir.resolve("Projects").toAbsolutePath();
+        write("{\"version\": 1, \"defaultProjectLocation\": \"" + jsonText(location) + "\", \"logRetention\": 5}");
+
+        assertEquals(Optional.of(location), load().defaultProjectLocation());
+        assertEquals(5, load().logRetention());
+    }
+
+    @Test
+    void aBlankLocationMeansNoneWithoutAWarning() throws IOException {
+        write("{\"version\": 1, \"defaultProjectLocation\": \"  \"}");
+
+        assertEquals(Optional.empty(), load().defaultProjectLocation());
+        assertEquals("", log.console());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\"relative\\\\folder\"", "\"C:no-separator\"", "\"\\\\no-drive\"", "12", "true",
+            "\"bad\\u0000name\""})
+    void aLocationThatIsNotAnAbsolutePathIsIgnoredWithAWarning(String value) throws IOException {
+        write("{\"version\": 1, \"defaultProjectLocation\": " + value + "}");
+
+        assertEquals(Optional.empty(), load().defaultProjectLocation());
+        assertTrue(log.console().contains("defaultProjectLocation"), log.console());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "201", "-1", "2.5", "\"10\"", "false"})
+    void anInvalidRetentionFallsBackToTheDefaultWithAWarning(String value) throws IOException {
+        write("{\"version\": 1, \"logRetention\": " + value + "}");
+
+        assertEquals(LauncherSettings.DEFAULT_LOG_RETENTION, load().logRetention());
+        assertTrue(log.console().contains("logRetention"), log.console());
+    }
+
+    @Test
+    void theRetentionMustBeInRangeAndTheLocationAbsolute() {
+        assertThrows(IllegalArgumentException.class, () -> new LauncherSettings(10,
+                LauncherSettings.AfterLaunch.STAY, true, Optional.empty(), 0));
+        assertThrows(IllegalArgumentException.class, () -> new LauncherSettings(10,
+                LauncherSettings.AfterLaunch.STAY, true, Optional.empty(), 201));
+        assertThrows(IllegalArgumentException.class, () -> new LauncherSettings(10,
+                LauncherSettings.AfterLaunch.STAY, true, Optional.of(Path.of("relative")), 20));
+        assertEquals(200, new LauncherSettings(10, LauncherSettings.AfterLaunch.STAY, true, Optional.empty(), 200)
+                .logRetention());
+    }
+
+    /** The default keeps as many logs as the launcher kept before the setting existed. */
+    @Test
+    void theDefaultRetentionIsTheOldFixedNumber() {
+        assertEquals(SessionLogs.KEEP, LauncherSettings.DEFAULT_LOG_RETENTION);
     }
 }

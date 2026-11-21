@@ -27,12 +27,13 @@ import java.util.function.Consumer;
  * (so the log is complete even when the launcher exits first), and {@code <same name>.status.json}, the editor's
  * {@code --launch-status} file. The launcher writes a header before the start and a footer after the exit.
  * <p>
- * Only the newest {@link #KEEP} logs are kept. A running editor's log cannot be deleted (its handle does not share
- * delete access), so pruning never touches a live session.
+ * Only the newest logs are kept: as many as the Settings dialog says (VK-1694), {@link #KEEP} by default. A running
+ * editor's log cannot be deleted (its handle does not share delete access), so pruning never touches a live session.
  */
 public final class SessionLogs {
 
     public static final String DIRECTORY_NAME = "logs";
+    /** How many logs are kept unless the settings say otherwise ({@code LauncherSettings.DEFAULT_LOG_RETENTION}). */
     public static final int KEEP = 20;
     public static final String LOG_SUFFIX = ".log";
     public static final String STATUS_SUFFIX = ".status.json";

@@ -1,23 +1,26 @@
 package com.vertexforge.launcher.util;
 
 import javafx.application.Platform;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.TextArea;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.Objects;
 import java.util.function.Supplier;
 
 
 public final class GlobalExceptionHandler {
 
+    /** Shows an error to the user (the launcher's themed error dialog, VK-1694). FX thread. */
+    @FunctionalInterface
+    public interface ErrorPresenter {
+        /**
+         * @param owner the window to show it over, or {@code null} for none
+         */
+        void show(Window owner, String title, String header, Throwable throwable);
+    }
+
     private static volatile LauncherLog log;
+    private static volatile ErrorPresenter presenter;
 
     private GlobalExceptionHandler() {
         // Utility class - prevent instantiation
@@ -25,11 +28,12 @@ public final class GlobalExceptionHandler {
 
 
     /**
-     * Logs every uncaught exception to {@code launcherLog} and shows it in a dialog owned by the main window
-     * ({@code mainWindow} returns {@code null} until the window exists).
+     * Logs every uncaught exception to {@code launcherLog} and shows it with {@code errorPresenter}, over the main
+     * window ({@code mainWindow} returns {@code null} until the window exists).
      */
-    public static void install(LauncherLog launcherLog, Supplier<Window> mainWindow) {
+    public static void install(LauncherLog launcherLog, Supplier<Window> mainWindow, ErrorPresenter errorPresenter) {
         log = Objects.requireNonNull(launcherLog, "launcherLog");
+        presenter = Objects.requireNonNull(errorPresenter, "errorPresenter");
         Objects.requireNonNull(mainWindow, "mainWindow");
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logException(throwable);
@@ -59,49 +63,14 @@ public final class GlobalExceptionHandler {
     /**
      * Shows {@code throwable} in an error dialog. {@code owner} is the main window, or {@code null} before it
      * exists; a hidden or minimized owner is skipped, since a dialog owned by a minimized window can stay out of
-     * sight (the launcher minimizes itself after opening the editor).
+     * sight (the launcher minimizes itself after opening the editor). Before {@link #install} nothing is shown: the
+     * error has been logged, and there is no dialog to show it with yet.
      */
     public static void showErrorDialog(Window owner, String title, String header, Throwable throwable) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        if (isUsableOwner(owner)) {
-            alert.initOwner(owner);
+        ErrorPresenter current = presenter;
+        if (current != null) {
+            current.show(isUsableOwner(owner) ? owner : null, title, header, throwable);
         }
-        alert.setTitle(title);
-        alert.setHeaderText(header);
-        alert.setContentText(throwable.getMessage());
-
-        // Create expandable content with stack trace
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        String stackTrace = sw.toString();
-
-        TextArea textArea = new TextArea(stackTrace);
-        textArea.setEditable(false);
-        textArea.setWrapText(false);
-        textArea.setMaxWidth(Double.MAX_VALUE);
-        textArea.setMaxHeight(Double.MAX_VALUE);
-        GridPane.setVgrow(textArea, Priority.ALWAYS);
-        GridPane.setHgrow(textArea, Priority.ALWAYS);
-
-        GridPane expContent = new GridPane();
-        expContent.setMaxWidth(Double.MAX_VALUE);
-        expContent.add(textArea, 0, 0);
-
-        alert.getDialogPane().setExpandableContent(expContent);
-
-        // Add copy to clipboard button
-        ButtonType copyButton = new ButtonType("Copy to Clipboard");
-        alert.getButtonTypes().add(copyButton);
-
-        alert.showAndWait().ifPresent(response -> {
-            if (response == copyButton) {
-                javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
-                javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                content.putString(stackTrace);
-                clipboard.setContent(content);
-            }
-        });
     }
 
     private static boolean isUsableOwner(Window owner) {

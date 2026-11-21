@@ -119,7 +119,7 @@ public class EditorLauncher implements AutoCloseable {
             return new StartResult.Failed("Could not create the launch log in " + logs.directory() + ": "
                     + e.getMessage());
         }
-        logs.prune(SessionLogs.KEEP);
+        logs.prune(request.logRetention());
 
         Path status = files.status();
         boolean unicodeArguments = manifest != null && manifest.acceptsUnicodeArguments();

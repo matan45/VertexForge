@@ -1,8 +1,12 @@
 /*
  * VertexForge Launcher - Dark Theme Stylesheet
  *
- * Base styling for the launcher application.
- * Full theming will be implemented in VK-157 (Launcher UI Layout & Styling).
+ * The main window's scene and every launcher dialog's pane (DialogFactory, VK-1694) get this file.
+ *
+ * Palette (VK-1694 style pass): window #1e1e1e, panels #252526, controls #3c3c3c, lines #333333 / #3f3f46,
+ * text #cccccc (muted #9d9d9d), accent #4a9eff, selection #264f78, warning #d7ba7d, error #e06c6c.
+ * A button's focus ring is drawn with layered backgrounds, never a border, so that it never moves the button, and only
+ * for keyboard focus (:focus-visible): a click focuses a button too, and must not leave a ring behind.
  */
 
 /* ============================================
@@ -29,6 +33,8 @@
    ============================================ */
 .sidebar {
     -fx-background-color: #252526;
+    -fx-border-color: transparent #333333 transparent transparent;
+    -fx-border-width: 0 1 0 0;
     -fx-min-width: 200px;
     -fx-pref-width: 200px;
 }
@@ -44,7 +50,8 @@
     -fx-text-fill: #cccccc;
     -fx-padding: 10 15;
     -fx-cursor: hand;
-    -fx-background-radius: 4;
+    -fx-background-radius: 6;
+    -fx-alignment: CENTER_LEFT;
 }
 
 .sidebar-button:hover {
@@ -55,19 +62,45 @@
     -fx-background-color: #555555;
 }
 
+.sidebar-button:focus-visible {
+    -fx-background-color: #4a9eff, #3c3c3c;
+    -fx-background-insets: 0, 1;
+}
+
+.sidebar-button:focus-visible:hover {
+    -fx-background-color: #4a9eff, #4a4a4a;
+}
+
+.sidebar-button:focus-visible:pressed {
+    -fx-background-color: #4a9eff, #555555;
+}
+
+.sidebar-button:disabled {
+    -fx-opacity: 0.45;
+}
+
 /* "Add Existing…" (VK-1685): a split button that looks like the other sidebar buttons */
 .sidebar-split {
     -fx-background-color: #3c3c3c;
     -fx-background-insets: 0;
-    -fx-background-radius: 4;
+    -fx-background-radius: 6;
     -fx-padding: 0;
     -fx-cursor: hand;
+}
+
+.sidebar-split:focus-visible {
+    -fx-background-color: #4a9eff, #3c3c3c;
+    -fx-background-insets: 0, 1;
+}
+
+.sidebar-split:disabled {
+    -fx-opacity: 0.45;
 }
 
 .sidebar-split > .label {
     -fx-background-color: transparent;
     -fx-background-insets: 0;
-    -fx-background-radius: 4 0 0 4;
+    -fx-background-radius: 6 0 0 6;
     -fx-text-fill: #cccccc;
     -fx-padding: 10 15;
 }
@@ -75,7 +108,7 @@
 .sidebar-split > .arrow-button {
     -fx-background-color: transparent;
     -fx-background-insets: 0;
-    -fx-background-radius: 0 4 4 0;
+    -fx-background-radius: 0 6 6 0;
     -fx-border-color: transparent transparent transparent #2b2b2b;
     -fx-border-width: 0 0 0 1;
     -fx-padding: 10 10;
@@ -108,32 +141,79 @@
     -fx-border-color: #4a9eff;
     -fx-border-style: dashed;
     -fx-border-width: 2;
-    -fx-border-radius: 6;
+    -fx-border-radius: 8;
 }
 
 .section-title {
-    -fx-font-size: 24px;
+    -fx-font-size: 22px;
     -fx-font-weight: bold;
     -fx-text-fill: #ffffff;
 }
 
 .placeholder-text {
     -fx-font-size: 14px;
-    -fx-text-fill: #888888;
+    -fx-text-fill: #9d9d9d;
 }
 
 .hint-text {
-    -fx-font-size: 12px;
-    -fx-text-fill: #666666;
+    -fx-font-size: 13px;
+    -fx-text-fill: #9d9d9d;
+}
+
+/* The list's search box (VK-1694) */
+.search-field {
+    -fx-background-color: #2b2b2b;
+    -fx-text-fill: #e0e0e0;
+    -fx-prompt-text-fill: #7a7a7a;
+    -fx-highlight-fill: #264f78;
+    -fx-highlight-text-fill: #ffffff;
+    -fx-background-radius: 6;
+    -fx-border-color: #3f3f46;
+    -fx-border-radius: 6;
+    -fx-padding: 7 10;
+}
+
+.search-field:hover {
+    -fx-border-color: #55555c;
+}
+
+.search-field:focused {
+    -fx-border-color: #4a9eff;
+}
+
+/* The empty screen: what to do first (VK-1694) */
+.empty-state {
+    -fx-padding: 20;
+}
+
+.empty-card {
+    -fx-background-color: #252526;
+    -fx-background-radius: 10;
+    -fx-border-color: #333333;
+    -fx-border-radius: 10;
+    -fx-padding: 24 32;
+    -fx-max-width: 540;
+}
+
+.empty-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
 }
 
 /* ============================================
-   Bottom Bar
+   Buttons and Bottom Bar
    ============================================ */
 .bottom-bar {
     -fx-background-color: #252526;
-    -fx-border-color: #3c3c3c transparent transparent transparent;
+    -fx-border-color: #333333 transparent transparent transparent;
     -fx-border-width: 1 0 0 0;
+}
+
+/* The shortcuts, shown where Open Project is (VK-1694) */
+.shortcut-hint {
+    -fx-font-size: 12px;
+    -fx-text-fill: #8a8a8a;
 }
 
 .primary-button {
@@ -142,7 +222,7 @@
     -fx-font-weight: bold;
     -fx-padding: 10 25;
     -fx-cursor: hand;
-    -fx-background-radius: 4;
+    -fx-background-radius: 6;
 }
 
 .primary-button:hover {
@@ -153,14 +233,61 @@
     -fx-background-color: #3a8eef;
 }
 
+.primary-button:focus-visible {
+    -fx-background-color: #b8d9ff, #4a9eff;
+    -fx-background-insets: 0, 2;
+}
+
+.primary-button:focus-visible:hover {
+    -fx-background-color: #b8d9ff, #5aafff;
+}
+
+.primary-button:focus-visible:pressed {
+    -fx-background-color: #b8d9ff, #3a8eef;
+}
+
 .primary-button:disabled {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #666666;
     -fx-opacity: 0.7;
 }
 
+/* A button beside a primary one (the empty screen's Add Existing…, VK-1694) */
+.secondary-button {
+    -fx-background-color: #45454a, #333337;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6;
+    -fx-text-fill: #dddddd;
+    -fx-padding: 10 25;
+    -fx-cursor: hand;
+}
+
+.secondary-button:hover {
+    -fx-background-color: #55555c, #3e3e42;
+}
+
+.secondary-button:pressed {
+    -fx-background-color: #55555c, #4a4a4a;
+}
+
+.secondary-button:focus-visible {
+    -fx-background-color: #4a9eff, #333337;
+}
+
+.secondary-button:focus-visible:hover {
+    -fx-background-color: #4a9eff, #3e3e42;
+}
+
+.secondary-button:focus-visible:pressed {
+    -fx-background-color: #4a9eff, #4a4a4a;
+}
+
+.secondary-button:disabled {
+    -fx-opacity: 0.45;
+}
+
 /* ============================================
-   Scrollbars (for future lists)
+   Scrollbars
    ============================================ */
 .scroll-bar {
     -fx-background-color: transparent;
@@ -188,21 +315,66 @@
 }
 
 /* ============================================
-   Alert Dialogs (for error handling)
+   Popups: context menus, tooltips and combo box lists. A popup is a window of its own that takes its owner
+   scene's stylesheets: the main window's, or a dialog's (DialogFactory gives a dialog's scene this file, VK-1694).
    ============================================ */
-.alert .dialog-pane {
-    -fx-background-color: #2b2b2b;
+.context-menu {
+    -fx-background-color: #2d2d30;
+    -fx-background-radius: 6;
+    -fx-border-color: #3f3f46;
+    -fx-border-radius: 6;
+    -fx-padding: 4;
 }
 
-.alert .dialog-pane .content {
-    -fx-text-fill: #cccccc;
+.context-menu .menu-item {
+    -fx-background-radius: 4;
+    -fx-padding: 6 14;
 }
 
-.alert .dialog-pane .header-panel {
-    -fx-background-color: #333333;
+.context-menu .menu-item .label {
+    -fx-text-fill: #dddddd;
 }
 
-.alert .dialog-pane .header-panel .label {
+.context-menu .menu-item:focused {
+    -fx-background-color: #264f78;
+}
+
+.context-menu .menu-item:focused .label {
+    -fx-text-fill: #ffffff;
+}
+
+.context-menu .separator .line {
+    -fx-border-color: #3f3f46 transparent transparent transparent;
+}
+
+.tooltip {
+    -fx-background-color: #2d2d30;
+    -fx-background-radius: 4;
+    -fx-border-color: #3f3f46;
+    -fx-border-radius: 4;
+    -fx-text-fill: #dddddd;
+    -fx-font-size: 12px;
+    -fx-padding: 6 8;
+}
+
+.combo-box-popup > .list-view {
+    -fx-background-color: #3f3f46, #2d2d30;
+    -fx-background-insets: 0, 1;
+    -fx-padding: 2;
+}
+
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-background-color: #2d2d30;
+    -fx-text-fill: #dddddd;
+    -fx-padding: 6 10;
+}
+
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:hover {
+    -fx-background-color: #3e3e42;
+}
+
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected {
+    -fx-background-color: #264f78;
     -fx-text-fill: #ffffff;
 }
 
@@ -211,24 +383,31 @@
    ============================================ */
 .projects-table {
     -fx-background-color: #1e1e1e;
-    -fx-border-color: #3c3c3c;
+    -fx-border-color: #333333;
     -fx-border-width: 1;
-    -fx-border-radius: 4;
-    -fx-background-radius: 4;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
 }
 
 .projects-table .column-header-background {
-    -fx-background-color: #2b2b2b;
+    -fx-background-color: #252526;
+    -fx-border-color: transparent transparent #3c3c3c transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-background-radius: 6 6 0 0;
 }
 
 .projects-table .column-header {
-    -fx-background-color: #2b2b2b;
-    -fx-border-color: transparent #3c3c3c transparent transparent;
+    -fx-background-color: #252526;
+    -fx-border-color: transparent #333333 transparent transparent;
     -fx-border-width: 0 1 0 0;
 }
 
+.projects-table .column-header:hover {
+    -fx-background-color: #2d2d30;
+}
+
 .projects-table .column-header .label {
-    -fx-text-fill: #cccccc;
+    -fx-text-fill: #a0a0a0;
     -fx-font-weight: bold;
     -fx-padding: 8 10;
 }
@@ -240,7 +419,7 @@
 }
 
 .projects-table .table-row-cell:odd {
-    -fx-background-color: #242424;
+    -fx-background-color: #222222;
 }
 
 .projects-table .table-row-cell:selected {
@@ -263,6 +442,16 @@
     -fx-text-fill: #cccccc;
     -fx-padding: 8 10;
     -fx-alignment: CENTER-LEFT;
+    -fx-graphic-text-gap: 7;
+}
+
+/* A pinned project's name has a pin before it (VK-1694) */
+.projects-table .pin-glyph {
+    -fx-fill: #4a9eff;
+}
+
+.projects-table .table-row-cell:selected .pin-glyph {
+    -fx-fill: #ffffff;
 }
 
 /* Project status rows (VK-1678): pseudo-classes set from each row's status */
@@ -279,7 +468,7 @@
 }
 
 .projects-table .table-row-cell:missing .table-cell {
-    -fx-text-fill: #cc6666;
+    -fx-text-fill: #e06c6c;
 }
 
 .projects-table .table-row-cell:missing:selected .table-cell {
@@ -320,7 +509,7 @@
 }
 
 .projects-table .table-row-cell:invalid .table-cell {
-    -fx-text-fill: #cc6666;
+    -fx-text-fill: #e06c6c;
 }
 
 .projects-table .table-row-cell:invalid:selected .table-cell {
@@ -337,7 +526,7 @@
 }
 
 .projects-table .table-row-cell:checking .table-cell {
-    -fx-text-fill: #888888;
+    -fx-text-fill: #8a8a8a;
 }
 
 .projects-table .table-row-cell:checking:selected .table-cell {
@@ -353,13 +542,13 @@
     -fx-text-fill: #cfe9ff;
 }
 
-/* TableView Empty State */
+/* TableView Empty State, and "No projects match …" (VK-1694) */
 .projects-table .placeholder {
     -fx-background-color: transparent;
 }
 
 .projects-table .placeholder .label {
-    -fx-text-fill: #666666;
+    -fx-text-fill: #8a8a8a;
     -fx-font-size: 14px;
 }
 
@@ -374,8 +563,14 @@
     -fx-background-color: #cccccc;
 }
 
+.projects-table .library-tag {
+    -fx-text-fill: #d7ba7d;
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 0 8;
+}
+
 /* ============================================
-   Launcher dialogs: Create Project (VK-155, VK-1679), Engines and the engine chooser (VK-1681)
+   Launcher dialogs (VK-155, VK-1679, VK-1681, VK-1683, VK-1694)
    Each dialog pane carries both "dialog-pane" and "launcher-dialog", and the stylesheet is added to the pane
    itself (a dialog is a window of its own), so every rule starts at the pane. The palette is set on the pane too:
    it is not under .root here.
@@ -391,8 +586,15 @@
     -fx-min-width: 550px;
 }
 
+/* Message boxes (DialogFactory.alert, VK-1694): Alert puts "alert" on the dialog pane itself. */
+.dialog-pane.launcher-dialog.alert {
+    -fx-min-width: 420px;
+}
+
 .dialog-pane.launcher-dialog .header-panel {
     -fx-background-color: #333333;
+    -fx-border-color: transparent transparent #3f3f46 transparent;
+    -fx-border-width: 0 0 1 0;
 }
 
 .dialog-pane.launcher-dialog .header-panel .label {
@@ -405,12 +607,32 @@
     -fx-font-size: 13px;
 }
 
+/* A section of the Settings dialog (VK-1694) */
+.dialog-pane.launcher-dialog .settings-section {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 12 0 4 0;
+    -fx-border-color: transparent transparent #3f3f46 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.dialog-pane.launcher-dialog .settings-scroll {
+    -fx-background-color: transparent;
+    -fx-background: #2b2b2b;
+    -fx-padding: 0;
+}
+
+.dialog-pane.launcher-dialog .settings-scroll > .viewport {
+    -fx-background-color: #2b2b2b;
+}
+
 .dialog-pane.launcher-dialog .text-field {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #ffffff;
     -fx-border-color: #555555;
-    -fx-border-radius: 3;
-    -fx-background-radius: 3;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
     -fx-padding: 8;
     -fx-prompt-text-fill: #888888;
 }
@@ -423,12 +645,39 @@
     -fx-opacity: 0.6;
 }
 
+.dialog-pane.launcher-dialog .combo-box {
+    -fx-background-color: #3c3c3c;
+    -fx-background-radius: 4;
+    -fx-border-color: #555555;
+    -fx-border-radius: 4;
+}
+
+.dialog-pane.launcher-dialog .combo-box:focused {
+    -fx-border-color: #4a9eff;
+}
+
+.dialog-pane.launcher-dialog .combo-box > .list-cell {
+    -fx-text-fill: #ffffff;
+}
+
+.dialog-pane.launcher-dialog .combo-box > .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.dialog-pane.launcher-dialog .combo-box > .arrow-button > .arrow {
+    -fx-background-color: #cccccc;
+}
+
+.dialog-pane.launcher-dialog .combo-box:disabled {
+    -fx-opacity: 0.55;
+}
+
 .dialog-pane.launcher-dialog .check-box {
     -fx-text-fill: #cccccc;
 }
 
 .dialog-pane.launcher-dialog .validation-error {
-    -fx-text-fill: #cc6666;
+    -fx-text-fill: #e06c6c;
     -fx-font-size: 12px;
 }
 
@@ -459,7 +708,7 @@
     -fx-text-fill: #cccccc;
     -fx-padding: 8 15;
     -fx-cursor: hand;
-    -fx-background-radius: 3;
+    -fx-background-radius: 4;
 }
 
 .dialog-pane.launcher-dialog .browse-button:hover {
@@ -470,16 +719,38 @@
     -fx-background-color: #555555;
 }
 
+.dialog-pane.launcher-dialog .browse-button:focus-visible {
+    -fx-background-color: #4a9eff, #3c3c3c;
+    -fx-background-insets: 0, 1;
+}
+
+.dialog-pane.launcher-dialog .browse-button:focus-visible:hover {
+    -fx-background-color: #4a9eff, #4a4a4a;
+}
+
+.dialog-pane.launcher-dialog .browse-button:focus-visible:pressed {
+    -fx-background-color: #4a9eff, #555555;
+}
+
 /* Dialog buttons */
 .dialog-pane.launcher-dialog .button-bar .button {
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #cccccc;
     -fx-padding: 8 20;
-    -fx-background-radius: 3;
+    -fx-background-radius: 4;
 }
 
 .dialog-pane.launcher-dialog .button-bar .button:hover {
     -fx-background-color: #4a4a4a;
+}
+
+.dialog-pane.launcher-dialog .button-bar .button:focus-visible {
+    -fx-background-color: #4a9eff, #3c3c3c;
+    -fx-background-insets: 0, 1;
+}
+
+.dialog-pane.launcher-dialog .button-bar .button:focus-visible:hover {
+    -fx-background-color: #4a9eff, #4a4a4a;
 }
 
 .dialog-pane.launcher-dialog .button-bar .button:default {
@@ -489,6 +760,15 @@
 
 .dialog-pane.launcher-dialog .button-bar .button:default:hover {
     -fx-background-color: #5aafff;
+}
+
+.dialog-pane.launcher-dialog .button-bar .button:default:focus-visible {
+    -fx-background-color: #b8d9ff, #4a9eff;
+    -fx-background-insets: 0, 2;
+}
+
+.dialog-pane.launcher-dialog .button-bar .button:default:focus-visible:hover {
+    -fx-background-color: #b8d9ff, #5aafff;
 }
 
 .dialog-pane.launcher-dialog .button-bar .button:default:disabled {
@@ -516,11 +796,20 @@
     -fx-background-color: #3c3c3c;
     -fx-text-fill: #cccccc;
     -fx-padding: 6 14;
-    -fx-background-radius: 3;
+    -fx-background-radius: 4;
 }
 
 .dialog-pane.launcher-dialog .engine-actions .button:hover {
     -fx-background-color: #4a4a4a;
+}
+
+.dialog-pane.launcher-dialog .engine-actions .button:focus-visible {
+    -fx-background-color: #4a9eff, #3c3c3c;
+    -fx-background-insets: 0, 1;
+}
+
+.dialog-pane.launcher-dialog .engine-actions .button:focus-visible:hover {
+    -fx-background-color: #4a9eff, #4a4a4a;
 }
 
 .dialog-pane.launcher-dialog .engine-actions .button:disabled {
@@ -551,16 +840,6 @@
     -fx-fill: #cccccc;
 }
 
-.dialog-pane.launcher-dialog .check-box {
-    -fx-text-fill: #cccccc;
-}
-
-.projects-table .library-tag {
-    -fx-text-fill: #d7ba7d;
-    -fx-font-size: 11px;
-    -fx-padding: 0 0 0 8;
-}
-
 .dialog-pane.launcher-dialog .failure-summary {
     -fx-text-fill: #d7ba7d;
     -fx-font-size: 13px;
@@ -576,10 +855,10 @@
 }
 
 /* ============================================
-   Banners (VK-1678)
+   Banners (VK-1678): a strip of the kind's colour at the left edge
    ============================================ */
 .banner {
-    -fx-padding: 8 12;
+    -fx-padding: 8 12 8 16;
     -fx-spacing: 10;
     -fx-alignment: CENTER_LEFT;
     -fx-border-width: 0 0 1 0;
@@ -591,17 +870,20 @@
 }
 
 .banner-info {
-    -fx-background-color: #264f78;
+    -fx-background-color: #4a9eff, #264f78;
+    -fx-background-insets: 0, 0 0 0 4;
     -fx-border-color: transparent transparent #3a6ea5 transparent;
 }
 
 .banner-warning {
-    -fx-background-color: #5a4a1e;
+    -fx-background-color: #d7ba7d, #4f4120;
+    -fx-background-insets: 0, 0 0 0 4;
     -fx-border-color: transparent transparent #8a7230 transparent;
 }
 
 .banner-error {
-    -fx-background-color: #5c3030;
+    -fx-background-color: #e06c6c, #5c3030;
+    -fx-background-insets: 0, 0 0 0 4;
     -fx-border-color: transparent transparent #8a4444 transparent;
 }
 
@@ -622,7 +904,7 @@
     -fx-background-color: rgba(255, 255, 255, 0.12);
     -fx-text-fill: #ffffff;
     -fx-padding: 3 10;
-    -fx-background-radius: 3;
+    -fx-background-radius: 4;
     -fx-cursor: hand;
 }
 

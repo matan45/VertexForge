@@ -47,6 +47,21 @@ class ProjectViewModelTest {
         assertEquals(ProjectViewModel.UNKNOWN_DATE, ProjectViewModel.formatLastOpened(null, ZoneOffset.UTC));
     }
 
+    /** VK-1694: the pin follows the entry, including when a reused row shows its newer version. */
+    @Test
+    void thePinFollowsTheEntry() {
+        RecentEntry game = entry("Game", TestSupport.T0);
+        ProjectViewModel row = new ProjectViewModel(game);
+        assertFalse(row.isPinned());
+
+        row.update(game.withPinned(true));
+        assertTrue(row.pinnedProperty().get());
+
+        row.update(game.withPinned(false));
+        assertFalse(row.isPinned());
+        assertTrue(new ProjectViewModel(game.withPinned(true)).isPinned());
+    }
+
     @Test
     void everyColumnHasAValueForAWrittenEntry() {
         ProjectViewModel row = new ProjectViewModel(entry("Game", TestSupport.T0));

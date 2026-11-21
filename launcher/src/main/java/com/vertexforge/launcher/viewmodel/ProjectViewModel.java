@@ -10,6 +10,8 @@ import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.ObjectBinding;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
@@ -44,6 +46,10 @@ public final class ProjectViewModel {
     private final ReadOnlyStringWrapper pathText;
     private final ReadOnlyObjectWrapper<Instant> lastOpened;
     private final ReadOnlyStringWrapper engineText;
+    /** Whether the entry is pinned to the top of the list (VK-1694). */
+    private final ReadOnlyBooleanWrapper pinned;
+    /** The row's place in the list's own order (most recently opened first), the last tiebreak of every sort. */
+    private int displayIndex;
     private final ObjectProperty<ProjectStatus> status = new SimpleObjectProperty<>(ProjectStatus.CHECKING);
     /** The phase of this launcher's editor on the project (VK-1683); {@code null} when none runs. */
     private final ObjectProperty<EditorSession.Phase> sessionPhase = new SimpleObjectProperty<>(null);
@@ -61,6 +67,7 @@ public final class ProjectViewModel {
         this.name = new ReadOnlyStringWrapper(entry.displayName());
         this.pathText = new ReadOnlyStringWrapper(pathTextOf(entry));
         this.lastOpened = new ReadOnlyObjectWrapper<>(entry.lastOpened());
+        this.pinned = new ReadOnlyBooleanWrapper(entry.pinned());
         // Until the engines have been checked (VK-1681); the window then sets the real text.
         this.engineText = new ReadOnlyStringWrapper(EngineLabels.forProject(entry.engineId(), null));
         // The path cannot change for this row (see matches), so only the status needs observing.
@@ -84,7 +91,7 @@ public final class ProjectViewModel {
         return entry.id().equals(other.id()) && Objects.equals(entry.path(), other.path());
     }
 
-    /** Shows a newer version of the same entry (a new name or time); the status is kept. */
+    /** Shows a newer version of the same entry (a new name, time or pin); the status is kept. */
     public void update(RecentEntry newer) {
         if (!matches(newer)) {
             throw new IllegalArgumentException("Not the same entry: " + newer.id());
@@ -93,6 +100,25 @@ public final class ProjectViewModel {
         name.set(newer.displayName());
         pathText.set(pathTextOf(newer));
         lastOpened.set(newer.lastOpened());
+        pinned.set(newer.pinned());
+    }
+
+    /** Whether the entry is pinned to the top of the list (VK-1694). */
+    public boolean isPinned() {
+        return pinned.get();
+    }
+
+    public ReadOnlyBooleanProperty pinnedProperty() {
+        return pinned.getReadOnlyProperty();
+    }
+
+    /** The row's place in the list's own order (0 = most recently opened), set each time the list is shown. */
+    public int getDisplayIndex() {
+        return displayIndex;
+    }
+
+    public void setDisplayIndex(int index) {
+        displayIndex = index;
     }
 
     public RecentEntry getEntry() {

@@ -131,6 +131,40 @@ class RecentProjectsTest {
         assertEquals(2, projects.trim(1, justAdded.id()).size());
     }
 
+    /** VK-1694: Pin to Top / Unpin. */
+    @Test
+    void setPinnedPinsAndUnpinsOnlyThatEntry() {
+        RecentEntry game = entry("Game", 1);
+        RecentEntry demo = entry("Demo", 2);
+        RecentProjects projects = new RecentProjects(List.of(game, demo));
+
+        RecentProjects pinned = projects.setPinned(game.id(), true);
+
+        assertTrue(pinned.entries().getFirst().pinned());
+        assertFalse(pinned.entries().get(1).pinned());
+        assertFalse(pinned.setPinned(game.id(), false).entries().getFirst().pinned());
+        assertEquals(names(projects.entries()), names(pinned.entries()), "the file order is kept");
+    }
+
+    @Test
+    void setPinnedChangesNothingWhenTheEntryIsGoneOrAlreadySo() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        assertSame(projects, projects.setPinned(UUID.randomUUID(), true));
+        assertSame(projects, projects.setPinned(projects.entries().getFirst().id(), false));
+    }
+
+    /** VK-1694: Settings trims a lowered cap at once, with nothing just added. */
+    @Test
+    void trimWithoutAnEntryToKeepStillKeepsThePinnedOnes() {
+        RecentEntry pinnedOld = entry("PinnedOld", 0).withPinned(true);
+        RecentProjects projects = new RecentProjects(List.of(pinnedOld, entry("A", 1), entry("B", 2),
+                entry("C", 3)));
+
+        assertEquals(List.of("C", "PinnedOld"), names(projects.trim(2, null).displayOrder()));
+        assertEquals(List.of("PinnedOld"), names(projects.trim(1, null).entries()));
+    }
+
     @Test
     void theDefaultLimitComfortablyHoldsFiftyProjects() {
         List<RecentEntry> fiftyOne = new ArrayList<>();

@@ -31,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Public only so the session tests can share its fakes ({@link FakeProcess}, {@link RecordingStarter}). */
@@ -430,6 +431,27 @@ public class EditorLauncherTest {
         assertEquals(SessionLogs.KEEP, left.size(), left.toString());
         assertTrue(left.contains(start.log().getFileName().toString()));
         assertFalse(left.contains("Old-0.log"), "the oldest went first");
+    }
+
+    /** VK-1694: the Settings dialog's log retention decides how many are kept, the new log included. */
+    @Test
+    void aLaunchKeepsAsManyLogsAsTheRequestAsks() throws Exception {
+        Path logs = Files.createDirectories(logsDir());
+        for (int i = 0; i < 6; i++) {
+            Path old = Files.writeString(logs.resolve("Old-" + i + SessionLogs.LOG_SUFFIX), "old");
+            Files.setLastModifiedTime(old, FileTime.fromMillis(1_000_000L + i));
+        }
+        RecordingStarter starter = new RecordingStarter(FakeProcess.running(), null);
+
+        SessionStart start = started(launcher(starter, StandardCharsets.UTF_8).startNow(new LaunchRequest(
+                engine(editor(), tempDir, 1), project(), "Game", McpSetting.DEFAULT, false, 3)));
+
+        List<String> left = TestSupport.fileNames(logs).stream().filter(name -> name.endsWith(".log")).toList();
+        assertEquals(3, left.size(), left.toString());
+        assertTrue(left.contains(start.log().getFileName().toString()), "the new log is always kept");
+        assertTrue(left.containsAll(List.of("Old-5.log", "Old-4.log")), left.toString());
+        assertThrows(IllegalArgumentException.class, () -> new LaunchRequest(engine(editor(), tempDir, 1),
+                project(), "Game", McpSetting.DEFAULT, false, 0));
     }
 
     @Test
