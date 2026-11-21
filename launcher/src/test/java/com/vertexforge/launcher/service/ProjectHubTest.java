@@ -886,4 +886,109 @@ class ProjectHubTest {
         assertEquals(Kind.INVALID, status.kind());
         assertEquals("Invalid project file: missing or invalid 'startupScene' field", status.reason());
     }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Project actions (VK-1695)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** A created project's duplicate has its own name in its folder, project file and scripts project. */
+    @Test
+    void aDuplicateOfACreatedProjectHasItsOwnNameEverywhereAndTheOriginalIsUntouched() throws Exception {
+        Path original = hub.createProject(TestSupport.request("Game", projectsDir, engine)).projectPath();
+        Map<String, String> before = TestSupport.treeSnapshot(original.getParent());
+        String name = hub.suggestDuplicateName(original, "Game");
+        assertEquals("Game-copy", name);
+
+        ProjectCopier.CopyOutcome outcome = hub.duplicateProject(original, "assets", name, JobMonitor.NONE);
+
+        ProjectCopier.CopyOutcome.Done done = assertInstanceOf(ProjectCopier.CopyOutcome.Done.class, outcome,
+                outcome::toString);
+        assertEquals(projectsDir.resolve("Game-copy").resolve("Game-copy.vfproj"), done.projectFile());
+        assertFalse(Files.exists(done.folder().resolve("Game.vfproj")));
+        assertEquals("Game-copy", com.vertexforge.launcher.project.ProjectFileReader.read(done.projectFile())
+                .projectName());
+        assertTrue(Files.readString(done.folder().resolve("assets/scripts/scripts.mtproj"))
+                .contains("Name=\"Game-copy\""));
+        assertEquals(before, TestSupport.treeSnapshot(original.getParent()), "the original is only read");
+        assertEquals("Game-copy-2", hub.suggestDuplicateName(original, "Game"), "the next one is numbered");
+
+        AddedProject listed = hub.listDuplicate(done.projectFile(), name, "kept-as-it-is");
+        assertEquals("kept-as-it-is", listed.entry().engineId());
+        assertEquals(2, hub.listProjects().entries().size());
+    }
+
+    /** A probe alone cannot see another launcher's hold (VK-1691); Duplicate and Back Up must not miss it. */
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void duplicateAndBackUpWaitForAnotherLaunchersHold() throws Exception {
+        Path original = hub.createProject(TestSupport.request("Game", projectsDir, engine)).projectPath();
+        Process other = startJava(com.vertexforge.launcher.project.HoldMain.class, original.getParent().toString());
+        try {
+            java.io.BufferedReader output = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    other.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+            assertEquals(com.vertexforge.launcher.project.HoldMain.HOLDING,
+                    java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return output.readLine();
+                        } catch (IOException e) {
+                            return "<output closed: " + e + ">";
+                        }
+                    }).get(60, TimeUnit.SECONDS));
+
+            ProjectCopier.CopyOutcome copy = hub.duplicateProject(original, "assets", "Game-copy", JobMonitor.NONE);
+            ProjectBackupService.BackupOutcome backup = hub.backUpClosedProject(new ProjectBackupService.BackupRequest(
+                    original, "assets", "1.0.0"), JobMonitor.NONE);
+
+            assertTrue(assertInstanceOf(ProjectCopier.CopyOutcome.Failed.class, copy, copy::toString).message()
+                    .contains("Another VertexForge launcher"));
+            assertTrue(assertInstanceOf(ProjectBackupService.BackupOutcome.Refused.class, backup, backup::toString)
+                    .reason().contains("Another VertexForge launcher"));
+            assertEquals(Set.of("Game"), TestSupport.fileNames(projectsDir), "nothing was copied or zipped");
+        } finally {
+            other.getOutputStream().close();
+            assertTrue(other.waitFor(30, TimeUnit.SECONDS), "the other launcher did not exit");
+        }
+    }
+
+    @Test
+    void cleanCachesFindsAndDeletesTheCompiledScriptsOfACreatedProject() throws Exception {
+        Path original = hub.createProject(TestSupport.request("Game", projectsDir, engine)).projectPath();
+        Path compiled = Files.createDirectories(original.getParent().resolve("assets/scripts/compiled"));
+        Files.writeString(compiled.resolve("scripts.mtcLib"), "built");
+        ProjectCacheCleaner.CleanRequest request = new ProjectCacheCleaner.CleanRequest(original, "assets",
+                List.of("scripts/compiled"));
+
+        ProjectCacheCleaner.PreviewOutcome preview = hub.previewCacheClean(request, JobMonitor.NONE);
+        ProjectCacheCleaner.CleanOutcome clean = hub.cleanCaches(request, JobMonitor.NONE);
+
+        assertEquals(1, assertInstanceOf(ProjectCacheCleaner.PreviewOutcome.Ready.class, preview).present().size());
+        assertEquals(5, assertInstanceOf(ProjectCacheCleaner.CleanOutcome.Done.class, clean).freedBytes());
+        assertFalse(Files.exists(compiled));
+        assertTrue(Files.exists(original.getParent().resolve("assets/scripts/scripts.mtproj")));
+    }
+
+    /** The unit tests' environment has no Recycle Bin, so nothing here can ever reach the user's. */
+    @Test
+    void aHubWithoutARecycleBinCannotMoveAnythingToIt() throws Exception {
+        Path original = hub.createProject(TestSupport.request("Game", projectsDir, engine)).projectPath();
+        assertFalse(hub.canRecycle());
+
+        ProjectDeleter.DeleteOutcome outcome = hub.deleteProject(new ProjectDeleter.DeleteRequest(original,
+                "assets", "Game", hub.deleteContext(List.of(), checked(hub))), "Game", JobMonitor.NONE);
+
+        assertInstanceOf(ProjectDeleter.DeleteOutcome.Refused.class, outcome, outcome::toString);
+        assertTrue(Files.exists(original));
+    }
+
+    /** A child JVM with the test classes and the launcher's own classes, running {@code main}. */
+    private static Process startJava(Class<?> main, String... args) throws Exception {
+        String classPath = Path.of(main.getProtectionDomain().getCodeSource().getLocation().toURI())
+                + java.io.File.pathSeparator
+                + Path.of(ProjectHub.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path javaExe = Path.of(System.getProperty("java.home"), "bin", TestSupport.isWindows() ? "java.exe" : "java");
+        List<String> command = new ArrayList<>(List.of(javaExe.toString(),
+                "-Duser.home=" + System.getProperty("user.home"), "-cp", classPath, main.getName()));
+        command.addAll(List.of(args));
+        return new ProcessBuilder(command).redirectErrorStream(true).start();
+    }
 }

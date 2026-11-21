@@ -16,13 +16,11 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Asks for the name of the folder "Open a copy" makes beside the project's own (VK-1690). The name is checked as it is
- * typed with the same rules a new project's name has; whether a folder of that name exists is checked by the copy
- * itself, which asks again with the reason when it refuses.
+ * Asks for the name of the folder "Open a copy" (VK-1690) or "Duplicate…" (VK-1695) makes beside the project's own.
+ * The name is checked as it is typed with the same rules a new project's name has; whether a folder of that name
+ * exists is checked by the copy itself, which asks again with the reason when it refuses.
  */
 public final class CopyNameDialog {
-
-    private static final ButtonType COPY = new ButtonType("Copy and open", ButtonBar.ButtonData.OK_DONE);
 
     private CopyNameDialog() {
         // Shown through show()
@@ -36,16 +34,16 @@ public final class CopyNameDialog {
     public static Optional<String> show(Window owner, CopyNamePrompt prompt, Function<String, Optional<String>> check) {
         Objects.requireNonNull(prompt, "prompt");
         Objects.requireNonNull(check, "check");
-        Dialog<String> dialog = DialogFactory.dialog(owner, "Open a Copy");
-        dialog.setHeaderText("Copy \"" + prompt.projectName() + "\" and open the copy");
+        Dialog<String> dialog = DialogFactory.dialog(owner, prompt.purpose().title());
+        dialog.setHeaderText(prompt.header());
         dialog.setResizable(true);
 
+        ButtonType copy = new ButtonType(prompt.purpose().button(), ButtonBar.ButtonData.OK_DONE);
         DialogPane pane = DialogFactory.pane();
         pane.getStyleClass().add("copy-name-dialog");
-        pane.getButtonTypes().addAll(COPY, ButtonType.CANCEL);
+        pane.getButtonTypes().addAll(copy, ButtonType.CANCEL);
 
-        Label intro = new Label("The project folder is copied into " + prompt.location()
-                + " under the name below, and the copy opens. This project stays exactly as it is.");
+        Label intro = new Label(prompt.intro());
         intro.setWrapText(true);
         intro.setMaxWidth(560);
         TextField name = new TextField(prompt.suggestedName());
@@ -61,7 +59,7 @@ public final class CopyNameDialog {
         pane.setContent(content);
         dialog.setDialogPane(pane);
 
-        Node copyButton = pane.lookupButton(COPY);
+        Node copyButton = pane.lookupButton(copy);
         Runnable update = () -> {
             String text = name.getText();
             Optional<String> typed = check.apply(text);
@@ -82,7 +80,7 @@ public final class CopyNameDialog {
             name.requestFocus();
             name.selectAll();
         });
-        dialog.setResultConverter(type -> type == COPY ? name.getText() : null);
+        dialog.setResultConverter(type -> type == copy ? name.getText() : null);
         return dialog.showAndWait();
     }
 }

@@ -4,6 +4,8 @@ import com.vertexforge.launcher.project.InvalidProjectFileException;
 import com.vertexforge.launcher.project.ProjectContent;
 import com.vertexforge.launcher.project.ProjectFileEdit;
 import com.vertexforge.launcher.project.ProjectFileReader;
+import com.vertexforge.launcher.project.ProjectFiles;
+import com.vertexforge.launcher.project.ScriptsProjectEdit;
 import com.vertexforge.launcher.util.FileErrors;
 import com.vertexforge.launcher.util.FileTrees;
 import com.vertexforge.launcher.util.TransientIo;
@@ -22,23 +24,27 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
- * Copies a project into a new folder beside it (VK-1690: "Open a copy"), so that an engine upgrade changes the copy
- * and never the original.
+ * Copies a project into a new folder beside it: VK-1690's "Open a copy", so that an engine upgrade changes the copy and
+ * never the original, and VK-1695's "Duplicate".
  * <p>
  * The copy holds the project folder without the editor's state folder and the compiled scripts
- * ({@link ProjectContent#exclusions()}); its {@code .vfproj} keeps its file name and gets the copy's name as
- * {@code projectName}, with the paths that pointed into the original re-pointed into the copy
- * ({@link ProjectFileEdit#forCopy}). As a project creation does (VK-1679), the copier checks everything first, builds
- * the copy in a sibling staging folder ({@code .<name>.creating-<uuid>}) and renames it into place in one step that
- * never replaces anything. A failure or a cancel before that rename deletes the staging folder and nothing else; the
- * original is only ever read.
+ * ({@link ProjectContent#exclusions()}). Its {@code .vfproj} gets the copy's name as {@code projectName}, with the paths
+ * that pointed into the original re-pointed into the copy ({@link ProjectFileEdit#forCopy}); it keeps its file name, or
+ * for a duplicate becomes {@code <name>.vfproj} ({@link CopyRequest.ProjectFileName}). Its scripts project
+ * ({@code <workingDirectory>/scripts/scripts.mtproj}) gets the copy's name too ({@link ScriptsProjectEdit}, VK-1695);
+ * one that cannot be edited is copied as it is, with a note. As a project creation does (VK-1679), the copier checks
+ * everything first, builds the copy in a sibling staging folder ({@code .<name>.creating-<uuid>}) and renames it into
+ * place in one step that never replaces anything. A failure or a cancel before that rename deletes the staging folder
+ * and nothing else; the original is only ever read.
  */
 public final class ProjectCopier {
 
@@ -59,11 +65,32 @@ public final class ProjectCopier {
      * @param projectFile      the original's {@code .vfproj}
      * @param workingDirectory its {@code workingDirectory} member as written, or {@code null}
      * @param newName          the copy's folder name and {@code projectName}, exactly as typed
+     * @param projectFileName  what the copy's {@code .vfproj} is called
      */
-    public record CopyRequest(Path projectFile, String workingDirectory, String newName) {
+    public record CopyRequest(Path projectFile, String workingDirectory, String newName,
+                              ProjectFileName projectFileName) {
+
+        /** What the copy's {@code .vfproj} is called. */
+        public enum ProjectFileName {
+            /** The original's file name (VK-1690 "Open a copy"). */
+            KEEP,
+            /** {@code <newName>.vfproj}, as a project creation names it (VK-1695 "Duplicate"). */
+            NEW_NAME
+        }
+
         public CopyRequest {
             Objects.requireNonNull(projectFile, "projectFile");
+            Objects.requireNonNull(projectFileName, "projectFileName");
         }
+
+        /** A copy whose {@code .vfproj} keeps its file name ({@link ProjectFileName#KEEP}). */
+        public CopyRequest(Path projectFile, String workingDirectory, String newName) {
+            this(projectFile, workingDirectory, newName, ProjectFileName.KEEP);
+        }
+    }
+
+    /** A file of the original whose copy gets other bytes, under {@code targetRelative} in the copy. */
+    private record Replacement(String targetRelative, byte[] bytes) {
     }
 
     /** How a copy ended. */
@@ -202,10 +229,21 @@ public final class ProjectCopier {
             return new CopyOutcome.Refused("The project file " + content.projectFile() + " is not a file in the "
                     + "project folder (a link is never copied), so the copy would have none.");
         }
+        // A duplicate's project file is named after it; nothing else at the top of the folder may have that name.
+        String copyFileName = request.projectFileName() == CopyRequest.ProjectFileName.NEW_NAME
+                ? name + ProjectFiles.EXTENSION
+                : projectEntry.relative();
+        if (!copyFileName.equalsIgnoreCase(projectEntry.relative())) {
+            Optional<String> clash = topLevelEntryNamed(tree, copyFileName);
+            if (clash.isPresent()) {
+                return new CopyOutcome.Refused("The project folder already holds \"" + clash.get() + "\", so the "
+                        + "copy's project file could not be called \"" + copyFileName + "\". Choose another name.");
+            }
+        }
 
         // 6-7: the path budget and the room for the files.
         Optional<ProjectNameRules.Problem> lengthProblem = ProjectNameRules.checkPathLength(parent, name,
-                tree.deepestRelativeLength());
+                Math.max(tree.deepestRelativeLength(), copyFileName.length()));
         if (lengthProblem.isPresent()) {
             return new CopyOutcome.Refused(lengthProblem.get().message());
         }
@@ -246,6 +284,29 @@ public final class ProjectCopier {
         if (reach.isPresent()) {
             return new CopyOutcome.Refused(reach.get());
         }
+        Map<FolderTree.FileEntry, Replacement> replacements = new HashMap<>();
+        replacements.put(projectEntry, new Replacement(copyFileName, projectBytes));
+
+        // 8b: the scripts project gets the copy's name too (VK-1695), read before anything is written.
+        String scriptsRelative = content.scriptsProjectRelative();
+        for (FolderTree.FileEntry file : tree.files()) {
+            if (!file.relative().equalsIgnoreCase(scriptsRelative)) {
+                continue;
+            }
+            byte[] original;
+            try (InputStream in = Files.newInputStream(file.path())) {
+                // One byte more than the edit takes tells a file at the limit from a longer one.
+                original = in.readNBytes(ScriptsProjectEdit.MAX_BYTES + 1);
+            } catch (IOException e) {
+                return new CopyOutcome.Failed("Could not read " + file.path() + ": " + describe(e));
+            }
+            switch (ScriptsProjectEdit.rename(original, name)) {
+                case ScriptsProjectEdit.Result.Renamed renamed ->
+                        replacements.put(file, new Replacement(file.relative(), renamed.bytes()));
+                case ScriptsProjectEdit.Result.Unchanged unchanged -> notes.add(file.relative() + " was copied as it "
+                        + "is, so it keeps the original's name: " + unchanged.reason() + ".");
+            }
+        }
 
         if (monitor.cancelRequested()) {
             return new CopyOutcome.Cancelled();
@@ -259,7 +320,7 @@ public final class ProjectCopier {
             return new CopyOutcome.Failed("Could not create a folder in " + parent + ": " + describe(e));
         }
         try {
-            copyInto(staging, tree, projectEntry, projectBytes, monitor);
+            copyInto(staging, tree, replacements, monitor);
             monitor.checkCancelled();
         } catch (JobCancelledException e) {
             return abandon(parent, name, staging, new CopyOutcome.Cancelled());
@@ -273,16 +334,34 @@ public final class ProjectCopier {
         }
 
         // 10: the commit. A cancel is no longer possible.
-        return commit(parent, name, staging, target, target.resolve(projectEntry.relative()), notes);
+        return commit(parent, name, staging, target, target.resolve(copyFileName), notes);
+    }
+
+    /**
+     * The name of a file or folder at the top of {@code tree} that is {@code name}, ignoring case, as Windows compares
+     * names; empty when there is none.
+     */
+    private static Optional<String> topLevelEntryNamed(FolderTree tree, String name) {
+        for (FolderTree.FileEntry file : tree.files()) {
+            if (file.relative().indexOf('/') < 0 && file.relative().equalsIgnoreCase(name)) {
+                return Optional.of(file.relative());
+            }
+        }
+        for (String folder : tree.folders()) {
+            if (folder.indexOf('/') < 0 && folder.equalsIgnoreCase(name)) {
+                return Optional.of(folder);
+            }
+        }
+        return Optional.empty();
     }
 
     /**
      * Writes every folder and file of {@code tree} into {@code staging}, each file new ({@code CREATE_NEW}) with its
-     * modification time; the project file gets {@code projectBytes} instead of its content. Never
-     * {@code Files.copy}: it keeps a source's read-only flag, which would stop a failed copy from deleting its
-     * staging folder.
+     * modification time; a file in {@code replacements} gets its replacement's bytes instead of its content, under
+     * the replacement's path. Never {@code Files.copy}: it keeps a source's read-only flag, which would stop a failed
+     * copy from deleting its staging folder.
      */
-    private static void copyInto(Path staging, FolderTree tree, FolderTree.FileEntry projectEntry, byte[] projectBytes,
+    private static void copyInto(Path staging, FolderTree tree, Map<FolderTree.FileEntry, Replacement> replacements,
                                  JobMonitor monitor) throws IOException {
         for (String folder : tree.folders()) {
             monitor.checkCancelled();
@@ -295,8 +374,10 @@ public final class ProjectCopier {
         for (FolderTree.FileEntry file : tree.files()) {
             monitor.checkCancelled();
             Path copy = staging.resolve(file.relative());
-            if (file == projectEntry) {
-                Files.write(copy, projectBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Replacement replacement = replacements.get(file);
+            if (replacement != null) {
+                Files.write(staging.resolve(replacement.targetRelative()), replacement.bytes(),
+                        StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
                 done += file.size();
                 total = Math.max(total, done);
                 monitor.progress(JobMonitor.Phase.COPYING, done, total);

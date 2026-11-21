@@ -1,5 +1,6 @@
 package com.vertexforge.launcher.engine;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -8,6 +9,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
+import com.vertexforge.launcher.util.RelativePathRules;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -20,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -32,11 +35,13 @@ import java.util.regex.Pattern;
  *   "editorExe": "Editor.exe", "workingDirectory": "../../../../VFEngine/editor",
  *   "templatesDir": "../../../../assets/templates", "scriptLibDir": "../../../../assets/scripts/lib",
  *   "examplesDir": "../../../../assets/scripts/game/examples", "vfxLibraryDir": "../../../../assets/vfx/library",
- *   "launchContract": 2 }
+ *   "launchContract": 2, "projectCacheDirs": ["scripts/compiled"] }
  * </pre>
- * Paths are relative to the manifest's folder. The members the launcher needs to start the editor are required and
- * checked strictly; the others are informational and read as {@code null} when they are missing or of the wrong type.
- * Members this launcher does not know are ignored.
+ * Paths are relative to the manifest's folder, except {@code projectCacheDirs}, whose entries are relative to a
+ * project's working directory. The members the launcher needs to start the editor are required and checked strictly;
+ * the others are informational and read as {@code null} when they are missing or of the wrong type: a bad one must
+ * never make the whole engine unusable ({@code EngineProbe} reports any parse failure as a broken engine). Members this
+ * launcher does not know are ignored.
  *
  * @param manifestVersion      always {@link #SUPPORTED_VERSION}; a newer manifest is rejected
  * @param engineVersion        the engine's {@code MAJOR.MINOR.PATCH}
@@ -55,6 +60,10 @@ import java.util.regex.Pattern;
  *                             {@code null} for an editor built before the field existed: the launcher then passes only
  *                             the arguments every editor accepts. 1 adds {@code --console}; 2 means the arguments
  *                             may hold any Unicode character (the editor runs in the UTF-8 code page, VK-1684).
+ * @param projectCacheDirs     the folders in a project that the editor rebuilds and Clean Caches may delete, relative
+ *                             to the project's working directory (VK-1695); {@code null} when the member is missing or
+ *                             not a valid list (Clean Caches is then unavailable with this engine), empty when the
+ *                             engine rebuilds nothing
  */
 public record EngineManifest(
         int manifestVersion,
@@ -70,8 +79,13 @@ public record EngineManifest(
         String scriptLibDir,
         String examplesDir,
         String vfxLibraryDir,
-        Integer launchContract
+        Integer launchContract,
+        List<String> projectCacheDirs
 ) {
+    public EngineManifest {
+        projectCacheDirs = projectCacheDirs == null ? null : List.copyOf(projectCacheDirs);
+    }
+
     public static final String FILE_NAME = "engine.json";
     public static final int SUPPORTED_VERSION = 1;
     public static final List<String> CONFIGURATIONS = List.of("Debug", "Development", "Release");
@@ -90,6 +104,9 @@ public record EngineManifest(
     static final String EXAMPLES_DIR = "examplesDir";
     static final String VFX_LIBRARY_DIR = "vfxLibraryDir";
     static final String LAUNCH_CONTRACT = "launchContract";
+    static final String PROJECT_CACHE_DIRS = "projectCacheDirs";
+    /** More entries than any engine needs make the list unusable rather than slow (VK-1695). */
+    static final int MAX_PROJECT_CACHE_DIRS = 32;
     /** The first contract revision with {@code --console} (VK-1683). */
     public static final int CONSOLE_FLAG_CONTRACT = 1;
     /**
@@ -173,7 +190,49 @@ public record EngineManifest(
                 optionalString(root, SCRIPT_LIB_DIR),
                 optionalString(root, EXAMPLES_DIR),
                 optionalString(root, VFX_LIBRARY_DIR),
-                launchContract(root.get(LAUNCH_CONTRACT)));
+                launchContract(root.get(LAUNCH_CONTRACT)),
+                projectCacheDirs(root.get(PROJECT_CACHE_DIRS)));
+    }
+
+    /**
+     * The {@code projectCacheDirs} member as a list, or {@code null} when it is missing or not a list Clean Caches can
+     * trust (VK-1695). Lenient by design: it never throws, so a bad list costs only that action, never the engine. The
+     * whole list is refused when any entry is not a string, is not a {@link RelativePathRules relative path}, lies in
+     * the editor's own folder, repeats another entry (ignoring case) or lies in one; or when there are more than
+     * {@link #MAX_PROJECT_CACHE_DIRS} of them.
+     */
+    static List<String> projectCacheDirs(JsonElement element) {
+        if (element == null || !element.isJsonArray()) {
+            return null;
+        }
+        JsonArray array = element.getAsJsonArray();
+        if (array.size() > MAX_PROJECT_CACHE_DIRS) {
+            return null;
+        }
+        List<String> entries = new ArrayList<>();
+        for (JsonElement item : array) {
+            if (item == null || !item.isJsonPrimitive() || !item.getAsJsonPrimitive().isString()) {
+                return null;
+            }
+            String entry = item.getAsString();
+            if (!RelativePathRules.isValid(entry) || RelativePathRules.isEditorState(entry)) {
+                return null;
+            }
+            for (String other : entries) {
+                if (sameOrInside(entry, other) || sameOrInside(other, entry)) {
+                    return null;
+                }
+            }
+            entries.add(entry);
+        }
+        return List.copyOf(entries);
+    }
+
+    /** Whether the '/'-relative {@code path} is {@code base} or lies in it, ignoring case. */
+    private static boolean sameOrInside(String path, String base) {
+        return path.equalsIgnoreCase(base)
+                || (path.length() > base.length() && path.charAt(base.length()) == '/'
+                && path.regionMatches(true, 0, base, 0, base.length()));
     }
 
     /** Whether this engine's editor accepts {@code --console} (VK-1683). */

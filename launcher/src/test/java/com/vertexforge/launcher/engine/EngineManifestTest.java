@@ -21,7 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EngineManifestTest {
 
-    /** Verbatim from bin/Editor/Development/x64/engine.json, as tools/engine_version.lua wrote it (VK-1680). */
+    /**
+     * Verbatim from bin/Editor/Development/x64/engine.json as tools/engine_version.lua wrote it before VK-1695 (VK-1680,
+     * VK-1689): an engine without {@code projectCacheDirs}, which {@link #withCacheDirs} adds.
+     */
     static final String DEV_MANIFEST = """
             {
               "manifestVersion": 1,
@@ -193,5 +196,69 @@ class EngineManifestTest {
         assertEquals(EngineManifest.UNICODE_ARGUMENTS_CONTRACT, manifest.launchContract());
         assertTrue(manifest.acceptsUnicodeArguments());
         assertTrue(manifest.acceptsConsoleFlag());
+    }
+
+    /** A manifest with {@code projectCacheDirs} set to {@code jsonValue} (VK-1695), as the last member. */
+    private static String withCacheDirs(String jsonValue) {
+        return DEV_MANIFEST.replace("\"vfxLibraryDir\": \"../../../../assets/vfx/library\"",
+                "\"vfxLibraryDir\": \"../../../../assets/vfx/library\",\n  \"projectCacheDirs\": " + jsonValue);
+    }
+
+    /** VK-1695: the folders Clean Caches may delete, as tools/engine_version.lua writes them. */
+    @Test
+    void theProjectCacheDirsAreRead() throws InvalidManifestException {
+        assertEquals(List.of("scripts/compiled"),
+                EngineManifest.parse(withCacheDirs("[\"scripts/compiled\"]")).projectCacheDirs());
+        assertEquals(List.of("scripts/compiled", "build/intermediate"),
+                EngineManifest.parse(withCacheDirs("[\"scripts/compiled\", \"build/intermediate\"]"))
+                        .projectCacheDirs());
+        // An engine that rebuilds nothing: an empty list, which is not the same as no list.
+        assertEquals(List.of(), EngineManifest.parse(withCacheDirs("[]")).projectCacheDirs());
+    }
+
+    /** An engine built before VK-1695 names no folders, so Clean Caches is unavailable with it. */
+    @Test
+    void aManifestWithoutProjectCacheDirsHasNoList() throws InvalidManifestException {
+        assertNull(EngineManifest.parse(DEV_MANIFEST).projectCacheDirs());
+    }
+
+    /**
+     * A bad list must never make the engine unusable (EngineProbe reports a parse failure as a broken engine): the
+     * manifest still parses, and only the list is dropped, whole.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"scripts/compiled\"", "null", "{}", "7", "[7]", "[null]", "[[\"a\"]]", "[\"\"]", "[\"..\"]",
+            "[\"scripts/../..\"]", "[\"/abs\"]", "[\"C:/x\"]", "[\"a\\\\b\"]", "[\"a//b\"]", "[\"a/\"]", "[\"./a\"]",
+            "[\"a.\"]", "[\"a \"]", "[\"a?b\"]", "[\".vertexforge\"]", "[\".VertexForge/saves\"]",
+            "[\"scripts/compiled\", \"scripts/compiled\"]", "[\"scripts/compiled\", \"Scripts/Compiled\"]",
+            "[\"scripts\", \"scripts/compiled\"]", "[\"scripts/compiled/x\", \"scripts/compiled\"]",
+            "[\"ok\", 1]"})
+    void aBadProjectCacheDirsListIsDroppedWhole(String jsonValue) throws InvalidManifestException {
+        EngineManifest manifest = EngineManifest.parse(withCacheDirs(jsonValue));
+
+        assertNull(manifest.projectCacheDirs(), jsonValue);
+        assertEquals("1.0.0 Development", manifest.describe());
+    }
+
+    @Test
+    void moreProjectCacheDirsThanTheLimitAreDropped() throws InvalidManifestException {
+        StringBuilder limit = new StringBuilder("[");
+        for (int i = 0; i < EngineManifest.MAX_PROJECT_CACHE_DIRS; i++) {
+            limit.append(i == 0 ? "" : ", ").append("\"dir").append(i).append('"');
+        }
+        String atLimit = limit + "]";
+        String overLimit = limit + ", \"one-more\"]";
+
+        assertEquals(EngineManifest.MAX_PROJECT_CACHE_DIRS,
+                EngineManifest.parse(withCacheDirs(atLimit)).projectCacheDirs().size());
+        assertNull(EngineManifest.parse(withCacheDirs(overLimit)).projectCacheDirs());
+    }
+
+    /** "scripts" and "scripts2" share a prefix but neither lies in the other. */
+    @Test
+    void entriesThatOnlyShareAPrefixAreKept() throws InvalidManifestException {
+        assertEquals(List.of("scripts", "scripts2/compiled"),
+                EngineManifest.parse(withCacheDirs("[\"scripts\", \"scripts2/compiled\"]")).projectCacheDirs());
     }
 }

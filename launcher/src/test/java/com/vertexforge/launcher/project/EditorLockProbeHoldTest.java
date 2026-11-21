@@ -228,6 +228,52 @@ class EditorLockProbeHoldTest {
         }
     }
 
+    /** VK-1695: a probe cannot see another launcher's hold; probeLauncher can, and so a delete or copy waits. */
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    @Timeout(value = 120, unit = TimeUnit.SECONDS)
+    void probeLauncherSeesAnotherLaunchersHold() throws Exception {
+        Path folder = Files.createDirectories(TestSupport.real(tempDir).resolve("Game"));
+        Process other = startJava(HoldMain.class, folder.toString());
+        try {
+            java.io.BufferedReader output = new java.io.BufferedReader(new java.io.InputStreamReader(
+                    other.getInputStream(), StandardCharsets.UTF_8));
+            String line = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return output.readLine();
+                } catch (IOException e) {
+                    return "<output closed: " + e + ">";
+                }
+            }).get(60, TimeUnit.SECONDS);
+            assertEquals(HoldMain.HOLDING, line);
+
+            assertInstanceOf(EditorLockState.Free.class, probe().probe(folder), "the editor's byte reads as free");
+            assertEquals(new EditorLockState.Unknown(EditorLockProbe.HELD_BY_LAUNCHER), probe().probeLauncher(folder));
+        } finally {
+            other.getOutputStream().close();
+            assertTrue(other.waitFor(30, TimeUnit.SECONDS), "the other launcher did not exit");
+        }
+        assertEquals(EditorLockState.FREE, probe().probeLauncher(folder));
+    }
+
+    @Test
+    void probeLauncherSeesThisLaunchersOwnHold() throws IOException {
+        Path folder = Files.createDirectories(TestSupport.real(tempDir).resolve("Game"));
+
+        try (EditorLockProbe.Hold ignored = holding(probe().hold(folder))) {
+            assertEquals(new EditorLockState.Unknown(EditorLockProbe.HELD_BY_LAUNCHER), probe().probeLauncher(folder));
+        }
+        assertEquals(EditorLockState.FREE, probe().probeLauncher(folder));
+    }
+
+    @Test
+    void probeLauncherCreatesNothing() throws IOException {
+        Path folder = Files.createDirectories(TestSupport.real(tempDir).resolve("Game"));
+
+        assertEquals(EditorLockState.FREE, probe().probeLauncher(folder));
+        assertFalse(Files.exists(folder.resolve(EditorLockProbe.STATE_FOLDER)), "a probe never creates the folder");
+    }
+
     /** What a second process gets when it asks for the editor's (or with "launcher", the launcher's) exclusive byte. */
     static String attempt(Path lockFile, String... which) throws IOException, URISyntaxException,
             InterruptedException, java.util.concurrent.ExecutionException, TimeoutException {

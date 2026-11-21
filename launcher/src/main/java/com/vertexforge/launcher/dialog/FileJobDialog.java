@@ -142,8 +142,11 @@ public final class FileJobDialog {
                     : progress.done() + " of " + progress.total()));
         } else {
             bar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
-            status.setText(phaseTexts.apply(progress.phase()) + (bytes ? ": " + sizeText(progress.done())
-                    : ": " + progress.done() + " found"));
+            // A step whose size is not known and that has counted nothing yet (VK-1695: Windows checking whether a
+            // folder can go to the Recycle Bin) shows just its name.
+            boolean nothingCounted = bytes && progress.done() <= 0;
+            status.setText(phaseTexts.apply(progress.phase()) + (nothingCounted ? ""
+                    : bytes ? ": " + sizeText(progress.done()) : ": " + progress.done() + " found"));
         }
     }
 

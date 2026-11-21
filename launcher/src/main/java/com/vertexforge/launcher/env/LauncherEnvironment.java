@@ -27,7 +27,10 @@ import java.util.function.UnaryOperator;
  * @param nativeCharset      the system's ANSI code page: an editor older than VK-1684 only receives paths this charset
  *                           can encode, and parts of its output are in it. Read from the registry on Windows
  *                           ({@link #systemAnsiCharset()}), because the packaged launcher itself runs in UTF-8 (VK-1693)
- * @param driveTypes         tells local drives from network ones (VK-1679)
+ * @param driveTypes         tells fixed drives from network, removable and other ones (VK-1679, VK-1695)
+ * @param recycleBin         moves a project folder to the Recycle Bin, and never deletes one permanently (VK-1695)
+ * @param knownFolders       the user's profile, Desktop, Documents and Downloads, which a project folder delete must
+ *                           never take (VK-1695)
  */
 public record LauncherEnvironment(
         Clock clock,
@@ -36,7 +39,9 @@ public record LauncherEnvironment(
         UnaryOperator<String> env,
         ProcessStarter processStarter,
         Charset nativeCharset,
-        DriveTypes driveTypes
+        DriveTypes driveTypes,
+        RecycleBin recycleBin,
+        KnownFolders knownFolders
 ) {
     public static final String CONFIG_DIR_NAME = ".vertexforge";
     /** Set by jpackage's native launcher to the full path of its exe; absent outside the app image. */
@@ -52,6 +57,19 @@ public record LauncherEnvironment(
         Objects.requireNonNull(processStarter, "processStarter");
         Objects.requireNonNull(nativeCharset, "nativeCharset");
         Objects.requireNonNull(driveTypes, "driveTypes");
+        Objects.requireNonNull(recycleBin, "recycleBin");
+        Objects.requireNonNull(knownFolders, "knownFolders");
+    }
+
+    /**
+     * An environment without a Recycle Bin ({@link RecycleBin#unavailable()}) and without known folders: the hermetic
+     * self-test and the unit tests, which must never move anything to the user's Recycle Bin.
+     */
+    public LauncherEnvironment(Clock clock, Path configDir, Optional<Path> launcherExecutable,
+                               UnaryOperator<String> env, ProcessStarter processStarter, Charset nativeCharset,
+                               DriveTypes driveTypes) {
+        this(clock, configDir, launcherExecutable, env, processStarter, nativeCharset, driveTypes,
+                RecycleBin.unavailable(), KnownFolders.none());
     }
 
     /**
@@ -68,7 +86,9 @@ public record LauncherEnvironment(
                 System::getenv,
                 ProcessStarter.system(),
                 systemAnsiCharset(),
-                DriveTypes.system());
+                DriveTypes.system(),
+                RecycleBin.system(),
+                KnownFolders.system());
     }
 
     /**

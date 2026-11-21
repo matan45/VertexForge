@@ -16,15 +16,20 @@ import com.vertexforge.launcher.engine.EngineRegistryRepository;
 import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
 import com.vertexforge.launcher.env.DriveTypes;
+import com.vertexforge.launcher.env.KnownFolders;
 import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.env.RecycleBin;
+import com.vertexforge.launcher.env.RecycleCheck;
 import com.vertexforge.launcher.model.ProjectStatus;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.project.EditorLockProbe;
 import com.vertexforge.launcher.project.EditorLockState;
 import com.vertexforge.launcher.project.PickedProject;
+import com.vertexforge.launcher.project.ProjectContent;
 import com.vertexforge.launcher.project.ProjectFile;
 import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.ProjectFileReader;
+import com.vertexforge.launcher.project.ProjectFiles;
 import com.vertexforge.launcher.project.VersionCompatibility;
 import com.vertexforge.launcher.repository.AddedProject;
 import com.vertexforge.launcher.repository.RecentProjectsCodec;
@@ -35,6 +40,8 @@ import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.JobMonitor;
 import com.vertexforge.launcher.service.ProjectBackupService;
+import com.vertexforge.launcher.service.ProjectCacheCleaner;
+import com.vertexforge.launcher.service.ProjectCopier;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHub;
 import com.vertexforge.launcher.service.ScriptLibraryStatusService;
@@ -50,6 +57,7 @@ import com.vertexforge.launcher.template.TemplateCatalog;
 import com.vertexforge.launcher.template.TemplateCatalogs;
 import com.vertexforge.launcher.template.TemplateOptionKind;
 import com.vertexforge.launcher.ui.MainView;
+import com.vertexforge.launcher.util.FileTrees;
 import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.viewmodel.ProjectViewModel;
 import javafx.application.Platform;
@@ -77,6 +85,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -175,6 +184,9 @@ public final class SelfTest {
                         LauncherEnvironment.systemAppVersion(), LauncherEnvironment.systemJavaHome(),
                         LauncherEnvironment.systemLauncherExecutable()));
                 check("code page", () -> checkCodePage(LauncherEnvironment.systemPathEncoding()));
+                Path probeRoot = workDir;
+                check("recycle bin", () -> checkRecycleBin(RecycleBin.system(), probeRoot.resolve("recycle-probe")));
+                check("known folders", () -> checkKnownFolders(KnownFolders.system()));
             }
             ProjectHub hub = runCoreChecks(workDir);
             toolkitStarted = startToolkit();
@@ -217,7 +229,104 @@ public final class SelfTest {
         check("existing project", () -> checkExistingProject(hub));
         check("project backup", () -> checkProjectBackup(hub));
         check("script library update", () -> checkScriptLibraryUpdate(hub, engine[0]));
+        check("project duplicate", () -> checkProjectDuplicate(hub));
+        check("cache clean", () -> checkCacheClean(hub));
         return hub;
+    }
+
+    /**
+     * "Duplicate…" end to end on the created project (VK-1695): the copy is beside it, its project file and scripts
+     * project carry the copy's name, and the original still carries its own. The copy is deleted again, unlisted, so
+     * the later checks still find the created project first.
+     */
+    private static void checkProjectDuplicate(ProjectHub hub) throws Exception {
+        Path projectFile = hub.listProjects().entries().getFirst().path();
+        ProjectFile project = ProjectFileReader.read(projectFile);
+        Path scripts = Path.of(project.workingDirectory()).resolve(ProjectContent.SCRIPTS_PROJECT);
+        String before = Files.readString(projectFile.getParent().resolve(scripts), StandardCharsets.UTF_8);
+        String name = hub.suggestDuplicateName(projectFile, project.projectName());
+
+        ProjectCopier.CopyOutcome outcome = hub.duplicateProject(projectFile, project.workingDirectory(), name,
+                JobMonitor.NONE);
+        if (!(outcome instanceof ProjectCopier.CopyOutcome.Done done)) {
+            throw new IllegalStateException("the duplicate gave " + outcome);
+        }
+        try {
+            if (!done.projectFile().getFileName().toString().equals(name + ProjectFiles.EXTENSION)
+                    || !done.folder().getParent().equals(projectFile.getParent().getParent())) {
+                throw new IllegalStateException("the duplicate is not " + name + ProjectFiles.EXTENSION
+                        + " beside the project: " + done.projectFile());
+            }
+            if (!ProjectFileReader.read(done.projectFile()).projectName().equals(name)) {
+                throw new IllegalStateException("the duplicate's project file does not name it " + name);
+            }
+            if (!Files.readString(done.folder().resolve(scripts), StandardCharsets.UTF_8)
+                    .contains("Name=\"" + name + "\"")) {
+                throw new IllegalStateException("the duplicate's scripts project does not name it " + name);
+            }
+            if (!ProjectFileReader.read(projectFile).projectName().equals(project.projectName())
+                    || !Files.readString(projectFile.getParent().resolve(scripts), StandardCharsets.UTF_8)
+                    .equals(before)) {
+                throw new IllegalStateException("the duplicate changed the original");
+            }
+        } finally {
+            FileTrees.deleteTreeClearingReadOnly(done.folder(), new ArrayList<>());
+        }
+    }
+
+    /**
+     * "Clean Caches…" end to end on the created project (VK-1695): its compiled scripts are found and deleted, and its
+     * scripts project and library stay.
+     */
+    private static void checkCacheClean(ProjectHub hub) throws Exception {
+        Path projectFile = hub.listProjects().entries().getFirst().path();
+        ProjectFile project = ProjectFileReader.read(projectFile);
+        Path workingDirectory = projectFile.getParent().resolve(project.workingDirectory());
+        Path compiled = Files.createDirectories(workingDirectory.resolve(ProjectContent.COMPILED_SCRIPTS));
+        Files.writeString(compiled.resolve("scripts.mtcLib"), "self-test", StandardCharsets.UTF_8);
+        ProjectCacheCleaner.CleanRequest request = new ProjectCacheCleaner.CleanRequest(projectFile,
+                project.workingDirectory(), List.of(ProjectContent.COMPILED_SCRIPTS));
+
+        if (!(hub.previewCacheClean(request, JobMonitor.NONE) instanceof ProjectCacheCleaner.PreviewOutcome.Ready
+                ready) || ready.present().size() != 1) {
+            throw new IllegalStateException("the compiled scripts were not found to clean");
+        }
+        ProjectCacheCleaner.CleanOutcome outcome = hub.cleanCaches(request, JobMonitor.NONE);
+        if (!(outcome instanceof ProjectCacheCleaner.CleanOutcome.Done done) || done.freedBytes() != 9
+                || !done.failures().isEmpty()) {
+            throw new IllegalStateException("the clean gave " + outcome);
+        }
+        if (Files.exists(compiled) || !Files.isRegularFile(workingDirectory.resolve(ProjectContent.SCRIPTS_PROJECT))
+                || !Files.isDirectory(workingDirectory.resolve("scripts/lib"))) {
+            throw new IllegalStateException("the clean deleted more or less than the compiled scripts");
+        }
+    }
+
+    /**
+     * The packaged image can drive the shell's IFileOperation (VK-1695): a dry run on a folder of the self-test answers
+     * whether Windows would recycle it, and leaves it exactly as it was. Nothing is deleted.
+     */
+    static void checkRecycleBin(RecycleBin bin, Path folder) throws Exception {
+        if (!bin.available()) {
+            throw new IllegalStateException("the shell's IFileOperation could not be found");
+        }
+        Path file = Files.writeString(Files.createDirectories(folder).resolve("probe.txt"), "probe",
+                StandardCharsets.UTF_8);
+        RecycleCheck answer = bin.check(folder.toRealPath(), () -> false);
+        if (!(answer instanceof RecycleCheck.Recyclable) && !(answer instanceof RecycleCheck.NotRecyclable)) {
+            throw new IllegalStateException("Windows was not reached: " + answer);
+        }
+        if (!Files.readString(file, StandardCharsets.UTF_8).equals("probe")) {
+            throw new IllegalStateException("the dry run changed the folder");
+        }
+    }
+
+    /** The packaged image can ask Windows for the user's folders (VK-1695): absolute paths, the profile among them. */
+    static void checkKnownFolders(KnownFolders folders) {
+        List<Path> found = folders.userFolders();
+        if (found.isEmpty() || !found.stream().allMatch(Path::isAbsolute)) {
+            throw new IllegalStateException("Windows named no usable known folders: " + found);
+        }
     }
 
     /**

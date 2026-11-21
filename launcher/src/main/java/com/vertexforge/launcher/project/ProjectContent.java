@@ -1,5 +1,7 @@
 package com.vertexforge.launcher.project;
 
+import com.vertexforge.launcher.util.PathContainment;
+
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -134,25 +136,36 @@ public record ProjectContent(Path projectFile, Path folder, Path workingDirector
     }
 
     /**
+     * A path relative to the working directory, as a '/'-relative path from the folder: {@code relativeToWd} itself
+     * for a working directory of {@code "."}, else prefixed with it. Only for an {@link Scope#INSIDE} project.
+     *
+     * @throws IllegalStateException when the project is not {@link Scope#INSIDE}
+     */
+    public String relativeToFolder(String relativeToWd) {
+        Objects.requireNonNull(relativeToWd, "relativeToWd");
+        if (relativeWorkingDirectory == null) {
+            throw new IllegalStateException("only an INSIDE project has paths relative to its folder");
+        }
+        return relativeWorkingDirectory.equals(".") ? relativeToWd : relativeWorkingDirectory + "/" + relativeToWd;
+    }
+
+    /**
+     * Where the editor reads the scripts project, relative to the folder (VK-1695): always
+     * {@code <workingDirectory>/scripts/scripts.mtproj} ({@code ScriptingServiceImpl}). Only for an
+     * {@link Scope#INSIDE} project.
+     */
+    public String scriptsProjectRelative() {
+        return relativeToFolder(SCRIPTS_PROJECT);
+    }
+
+    /** The scripts project relative to the working directory ({@code ScriptingServiceImpl}: scripts/scripts.mtproj). */
+    public static final String SCRIPTS_PROJECT = "scripts/scripts.mtproj";
+
+    /**
      * The names of {@code path} after those of {@code base} when {@code path} is {@code base} or lies in it, compared
      * name by name and ignoring case; {@code null} otherwise. Both are absolute and normalized.
      */
     static List<String> namesBelow(Path base, Path path) {
-        Path baseRoot = base.getRoot();
-        Path pathRoot = path.getRoot();
-        if (baseRoot == null || pathRoot == null || !baseRoot.toString().equalsIgnoreCase(pathRoot.toString())
-                || path.getNameCount() < base.getNameCount()) {
-            return null;
-        }
-        for (int i = 0; i < base.getNameCount(); i++) {
-            if (!base.getName(i).toString().equalsIgnoreCase(path.getName(i).toString())) {
-                return null;
-            }
-        }
-        List<String> below = new ArrayList<>();
-        for (int i = base.getNameCount(); i < path.getNameCount(); i++) {
-            below.add(path.getName(i).toString());
-        }
-        return below;
+        return PathContainment.below(base, path);
     }
 }

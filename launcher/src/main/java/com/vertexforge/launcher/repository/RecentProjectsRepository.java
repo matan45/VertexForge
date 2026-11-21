@@ -145,6 +145,33 @@ public class RecentProjectsRepository {
         return new AddedProject(view, entry, added.get().existed());
     }
 
+    /**
+     * As {@link #addBound}, with the binding copied as an entry stores it: a duplicate made by "Duplicate" (VK-1695)
+     * opens with the engine its original opens with. {@code rawEngineId} is another entry's
+     * {@link RecentEntry#engineId()}, kept verbatim, even when it is not a valid id (the engine resolver then asks, as
+     * it does for the original); {@code null} or blank leaves the entry unbound, following the default engine.
+     *
+     * @param path the duplicate's project file, as its real path
+     */
+    public AddedProject addBoundRaw(Path path, String name, int limit, String rawEngineId)
+            throws StoreWriteException {
+        Objects.requireNonNull(path, "path");
+        UUID newId = ids.get();
+        AtomicReference<RecentProjects.Added> added = new AtomicReference<>();
+        RecentProjectsView view = change("add " + path, projects -> {
+            RecentProjects.Added result = projects.add(path, name, clock.instant(), newId);
+            added.set(result);
+            RecentProjects bound = rawEngineId == null || rawEngineId.isBlank()
+                    ? result.projects()
+                    : result.projects().bindEngine(result.id(), rawEngineId);
+            return bound.trim(limit, result.id());
+        });
+        UUID id = added.get().id();
+        RecentEntry entry = view.find(id)
+                .orElseThrow(() -> new IllegalStateException("The added project " + id + " is not in the list"));
+        return new AddedProject(view, entry, added.get().existed());
+    }
+
     /** Records that the project was just opened. Does nothing when another launcher removed it meanwhile. */
     public RecentProjectsView markOpened(UUID id) throws StoreWriteException {
         return markOpened(id, Optional.empty());

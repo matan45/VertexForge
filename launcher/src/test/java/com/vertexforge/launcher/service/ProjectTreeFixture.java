@@ -66,6 +66,24 @@ final class ProjectTreeFixture {
         }
     }
 
+    /** The fixture's {@code scripts.mtproj}, as a project created from the {@code empty} template has it (VK-1695). */
+    static final String SCRIPTS_PROJECT = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n"
+            + "<Project Name=\"Game\" Version=\"1.0.0\">\r\n"
+            + "  <Source>\r\n"
+            + "    <Include>game/**/*.mt</Include>\r\n"
+            + "  </Source>\r\n"
+            + "  <Output Directory=\"compiled\" />\r\n"
+            + "</Project>\r\n";
+
+    /** Adds {@link #SCRIPTS_PROJECT} to a {@link #game} at {@code assets/scripts/scripts.mtproj} (VK-1695). */
+    static void addScriptsProject(Path game) {
+        try {
+            write(game.resolve("assets/scripts/scripts.mtproj"), SCRIPTS_PROJECT.getBytes(StandardCharsets.UTF_8), 9);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     private static void write(Path file, byte[] content, int day) throws IOException {
         Files.createDirectories(file.getParent());
         Files.write(file, content);

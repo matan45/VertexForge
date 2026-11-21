@@ -1,9 +1,13 @@
 package com.vertexforge.launcher.controller;
 
+import com.vertexforge.launcher.dialog.CleanCachesDialog;
+import com.vertexforge.launcher.dialog.CleanCachesPrompt;
 import com.vertexforge.launcher.dialog.CopyNameDialog;
 import com.vertexforge.launcher.dialog.CopyNamePrompt;
 import com.vertexforge.launcher.dialog.CreateProjectDialog;
 import com.vertexforge.launcher.dialog.CreateProjectForm;
+import com.vertexforge.launcher.dialog.DeletePrompt;
+import com.vertexforge.launcher.dialog.DeleteProjectDialog;
 import com.vertexforge.launcher.dialog.DialogFactory;
 import com.vertexforge.launcher.dialog.EngineChooserDialog;
 import com.vertexforge.launcher.dialog.EngineServices;
@@ -43,12 +47,15 @@ import com.vertexforge.launcher.repository.RemovedProject;
 import com.vertexforge.launcher.service.CreateOutcome;
 import com.vertexforge.launcher.service.CreateRequest;
 import com.vertexforge.launcher.service.CreationJob;
+import com.vertexforge.launcher.service.DeleteGuards;
 import com.vertexforge.launcher.service.EditorExitCode;
 import com.vertexforge.launcher.service.FileJob;
 import com.vertexforge.launcher.service.JobMonitor;
 import com.vertexforge.launcher.service.LocationChecker.LocationCheck;
 import com.vertexforge.launcher.service.ProjectBackupService;
+import com.vertexforge.launcher.service.ProjectCacheCleaner;
 import com.vertexforge.launcher.service.ProjectCopier;
+import com.vertexforge.launcher.service.ProjectDeleter;
 import com.vertexforge.launcher.service.ProjectHealthService;
 import com.vertexforge.launcher.service.ProjectHealthService.FolderEditor;
 import com.vertexforge.launcher.service.ProjectHub;
@@ -145,6 +152,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 
 /**
@@ -183,6 +191,8 @@ public class MainController implements Initializable {
     /** What Open did before the editor started: a backup, a copy, a cancelled job (VK-1690). */
     static final String BANNER_VERSION = "version";
     static final String BANNER_LIBRARY = "script-library";
+    /** Duplicate, Back Up, Clean Caches and Move to Recycle Bin's results (VK-1695). */
+    static final String BANNER_ACTION = "project-action";
     /** The list has projects but no engine can open them (VK-1694). */
     static final String BANNER_NO_ENGINE = "no-engine";
 
@@ -313,6 +323,9 @@ public class MainController implements Initializable {
     /** Updates a project's script library to its engine's (VK-1691). */
     private final ScriptLibraryUpdateFlow libraryFlow = new ScriptLibraryUpdateFlow(new LibraryServices(),
             MainController::runLaterQuietly);
+    /** Duplicates, backs up, cleans and moves projects to the Recycle Bin (VK-1695). */
+    private final ProjectActionsFlow actionsFlow = new ProjectActionsFlow(new ActionServices(),
+            MainController::runLaterQuietly);
 
     /** A Locate… is checking a picked file or saving the relink (VK-1686); a second one must wait. */
     private final BooleanProperty locating = new SimpleBooleanProperty(false);
@@ -423,7 +436,7 @@ public class MainController implements Initializable {
 
     /**
      * Asks a creation, a backup or a copy in progress to stop (the launcher is closing; VK-1690 runs its backups and
-     * copies on the creation thread too). FX thread.
+     * copies on the creation thread too, and so do VK-1691's and VK-1695's jobs). FX thread.
      */
     public void cancelCreation() {
         if (activeJob != null) {
@@ -431,11 +444,15 @@ public class MainController implements Initializable {
         }
         openFlow.cancelJob();
         libraryFlow.cancelJob();
+        actionsFlow.cancelJob();
     }
 
-    /** Whether a creation, a backup, a copy or a script-library job (VK-1691) is in progress. FX thread. */
+    /**
+     * Whether a creation, a backup, a copy, a script-library job (VK-1691) or a project action's job (VK-1695) is in
+     * progress. FX thread.
+     */
     public boolean creationRunning() {
-        return activeJob != null || openFlow.jobRunning() || libraryFlow.jobRunning();
+        return activeJob != null || openFlow.jobRunning() || libraryFlow.jobRunning() || actionsFlow.jobRunning();
     }
 
     private void setupTableColumns() {
@@ -544,12 +561,26 @@ public class MainController implements Initializable {
         mcpItem.setOnAction(e -> editMcpOfSelected());
         mcpItem.disableProperty().bind(readOnly.or(launching).or(choosingEngine));
 
+        // VK-1695: housekeeping on the project's files. Each one is refused while an editor has the project open.
+        MenuItem duplicateItem = new MenuItem("Duplicate…");
+        duplicateItem.setOnAction(e -> runProjectAction(ProjectAction.DUPLICATE));
+        MenuItem backUpItem = new MenuItem("Back Up");
+        backUpItem.setOnAction(e -> runProjectAction(ProjectAction.BACK_UP));
+        MenuItem cleanItem = new MenuItem("Clean Caches…");
+        cleanItem.setOnAction(e -> runProjectAction(ProjectAction.CLEAN_CACHES));
+
         MenuItem removeItem = new MenuItem("Remove from List");
         removeItem.setOnAction(e -> removeSelectedProject());
         removeItem.disableProperty().bind(readOnly);
 
+        // VK-1695: never on a key (Delete removes from the list); the dialog asks for the project's name.
+        MenuItem recycleItem = new MenuItem("Move to Recycle Bin…");
+        recycleItem.getStyleClass().add("danger-menu-item");
+        recycleItem.setOnAction(e -> runProjectAction(ProjectAction.MOVE_TO_RECYCLE_BIN));
+
         contextMenu.getItems().addAll(pinItem, new SeparatorMenuItem(), showItem, copyPathItem, new SeparatorMenuItem(),
-                locateItem, changeEngineItem, updateLibraryItem, mcpItem, new SeparatorMenuItem(), removeItem);
+                locateItem, changeEngineItem, updateLibraryItem, mcpItem, new SeparatorMenuItem(), duplicateItem,
+                backUpItem, cleanItem, new SeparatorMenuItem(), removeItem, recycleItem);
         // These depend on the row's status, which changes in the background; each handler checks again.
         contextMenu.setOnShowing(event -> {
             ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
@@ -559,6 +590,10 @@ public class MainController implements Initializable {
             copyPathItem.setDisable(selected == null || isBlank(selected.getEntry().rawPath()));
             locateItem.setDisable(!canLocate(selected));
             updateLibraryItem.setDisable(!canUpdateLibrary(selected));
+            duplicateItem.setDisable(!canRunProjectAction(selected, ProjectAction.DUPLICATE));
+            backUpItem.setDisable(!canRunProjectAction(selected, ProjectAction.BACK_UP));
+            cleanItem.setDisable(!canRunProjectAction(selected, ProjectAction.CLEAN_CACHES));
+            recycleItem.setDisable(!canRunProjectAction(selected, ProjectAction.MOVE_TO_RECYCLE_BIN));
         });
 
         projectsTable.setRowFactory(table -> {
@@ -1051,6 +1086,67 @@ public class MainController implements Initializable {
         launching.set(true);
         libraryFlow.update(new ScriptLibraryUpdateFlow.Request(selected.getProjectPath(), selected.getEntry(),
                 selected.getName()));
+    }
+
+    /** The project actions of a row's menu (VK-1695). */
+    enum ProjectAction {
+        DUPLICATE,
+        BACK_UP,
+        CLEAN_CACHES,
+        MOVE_TO_RECYCLE_BIN
+    }
+
+    /**
+     * Whether {@code action} can start on {@code row} now (VK-1695): its project file reads as OK (or only needs a
+     * newer engine, which does not stop a copy, a backup or a delete: cleaning needs an engine that reads the project),
+     * no editor of this window has its folder open, and nothing else is running. An editor started elsewhere shows as
+     * Already open, which disables the action too; the flow checks every one of these again.
+     */
+    private boolean canRunProjectAction(ProjectViewModel row, ProjectAction action) {
+        if (row == null || row.getProjectPath() == null || launching.get() || choosingEngine.get() || creating.get()
+                || creationRunning() || folderEditor(row) != FolderEditor.NONE) {
+            return false;
+        }
+        ProjectStatus.Kind kind = row.getStatus().kind();
+        boolean readable = kind == ProjectStatus.Kind.OK
+                || (kind == ProjectStatus.Kind.NEEDS_NEWER_ENGINE && action != ProjectAction.CLEAN_CACHES);
+        return readable && (action != ProjectAction.MOVE_TO_RECYCLE_BIN || hub.canRecycle());
+    }
+
+    /** Starts {@code action} on the selected project (VK-1695). */
+    private void runProjectAction(ProjectAction action) {
+        ProjectViewModel selected = projectsTable.getSelectionModel().getSelectedItem();
+        if (!canRunProjectAction(selected, action)) {
+            return;
+        }
+        // Like a launch, the flow keeps the window's buttons disabled until it ends (through release()).
+        launching.set(true);
+        ProjectActionsFlow.Request request = new ProjectActionsFlow.Request(selected.getProjectPath(),
+                selected.getEntry(), selected.getName());
+        switch (action) {
+            case DUPLICATE -> actionsFlow.duplicate(request);
+            case BACK_UP -> actionsFlow.backUp(request);
+            case CLEAN_CACHES -> actionsFlow.cleanCaches(request);
+            case MOVE_TO_RECYCLE_BIN -> actionsFlow.delete(request);
+        }
+    }
+
+    /** The project files of every listed row but {@code projectFile}'s own (a delete must leave them alone). */
+    private List<Path> otherListedProjects(Path projectFile) {
+        return projectsList.stream()
+                .map(ProjectViewModel::getProjectPath)
+                .filter(Objects::nonNull)
+                .filter(path -> !path.equals(projectFile))
+                .toList();
+    }
+
+    /** Checks the rows of {@code projectFile} again: its files changed, or may have. */
+    private void recheckRowsOf(Path projectFile) {
+        for (ProjectViewModel row : projectsList) {
+            if (projectFile.equals(row.getProjectPath())) {
+                check(row);
+            }
+        }
     }
 
     /** Which editor of this window has a project of the row's folder open. */
@@ -1949,18 +2045,7 @@ public class MainController implements Initializable {
 
         @Override
         public OpenProjectFlow.JobView showJob(String title, String header, Runnable cancel) {
-            FileJobDialog dialog = FileJobDialog.show(window(), title, header, cancel);
-            return new OpenProjectFlow.JobView() {
-                @Override
-                public void progress(JobMonitor.Phase phase, long done, long total) {
-                    dialog.progress(phase, done, total);
-                }
-
-                @Override
-                public void close() {
-                    dialog.close();
-                }
-            };
+            return jobView(FileJobDialog.show(window(), title, header, cancel));
         }
 
         @Override
@@ -2087,19 +2172,7 @@ public class MainController implements Initializable {
 
         @Override
         public OpenProjectFlow.JobView showJob(String title, String header, Runnable cancel) {
-            FileJobDialog dialog = FileJobDialog.show(window(), title, header, ScriptLibraryUpdateFlow::phaseText,
-                    cancel);
-            return new OpenProjectFlow.JobView() {
-                @Override
-                public void progress(JobMonitor.Phase phase, long done, long total) {
-                    dialog.progress(phase, done, total);
-                }
-
-                @Override
-                public void close() {
-                    dialog.close();
-                }
-            };
+            return jobView(FileJobDialog.show(window(), title, header, ScriptLibraryUpdateFlow::phaseText, cancel));
         }
 
         @Override
@@ -2126,11 +2199,7 @@ public class MainController implements Initializable {
 
         @Override
         public void changed(Path projectFile) {
-            for (ProjectViewModel row : projectsList) {
-                if (projectFile.equals(row.getProjectPath())) {
-                    check(row);
-                }
-            }
+            recheckRowsOf(projectFile);
         }
 
         @Override
@@ -2149,6 +2218,180 @@ public class MainController implements Initializable {
                 banners.show(BANNER_LIBRARY, BannerBar.Kind.INFO, message, true);
             } else {
                 banners.show(BANNER_LIBRARY, BannerBar.Kind.INFO, message, true, "Show backup",
+                        () -> showInFolder(reveal));
+            }
+        }
+    }
+
+    /** A job window as the flows see it. */
+    private static OpenProjectFlow.JobView jobView(FileJobDialog dialog) {
+        return new OpenProjectFlow.JobView() {
+            @Override
+            public void progress(JobMonitor.Phase phase, long done, long total) {
+                dialog.progress(phase, done, total);
+            }
+
+            @Override
+            public void close() {
+                dialog.close();
+            }
+        };
+    }
+
+    /** What the project actions need from this window (VK-1695). FX thread, except where a method says otherwise. */
+    private final class ActionServices implements ProjectActionsFlow.Services {
+
+        @Override
+        public CompletableFuture<EngineOptions> engines() {
+            return engineServices.refresh();
+        }
+
+        @Override
+        public CompletableFuture<ProjectFileCheck> read(Path projectFile) {
+            return hub.checkProjectFile(projectFile, true);
+        }
+
+        @Override
+        public FolderEditor folderEditor(Path projectFile) {
+            return MainController.this.folderEditor(projectFile);
+        }
+
+        @Override
+        public boolean readOnly() {
+            return readOnly.get();
+        }
+
+        @Override
+        public DeleteGuards.DeleteContext deleteContext(Path projectFile, EngineOptions options) {
+            return hub.deleteContext(otherListedProjects(projectFile), options);
+        }
+
+        @Override
+        public Optional<EngineOption> chooseEngine(OpenProjectFlow.EnginePrompt prompt) {
+            return EngineChooserDialog.showForOpen(window(), prompt.header(), prompt.problem(), prompt.candidates(),
+                            prompt.canRemember(), prompt.rememberByDefault(), prompt.offered(), engineServices)
+                    .flatMap(EngineChooserDialog.Choice::engine);
+        }
+
+        @Override
+        public CompletableFuture<String> suggestDuplicateName(Path projectFile, String projectName) {
+            // It looks beside the project, which may be a slow share: never on the FX thread.
+            return CompletableFuture.supplyAsync(() -> hub.suggestDuplicateName(projectFile, projectName), background);
+        }
+
+        @Override
+        public Optional<String> askCopyName(CopyNamePrompt prompt) {
+            return CopyNameDialog.show(window(), prompt,
+                    name -> ProjectNameRules.checkName(name).map(ProjectNameRules.Problem::message));
+        }
+
+        @Override
+        public boolean confirmClean(CleanCachesPrompt prompt) {
+            return CleanCachesDialog.show(window(), prompt);
+        }
+
+        @Override
+        public Optional<String> askDeleteName(DeletePrompt prompt) {
+            return DeleteProjectDialog.show(window(), prompt);
+        }
+
+        @Override
+        public OpenProjectFlow.JobView showJob(String title, String header,
+                                               Function<JobMonitor.Phase, String> texts, Runnable cancel) {
+            return jobView(FileJobDialog.show(window(), title, header, texts, cancel));
+        }
+
+        // The creation thread runs one disk job at a time, and the launcher's shutdown cancels and waits for it.
+
+        @Override
+        public FileJob<ProjectCopier.CopyOutcome> startDuplicate(Path projectFile, String workingDirectory,
+                                                                 String newName, FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.duplicateProject(projectFile, workingDirectory, newName,
+                    monitor), listener, ProjectCopier.CopyOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectBackupService.BackupOutcome> startBackup(ProjectBackupService.BackupRequest request,
+                                                                       FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.backUpClosedProject(request, monitor), listener,
+                    ProjectBackupService.BackupOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectCacheCleaner.PreviewOutcome> startCleanPreview(ProjectCacheCleaner.CleanRequest request,
+                                                                            FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.previewCacheClean(request, monitor), listener,
+                    ProjectCacheCleaner.PreviewOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectCacheCleaner.CleanOutcome> startClean(ProjectCacheCleaner.CleanRequest request,
+                                                                   FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.cleanCaches(request, monitor), listener,
+                    ProjectCacheCleaner.CleanOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectDeleter.CheckOutcome> startDeleteCheck(ProjectDeleter.DeleteRequest request,
+                                                                    FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.checkDelete(request, monitor), listener,
+                    ProjectDeleter.CheckOutcome.Failed::new);
+        }
+
+        @Override
+        public FileJob<ProjectDeleter.DeleteOutcome> startDelete(ProjectDeleter.DeleteRequest request, String typed,
+                                                                FileJob.ProgressListener listener) {
+            return FileJob.start(creation, monitor -> hub.deleteProject(request, typed, monitor), listener,
+                    ProjectDeleter.DeleteOutcome.Failed::new);
+        }
+
+        @Override
+        public CompletableFuture<AddedProject> listDuplicate(Path projectFile, String name, String rawEngineId) {
+            CompletableFuture<AddedProject> result = new CompletableFuture<>();
+            runInBackground(() -> hub.listDuplicate(projectFile, name, rawEngineId), result::complete,
+                    result::completeExceptionally);
+            return result;
+        }
+
+        @Override
+        public CompletableFuture<RemovedProject> unlist(UUID id) {
+            CompletableFuture<RemovedProject> result = new CompletableFuture<>();
+            runInBackground(() -> hub.removeProject(id), result::complete, result::completeExceptionally);
+            return result;
+        }
+
+        @Override
+        public void listed(AddedProject added) {
+            applySavedView(added.view());
+            revealById(added.entry().id());
+        }
+
+        @Override
+        public void unlisted(RemovedProject removed) {
+            applySavedView(removed.view());
+        }
+
+        @Override
+        public void changed(Path projectFile) {
+            recheckRowsOf(projectFile);
+        }
+
+        @Override
+        public void release() {
+            launching.set(false);
+        }
+
+        @Override
+        public void error(String title, String message) {
+            showErrorDialog(title, message);
+        }
+
+        @Override
+        public void notice(String message, Path reveal) {
+            if (reveal == null) {
+                banners.show(BANNER_ACTION, BannerBar.Kind.INFO, message, true);
+            } else {
+                banners.show(BANNER_ACTION, BannerBar.Kind.INFO, message, true, "Show in folder",
                         () -> showInFolder(reveal));
             }
         }

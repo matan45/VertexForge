@@ -78,7 +78,8 @@
 -- Failures: every check ends in error(), so premake prints "Error: package-release: ..."
 -- and exits 1, and dist/VertexForge only ever changes once a new package is complete.
 -- The Release build's own engine.json must match the sources (version, asset format, project
--- schema, plugin API, launch contract), or the bundle would claim what its binaries lack.
+-- schema, plugin API, launch contract, project cache folders), or the bundle would claim what its
+-- binaries lack.
 -- The launcher is built first; the package is assembled in dist/.VertexForge-staging and
 -- verified, and the installer is built from it in dist/.VertexForge-installer and inspected;
 -- then the old package is renamed to dist/.VertexForge-old, the staging folder
@@ -289,6 +290,41 @@ function vfPackageRelease()
          return decoded
       end
       return nil
+   end
+
+   -- The same strings in the same order. json.decode gives a JSON array as a Lua table; anything that is not a
+   -- table, or a table with keys other than 1..n (a decoded object), is no list (VK-1695: projectCacheDirs).
+   local function sameStringList(a, b)
+      if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then
+         return false
+      end
+      for _, list in ipairs({ a, b }) do
+         local keys = 0
+         for _ in pairs(list) do
+            keys = keys + 1
+         end
+         if keys ~= #list then
+            return false
+         end
+      end
+      for i = 1, #a do
+         if type(a[i]) ~= "string" or a[i] ~= b[i] then
+            return false
+         end
+      end
+      return true
+   end
+
+   -- A list for a message: "[a, b]", or "(none)" when the manifest has no list.
+   local function describeStringList(list)
+      if type(list) ~= "table" then
+         return "(none)"
+      end
+      local items = {}
+      for i, item in ipairs(list) do
+         items[i] = tostring(item)
+      end
+      return "[" .. table.concat(items, ", ") .. "]"
    end
 
    -- One argument for cmd /c, in quotes. cmd expands %VAR% even inside quotes and a quote cannot be escaped, so a
@@ -632,6 +668,14 @@ function vfPackageRelease()
             " but the sources now say " .. field.value .. ". Re-run premake5 vs2022 and rebuild Release")
       end
    end
+   -- projectCacheDirs (VK-1695) is a list, so it is compared on its own: the project folders the launcher may delete
+   -- must be the ones these binaries rebuild. A Release build older than VK-1695 has none.
+   local sourceCacheDirs = vfProjectCacheDirs()
+   if not sameStringList(buildManifest.projectCacheDirs, sourceCacheDirs) then
+      fail("the Release binaries were built with projectCacheDirs " ..
+         describeStringList(buildManifest.projectCacheDirs) .. " but the sources now say " ..
+         describeStringList(sourceCacheDirs) .. ". Re-run premake5 vs2022 and rebuild Release")
+   end
 
    local plugins = collectPlugins()
 
@@ -921,6 +965,12 @@ function vfPackageRelease()
       if tree.present and tree.manifestField then
          checkManifestDir(tree.manifestField, tree.rel)
       end
+   end
+   -- projectCacheDirs (VK-1695) are relative to a project's working directory, not to the bundle, so there is no
+   -- folder to resolve: the staged list must be the sources' own.
+   if not sameStringList(stagedManifest.projectCacheDirs, sourceCacheDirs) then
+      fail(stagedManifestPath .. " projectCacheDirs = " .. describeStringList(stagedManifest.projectCacheDirs) ..
+         " but the sources say " .. describeStringList(sourceCacheDirs))
    end
 
    -- 6. The installer (VK-1693), from the verified staging folder, before anything in dist/ changes.

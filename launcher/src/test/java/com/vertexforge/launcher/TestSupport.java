@@ -219,6 +219,18 @@ public final class TestSupport {
     /** As {@link #writeManifest(Path, String, String)}, with a {@code launchContract} member (VK-1683) when given. */
     public static Path writeManifest(Path dir, String configuration, String workingDirectory,
                                      Integer launchContract) {
+        return writeManifest(dir, configuration, workingDirectory, launchContract, DEFAULT_PROJECT_CACHE_DIRS);
+    }
+
+    /** The {@code projectCacheDirs} member {@code tools/engine_version.lua} writes (VK-1695), as JSON text. */
+    public static final String DEFAULT_PROJECT_CACHE_DIRS = "[\"scripts/compiled\"]";
+
+    /**
+     * As {@link #writeManifest(Path, String, String, Integer)}, with {@code projectCacheDirsJson} as the
+     * {@code projectCacheDirs} member's raw JSON text (VK-1695), or without the member when it is {@code null}.
+     */
+    public static Path writeManifest(Path dir, String configuration, String workingDirectory,
+                                     Integer launchContract, String projectCacheDirsJson) {
         String text = """
                 {
                   "manifestVersion": 1,
@@ -233,10 +245,11 @@ public final class TestSupport {
                   "templatesDir": "../../../../assets/templates",
                   "scriptLibDir": "../../../../assets/scripts/lib",
                   "examplesDir": "../../../../assets/scripts/game/examples",
-                  "vfxLibraryDir": "../../../../assets/vfx/library"%s
+                  "vfxLibraryDir": "../../../../assets/vfx/library"%s%s
                 }
                 """.formatted(configuration, workingDirectory,
-                launchContract == null ? "" : ",\n  \"launchContract\": " + launchContract);
+                launchContract == null ? "" : ",\n  \"launchContract\": " + launchContract,
+                projectCacheDirsJson == null ? "" : ",\n  \"projectCacheDirs\": " + projectCacheDirsJson);
         try {
             return Files.writeString(Files.createDirectories(dir).resolve("engine.json"), text, StandardCharsets.UTF_8);
         } catch (IOException e) {

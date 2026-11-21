@@ -120,6 +120,19 @@ class EngineProbeTest {
         assertEquals(Kind.OK, probe.probe(editor).kind());
     }
 
+    /** VK-1695: a bad projectCacheDirs list costs only Clean Caches, never the engine. */
+    @Test
+    void aBadProjectCacheDirsListLeavesTheEngineOk() {
+        Path exeDir = root.resolve("bin");
+        Path editor = TestSupport.fakeEditor(exeDir);
+        TestSupport.writeManifest(exeDir, "Release", ".", null, "[\"../outside\", 7]");
+
+        EngineHealth health = probe.probe(editor);
+
+        assertEquals(Kind.OK, health.kind(), health.reason());
+        assertNull(health.manifest().projectCacheDirs());
+    }
+
     @Test
     void aMissingWorkingDirectoryIsBroken() {
         Path exeDir = root.resolve("repo/bin/Editor/Debug/x64");

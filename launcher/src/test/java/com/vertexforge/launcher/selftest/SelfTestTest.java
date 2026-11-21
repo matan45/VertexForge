@@ -1,6 +1,9 @@
 package com.vertexforge.launcher.selftest;
 
 import com.vertexforge.launcher.TestSupport;
+import com.vertexforge.launcher.env.RecycleBin;
+import com.vertexforge.launcher.env.RecycleCheck;
+import com.vertexforge.launcher.env.RecycleResult;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.selftest.SelfTest.CheckFailure;
 import com.vertexforge.launcher.selftest.SelfTest.Reporter;
@@ -16,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -196,5 +200,44 @@ class SelfTestTest {
 
     private static PrintStream print(ByteArrayOutputStream bytes) {
         return new PrintStream(bytes, true, StandardCharsets.UTF_8);
+    }
+
+    /** A Recycle Bin whose dry run answers {@code answer} (VK-1695's packaged check, without Windows). */
+    private static RecycleBin answering(RecycleCheck answer) {
+        return new RecycleBin() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public RecycleCheck check(Path folder, BooleanSupplier cancelRequested) {
+                return answer;
+            }
+
+            @Override
+            public RecycleResult recycle(Path folder) {
+                throw new AssertionError("the self-test never recycles");
+            }
+        };
+    }
+
+    @Test
+    void theRecycleBinCheckPassesOnlyWhenWindowsWasReached() throws Exception {
+        Path folder = TestSupport.real(tempDir).resolve("probe");
+
+        SelfTest.checkRecycleBin(answering(new RecycleCheck.Recyclable()), folder);
+        SelfTest.checkRecycleBin(answering(new RecycleCheck.NotRecyclable("no bin")), folder);
+        assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkRecycleBin(answering(new RecycleCheck.Unknown("COM failed")), folder));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkRecycleBin(RecycleBin.unavailable(), folder));
+        assertEquals("probe", Files.readString(folder.resolve("probe.txt")));
+    }
+
+    @Test
+    void theKnownFoldersCheckWantsAbsolutePaths() {
+        SelfTest.checkKnownFolders(() -> List.of(TestSupport.real(tempDir)));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkKnownFolders(List::of));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkKnownFolders(() -> List.of(Path.of("relative"))));
     }
 }

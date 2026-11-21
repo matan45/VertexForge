@@ -9,6 +9,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.Strictness;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
+import com.vertexforge.launcher.util.RelativePathRules;
 import com.vertexforge.launcher.util.VersionNumber;
 
 import java.io.IOException;
@@ -69,13 +70,12 @@ public record TemplateManifest(
     /** The working directory that is the project folder itself. */
     public static final String PROJECT_FOLDER = ".";
     /** The editor's own folder in a project (VK-1682); nothing a template writes may go there. */
-    static final String EDITOR_STATE_DIR = ".vertexforge";
+    static final String EDITOR_STATE_DIR = RelativePathRules.EDITOR_STATE_DIR;
     static final String SCENE_EXTENSION = ".vfScene";
 
     /** {@code MAJOR.MINOR.PATCH} without leading zeros, as the engine's {@code VERSION} file holds it. */
     static final Pattern VERSION_PATTERN = Pattern.compile("(0|[1-9]\\d*)(\\.(0|[1-9]\\d*)){2}");
     private static final Pattern ID_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
-    private static final String FORBIDDEN_CHARACTERS = "<>:\"|?*\\";
     private static final char BYTE_ORDER_MARK = '\uFEFF';
 
     /**
@@ -258,37 +258,24 @@ public record TemplateManifest(
      * only characters (and endings) Windows allows in a file name.
      */
     static String relativePath(String what, String value) throws TemplateException {
-        if (value.isEmpty()) {
-            throw invalid(quoted(what) + " is empty");
+        Optional<RelativePathRules.Problem> problem = RelativePathRules.problem(value);
+        if (problem.isEmpty()) {
+            return value;
         }
-        if (value.startsWith("/")) {
-            throw invalid(quoted(what) + " is \"" + value + "\", which is not a relative path");
-        }
-        for (String part : value.split("/", -1)) {
-            if (part.isEmpty() || part.equals(".") || part.equals("..")) {
-                throw invalid(quoted(what) + " is \"" + value + "\": use a relative path with '/' between folder"
-                        + " names, without '.' or '..'");
-            }
-            for (int i = 0; i < part.length(); i++) {
-                char c = part.charAt(i);
-                if (Character.isISOControl(c) || FORBIDDEN_CHARACTERS.indexOf(c) >= 0) {
-                    throw invalid(quoted(what) + " is \"" + value + "\", which holds a character Windows does not"
-                            + " allow in a file name");
-                }
-            }
-            char last = part.charAt(part.length() - 1);
-            if (last == ' ' || last == '.') {
-                throw invalid(quoted(what) + " is \"" + value + "\": a name may not end with a space or a dot");
-            }
-        }
-        return value;
+        throw invalid(quoted(what) + switch (problem.get()) {
+            case EMPTY -> " is empty";
+            case NOT_RELATIVE -> " is \"" + value + "\", which is not a relative path";
+            case BAD_PART -> " is \"" + value + "\": use a relative path with '/' between folder names, without '.'"
+                    + " or '..'";
+            case FORBIDDEN_CHARACTER -> " is \"" + value + "\", which holds a character Windows does not allow in a"
+                    + " file name";
+            case BAD_ENDING -> " is \"" + value + "\": a name may not end with a space or a dot";
+        });
     }
 
     /** Whether a project-relative path is, or lies in, {@link #EDITOR_STATE_DIR}. */
     static boolean isEditorState(String projectRelative) {
-        int slash = projectRelative.indexOf('/');
-        String first = slash < 0 ? projectRelative : projectRelative.substring(0, slash);
-        return first.equalsIgnoreCase(EDITOR_STATE_DIR);
+        return RelativePathRules.isEditorState(projectRelative);
     }
 
     private static String quoted(String what) {

@@ -9,11 +9,14 @@ import com.vertexforge.launcher.engine.EngineRegistryView;
 import com.vertexforge.launcher.engine.EngineResolver;
 import com.vertexforge.launcher.engine.LaunchPlan;
 import com.vertexforge.launcher.engine.PickedEngine;
+import com.vertexforge.launcher.env.DriveTypes;
 import com.vertexforge.launcher.env.LauncherEnvironment;
+import com.vertexforge.launcher.env.RecycleBin;
 import com.vertexforge.launcher.model.McpSetting;
 import com.vertexforge.launcher.model.ProjectCreationResult;
 import com.vertexforge.launcher.model.RecentEntry;
 import com.vertexforge.launcher.project.EditorLockProbe;
+import com.vertexforge.launcher.project.EditorLockState;
 import com.vertexforge.launcher.project.PickedProject;
 import com.vertexforge.launcher.project.ProjectFileCheck;
 import com.vertexforge.launcher.project.ProjectInspector;
@@ -36,15 +39,19 @@ import com.vertexforge.launcher.store.StoreWriteException;
 import com.vertexforge.launcher.template.ProjectBlueprint;
 import com.vertexforge.launcher.template.TemplateCatalogs;
 import com.vertexforge.launcher.template.TemplateScanner;
+import com.vertexforge.launcher.util.FileTrees;
 import com.vertexforge.launcher.util.LauncherLog;
 import com.vertexforge.launcher.util.SingleFlightChecks;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -92,6 +99,14 @@ public class ProjectHub implements AutoCloseable {
     private volatile LauncherSettings settings;
     /** What was remembered at startup (VK-1694). */
     private final LauncherState state;
+    /** Whether an editor or another launcher holds a project (VK-1695's Duplicate and Back Up check first). */
+    private final EditorLockProbe locks;
+    /** "Move to Recycle Bin…" (VK-1695). */
+    private final ProjectDeleter deleter;
+    /** "Clean Caches…" (VK-1695). */
+    private final ProjectCacheCleaner cacheCleaner;
+    /** The folders "Move to Recycle Bin…" never takes (VK-1695). */
+    private final ProtectedFolders protectedFolders;
 
     /** A hub whose location checks show no warnings (they need the environment; see {@link #create}). */
     public ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
@@ -119,22 +134,27 @@ public class ProjectHub implements AutoCloseable {
                       ProjectHealthService health, LocationChecker locationChecker,
                       LauncherSettingsRepository settingsRepository, LauncherSettings settings, Clock clock) {
         this(repository, projectCreator, engines, editorLauncher, health, locationChecker, settingsRepository,
-                settings, null, clock, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT);
+                settings, null, clock, ProjectInspector.system(), ProjectHealthService.DEFAULT_TIMEOUT,
+                RecycleBin.unavailable(), DriveTypes.unknown(), ProtectedFolders.none());
     }
 
     /**
-     * @param stateRepository where the window and the list's sort are remembered (VK-1694), or {@code null} to
-     *                        remember nothing; it is read here, once
-     * @param inspector       reads the projects picked with "Add Existing…", dropped or given on the command line
-     *                        (VK-1685)
-     * @param pickTimeout     how long one such read may take before it is refused
+     * @param stateRepository  where the window and the list's sort are remembered (VK-1694), or {@code null} to
+     *                         remember nothing; it is read here, once
+     * @param inspector        reads the projects picked with "Add Existing…", dropped or given on the command line
+     *                         (VK-1685)
+     * @param pickTimeout      how long one such read may take before it is refused
+     * @param recycleBin       where "Move to Recycle Bin…" moves a project folder (VK-1695)
+     * @param driveTypes       tells the fixed drives, the only ones with a Recycle Bin, from the others (VK-1695)
+     * @param protectedFolders the folders that delete never takes (VK-1695)
      */
     ProjectHub(RecentProjectsRepository repository, ProjectCreator projectCreator,
                EngineCatalog engines, EditorLauncher editorLauncher,
                ProjectHealthService health, LocationChecker locationChecker,
                LauncherSettingsRepository settingsRepository, LauncherSettings settings,
                LauncherStateRepository stateRepository, Clock clock,
-               ProjectInspector inspector, Duration pickTimeout) {
+               ProjectInspector inspector, Duration pickTimeout,
+               RecycleBin recycleBin, DriveTypes driveTypes, ProtectedFolders protectedFolders) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.projectCreator = Objects.requireNonNull(projectCreator, "projectCreator");
         this.engines = Objects.requireNonNull(engines, "engines");
@@ -150,6 +170,11 @@ public class ProjectHub implements AutoCloseable {
         this.copier = new ProjectCopier(SpaceProbe.SYSTEM);
         this.libraryUpdater = new ScriptLibraryUpdater(clock, SpaceProbe.SYSTEM, EditorLockProbe.system());
         this.libraryStatus = new ScriptLibraryStatusService(ScriptLibraryStatusService.DEFAULT_TIMEOUT);
+        this.locks = EditorLockProbe.system();
+        this.deleter = new ProjectDeleter(Objects.requireNonNull(recycleBin, "recycleBin"),
+                Objects.requireNonNull(driveTypes, "driveTypes"), locks);
+        this.cacheCleaner = new ProjectCacheCleaner(locks);
+        this.protectedFolders = Objects.requireNonNull(protectedFolders, "protectedFolders");
         this.stateRepository = stateRepository;
         this.state = stateRepository == null ? LauncherState.EMPTY : stateRepository.load();
         ProjectInspector reader = Objects.requireNonNull(inspector, "inspector");
@@ -210,7 +235,10 @@ public class ProjectHub implements AutoCloseable {
                 stateRepository,
                 environment.clock(),
                 inspector,
-                pickTimeout);
+                pickTimeout,
+                environment.recycleBin(),
+                environment.driveTypes(),
+                ProtectedFolders.of(environment));
     }
 
     /** The recent projects, most recently opened first, with the state of the list's file. Never probes a project. */
@@ -366,6 +394,156 @@ public class ProjectHub implements AutoCloseable {
     public AddedProject listCopy(Path projectFile, String name, Optional<UUID> engineId) throws StoreWriteException {
         Objects.requireNonNull(projectFile, "projectFile");
         return repository.addBound(canonical(projectFile), name, listLimit(), engineId);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Project actions (VK-1695): Duplicate, Back Up, Clean Caches, Move to Recycle Bin
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * The name "Duplicate…" offers for the project: {@code <Folder>-copy}, or the first numbered one that is free
+     * beside it. Looks beside the project, so it blocks briefly: a background thread. Never throws.
+     */
+    public String suggestDuplicateName(Path projectFile, String projectName) {
+        Objects.requireNonNull(projectFile, "projectFile");
+        Path folder = projectFile.toAbsolutePath().normalize().getParent();
+        Path parent = folder == null ? null : folder.getParent();
+        if (parent == null || folder.getFileName() == null) {
+            return DuplicateNames.suggest(null, projectName, name -> false);
+        }
+        return DuplicateNames.suggest(folder.getFileName().toString(), projectName, name -> {
+            try {
+                return Files.exists(parent.resolve(name), LinkOption.NOFOLLOW_LINKS);
+            } catch (InvalidPathException | SecurityException e) {
+                return true;
+            }
+        });
+    }
+
+    /**
+     * Copies the project beside it as {@code newName}, with its project file named after the copy
+     * ({@link ProjectCopier.CopyRequest.ProjectFileName#NEW_NAME}); the original is only read. Refused when an editor or
+     * another launcher holds the project now: a copy taken while the editor writes could catch half-saved files. Blocks
+     * for as long as the copy takes: a job's thread. Never throws.
+     */
+    public ProjectCopier.CopyOutcome duplicateProject(Path projectFile, String workingDirectory, String newName,
+                                                      JobMonitor monitor) {
+        Optional<String> held = heldReason(projectFile, "copied");
+        if (held.isPresent()) {
+            return new ProjectCopier.CopyOutcome.Failed(held.get());
+        }
+        ProjectCopier.CopyOutcome outcome = copier.copy(new ProjectCopier.CopyRequest(projectFile, workingDirectory,
+                newName, ProjectCopier.CopyRequest.ProjectFileName.NEW_NAME), monitor);
+        // An editor that opened the project while it was copied may have saved half a change into the copy.
+        if (outcome instanceof ProjectCopier.CopyOutcome.Done done && heldReason(projectFile, "copied").isPresent()) {
+            List<IOException> failures = new ArrayList<>();
+            // The copy is a folder this call made, so its own read-only flags may go with it.
+            FileTrees.deleteTreeClearingReadOnly(done.folder(), failures);
+            return new ProjectCopier.CopyOutcome.Failed("The project was opened in an editor while it was being "
+                    + "copied, so the copy (which may hold half-saved files) was deleted again"
+                    + (failures.isEmpty() ? "." : ", except what could not be deleted: delete " + done.folder()
+                    + " by hand."));
+        }
+        return outcome;
+    }
+
+    /**
+     * {@link #backUpProject}, refused when an editor or another launcher holds the project now: "Back Up" from the
+     * list backs up a closed project only. Blocks: a job's thread. Never throws.
+     */
+    public ProjectBackupService.BackupOutcome backUpClosedProject(ProjectBackupService.BackupRequest request,
+                                                                  JobMonitor monitor) {
+        Optional<String> held = heldReason(request.projectFile(), "backed up");
+        if (held.isPresent()) {
+            return new ProjectBackupService.BackupOutcome.Refused(held.get());
+        }
+        ProjectBackupService.BackupOutcome outcome = backups.backUp(request, monitor);
+        // An editor that opened the project meanwhile may have saved half a change into the zip.
+        if (outcome instanceof ProjectBackupService.BackupOutcome.Done done
+                && heldReason(request.projectFile(), "backed up").isPresent()) {
+            try {
+                Files.deleteIfExists(done.zip());
+                return new ProjectBackupService.BackupOutcome.Refused("The project was opened in an editor while it "
+                        + "was being backed up, so the backup (which may hold half-saved files) was deleted again.");
+            } catch (IOException e) {
+                return new ProjectBackupService.BackupOutcome.Refused("The project was opened in an editor while it "
+                        + "was being backed up, so the backup " + done.zip() + " may hold half-saved files: delete "
+                        + "it by hand.");
+            }
+        }
+        return outcome;
+    }
+
+    /**
+     * Lists a duplicate under its real path, bound as the original's entry is ({@code rawEngineId}, verbatim;
+     * {@code null} follows the default engine), in one write; the original's entry is never touched. Store thread.
+     */
+    public AddedProject listDuplicate(Path projectFile, String name, String rawEngineId) throws StoreWriteException {
+        Objects.requireNonNull(projectFile, "projectFile");
+        return repository.addBoundRaw(canonical(projectFile), name, listLimit(), rawEngineId);
+    }
+
+    /** What "Clean Caches…" would delete. Only reads. Blocks: a job's thread. Never throws. */
+    public ProjectCacheCleaner.PreviewOutcome previewCacheClean(ProjectCacheCleaner.CleanRequest request,
+                                                                JobMonitor monitor) {
+        return cacheCleaner.preview(request, monitor);
+    }
+
+    /** Deletes the project's caches as {@code request}'s engine lists them. Blocks: a job's thread. Never throws. */
+    public ProjectCacheCleaner.CleanOutcome cleanCaches(ProjectCacheCleaner.CleanRequest request, JobMonitor monitor) {
+        return cacheCleaner.clean(request, monitor);
+    }
+
+    /** Whether "Move to Recycle Bin…" can work on this machine at all. Any thread. */
+    public boolean canRecycle() {
+        return deleter.available();
+    }
+
+    /**
+     * What a delete is checked against: this hub's protected folders and the folder Create Project starts in (the
+     * settings as they are now), every engine's folders and the other listed projects. Pure; any thread.
+     */
+    public DeleteGuards.DeleteContext deleteContext(List<Path> otherListedProjects, EngineOptions options) {
+        return new DeleteGuards.DeleteContext(protectedFolders.with(settings.defaultProjectLocation().stream()
+                .toList()), DeleteGuards.engineFolders(options), otherListedProjects);
+    }
+
+    /** Everything "Move to Recycle Bin…" shows before the user types the name. Only reads. A job's thread. */
+    public ProjectDeleter.CheckOutcome checkDelete(ProjectDeleter.DeleteRequest request, JobMonitor monitor) {
+        return deleter.check(request, monitor);
+    }
+
+    /** Moves the project folder to the Recycle Bin when {@code typed} is its name. A job's thread. Never throws. */
+    public ProjectDeleter.DeleteOutcome deleteProject(ProjectDeleter.DeleteRequest request, String typed,
+                                                      JobMonitor monitor) {
+        return deleter.delete(request, typed, monitor);
+    }
+
+    /**
+     * Why the project cannot be {@code what} now, because an editor or another launcher holds it; empty when neither
+     * does. Probes only, so nothing is written into the project. Blocks briefly.
+     */
+    private Optional<String> heldReason(Path projectFile, String what) {
+        Path folder = projectFile.toAbsolutePath().normalize().getParent();
+        if (folder == null) {
+            return Optional.empty();
+        }
+        return heldReason(locks.probe(folder), what).or(() -> heldReason(locks.probeLauncher(folder), what));
+    }
+
+    static Optional<String> heldReason(EditorLockState state, String what) {
+        return switch (state) {
+            case EditorLockState.Held held -> Optional.of("The project was opened in the editor"
+                    + (held.pid().isPresent() ? " (process " + held.pid().getAsLong() + ")" : "")
+                    + ", so it was not " + what + ". Close the editor, then try again.");
+            case EditorLockState.Unknown unknown -> Optional.of(EditorLockProbe.HELD_BY_LAUNCHER.equals(unknown.reason())
+                    ? "Another VertexForge launcher is changing this project right now, so it was not " + what
+                    + ". Try again once it is done."
+                    : "Could not check whether the editor has the project open (" + unknown.reason() + "), so it was "
+                    + "not " + what + ".");
+            case EditorLockState.Free ignored -> Optional.empty();
+            case EditorLockState.Skipped ignored -> Optional.empty();
+        };
     }
 
     /** The settings as last read or saved. Any thread. */

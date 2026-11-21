@@ -478,4 +478,150 @@ class ProjectCopierTest {
     private static String quoted(String value) {
         return "\"" + value.replace("\\", "\\\\") + "\"";
     }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Duplicate (VK-1695): the project file named after the copy, and the scripts project renamed
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private static final String DUPLICATE = "Game-copy";
+
+    /** Gives {@link #game} a scripts project. */
+    private void useGameWithScriptsProject() {
+        ProjectTreeFixture.addScriptsProject(game);
+    }
+
+    private CopyOutcome duplicate(String name) {
+        return copier().copy(new CopyRequest(projectFile, "assets", name, CopyRequest.ProjectFileName.NEW_NAME),
+                JobMonitor.NONE);
+    }
+
+    @Test
+    void aDuplicatesProjectFileIsNamedAfterIt() throws Exception {
+        useGameWithScriptsProject();
+        Map<String, String> before = TestSupport.treeSnapshot(game);
+
+        CopyOutcome.Done done = done(duplicate(DUPLICATE));
+
+        Path copy = parent.resolve(DUPLICATE);
+        assertEquals(copy.resolve(DUPLICATE + ".vfproj"), done.projectFile());
+        assertFalse(Files.exists(copy.resolve("Game.vfproj")), "the old file name is gone from the copy");
+        assertEquals(DUPLICATE, ProjectFileReader.read(done.projectFile()).projectName());
+        assertEquals(before, TestSupport.treeSnapshot(game), "the original is only read");
+        assertEquals(List.of(), done.notes());
+    }
+
+    @Test
+    void theScriptsProjectGetsTheCopysNameAndNothingElseChanges() throws Exception {
+        useGameWithScriptsProject();
+
+        CopyOutcome.Done done = done(duplicate(DUPLICATE));
+
+        Path copy = done.folder();
+        assertEquals(ProjectTreeFixture.SCRIPTS_PROJECT.replace("Name=\"Game\"", "Name=\"" + DUPLICATE + "\""),
+                Files.readString(copy.resolve("assets/scripts/scripts.mtproj"), StandardCharsets.UTF_8));
+        // Every other file is the original's, byte for byte.
+        Predicate<String> excluded = ProjectContent.of(projectFile, "assets").excluded();
+        Predicate<String> edited = relative -> excluded.test(relative) || relative.endsWith(".vfproj")
+                || relative.equals("assets/scripts/scripts.mtproj");
+        assertEquals(ProjectTreeFixture.contentHashes(game, edited), ProjectTreeFixture.contentHashes(copy, edited));
+    }
+
+    /** VK-1695 also renames the scripts project of an "Open a copy" (VK-1690), whose project file keeps its name. */
+    @Test
+    void openACopyRenamesTheScriptsProjectToo() throws Exception {
+        useGameWithScriptsProject();
+
+        CopyOutcome.Done done = done(copy(COPY));
+
+        assertEquals(parent.resolve(COPY).resolve("Game.vfproj"), done.projectFile());
+        assertTrue(Files.readString(done.folder().resolve("assets/scripts/scripts.mtproj"), StandardCharsets.UTF_8)
+                .contains("Name=\"" + COPY + "\""));
+    }
+
+    @Test
+    void aScriptsProjectThatCannotBeEditedIsCopiedAsItIsWithANote() throws Exception {
+        useGameWithScriptsProject();
+        Path scripts = game.resolve("assets/scripts/scripts.mtproj");
+        Files.writeString(scripts, "<Project Name='Game'/>\r\n", StandardCharsets.UTF_8);
+
+        CopyOutcome.Done done = done(duplicate(DUPLICATE));
+
+        assertEquals("<Project Name='Game'/>\r\n",
+                Files.readString(done.folder().resolve("assets/scripts/scripts.mtproj"), StandardCharsets.UTF_8));
+        assertEquals(1, done.notes().size(), done.notes()::toString);
+        assertTrue(done.notes().getFirst().startsWith("assets/scripts/scripts.mtproj was copied as it is"),
+                done.notes().getFirst());
+    }
+
+    @Test
+    void aProjectWithoutAScriptsProjectNeedsNoNote() {
+        assertEquals(List.of(), done(duplicate(DUPLICATE)).notes());
+    }
+
+    /** Old projects keep their scripts beside the project file (working directory "."). */
+    @Test
+    void aProjectWhoseWorkingDirectoryIsItsFolderFindsItsScriptsProject() throws Exception {
+        Path old = Files.createDirectories(parent.resolve("Old"));
+        Path oldProject = Files.writeString(old.resolve("Old.vfproj"), ProjectTreeFixture.PROJECT_JSON
+                .replace("\"Game\"", "\"Old\"").replace("\"assets\"", "\".\""), StandardCharsets.UTF_8);
+        Files.createDirectories(old.resolve("scripts"));
+        Files.writeString(old.resolve("scripts/scripts.mtproj"), "<Project Name=\"VertexForgeScripts\" Version=\"1\">",
+                StandardCharsets.UTF_8);
+
+        CopyOutcome.Done done = done(copier().copy(new CopyRequest(oldProject, ".", "Old-copy",
+                CopyRequest.ProjectFileName.NEW_NAME), JobMonitor.NONE));
+
+        assertEquals(parent.resolve("Old-copy/Old-copy.vfproj"), done.projectFile());
+        assertEquals("<Project Name=\"Old-copy\" Version=\"1\">",
+                Files.readString(done.folder().resolve("scripts/scripts.mtproj"), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void aDuplicateNameThatAnotherTopLevelEntryHasIsRefusedBeforeAnythingIsWritten() throws Exception {
+        useGameWithScriptsProject();
+        Files.writeString(game.resolve("game-COPY.vfproj"), "{}", StandardCharsets.UTF_8);
+        Map<String, String> before = TestSupport.treeSnapshot(game);
+
+        CopyOutcome outcome = duplicate(DUPLICATE);
+
+        CopyOutcome.Refused refused = assertInstanceOf(CopyOutcome.Refused.class, outcome, outcome::toString);
+        assertTrue(refused.reason().contains("\"game-COPY.vfproj\""), refused.reason());
+        assertEquals(Set.of("Game"), TestSupport.fileNames(parent), "nothing was written");
+        assertEquals(before, TestSupport.treeSnapshot(game));
+    }
+
+    /** "proj" for "Proj.vfproj" only changes the letter case of the same file, which is no clash. */
+    @Test
+    void aDuplicateNamedLikeTheOriginalsFileInAnotherCaseIsNoClash() throws IOException {
+        Path renamed = Files.move(projectFile, game.resolve("Proj.vfproj"));
+
+        CopyOutcome.Done done = done(copier().copy(new CopyRequest(renamed, "assets", "proj",
+                CopyRequest.ProjectFileName.NEW_NAME), JobMonitor.NONE));
+
+        assertEquals(parent.resolve("proj").resolve("proj.vfproj"), done.projectFile());
+        assertEquals(Set.of("proj.vfproj"), TestSupport.fileNames(done.folder()).stream()
+                .filter(name -> name.endsWith(".vfproj")).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    void theNewProjectFileNameCountsAgainstThePathBudget() {
+        // ProjectNameRules.checkPathLength: <parent>\<name> + '\' + the deepest relative path must fit the budget.
+        Predicate<String> excluded = ProjectContent.of(projectFile, "assets").excluded();
+        int deepest = ProjectTreeFixture.contentHashes(game, excluded).keySet().stream()
+                .mapToInt(String::length).max().orElseThrow();
+        int allowed = ProjectNameRules.MAX_PATH_CHARS - ProjectNameRules.PATH_MARGIN;
+        int parentLength = parent.toString().length();
+        // The smallest name whose own project file (name + ".vfproj") no longer fits: parent + 2n + 9 > allowed.
+        int nameLength = (allowed - parentLength - 9) / 2 + 1;
+        assumeTrue(parentLength + 2 + nameLength + deepest <= allowed && nameLength + 7 > deepest,
+                "the temp folder leaves room for this case");
+        String name = "n".repeat(nameLength);
+
+        CopyOutcome rename = duplicate(name);
+        assertTrue(assertInstanceOf(CopyOutcome.Refused.class, rename, rename::toString).reason().contains("too long"));
+        assertEquals(Set.of("Game"), TestSupport.fileNames(parent), "nothing was written");
+
+        CopyOutcome keep = copier().copy(new CopyRequest(projectFile, "assets", name), JobMonitor.NONE);
+        assertInstanceOf(CopyOutcome.Done.class, keep, keep::toString);
+    }
 }

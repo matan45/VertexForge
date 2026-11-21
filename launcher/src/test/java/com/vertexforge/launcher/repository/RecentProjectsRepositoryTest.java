@@ -166,6 +166,24 @@ class RecentProjectsRepositoryTest {
         assertNull(added.entry().engineId());
     }
 
+    /** VK-1695: a duplicate is bound exactly as its original's entry is, even to an id that is not a valid UUID. */
+    @Test
+    void addBoundRawCopiesTheOriginalsBindingVerbatim() throws Exception {
+        String engine = "6f1c2a5e-8d3b-4c7a-9e21-0b5d7f3a1c88";
+
+        AddedProject bound = repository.addBoundRaw(projectFile("A"), "A", LIMIT, engine);
+        AddedProject odd = repository.addBoundRaw(projectFile("B"), "B", LIMIT, "not-a-uuid");
+        AddedProject unbound = repository.addBoundRaw(projectFile("C"), "C", LIMIT, null);
+        AddedProject blank = repository.addBoundRaw(projectFile("D"), "D", LIMIT, "  ");
+
+        assertEquals(engine, bound.entry().engineId());
+        assertEquals("not-a-uuid", odd.entry().engineId());
+        assertNull(unbound.entry().engineId());
+        assertNull(blank.entry().engineId());
+        assertEquals(engine, newRepository().load().find(bound.entry().id()).orElseThrow().engineId());
+        assertEquals(4, newRepository().load().entries().size());
+    }
+
     @Test
     void theUnknownVersionWarningIsRecordedOnceAndKeptOnReload() throws Exception {
         UUID id = repository.add(projectFile("Game"), "Game", LIMIT).entries().getFirst().id();

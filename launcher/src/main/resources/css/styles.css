@@ -343,6 +343,19 @@
     -fx-text-fill: #ffffff;
 }
 
+/* VK-1695: "Move to Recycle Bin…" reads as the one menu item that removes the project's files. */
+.context-menu .menu-item.danger-menu-item .label {
+    -fx-text-fill: #e06c6c;
+}
+
+.context-menu .menu-item.danger-menu-item:focused {
+    -fx-background-color: #5a1d1d;
+}
+
+.context-menu .menu-item.danger-menu-item:focused .label {
+    -fx-text-fill: #ffffff;
+}
+
 .context-menu .separator .line {
     -fx-border-color: #3f3f46 transparent transparent transparent;
 }

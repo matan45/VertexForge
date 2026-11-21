@@ -21,9 +21,15 @@ import java.nio.file.Path;
  */
 final class WindowsDriveTypes implements DriveTypes {
 
-    private static final int DRIVE_UNKNOWN = 0;
-    private static final int DRIVE_NO_ROOT_DIR = 1;
+    /**
+     * {@code GetDriveTypeW}'s answers (WinBase.h). 0 ({@code DRIVE_UNKNOWN}) and 1 ({@code DRIVE_NO_ROOT_DIR}) say
+     * nothing about the drive and fall into {@link Kind#UNKNOWN} with everything else.
+     */
+    private static final int DRIVE_REMOVABLE = 2;
+    private static final int DRIVE_FIXED = 3;
     private static final int DRIVE_REMOTE = 4;
+    private static final int DRIVE_CDROM = 5;
+    private static final int DRIVE_RAMDISK = 6;
 
     /** The function, or {@code null} when it could not be looked up. Initialized on first use. */
     private static final class Holder {
@@ -65,13 +71,24 @@ final class WindowsDriveTypes implements DriveTypes {
                 MemorySegment name = arena.allocateFrom(text, StandardCharsets.UTF_16LE);
                 type = (int) getDriveType.invokeExact(name);
             }
-            return switch (type) {
-                case DRIVE_REMOTE -> Kind.REMOTE;
-                case DRIVE_UNKNOWN, DRIVE_NO_ROOT_DIR -> Kind.UNKNOWN;
-                default -> Kind.LOCAL;
-            };
+            return kindOf(type);
         } catch (Throwable t) {
             return Kind.UNKNOWN;
         }
+    }
+
+    /**
+     * The kind a {@code GetDriveTypeW} answer names. Only a fixed drive is {@link Kind#LOCAL}; anything this list does
+     * not name (0, 1, or a value a later Windows adds) is {@link Kind#UNKNOWN}, never a guess.
+     */
+    static Kind kindOf(int driveType) {
+        return switch (driveType) {
+            case DRIVE_REMOVABLE -> Kind.REMOVABLE;
+            case DRIVE_FIXED -> Kind.LOCAL;
+            case DRIVE_REMOTE -> Kind.REMOTE;
+            case DRIVE_CDROM -> Kind.OPTICAL;
+            case DRIVE_RAMDISK -> Kind.RAM_DISK;
+            default -> Kind.UNKNOWN;
+        };
     }
 }

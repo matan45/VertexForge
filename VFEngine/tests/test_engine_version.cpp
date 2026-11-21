@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include "test_repo_scan_helpers.hpp" // pulls <windows.h>: keep it last
 
@@ -104,6 +105,37 @@ namespace
         for (char c : text)
         {
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+                return false;
+        }
+        return true;
+    }
+
+    // The '/'-separated parts of a manifest path, empty ones included: "a//b/" gives a, "", b, "".
+    std::vector<std::string> slashParts(const std::string& text)
+    {
+        std::vector<std::string> parts;
+        size_t start = 0;
+        while (true)
+        {
+            const size_t slash = text.find('/', start);
+            if (slash == std::string::npos)
+            {
+                parts.push_back(text.substr(start));
+                return parts;
+            }
+            parts.push_back(text.substr(start, slash - start));
+            start = slash + 1;
+        }
+    }
+
+    bool equalsIgnoreAsciiCase(const std::string& a, const std::string& b)
+    {
+        auto lower = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; };
+        if (a.size() != b.size())
+            return false;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            if (lower(a[i]) != lower(b[i]))
                 return false;
         }
         return true;
@@ -260,10 +292,12 @@ TEST_SUITE("EngineVersion")
                          << " if it is stale)");
 
         // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, examplesDir and
-        // vfxLibraryDir by VK-1689, still manifestVersion 1: the launcher ignores members it does not know).
+        // vfxLibraryDir by VK-1689, projectCacheDirs by VK-1695, still manifestVersion 1: the launcher ignores
+        // members it does not know).
         const char* keys[] = {"manifestVersion", "engineVersion", "assetFormatVersion", "projectSchemaVersion",
                               "pluginApiVersion", "launchContract", "configuration", "gitCommit", "editorExe",
-                              "workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir"};
+                              "workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir",
+                              "projectCacheDirs"};
         CHECK(manifest.size() == std::size(keys));
         for (const char* key : keys)
         {
@@ -324,6 +358,38 @@ TEST_SUITE("EngineVersion")
             const fs::path folder = fs::weakly_canonical(manifestDir / stringField(manifest, key), ec);
             CHECK(fs::is_directory(folder, ec));
             CHECK(fs::equivalent(folder, expected, ec));
+        }
+
+        // VK-1695: the build-output folders inside a project that the editor rebuilds, so the launcher's
+        // "Clean Caches..." may delete them. Unlike the paths above they are relative to a PROJECT's working
+        // directory: today only the compiled mType library (<wd>/scripts/compiled/scripts.mtcLib,
+        // ScriptingAdapter::getLibraryPath), the text the launcher's ProjectContent.COMPILED_SCRIPTS holds.
+        REQUIRE(manifest.contains("projectCacheDirs"));
+        const json& cacheDirs = manifest["projectCacheDirs"];
+        REQUIRE(cacheDirs.is_array());
+        const json expectedCacheDirs = json::array({"scripts/compiled"});
+        CHECK(cacheDirs == expectedCacheDirs);
+        // Every entry, so a folder added later stays one the launcher may delete safely: '/'-separated,
+        // inside the working directory, and never the editor's state folder.
+        for (const json& entry : cacheDirs)
+        {
+            REQUIRE(entry.is_string());
+            const std::string dir = entry.get<std::string>();
+            CAPTURE(dir);
+            CHECK_FALSE(dir.empty());
+            CHECK(dir.find('\\') == std::string::npos);
+            CHECK_FALSE(dir.starts_with('/'));
+            // No drive ("X:", absolute or drive-relative) and no NTFS stream name.
+            CHECK(dir.find(':') == std::string::npos);
+            const std::vector<std::string> parts = slashParts(dir);
+            for (const std::string& part : parts)
+            {
+                CAPTURE(part);
+                CHECK_FALSE(part.empty());
+                CHECK(part != ".");
+                CHECK(part != "..");
+            }
+            CHECK_FALSE(equalsIgnoreAsciiCase(parts.front(), ".vertexforge"));
         }
     }
 }

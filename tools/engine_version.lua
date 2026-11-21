@@ -10,7 +10,8 @@
 --   engine.json sits beside Editor.exe so the launcher can identify an install without running it:
 --     dev:     the Editor postbuild runs `premake5 --file=tools/engine_version.lua --vfconfig=<Config> engine-manifest`
 --     release: tools/package_release.lua rewrites it for dist/VertexForge (vfWriteEngineManifest)
---   Every path in it is relative to the manifest's own folder.
+--   Every path in it is relative to the manifest's own folder, except the projectCacheDirs entries: those are
+--   relative to a project's working directory (VK-1695).
 --
 -- This file is loaded two ways: include()d by the root premake5.lua, and standalone (--file) by the
 -- Editor postbuild. Premake changes into a script's folder while loading it and the postbuild runs
@@ -38,6 +39,25 @@ function vfEngineContentPaths()
       examplesDir = examplesRel,
       vfxLibraryDir = vfxLibraryRel
    }
+end
+
+-- The build-output folders inside a PROJECT that the editor rebuilds, so the launcher's "Clean Caches..." may
+-- delete them (VK-1695). Unlike every other path in the manifest they are relative to the project's
+-- workingDirectory, with forward slashes. Today only the compiled mType library: the editor loads
+-- <wd>/scripts/compiled/scripts.mtcLib (ScriptingAdapter::getLibraryPath in
+-- VFEngine/core/adapters/scripting/ScriptingAdapter.cpp), the folder the template's scripts.mtproj names with
+-- <Output Directory="compiled" />. The launcher's ProjectContent.COMPILED_SCRIPTS holds the same text, and a
+-- launcher test pins the two together.
+local projectCacheDirs = { "scripts/compiled" }
+
+-- A copy of projectCacheDirs (tools/package_release.lua compares its manifests with it), so no caller can change
+-- the list the manifest is written from.
+function vfProjectCacheDirs()
+   local copy = {}
+   for i, dir in ipairs(projectCacheDirs) do
+      copy[i] = dir
+   end
+   return copy
 end
 
 local function repoPath(rel)
@@ -179,13 +199,23 @@ local function jsonString(s)
    return "\"" .. escaped .. "\""
 end
 
+-- A JSON array of strings on one line: ["a", "b"], or [] for an empty list.
+local function jsonStringArray(list)
+   local items = {}
+   for i, s in ipairs(list) do
+      items[i] = jsonString(s)
+   end
+   return "[" .. table.concat(items, ", ") .. "]"
+end
+
 -- Writes <m.exeDir>/engine.json (only when its content changes) and returns its path.
 --   m.exeDir        folder of Editor.exe (absolute)
 --   m.workingDir    folder the editor must be started in (absolute)
 --   m.contentRoot   folder holding assets/ (absolute)
 --   m.configuration Debug | Development | Release
 --   m.gitCommit     40-hex commit or nil (written as null)
--- Field order is fixed; paths are relative to exeDir with forward slashes; UTF-8, no BOM, LF.
+-- Field order is fixed; paths are relative to exeDir with forward slashes (projectCacheDirs: to a project's working
+-- directory, VK-1695); UTF-8, no BOM, LF.
 -- Paths are written even when the folder does not exist yet: consumers check.
 function vfWriteEngineManifest(m)
    local exeDir = path.getabsolute(m.exeDir)
@@ -212,6 +242,7 @@ function vfWriteEngineManifest(m)
       { "scriptLibDir",         jsonString(relative(path.join(m.contentRoot, scriptLibRel))) },
       { "examplesDir",          jsonString(relative(path.join(m.contentRoot, examplesRel))) },
       { "vfxLibraryDir",        jsonString(relative(path.join(m.contentRoot, vfxLibraryRel))) },
+      { "projectCacheDirs",     jsonStringArray(vfProjectCacheDirs()) },
    }
    local lines = {}
    for i, field in ipairs(fields) do

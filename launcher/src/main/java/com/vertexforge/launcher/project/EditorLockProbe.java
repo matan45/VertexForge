@@ -162,6 +162,55 @@ public final class EditorLockProbe {
     public static final String HELD_BY_LAUNCHER = "another VertexForge launcher is changing this project right now";
 
     /**
+     * Whether another launcher {@linkplain #hold holds} {@code projectFolder} (VK-1695). A {@link #probe} cannot tell:
+     * a hold takes the editor's byte SHARED, which a probe's shared attempt still gets. This one tries the launcher's
+     * byte ({@link #LAUNCHER_OFFSET}), shared and released at once, which fails only while a launcher holds it
+     * exclusively. As a probe, it opens the lock file READ only and never creates it. Blocks while this launcher itself
+     * holds the folder; never throws.
+     *
+     * @return {@link EditorLockState#FREE} when no launcher holds the folder (or it has no lock file);
+     *         {@link EditorLockState.Unknown} with {@link #HELD_BY_LAUNCHER} when one does, or with the reason it could
+     *         not be checked
+     */
+    public EditorLockState probeLauncher(Path projectFolder) {
+        Objects.requireNonNull(projectFolder, "projectFolder");
+        Path lock = lockFile(projectFolder);
+        try (FileChannel channel = FileChannel.open(lock, StandardOpenOption.READ)) {
+            ReentrantLock local = LOCAL_LOCKS.computeIfAbsent(lock.toAbsolutePath().normalize(),
+                    key -> new ReentrantLock());
+            local.lockInterruptibly();
+            try {
+                FileLock shared;
+                try {
+                    shared = channel.tryLock(LAUNCHER_OFFSET, 1, true);
+                } catch (OverlappingFileLockException e) {
+                    // This JVM holds the byte itself, under another spelling of the path: a launcher holds the folder.
+                    return new EditorLockState.Unknown(HELD_BY_LAUNCHER);
+                }
+                if (shared == null) {
+                    return new EditorLockState.Unknown(HELD_BY_LAUNCHER);
+                }
+                shared.release();
+                return EditorLockState.FREE;
+            } finally {
+                local.unlock();
+            }
+        } catch (NoSuchFileException e) {
+            // No lock file: nothing, launcher or editor, has ever held this folder.
+            return EditorLockState.FREE;
+        } catch (AccessDeniedException e) {
+            return new EditorLockState.Unknown(PathFailures.ACCESS_DENIED);
+        } catch (IOException e) {
+            return new EditorLockState.Unknown(PathFailures.reasonOf(e));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new EditorLockState.Unknown("the check was interrupted");
+        } catch (RuntimeException e) {
+            return new EditorLockState.Unknown(e.toString());
+        }
+    }
+
+    /**
      * The lock held for a while (VK-1691: a script-library update). While it is held:
      * <ul>
      *   <li>an editor cannot open the folder: its exclusive lock on the editor's byte fails against this shared one
