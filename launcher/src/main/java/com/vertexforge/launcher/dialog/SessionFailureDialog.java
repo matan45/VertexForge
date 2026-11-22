@@ -21,8 +21,9 @@ import javafx.stage.Window;
 import java.util.Objects;
 
 /**
- * Why an editor the launcher started failed (VK-1683): the exit code and the editor's reason, the newest crash report
- * from its {@code crashes/} folder, and the last lines of its per-launch log, with Open log, Open crash folder and Copy.
+ * Why an editor the launcher started failed (VK-1683): the exit code and the editor's reason, its newest crash report
+ * from its crash folder (the one its status line named, VK-1732, else {@code crashes/} in its working directory), and
+ * the last lines of its per-launch log, with Open log, Open crash folder and Copy.
  * <p>
  * It is not modal, so a failure that arrives while another dialog is open never blocks that dialog, and several
  * failures each get their own window. Its buttons keep it open; only Close (or X) closes it.

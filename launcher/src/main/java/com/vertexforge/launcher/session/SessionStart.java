@@ -15,7 +15,7 @@ import java.util.Optional;
  * @param log              the per-launch log its stdout and stderr go to
  * @param statusFile       its {@code --launch-status} file; empty when the path could not be passed to the editor
  * @param statusOmitted    why no status file was passed, when it was not
- * @param workingDirectory the folder it runs in (its {@code crashes/} folder lives there)
+ * @param workingDirectory the folder it runs in (an editor older than VK-1732 keeps its {@code crashes/} folder there)
  * @param contractKnown    whether its engine advertises a launch contract ({@code launchContract} in engine.json)
  * @param command          the command line it was started with (for the failure details)
  * @param startedAt        when it was started
