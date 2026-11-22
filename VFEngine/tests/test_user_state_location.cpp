@@ -216,21 +216,29 @@ TEST_SUITE("UserStateLocation")
     TEST_CASE("createUserStateFolders makes the per-user folders, and nothing in Engine mode")
     {
         TempFolder temp(L"VertexForge_UserState");
+        // Every folder this test touches lies in the temp folder: the placeholder paths of inputsWith
+        // (C:\Users\me, D:\Docs) may name a drive that is not ready, where fs::exists throws.
+        std::error_code ec;
 
         UserStateInputs engineInputs = inputsWith(std::nullopt);
         engineInputs.workingDir = temp.path / L"work";
+        engineInputs.exeDir = temp.path / L"bin" / L"Editor" / L"Release" / L"x64";
         CHECK(launch::createUserStateFolders(launch::resolveUserStateLocation(engineInputs)).empty());
-        CHECK_FALSE(fs::exists(engineInputs.workingDir));
+        CHECK_FALSE(fs::exists(engineInputs.workingDir, ec));
 
         UserStateInputs userInputs = inputsWith(std::string(R"({"stateLocation":"user"})"));
         userInputs.profileDir = temp.path / L"profile";
+        userInputs.documentsDir = temp.path / L"documents";
+        userInputs.exeDir = temp.path / L"bin" / L"Editor" / L"Release" / L"x64";
+        userInputs.workingDir = userInputs.exeDir;
         const UserStateLocation location = launch::resolveUserStateLocation(userInputs);
         CHECK(launch::createUserStateFolders(location).empty());
-        CHECK(fs::is_directory(location.stateRoot));
-        CHECK(fs::is_directory(location.logsDir));
-        CHECK(fs::is_directory(location.crashesDir));
+        CHECK(fs::is_directory(location.stateRoot, ec));
+        CHECK(fs::is_directory(location.logsDir, ec));
+        CHECK(fs::is_directory(location.crashesDir, ec));
         // The rest is made by whoever writes there first.
-        CHECK_FALSE(fs::exists(location.pluginDataDir));
-        CHECK_FALSE(fs::exists(location.userPluginsDir));
+        CHECK_FALSE(fs::exists(location.pluginDataDir, ec));
+        CHECK_FALSE(fs::exists(location.userPluginsDir, ec));
+        CHECK_FALSE(fs::exists(userInputs.documentsDir, ec));
     }
 }
