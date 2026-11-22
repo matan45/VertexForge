@@ -5,12 +5,14 @@ import com.vertexforge.launcher.session.CrashReports.CrashReport;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
@@ -81,6 +83,8 @@ public final class EditorSession {
     // Session thread only.
     private Phase phase = Phase.STARTING;
     private LaunchStatus last;
+    /** The latest crash folder any status line named (VK-1732); null while none has (or for an older editor). */
+    private Path reportedCrashDir;
     private boolean crashSignalled;
     private boolean begun;
     private SessionScheduler.Cancellable poll;
@@ -138,17 +142,34 @@ public final class EditorSession {
         if (start.statusFile().isEmpty()) {
             return Optional.empty();
         }
-        long pid;
+        OptionalLong pid = editorPid();
+        return pid.isPresent()
+                ? LaunchStatusReader.read(start.statusFile().get(), pid.getAsLong())
+                : LaunchStatusReader.read(start.statusFile().get());
+    }
+
+    /** The editor's process id; empty when the platform cannot tell. */
+    private OptionalLong editorPid() {
         try {
-            pid = start.process().pid();
+            return OptionalLong.of(start.process().pid());
         } catch (UnsupportedOperationException e) {
-            return LaunchStatusReader.read(start.statusFile().get());
+            return OptionalLong.empty();
         }
-        return LaunchStatusReader.read(start.statusFile().get(), pid);
+    }
+
+    /** Keeps {@code status} as the last one heard, and the crash folder it names. */
+    private void remember(LaunchStatus status) {
+        last = status;
+        status.crashDir().ifPresent(dir -> reportedCrashDir = dir);
+    }
+
+    /** Where the editor writes its crash reports: the folder its status named, else its working directory's. */
+    private Path crashFolder() {
+        return reportedCrashDir != null ? reportedCrashDir : CrashReports.folder(start.workingDirectory());
     }
 
     private void apply(LaunchStatus status) {
-        last = status;
+        remember(status);
         switch (status.state()) {
             case LOADING -> {
                 if (phase == Phase.STARTING || phase == Phase.NO_READY_SIGNAL) {
@@ -192,7 +213,7 @@ public final class EditorSession {
         SessionReport report;
         try {
             // The last line can land between the last poll and the exit.
-            readStatus().ifPresent(status -> last = status);
+            readStatus().ifPresent(this::remember);
             int exitCode = start.process().exitValue();
             Optional<LaunchStatus> lastStatus = Optional.ofNullable(last);
             SessionOutcome outcome = SessionOutcome.classify(exitCode, lastStatus, start.statusFile().isPresent(),
@@ -201,18 +222,20 @@ public final class EditorSession {
             List<String> tail = failure
                     ? SessionLogs.tail(start.log(), LOG_TAIL_LINES, nativeCharset)
                     : List.of();
+            Path crashFolder = crashFolder();
+            // VK-1732: the folder may be shared by several editors; the report tagged with this one's pid is its own.
             Optional<CrashReport> crash = failure
-                    ? CrashReports.newestSince(start.workingDirectory(), start.startedAt(), nativeCharset)
+                    ? CrashReports.newestIn(crashFolder, start.startedAt(), editorPid(), nativeCharset)
                     : Optional.empty();
             Instant now = clock.instant();
             appendFooter(exitCode, now);
             report = new SessionReport(outcome, exitCode, lastStatus, tail, crash, start.log(),
-                    start.workingDirectory(), now);
+                    start.workingDirectory(), crashFolder, now);
         } catch (RuntimeException e) {
             // Never leave the window waiting for an exit that was already seen.
             report = new SessionReport(new SessionOutcome.Died(-1, Optional.ofNullable(last).map(LaunchStatus::state)),
                     -1, Optional.ofNullable(last), List.of(), Optional.empty(), start.log(), start.workingDirectory(),
-                    clock.instant());
+                    crashFolder(), clock.instant());
         }
         SessionReport finalReport = report;
         emit(target -> target.exited(this, finalReport));

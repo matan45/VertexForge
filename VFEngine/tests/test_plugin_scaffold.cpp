@@ -190,3 +190,182 @@ TEST_CASE("plugin scaffold: createPlugin writes the three files and refuses clob
         CHECK_FALSE(std::filesystem::exists(tempDir.path / "my-plugin"));
     }
 }
+
+// VK-1732: the in-tree flavour stays byte-identical; an installed engine gets the Standalone flavour.
+
+TEST_CASE("plugin scaffold: the in-tree premake5.lua is unchanged")
+{
+    plugin::scaffold::Options opts;
+    opts.name = "ScaffoldTest";
+    CHECK(opts.flavor == plugin::scaffold::Flavor::InTree);
+
+    CHECK(plugin::scaffold::makePremakeLua(opts) ==
+          "-- ScaffoldTest plugin - auto-discovered by the root premake5.lua.\n"
+          "-- Common setup (sdk/ includes, defines, DLL postbuild copy) comes from plugins/plugin_sdk.lua.\n"
+          "vfPluginProject(\"ScaffoldTest\")\n"
+          "   -- links { \"imgui\" }   -- uncomment if this plugin registers an editor window\n");
+
+    opts.withEditorWindow = true;
+    CHECK(plugin::scaffold::makePremakeLua(opts) ==
+          "-- ScaffoldTest plugin - auto-discovered by the root premake5.lua.\n"
+          "-- Common setup (sdk/ includes, defines, DLL postbuild copy) comes from plugins/plugin_sdk.lua.\n"
+          "vfPluginProject(\"ScaffoldTest\")\n"
+          "   links { \"imgui\" }   -- editor UI window\n");
+}
+
+TEST_CASE("plugin scaffold: luaLongString reads back as the text")
+{
+    using plugin::scaffold::luaLongString;
+
+    CHECK(luaLongString("") == "[[]]");
+    CHECK(luaLongString("C:/Program Files/VertexForge/sdk") == "[[C:/Program Files/VertexForge/sdk]]");
+    // the level-0 closing bracket inside the text
+    CHECK(luaLongString("a]]b") == "[=[a]]b]=]");
+    // a trailing ']' would join the closing bracket
+    CHECK(luaLongString("a]") == "[=[a]]=]");
+    // "]=" at the end with level 1 would close early too; level 0 is fine there
+    CHECK(luaLongString("a]=") == "[[a]=]]");
+    // both lower levels occur
+    CHECK(luaLongString("x]=]y]]") == "[==[x]=]y]]]==]");
+    // opening brackets never matter
+    CHECK(luaLongString("[[x[=[") == "[[[[x[=[]]");
+}
+
+TEST_CASE("plugin scaffold: the Standalone premake5.lua builds against the engine SDK")
+{
+    plugin::scaffold::Options opts;
+    opts.name = "ScaffoldTest";
+    opts.flavor = plugin::scaffold::Flavor::Standalone;
+    opts.sdkDir = std::filesystem::path(L"C:\\Users\\Dev\\AppData\\Local\\Programs\\VertexForge\\sdk");
+    opts.configuration = "Release";
+
+    const std::string lua = plugin::scaffold::makePremakeLua(opts);
+    CHECK(lua == plugin::scaffold::makeStandalonePremakeLua(opts));
+    const auto has = [&lua](const std::string& text) { return lua.find(text) != std::string::npos; };
+
+    SUBCASE("its own workspace, not the in-tree one-liner")
+    {
+        CHECK_FALSE(has("vfPluginProject"));
+        CHECK(has("local PLUGIN_NAME = \"ScaffoldTest\"\n"));
+        CHECK(has("workspace (PLUGIN_NAME)\n"));
+        CHECK(has("project (PLUGIN_NAME)\n"));
+        CHECK(has("   kind \"SharedLib\"\n"));
+        CHECK(has("   cppdialect \"C++20\"\n"));
+    }
+
+    SUBCASE("the SDK: VERTEXFORGE_SDK, else the engine's sdk folder with forward slashes")
+    {
+        CHECK(has("local sdkDir = os.getenv(\"VERTEXFORGE_SDK\") or "
+                  "[[C:/Users/Dev/AppData/Local/Programs/VertexForge/sdk]]\n"));
+        CHECK(has("if not os.isdir(sdkDir .. \"/include/VFEngine/plugin\") then\n   error("));
+        CHECK(has("local vulkanSDK = os.getenv(\"VULKAN_SDK\")\nif not vulkanSDK then\n   error("));
+        CHECK(has("      sdkDir .. \"/include/VFEngine/plugin\",\n"));
+        CHECK(has("      sdkDir .. \"/include/VFEngine/core/controllers\",\n"));
+        CHECK(has("      sdkDir .. \"/deps/mType\",\n"));
+        CHECK(has("      vulkanSDK .. \"/Include\"\n"));
+        CHECK(has("   libdirs { sdkDir .. \"/lib/%{cfg.buildcfg}\" }\n"));
+    }
+
+    SUBCASE("one configuration, the engine's ABI")
+    {
+        CHECK(has("   configurations { \"Release\" }\n"));
+        CHECK_FALSE(has("\"Debug\""));
+        CHECK_FALSE(has("\"Development\""));
+        CHECK(has("   platforms { \"x64\" }\n"));
+        CHECK(has("      toolset \"v145\"\n"));
+        CHECK(has("      buildoptions { \"/utf-8\", \"/MP\" }\n"));
+        CHECK(has("      defines { \"VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1\", \"GLM_FORCE_DEPTH_ZERO_TO_ONE\" }\n"));
+        CHECK(has("   runtime \"Release\"\n"));
+        CHECK(has("   defines { \"NDEBUG\" }\n"));
+        CHECK(has("   optimize \"On\"\n"));
+        CHECK_FALSE(has("symbols"));
+    }
+
+    SUBCASE("outputs inside the folder, the DLL copied beside the .vfplugin")
+    {
+        CHECK(has("   targetdir \"bin/%{cfg.buildcfg}\"\n"));
+        CHECK(has("   objdir \"obj/%{cfg.buildcfg}\"\n"));
+        CHECK(has("   postbuildcommands {\n"
+                  "      \"{COPY} \\\"%{cfg.buildtarget.abspath}\\\" \\\"%{prj.location}/\\\"\"\n"
+                  "   }\n"));
+    }
+
+    SUBCASE("imgui is linked only for an editor window")
+    {
+        CHECK(has("   -- links { \"imgui\" }"));
+        opts.withEditorWindow = true;
+        const std::string withWindow = plugin::scaffold::makeStandalonePremakeLua(opts);
+        CHECK(withWindow.find("\n   links { \"imgui\" }") != std::string::npos);
+    }
+
+    SUBCASE("Debug and Development builds match those engine configurations")
+    {
+        opts.configuration = "Debug";
+        const std::string debug = plugin::scaffold::makeStandalonePremakeLua(opts);
+        CHECK(debug.find("   configurations { \"Debug\" }\n") != std::string::npos);
+        CHECK(debug.find("   runtime \"Debug\"\n") != std::string::npos);  // the engine's Debug uses /MDd
+        CHECK(debug.find("   defines { \"DEBUG\" }\n") != std::string::npos);
+        CHECK(debug.find("   symbols \"On\"\n") != std::string::npos);
+        CHECK(debug.find("optimize") == std::string::npos);
+
+        opts.configuration = "Development";
+        const std::string development = plugin::scaffold::makeStandalonePremakeLua(opts);
+        CHECK(development.find("   configurations { \"Development\" }\n") != std::string::npos);
+        CHECK(development.find("   runtime \"Release\"\n") != std::string::npos);
+        CHECK(development.find("   defines { \"NDEBUG\", \"VF_DEVELOPMENT\" }\n") != std::string::npos);
+        CHECK(development.find("   optimize \"On\"\n") != std::string::npos);
+        CHECK(development.find("   symbols \"On\"\n") != std::string::npos);
+    }
+
+    SUBCASE("a non-ASCII SDK path is written as UTF-8")
+    {
+        opts.sdkDir = std::filesystem::path(u8"C:/\u05DE\u05E9\u05EA\u05DE\u05E9/VertexForge/sdk");
+        const std::string unicode = plugin::scaffold::makeStandalonePremakeLua(opts);
+        const std::u8string expected = u8"[[C:/\u05DE\u05E9\u05EA\u05DE\u05E9/VertexForge/sdk]]";
+        CHECK(unicode.find(std::string(expected.begin(), expected.end())) != std::string::npos);
+    }
+}
+
+TEST_CASE("plugin scaffold: createPlugin writes a Standalone plugin's three files")
+{
+    TempDir tempDir;
+
+    plugin::scaffold::Options opts;
+    opts.name = "ScaffoldTest";
+    opts.capabilities = {"graphics"};
+    opts.flavor = plugin::scaffold::Flavor::Standalone;
+    opts.sdkDir = tempDir.path / "sdk";
+    opts.configuration = "Development";
+
+    SUBCASE("the folder holds exactly premake5.lua, the .cpp and the .vfplugin")
+    {
+        CHECK(plugin::scaffold::createPlugin(tempDir.path, opts).empty());
+
+        const auto pluginDir = tempDir.path / "ScaffoldTest";
+        int fileCount = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(pluginDir))
+        {
+            CHECK(entry.is_regular_file());
+            ++fileCount;
+        }
+        CHECK(fileCount == 3);
+        CHECK(readFile(pluginDir / "premake5.lua") == plugin::scaffold::makeStandalonePremakeLua(opts));
+        // the source and the descriptor are the in-tree flavour's
+        CHECK(readFile(pluginDir / "ScaffoldTest.cpp") == plugin::scaffold::makeCppSource(opts));
+        CHECK(readFile(pluginDir / "ScaffoldTest.vfplugin") == plugin::scaffold::makeDescriptorJson(opts));
+    }
+
+    SUBCASE("an unknown SDK folder or configuration is refused before touching the filesystem")
+    {
+        plugin::scaffold::Options noSdk = opts;
+        noSdk.sdkDir.clear();
+        CHECK_FALSE(plugin::scaffold::createPlugin(tempDir.path, noSdk).empty());
+
+        plugin::scaffold::Options badConfig = opts;
+        badConfig.configuration = "Shipping";
+        const std::string error = plugin::scaffold::createPlugin(tempDir.path, badConfig);
+        CHECK(error.find("Shipping") != std::string::npos);
+
+        CHECK_FALSE(std::filesystem::exists(tempDir.path / "ScaffoldTest"));
+    }
+}

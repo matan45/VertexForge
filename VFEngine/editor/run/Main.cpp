@@ -7,6 +7,7 @@
 #include "launch/LaunchStatusFile.hpp"
 #include "launch/ProcessCodePage.hpp"
 #include "launch/ProjectLock.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "launch/Utf8Path.hpp"
 #include "print/Log.hpp"
 #include "serialization/ProjectSerialization.hpp"
@@ -42,11 +43,17 @@
 //   dialog's Abort ends the process with 3 as well; the status file tells the two apart.
 //
 // --launch-status <file>: one line of JSON, replaced atomically at every step:
-//   {"state":"loading"|"ready"|"failed","code":N,"message":"...","pid":N}
+//   {"state":"loading"|"ready"|"failed","code":N,"message":"...","pid":N,"crashDir":"..."}
 //   loading at start; ready once the project and its startup scene have loaded (a missing or
 //   broken startup scene still gives ready, with the reason in the message); failed with the exit
 //   code, or with the exception code from the crash handler before its message box shows. Exit
-//   code 0 is a normal exit whatever the last state. See launch/LaunchStatusFile.hpp.
+//   code 0 is a normal exit whatever the last state. crashDir (VK-1732) is the absolute folder the
+//   crash reports go into. See launch/LaunchStatusFile.hpp.
+//
+// State (VK-1732): the engine.json beside Editor.exe says where the editor keeps the state its user
+// makes (launch/UserStateLocation.hpp). An installed engine ("stateLocation": "user") keeps logs,
+// crash reports, imgui.ini and plugin data in %USERPROFILE%\.vertexforge\editor, because the MSI
+// deletes the install folder on every upgrade; the dev tree ("engine") keeps them where it always did.
 //
 // Project lock: while a project is open the editor holds <project folder>/.vertexforge/editor.lock
 // (launch/ProjectLock.hpp). Switching projects (MCP project_open) moves it. On read-only media the
@@ -102,7 +109,9 @@ namespace
     // Runs inside the crash filter: no heap, no locks, no throw.
     void onCrash(unsigned long exceptionCode, const char* exceptionLabel, const char* dumpPath) noexcept
     {
-        char message[512];
+        // Room for the absolute dump path (VK-1732); the status line keeps at most
+        // launch::maxLaunchStatusMessageBytes of it anyway.
+        char message[launch::maxLaunchStatusMessageBytes + 64];
         std::snprintf(message, sizeof(message), "Editor crashed: %s (0x%08lx); crash dump %s",
                       exceptionLabel ? exceptionLabel : "UNKNOWN", exceptionCode, dumpPath ? dumpPath : "");
         launch::processLaunchStatus().writeFromCrash(static_cast<int>(exceptionCode), message);
@@ -126,7 +135,44 @@ int main(int argc, char* argv[]) {
     // Then the crash handler (so even a fault during log init is dumped), then mirror the log to
     // disk, so that argument errors land in the log too.
     util::installCrashHandler();
-    util::initLogFile("Editor");
+
+    // VK-1732: where this editor keeps its user's state (engine.json's stateLocation), decided before
+    // the log file opens; what went wrong is logged once the log exists.
+    const launch::UserStateLocation& userState = launch::processUserState();
+    std::vector<std::string> stateProblems = userState.problems;
+    for (std::string& problem : launch::createUserStateFolders(userState))
+    {
+        stateProblems.push_back(std::move(problem));
+    }
+    const bool crashFolderSet = util::setCrashDirectory(userState.crashesDir);
+    if (!crashFolderSet && userState.crashesDir.is_absolute())
+    {
+        stateProblems.push_back("the crash folder " + launch::pathToUtf8(userState.crashesDir) +
+                                " is too long: crash reports go into crashes/ under the working directory");
+    }
+    std::filesystem::path crashFolder = userState.crashesDir;
+    if (!crashFolderSet)
+    {
+        std::error_code crashFolderEc;
+        crashFolder = std::filesystem::absolute(std::filesystem::path(L"crashes"), crashFolderEc);
+        if (crashFolderEc)
+        {
+            crashFolder.clear();
+        }
+    }
+    const std::filesystem::path logFile = userState.logsDir / L"Editor.log";
+
+    util::initLogFile("Editor", userState.logsDir);
+    for (const std::string& problem : stateProblems)
+    {
+        // An error, not a warning: Release builds keep only errors (util::engineLogsEnabled).
+        vfLogError("{}", problem);
+    }
+    if (userState.isUser())
+    {
+        vfLogInfo("Editor state: {} (logs, crash reports, layout, plugin data); your plugins: {}",
+                  launch::pathToUtf8(userState.stateRoot), launch::pathToUtf8(userState.userPluginsDir));
+    }
 
     if (!launch::processUsesUtf8())
     {
@@ -151,6 +197,12 @@ int main(int argc, char* argv[]) {
     {
         if (status.open(std::filesystem::path(args.launchStatusPath)))
         {
+            // VK-1732: every status line tells the launcher where the crash reports go (before the
+            // first write). A folder the status line cannot carry leaves the launcher at its default.
+            if (!crashFolder.empty())
+            {
+                status.setCrashDirectory(launch::pathToUtf8(crashFolder));
+            }
             // Only with a status file: a plain start keeps exactly the old crash behaviour.
             util::setCrashNotifier(&onCrash);
             std::signal(SIGABRT, &onAbortSignal);
@@ -324,8 +376,9 @@ int main(int argc, char* argv[]) {
         if (!loaded.loaded)
         {
             editor::SplashScreen::instance().close();
-            const int code = fail(EditorExitCode::ProjectLoadFailed,
-                                  "cannot open project " + projectText + ": it failed to load (see logs/Editor.log)");
+            const int code = fail(EditorExitCode::ProjectLoadFailed, "cannot open project " + projectText +
+                                                                         ": it failed to load (see " +
+                                                                         launch::pathToUtf8(logFile) + ")");
             editorHandler.cleanUp();
             return code;
         }

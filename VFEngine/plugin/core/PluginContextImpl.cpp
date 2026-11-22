@@ -653,11 +653,14 @@ namespace plugin {
         // Anchor on the resolved plugins directory, not the CWD — IDE launchers
         // run with a different working directory and would scatter config files
         // (and create stray "plugins" folders that used to hijack discovery).
+        // VK-1732: an installed editor keeps plugin data in the per-user state
+        // folder instead (PluginLoadConfig::dataRoot): the MSI deletes the engine's
+        // folder on every upgrade.
         const auto* manager = PluginManager::getActive();
-        auto base = manager && !manager->getPluginsDirectory().empty()
-            ? manager->getPluginsDirectory()
-            : PluginManager::resolvePluginsDirectory();
-        auto path = base / "data" / safeName;
+        std::filesystem::path base = manager ? manager->getPluginDataRoot() : std::filesystem::path{};
+        if (base.empty())
+            base = PluginManager::resolvePluginsDirectory() / "data";
+        auto path = base / safeName;
         return path.string();
     }
 

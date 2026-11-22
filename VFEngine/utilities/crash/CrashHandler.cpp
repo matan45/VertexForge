@@ -34,6 +34,15 @@ namespace util
         constexpr size_t kContextCapacity = 1024;
         char crashContext[kContextCapacity] = {0};
 
+        // VK-1732: the folder the crash files go into, ending in a backslash, as UTF-16 (for the file
+        // calls) and UTF-8 (for the notifier). Set once at startup by setCrashDirectory, read by the
+        // filter. The default is "crashes\" under the working directory, as before.
+        constexpr size_t kCrashDirCapacity = MAX_PATH;
+        wchar_t crashDirW[kCrashDirCapacity] = L"crashes\\";
+        char crashDirUtf8[3 * kCrashDirCapacity + 1] = "crashes\\";
+        // The longest file name the filter appends: "crash_" + YYYYMMDD_HHMMSS + "_" + a 32-bit pid + ".dmp".
+        constexpr size_t kCrashNameCapacity = 64;
+
         const char* exceptionLabel(DWORD code)
         {
             switch (code)
@@ -75,6 +84,24 @@ namespace util
 
             const int written = WideCharToMultiByte(CP_UTF8, 0, text, units, out, capacity - 1, nullptr, nullptr);
             out[written > 0 ? written : 0] = '\0';
+        }
+
+        // Creates each missing folder of `dir` (which ends in a backslash) from the outside in, without
+        // the heap (std::filesystem allocates; the heap may be corrupt here). A folder that exists, or a
+        // drive ("C:"), just fails to be created.
+        void createFolderChain(const wchar_t* dir) noexcept
+        {
+            wchar_t partial[kCrashDirCapacity];
+            for (size_t i = 0; dir[i] != L'\0' && i + 1 < kCrashDirCapacity; ++i)
+            {
+                partial[i] = dir[i];
+                if (dir[i] == L'\\' && i > 0)
+                {
+                    partial[i] = L'\0';
+                    CreateDirectoryW(partial, nullptr);
+                    partial[i] = L'\\';
+                }
+            }
         }
 
         // Longest symbol name read back, in UTF-16 units.
@@ -170,10 +197,15 @@ namespace util
             std::snprintf(stamp, sizeof(stamp), "%04d%02d%02d_%02d%02d%02d", st.wYear, st.wMonth,
                           st.wDay, st.wHour, st.wMinute, st.wSecond);
 
-            char dmpPath[MAX_PATH];
-            char txtPath[MAX_PATH];
-            std::snprintf(dmpPath, sizeof(dmpPath), "crashes/crash_%s.dmp", stamp);
-            std::snprintf(txtPath, sizeof(txtPath), "crashes/crash_%s.txt", stamp);
+            // VK-1732: in the crash folder (the working directory's crashes\ or setCrashDirectory's), with
+            // the process id, so editors sharing the per-user folder never overwrite each other's report.
+            const unsigned long pid = GetCurrentProcessId();
+            wchar_t dmpPathW[kCrashDirCapacity + kCrashNameCapacity];
+            wchar_t txtPathW[kCrashDirCapacity + kCrashNameCapacity];
+            swprintf_s(dmpPathW, L"%lscrash_%hs_%lu.dmp", crashDirW, stamp, pid);
+            swprintf_s(txtPathW, L"%lscrash_%hs_%lu.txt", crashDirW, stamp, pid);
+            char dmpPath[3 * kCrashDirCapacity + kCrashNameCapacity];
+            std::snprintf(dmpPath, sizeof(dmpPath), "%scrash_%s_%lu.dmp", crashDirUtf8, stamp, pid);
 
             // VK-1682: before anything that can be slow or fault again (directory creation, the
             // minidump, symbolization) and before the message box.
@@ -183,11 +215,10 @@ namespace util
                 notifier(notifyCode, exceptionLabel(notifyCode), dmpPath);
             }
 
-            std::error_code ec;
-            std::filesystem::create_directories("crashes", ec);
+            createFolderChain(crashDirW);
 
             // --- minidump ---
-            HANDLE hFile = CreateFileA(dmpPath, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+            HANDLE hFile = CreateFileW(dmpPathW, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                        FILE_ATTRIBUTE_NORMAL, nullptr);
             if (hFile != INVALID_HANDLE_VALUE)
             {
@@ -210,7 +241,7 @@ namespace util
 
             // --- human-readable companion ---
             std::FILE* out = nullptr;
-            if (fopen_s(&out, txtPath, "w") == 0 && out)
+            if (_wfopen_s(&out, txtPathW, L"w") == 0 && out)
             {
                 const EXCEPTION_RECORD* rec = ep ? ep->ExceptionRecord : nullptr;
                 DWORD code = rec ? rec->ExceptionCode : 0;
@@ -250,13 +281,11 @@ namespace util
 
             // Surface the crash for users who aren't watching the console. VK-1684: wide, with the
             // dump's absolute path, so a folder name in any script shows whatever the code page is.
-            wchar_t relativeDump[64];
-            swprintf_s(relativeDump, L"crashes\\crash_%hs.dmp", stamp);
             wchar_t absoluteDump[MAX_PATH + 64];
             const DWORD absoluteLength =
-                GetFullPathNameW(relativeDump, static_cast<DWORD>(std::size(absoluteDump)), absoluteDump, nullptr);
+                GetFullPathNameW(dmpPathW, static_cast<DWORD>(std::size(absoluteDump)), absoluteDump, nullptr);
             const wchar_t* shownDump =
-                (absoluteLength > 0 && absoluteLength < std::size(absoluteDump)) ? absoluteDump : relativeDump;
+                (absoluteLength > 0 && absoluteLength < std::size(absoluteDump)) ? absoluteDump : dmpPathW;
             // Fits: the 50-unit text plus at most MAX_PATH + 63 units of path.
             wchar_t box[MAX_PATH + 160];
             swprintf_s(box, L"VertexForge crashed.\nA crash dump was written to:\n%ls", shownDump);
@@ -288,6 +317,31 @@ namespace util
     void setCrashNotifier(CrashNotifier notifier) noexcept
     {
         crashNotifier.store(notifier);
+    }
+
+    bool setCrashDirectory(const std::filesystem::path& folder)
+    {
+        if (!folder.is_absolute())
+            return false;
+
+        // One trailing backslash, and backslashes only: createFolderChain splits on them.
+        std::wstring text = folder.native();
+        for (wchar_t& c : text)
+        {
+            if (c == L'/')
+                c = L'\\';
+        }
+        while (!text.empty() && text.back() == L'\\')
+            text.pop_back();
+        if (text.empty() || text.size() > maxCrashDirectoryUnits)
+            return false;
+        text += L'\\';
+
+        static_assert(maxCrashDirectoryUnits + 2 <= kCrashDirCapacity, "the crash folder buffer must hold the folder");
+        static_assert(3 * (maxCrashDirectoryUnits + 1) + 1 <= sizeof(crashDirUtf8), "and its UTF-8 copy");
+        std::wmemcpy(crashDirW, text.c_str(), text.size() + 1);
+        utf8Prefix(crashDirW, crashDirUtf8, static_cast<int>(sizeof(crashDirUtf8)));
+        return true;
     }
 
     void setCrashLogContext(const std::string& context)

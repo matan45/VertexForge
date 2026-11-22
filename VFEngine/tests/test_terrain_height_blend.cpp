@@ -53,6 +53,8 @@ namespace
     namespace fs = std::filesystem;
     using editor::graph::buildTerrainCompositeLoop;
     using editor::graph::buildTerrainCompositeSnippet;
+    using editor::graph::buildTerrainMaterialGeneratedFile;
+    using editor::graph::terrainMaterialFileIsCurrent;
 
     fs::path repoRoot()
     {
@@ -306,25 +308,22 @@ TEST_SUITE("TerrainHeightBlend")
 
     TEST_CASE("checked-in terrain_material_generated.glsl matches the emitter")
     {
-        // The file is CONTENT: the editor regenerates it on Compile and it is committed. Before
-        // VK-1609 it had drifted - three comment lines had been hand-added that the generator never
-        // emitted - so "regenerate and diff" showed spurious deletions. This keeps it honest.
+        // The file is CONTENT: the editor regenerates it on Compile when it differs, and it is
+        // committed. Before VK-1609 it had drifted - three comment lines had been hand-added that the
+        // generator never emitted - so "regenerate and diff" showed spurious deletions. This keeps it honest.
         const fs::path path =
             repoRoot() / "resources" / "shaders" / "material" / "terrain_material_generated.glsl";
         REQUIRE_MESSAGE(fs::exists(path), "missing " << path.string());
 
-        const std::string onDisk = normalizeNewlines(repo_scan::readFile(path));
-        const std::string snippet = buildTerrainCompositeSnippet();
+        const std::string rawOnDisk = repo_scan::readFile(path);
+        const std::string onDisk = normalizeNewlines(rawOnDisk);
 
-        // The two leading provenance comments carry the material's layer count, so only the body
-        // is emitter-determined. Assert the file ENDS with exactly the emitted snippet.
-        CHECK_MESSAGE(onDisk.size() >= snippet.size(), "generated file is shorter than the emitter output");
-        if (onDisk.size() >= snippet.size())
-        {
-            const std::string tail = onDisk.substr(onDisk.size() - snippet.size());
-            checkTextEqual(tail, snippet);
-        }
+        // VK-1732: the whole file is emitter-determined (no material's layer count in it), so the editor
+        // writes it only when it differs, and an installed engine never does.
+        checkTextEqual(onDisk, buildTerrainMaterialGeneratedFile());
+        CHECK(terrainMaterialFileIsCurrent(rawOnDisk));
         CHECK(onDisk.rfind("// Generated terrain material shader code\n", 0) == 0);
+        CHECK(onDisk.size() > buildTerrainCompositeSnippet().size());
     }
 
     // ------------------------------------------------------------------

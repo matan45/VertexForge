@@ -35,9 +35,11 @@
 -- (jpackage.app-path) as bin/Editor/Release/x64/Editor.exe below the exe's folder (BundledEngine.java, VK-1681,
 -- VK-1693), whatever folder it is started from, and registers it in ~/.vertexforge/engines.json.
 --
--- Exe folders: the Editor, Runtime and Tests write logs/, crashes/, cache/, saves/ and imgui.ini into their exe
--- folder at run time, and the linker leaves .pdb/.ilk files there. None of them ships (shippedBinFile): a package
--- must not carry one machine's state or a gigabyte of symbols. Each copy is verified against its filtered source.
+-- Exe folders: in the dev tree the Editor, Runtime and Tests write logs/, crashes/, cache/, saves/ and imgui.ini into
+-- their exe or working folder at run time, and the linker leaves .pdb/.ilk files there. None of them ships
+-- (shippedBinFile): a package must not carry one machine's state or a gigabyte of symbols. Each copy is verified
+-- against its filtered source. The packaged engine.json says stateLocation "user" (VK-1732), so the installed editor
+-- keeps that state in %USERPROFILE%\.vertexforge\editor instead (launch::UserStateLocation).
 --
 -- Plugins (VK-1688): PluginManager::resolvePluginsDirectory walks up from the exe and
 -- finds dist/VertexForge/plugins four levels up. Each plugins/<Name>/ ships its
@@ -46,7 +48,9 @@
 -- plugins/<Name>/<Name>.dll (the postbuild copy of whatever configuration was built
 -- last), plugins/data/ (per-machine plugin state, PluginContextImpl::getPluginDataPath)
 -- and the sources. Disabled plugins ship too (the Plugin Manager lists them), with the
--- enabled flags the working tree's descriptors hold. An enabled plugin whose apiVersion is
+-- enabled flags the working tree's descriptors hold: those are the defaults, and an installed
+-- editor keeps its user's choices in ~/.vertexforge/editor/plugin-overrides.json (VK-1732), never
+-- in the shipped descriptors. An enabled plugin whose apiVersion is
 -- not the engine's fails the package (a disabled one only warns, as PluginManager skips it
 -- before that check), and so does a descriptor-less DLL lying in plugins/ itself, which the
 -- dev editor's legacy pass would load.
@@ -70,8 +74,9 @@
 --   * tools/msi_inspect.ps1 then reads the MSI's own tables and every fact is checked (version, upgrade code,
 --     per-user, install folder, every staged file, the Start menu shortcut, the .vfproj association).
 --   * jpackage's MSI deletes the WHOLE install folder on uninstall and on every upgrade (util:RemoveFolderEx; the
---     old version is removed before the new one installs), including what the editor writes there. The summary says
---     so; the project folders and ~/.vertexforge are never touched.
+--     old version is removed before the new one installs), including anything written there. Since VK-1732 the
+--     installed editor writes nothing there (stateLocation "user"); the summary says what is kept. The project
+--     folders, ~/.vertexforge and Documents\VertexForge are never touched.
 --   * After the swap the MSI is moved to dist/VertexForge-<VERSION>.msi, replacing one of the same version; the
 --     installers of other versions are left alone.
 --
@@ -676,6 +681,14 @@ function vfPackageRelease()
          describeStringList(buildManifest.projectCacheDirs) .. " but the sources now say " ..
          describeStringList(sourceCacheDirs) .. ". Re-run premake5 vs2022 and rebuild Release")
    end
+   -- stateLocation (VK-1732): the dev build says "engine" (the package rewrites it to "user" below). A Release build
+   -- older than VK-1732 has none: its editor would write its logs, crash reports, imgui.ini and plugin data into the
+   -- install folder, which the MSI deletes on every upgrade.
+   if buildManifest.stateLocation ~= "engine" then
+      fail(buildManifestPath .. " has stateLocation " .. tostring(buildManifest.stateLocation) ..
+         ", not \"engine\": the Release binaries were built before VK-1732 (they would keep the user's logs, " ..
+         "crash reports and plugin data in the install folder) or the file was edited by hand. Rebuild Release")
+   end
 
    local plugins = collectPlugins()
 
@@ -847,6 +860,8 @@ function vfPackageRelease()
    -- bundle: working directory = the exe folder, content paths under the bundle root. Its paths
    -- are relative to the exe folder, so they stay valid once staging is renamed to dist/VertexForge.
    -- gitCommit = the commit the Release Editor was built at, or HEAD when its manifest has none.
+   -- stateLocation "user" (VK-1732): the installed editor keeps its user's state in %USERPROFILE%\.vertexforge\editor
+   -- and Documents\VertexForge\Plugins, never in the install folder the MSI deletes on every upgrade.
    local stagedExeDir = path.getabsolute(path.join(staging, "bin/Editor/Release/x64"))
    local gitCommit = type(buildManifest.gitCommit) == "string" and buildManifest.gitCommit or vfGitCommit()
    vfWriteEngineManifest {
@@ -854,7 +869,8 @@ function vfPackageRelease()
       workingDir = stagedExeDir,
       contentRoot = path.getabsolute(staging),
       configuration = "Release",
-      gitCommit = gitCommit
+      gitCommit = gitCommit,
+      stateLocation = "user"
    }
 
    -- Resources — placed two levels up from each exe so "../../resources/" resolves.
@@ -971,6 +987,10 @@ function vfPackageRelease()
    if not sameStringList(stagedManifest.projectCacheDirs, sourceCacheDirs) then
       fail(stagedManifestPath .. " projectCacheDirs = " .. describeStringList(stagedManifest.projectCacheDirs) ..
          " but the sources say " .. describeStringList(sourceCacheDirs))
+   end
+   -- VK-1732: the installed editor must keep its user's state out of the install folder.
+   if stagedManifest.stateLocation ~= "user" then
+      fail(stagedManifestPath .. " stateLocation = " .. tostring(stagedManifest.stateLocation) .. ", not \"user\"")
    end
 
    -- 6. The installer (VK-1693), from the verified staging folder, before anything in dist/ changes.
@@ -1256,9 +1276,11 @@ function vfPackageRelease()
          jdk.version, wix.version))
       print("    Installs for the current user only (no UAC) into %LOCALAPPDATA%\\" .. vfMsiInstallDir ..
          ", adds the Start menu entry " .. vfMsiMenuGroup .. " > " .. vfMsiName .. ", and opens .vfproj files in the launcher.")
-      print("    Uninstalling AND upgrading delete the whole install folder, with what the editor wrote there (logs/,")
-      print("    crashes/, cache/, imgui.ini, plugins/data/, Plugin Manager choices, plugins created under plugins/);")
-      print("    ~/.vertexforge and the projects are kept. Close the launcher and every editor before installing,")
+      print("    Uninstalling AND upgrading delete the whole install folder. The installed editor writes nothing there")
+      print("    (VK-1732): its logs, crash reports, layout, plugin data and Plugin Manager choices are in")
+      print("    ~/.vertexforge\\editor, plugins made with New Plugin in Documents\\VertexForge\\Plugins; those, the rest of")
+      print("    ~/.vertexforge and the projects are kept. An upgrade FROM a version older than VK-1732 still loses what")
+      print("    that version wrote into its install folder. Close the launcher and every editor before installing,")
       print("    upgrading or uninstalling. This version installs again only after an uninstall (MSI error 1638).")
    else
       print(string.format("  %-32s %s", "installer", skipLauncher and "SKIPPED (--skip-launcher)" or "SKIPPED (--skip-msi)"))

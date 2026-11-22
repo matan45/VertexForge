@@ -1,8 +1,10 @@
 #pragma once
 #include <string>
+#include <string_view>
 
-// Emitter for the terrain splat-composite GLSL snippet that ShaderGraphCompiler writes to
-// resources/shaders/material/terrain_material_generated.glsl. That single generated file is
+// Emitter for the terrain splat-composite GLSL snippet that the Terrain Material editor writes to
+// resources/shaders/material/terrain_material_generated.glsl (buildTerrainMaterialGeneratedFile, only
+// when the file differs, VK-1732). That single generated file is
 // #include-d verbatim by BOTH the live terrain fragment shader (mesh_terrain.glsl, in the
 // non-RVT path and in the RVT fallback branch) and the RVT bake shader
 // (terrain_rvt_bake.glsl) — so the per-layer logic can only be edited in one place and the
@@ -309,9 +311,9 @@ namespace editor::graph
     }
 
     // The preprocessor assembly written to terrain_material_generated.glsl, without the leading
-    // provenance comments (those carry the material's layer count and so are emitted by
-    // ShaderGraphCompiler::compileTerrainMaterial). Keeping the assembly here means the golden
-    // test can assert the checked-in file ends with exactly this text.
+    // comments (buildTerrainMaterialGeneratedFile adds them; the copy ShaderGraphCompiler::
+    // compileTerrainMaterial caches on a material also names its layer count). Keeping the assembly
+    // here means the golden test can assert the checked-in file is exactly this text.
     //
     // Four independent permutation macros = 16 arms. They are emitted as a FLAT #if / #elif chain
     // in which every arm names all four macros explicitly (`defined` or `!defined`), rather than
@@ -371,5 +373,32 @@ namespace editor::graph
         code += buildTerrainMacroVariationSnippet();
         code += "#endif\n";
         return code;
+    }
+
+    // VK-1732: the whole text of terrain_material_generated.glsl. It depends on no material (a tile's
+    // palette is indexed at run time), so it is the same for every terrain material and ships with the
+    // engine. TerrainMaterialEditorWindow writes it only when the file on disk differs (an emitter change
+    // in the dev tree), and never in an installed engine, whose install folder the MSI owns.
+    inline std::string buildTerrainMaterialGeneratedFile()
+    {
+        std::string text;
+        text += "// Generated terrain material shader code\n";
+        text += "// Generated terrain material code\n";
+        text += "// Per-tile palette: 8 channels with runtime indirection into the material's layer palette\n";
+        text += buildTerrainCompositeSnippet();
+        return text;
+    }
+
+    // True when `onDisk` (as read from disk: CRLF or LF) is exactly buildTerrainMaterialGeneratedFile().
+    inline bool terrainMaterialFileIsCurrent(std::string_view onDisk)
+    {
+        std::string normalized;
+        normalized.reserve(onDisk.size());
+        for (char c : onDisk)
+        {
+            if (c != '\r')
+                normalized += c;
+        }
+        return normalized == buildTerrainMaterialGeneratedFile();
     }
 }

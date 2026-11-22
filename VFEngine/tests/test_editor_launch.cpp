@@ -101,6 +101,16 @@ namespace
         return std::string(buffer, length);
     }
 
+    // VK-1732: with the crash folder member.
+    std::string formattedWithCrashDir(LaunchState state, std::string_view message, std::string_view crashDir,
+                                      unsigned long pid = 42)
+    {
+        char buffer[launch::launchStatusBufferSize];
+        const std::size_t length =
+            launch::formatLaunchStatus(buffer, sizeof(buffer), state, 0, message, pid, crashDir);
+        return std::string(buffer, length);
+    }
+
     std::string formattedMessage(std::string_view message)
     {
         const json parsed = json::parse(formatted(LaunchState::Loading, 0, message));
@@ -497,6 +507,34 @@ TEST_SUITE("EditorLaunch")
         CHECK(launch::formatLaunchStatus(nullptr, 0, LaunchState::Ready, 0, "hello", 1) == 0);
     }
 
+    TEST_CASE("the crash folder follows pid, escaped like the message")
+    {
+        // VK-1732: an empty folder leaves the VK-1682 line byte for byte (pinned above).
+        CHECK(formattedWithCrashDir(LaunchState::Loading, "Loading", "") ==
+              "{\"state\":\"loading\",\"code\":0,\"message\":\"Loading\",\"pid\":42}\n");
+        CHECK(formattedWithCrashDir(LaunchState::Loading, "Loading", "C:\\Users\\me\\.vertexforge\\editor\\crashes") ==
+              "{\"state\":\"loading\",\"code\":0,\"message\":\"Loading\",\"pid\":42,"
+              "\"crashDir\":\"C:\\\\Users\\\\me\\\\.vertexforge\\\\editor\\\\crashes\"}\n");
+
+        const std::string hebrew = "\xD7\xA9\xD7\x9C\xD7\x95\xD7\x9D";  // shalom
+        const std::string folder = "C:\\Users\\" + hebrew + "\\.vertexforge\\editor\\crashes";
+        const json parsed = json::parse(formattedWithCrashDir(LaunchState::Ready, "ready", folder));
+        CHECK(parsed.at("crashDir").get<std::string>() == folder);
+        CHECK(parsed.at("pid").get<unsigned long>() == 42);
+        CHECK(parsed.size() == 5);
+    }
+
+    TEST_CASE("the longest message and crash folder, every byte escaped, still fit the buffer")
+    {
+        const std::string controls(launch::maxLaunchStatusMessageBytes, '\x01');
+        const std::string folder(launch::maxLaunchStatusCrashDirBytes, '\x02');
+        const std::string line = formattedWithCrashDir(LaunchState::Failed, controls, folder, 4294967295ul);
+        REQUIRE_FALSE(line.empty());
+        const json parsed = json::parse(line);
+        CHECK(parsed.at("message").get<std::string>() == controls);
+        CHECK(parsed.at("crashDir").get<std::string>() == folder);
+    }
+
     // ------------------------------------------------------- status file writer
 
     TEST_CASE("open refuses a path it cannot write")
@@ -585,6 +623,57 @@ TEST_SUITE("EditorLaunch")
         CHECK(line.at("code").get<int>() == -1073741819);
         CHECK(line.at("message").get<std::string>() == "Editor crashed: ACCESS_VIOLATION");
         CHECK(fileNamesIn(temp.path) == std::vector<std::string>{"status.json"});
+    }
+
+    TEST_CASE("every line carries the crash folder once it is set")
+    {
+        // VK-1732: the launcher reads the folder from whichever line it saw last, the crash line included.
+        TempDir temp("VertexForge_EditorLaunch_StatusCrashDir");
+        const fs::path statusPath = temp.path / "status.json";
+        const std::string folder = "C:\\Users\\\xD7\xA9\xD7\x9C\xD7\x95\xD7\x9D\\.vertexforge\\editor\\crashes";
+
+        launch::LaunchStatusFile status;
+        REQUIRE(status.open(statusPath));
+        REQUIRE(status.setCrashDirectory(folder));
+        CHECK(std::string(status.crashDirectory()) == folder);
+
+        REQUIRE(status.write(LaunchState::Loading, 0, "Loading"));
+        CHECK(readStatus(statusPath).at("crashDir").get<std::string>() == folder);
+        REQUIRE(status.write(LaunchState::Ready, 0, "ready"));
+        CHECK(readStatus(statusPath).at("crashDir").get<std::string>() == folder);
+
+        REQUIRE(status.writeFromCrash(-1073741819, "Editor crashed: ACCESS_VIOLATION"));
+        const json line = readStatus(statusPath);
+        CHECK(line.at("state").get<std::string>() == "failed");
+        CHECK(line.at("crashDir").get<std::string>() == folder);
+    }
+
+    TEST_CASE("the crash folder is set once, before the first line, and must be valid")
+    {
+        TempDir temp("VertexForge_EditorLaunch_StatusCrashDirRules");
+
+        launch::LaunchStatusFile notOpen;
+        CHECK_FALSE(notOpen.setCrashDirectory("C:\\crashes"));
+        CHECK(notOpen.crashDirectory().empty());
+
+        launch::LaunchStatusFile twice;
+        REQUIRE(twice.open(temp.path / "twice.json"));
+        CHECK_FALSE(twice.setCrashDirectory(""));
+        CHECK(twice.setCrashDirectory("C:\\crashes"));
+        CHECK_FALSE(twice.setCrashDirectory("D:\\other"));
+        CHECK(std::string(twice.crashDirectory()) == "C:\\crashes");
+
+        launch::LaunchStatusFile afterWrite;
+        REQUIRE(afterWrite.open(temp.path / "after.json"));
+        REQUIRE(afterWrite.write(LaunchState::Loading, 0, "Loading"));
+        CHECK_FALSE(afterWrite.setCrashDirectory("C:\\crashes"));
+        CHECK_FALSE(readStatus(temp.path / "after.json").contains("crashDir"));
+
+        launch::LaunchStatusFile invalid;
+        REQUIRE(invalid.open(temp.path / "invalid.json"));
+        CHECK_FALSE(invalid.setCrashDirectory("C:\\\xFF"));
+        CHECK_FALSE(invalid.setCrashDirectory(std::string(launch::maxLaunchStatusCrashDirBytes + 1, 'x')));
+        CHECK(invalid.setCrashDirectory(std::string(launch::maxLaunchStatusCrashDirBytes, 'x')));
     }
 
     TEST_CASE("a reader that keeps the file open makes the write fail cleanly")

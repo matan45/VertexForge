@@ -86,6 +86,7 @@
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "launch/EditorStateDirectory.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
@@ -216,11 +217,13 @@ namespace handlers
                     }));
 
         // Play-mode saves and config live in the project's .vertexforge folder (VK-1684): hidden from
-        // the content browser and never exported, unlike files beside the .vfproj.
+        // the content browser and never exported, unlike files beside the .vfproj. Without a project an
+        // installed editor keeps them in its per-user folder (VK-1732; empty in the dev tree: "saves").
         saveService = std::make_unique<services::SaveService>(
             bootstrap->getSceneGraphSystem(),
             bootstrap->getScriptingProvider(),
-            std::filesystem::path(launch::editorStateDirName)
+            std::filesystem::path(launch::editorStateDirName),
+            launch::processUserState().savesFallbackDir
         );
         configService = std::make_unique<services::ConfigService>(std::filesystem::path(launch::editorStateDirName));
         editorSettingsService = std::make_unique<services::EditorSettingsService>();

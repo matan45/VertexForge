@@ -11,7 +11,14 @@
 #include "events/scene/ScenePersistenceEvents.hpp"
 #include "Pipeline.hpp"
 #include "registry/AssetImporter.hpp"
+#include "export/PluginDescriptorEdit.hpp"
+#include "launch/Utf8Path.hpp"
+#include "resource/AtomicFileReplace.hpp"
 #include <algorithm>
+#include <chrono>
+#include <fstream>
+#include <iterator>
+#include <thread>
 #include <unordered_set>
 #include <cassert>
 #include <glm/glm.hpp>
@@ -83,56 +90,165 @@ namespace plugin {
         return exeDir / "plugins";
     }
 
+    namespace
+    {
+        namespace fs = std::filesystem;
+        using launch::pathToUtf8;
+
+        enum class ReadOutcome { Ok, Missing, Failed };
+
+        // The whole file, as bytes.
+        ReadOutcome readWholeFile(const fs::path& path, std::string& bytes)
+        {
+            std::error_code ec;
+            const bool exists = fs::exists(path, ec);
+            if (ec)
+                return ReadOutcome::Failed;
+            if (!exists)
+                return ReadOutcome::Missing;
+            std::ifstream in(path, std::ios::binary);
+            if (!in.is_open())
+                return ReadOutcome::Failed;
+            bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            return in.bad() ? ReadOutcome::Failed : ReadOutcome::Ok;
+        }
+
+        // Replaces `file` with `bytes` through "<file>.tmp" and resource::replaceFileAtomically. The temp
+        // file never outlives a failure. Returns an error message, empty on success.
+        std::string replaceFileContents(const fs::path& file, const std::string& bytes)
+        {
+            std::error_code ec;
+            const fs::file_status status = fs::status(file, ec);
+            // MSVC maps FILE_ATTRIBUTE_READONLY to "no write bits"; the replace would only fail later.
+            if (!ec && fs::exists(status) && (status.permissions() & fs::perms::owner_write) == fs::perms::none)
+                return pathToUtf8(file) + " is read-only";
+
+            fs::path tempPath = file;
+            tempPath += ".tmp";
+            const auto removeTemp = [&tempPath]
+            {
+                std::error_code removeError;
+                fs::remove(tempPath, removeError);
+            };
+
+            // A reader holding the file open blocks the replace for a moment: retry, writing the temp
+            // file afresh each time.
+            for (int attempt = 0; attempt < 3; ++attempt)
+            {
+                if (attempt > 0)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+                bool written = false;
+                {
+                    std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
+                    if (out.is_open())
+                    {
+                        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+                        out.close();
+                        written = !out.fail();
+                    }
+                }
+                if (!written)
+                {
+                    removeTemp();
+                    return "cannot write " + pathToUtf8(tempPath);
+                }
+                if (::resource::replaceFileAtomically(tempPath, file))
+                    return {};
+                removeTemp();
+            }
+            return "cannot replace " + pathToUtf8(file) + " (is it open in another program?)";
+        }
+
+        const char* rootLabel(PluginRootKind root)
+        {
+            return root == PluginRootKind::Engine ? "shipped" : "user";
+        }
+    }
+
     void PluginManager::loadAll(const std::filesystem::path& pluginDirectory)
     {
-        if (!std::filesystem::exists(pluginDirectory)) {
-            vfLogInfo("Plugin directory '{}' does not exist, skipping plugin loading", pluginDirectory.string());
+        PluginLoadConfig config;
+        config.engineRoot = pluginDirectory;
+        loadAll(config);
+    }
+
+    void PluginManager::loadAll(const PluginLoadConfig& config)
+    {
+        loadConfig = config;
+
+        std::error_code ec;
+        const bool engineRootExists = !config.engineRoot.empty() && fs::exists(config.engineRoot, ec);
+        const bool userRootExists = !config.userRoot.empty() && fs::is_directory(config.userRoot, ec);
+        if (!engineRootExists && !userRootExists) {
+            vfLogInfo("Plugin directory '{}' does not exist, skipping plugin loading", pathToUtf8(config.engineRoot));
             return;
         }
 
-        vfLogInfo("Scanning for plugins in '{}'...", pluginDirectory.string());
-        pluginsDirectory = pluginDirectory;
+        if (engineRootExists) {
+            vfLogInfo("Scanning for plugins in '{}'...", pathToUtf8(config.engineRoot));
+            pluginsDirectory = config.engineRoot;
+        } else {
+            vfLogInfo("Plugin directory '{}' does not exist", pathToUtf8(config.engineRoot));
+        }
+        if (userRootExists)
+            vfLogInfo("Scanning for your plugins in '{}'...", pathToUtf8(config.userRoot));
+
+        const PluginOverrides overrides = readOverrides();
+        if (overrides.status == PluginOverridesStatus::Invalid)
+            vfLogWarning("Ignoring {}: {}; the shipped plugins follow their own descriptors",
+                         pathToUtf8(config.overridesFile), overrides.problem);
+        else if (overrides.status == PluginOverridesStatus::Newer)
+            vfLogWarning("Ignoring {}: {}; the shipped plugins follow their own descriptors, and this editor "
+                         "will not change the file", pathToUtf8(config.overridesFile), overrides.problem);
 
         // Phase 1: Collect descriptors from .vfplugin files
+        std::vector<fs::path> unparsed;
+        std::vector<DiscoveredPlugin> discovered = discover(overrides, &unparsed);
+        for (const auto& path : unparsed)
+            vfLogError("Failed to parse plugin descriptor: {}", pathToUtf8(path));
+
         std::vector<PluginDescriptor> descriptors;
-        std::unordered_set<std::string> dllsWithDescriptor;
-
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(pluginDirectory)) {
-            if (!entry.is_regular_file())
-                continue;
-
-            if (entry.path().extension() == ".vfplugin")
+        std::unordered_set<std::wstring> dllsWithDescriptor;
+        for (auto& found : discovered)
+        {
+            const PluginDescriptor& desc = found.descriptor;
+            if (found.shadowed)
             {
-                auto desc = PluginDescriptor::loadFromFile(entry.path());
-                if (!desc.has_value())
-                {
-                    vfLogError("Failed to parse plugin descriptor: {}", entry.path().string());
-                    continue;
-                }
-
-                if (!desc->enabled)
-                {
-                    vfLogInfo("Plugin '{}' is disabled, skipping", desc->name);
-                    continue;
-                }
-
-                if (desc->apiVersion != VF_PLUGIN_API_VERSION)
-                {
-                    vfLogError("Plugin '{}' API version mismatch: descriptor={}, engine={}",
-                               desc->name, desc->apiVersion, VF_PLUGIN_API_VERSION);
-                    continue;
-                }
-
-                auto libPath = desc->getLibraryPath();
-                if (!std::filesystem::exists(libPath))
-                {
-                    vfLogError("Plugin '{}' library not found: {}", desc->name, libPath.string());
-                    continue;
-                }
-
-                dllsWithDescriptor.insert(std::filesystem::canonical(libPath).string());
-                descriptors.push_back(std::move(*desc));
+                vfLogWarning("Plugin '{}' ({}) is shadowed by the {} plugin with that name ({}), skipping",
+                             desc.name, pathToUtf8(desc.descriptorPath), rootLabel(found.shadowedByRoot),
+                             pathToUtf8(found.shadowedBy));
+                continue;
             }
+
+            if (!found.effectiveEnabled)
+            {
+                if (found.hasOverride)
+                    vfLogInfo("Plugin '{}' is disabled in {}, skipping", desc.name, pathToUtf8(config.overridesFile));
+                else
+                    vfLogInfo("Plugin '{}' is disabled, skipping", desc.name);
+                continue;
+            }
+
+            if (desc.apiVersion != VF_PLUGIN_API_VERSION)
+            {
+                vfLogError("Plugin '{}' API version mismatch: descriptor={}, engine={}",
+                           desc.name, desc.apiVersion, VF_PLUGIN_API_VERSION);
+                continue;
+            }
+
+            auto libPath = desc.getLibraryPath();
+            std::error_code libEc;
+            if (!fs::exists(libPath, libEc))
+            {
+                vfLogError("Plugin '{}' library not found: {}", desc.name, pathToUtf8(libPath));
+                continue;
+            }
+
+            std::error_code canonicalEc;
+            const fs::path canonical = fs::canonical(libPath, canonicalEc);
+            dllsWithDescriptor.insert((canonicalEc ? libPath : canonical).wstring());
+            descriptors.push_back(std::move(found.descriptor));
         }
 
         // Phase 2+3: Topological sort with dependency validation and cycle detection
@@ -144,24 +260,235 @@ namespace plugin {
             loadPlugin(desc);
         }
 
-        // Phase 5: Backward compatibility — load orphan DLLs without descriptors
-        for (const auto& entry : std::filesystem::directory_iterator(pluginDirectory)) {
-            if (!entry.is_regular_file())
-                continue;
+        // Phase 5: Backward compatibility — load orphan DLLs without descriptors (engine root only)
+        if (engineRootExists) {
+            std::error_code dirEc;
+            for (auto it = fs::directory_iterator(config.engineRoot, fs::directory_options::skip_permission_denied, dirEc);
+                 !dirEc && it != fs::directory_iterator(); it.increment(dirEc)) {
+                std::error_code fileEc;
+                if (!it->is_regular_file(fileEc))
+                    continue;
 
-            const auto& path = entry.path();
-            if (path.extension() != ".dll")
-                continue;
-            auto canonical = std::filesystem::canonical(path).string();
-            if (dllsWithDescriptor.contains(canonical))
-                continue;
+                const auto& path = it->path();
+                if (path.extension() != ".dll")
+                    continue;
+                std::error_code canonicalEc;
+                const fs::path canonical = fs::canonical(path, canonicalEc);
+                if (dllsWithDescriptor.contains((canonicalEc ? path : canonical).wstring()))
+                    continue;
 
-            vfLogWarning("Plugin '{}' has no .vfplugin descriptor, loading with legacy method",
-                         path.filename().string());
-            loadPluginFromDll(path);
+                vfLogWarning("Plugin '{}' has no .vfplugin descriptor, loading with legacy method",
+                             pathToUtf8(path.filename()));
+                loadPluginFromDll(path);
+            }
         }
 
         vfLogInfo("Loaded {} plugin(s)", plugins.size());
+    }
+
+    std::vector<PluginManager::DescriptorFile> PluginManager::listDescriptorFiles() const
+    {
+        std::vector<DescriptorFile> files;
+        const auto isDescriptor = [](const fs::directory_entry& entry)
+        {
+            std::error_code ec;
+            return entry.is_regular_file(ec) && entry.path().extension() == ".vfplugin";
+        };
+
+        // The engine root: recursively, sorted by path (directory order is not a contract).
+        std::error_code ec;
+        if (!loadConfig.engineRoot.empty() && fs::is_directory(loadConfig.engineRoot, ec))
+        {
+            std::vector<fs::path> found;
+            for (auto it = fs::recursive_directory_iterator(loadConfig.engineRoot,
+                                                            fs::directory_options::skip_permission_denied, ec);
+                 !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
+            {
+                if (isDescriptor(*it))
+                    found.push_back(it->path());
+            }
+            std::sort(found.begin(), found.end());
+            for (auto& path : found)
+                files.push_back({std::move(path), PluginRootKind::Engine});
+        }
+
+        // The user root: <root>/<Folder>/*.vfplugin only. It is the user's Documents folder, where a deep
+        // scan could wander into anything.
+        ec.clear();
+        if (!loadConfig.userRoot.empty() && fs::is_directory(loadConfig.userRoot, ec))
+        {
+            std::vector<fs::path> found;
+            for (auto dir = fs::directory_iterator(loadConfig.userRoot, fs::directory_options::skip_permission_denied, ec);
+                 !ec && dir != fs::directory_iterator(); dir.increment(ec))
+            {
+                std::error_code dirEc;
+                if (!dir->is_directory(dirEc))
+                    continue;
+                for (auto file = fs::directory_iterator(dir->path(), fs::directory_options::skip_permission_denied, dirEc);
+                     !dirEc && file != fs::directory_iterator(); file.increment(dirEc))
+                {
+                    if (isDescriptor(*file))
+                        found.push_back(file->path());
+                }
+            }
+            std::sort(found.begin(), found.end());
+            for (auto& path : found)
+                files.push_back({std::move(path), PluginRootKind::User});
+        }
+        return files;
+    }
+
+    PluginOverrides PluginManager::readOverrides() const
+    {
+        if (loadConfig.overridesFile.empty())
+            return {};
+
+        std::string text;
+        switch (readWholeFile(loadConfig.overridesFile, text))
+        {
+        case ReadOutcome::Missing:
+            return {};
+        case ReadOutcome::Failed:
+        {
+            PluginOverrides unreadable;
+            unreadable.status = PluginOverridesStatus::Invalid;
+            unreadable.problem = "it could not be read";
+            return unreadable;
+        }
+        case ReadOutcome::Ok:
+            break;
+        }
+        return parsePluginOverrides(std::string_view(text));
+    }
+
+    std::vector<DiscoveredPlugin> PluginManager::discover(const PluginOverrides& overrides,
+                                                          std::vector<fs::path>* unparsed) const
+    {
+        std::vector<DiscoveredPlugin> found;
+        for (auto& file : listDescriptorFiles())
+        {
+            std::optional<PluginDescriptor> desc;
+            try
+            {
+                desc = PluginDescriptor::loadFromFile(file.path);
+            }
+            catch (const std::exception&)
+            {
+                desc.reset();
+            }
+            if (!desc.has_value())
+            {
+                if (unparsed)
+                    unparsed->push_back(std::move(file.path));
+                continue;
+            }
+
+            DiscoveredPlugin plugin;
+            plugin.descriptor = std::move(*desc);
+            plugin.root = file.root;
+            found.push_back(std::move(plugin));
+        }
+
+        std::vector<PluginRootCandidate> candidates;
+        candidates.reserve(found.size());
+        for (const auto& plugin : found)
+            candidates.push_back({plugin.descriptor.name, plugin.root});
+        const auto shadowedBy = findShadowed(candidates);
+
+        for (std::size_t i = 0; i < found.size(); ++i)
+        {
+            DiscoveredPlugin& plugin = found[i];
+            if (shadowedBy[i])
+            {
+                plugin.shadowed = true;
+                plugin.shadowedBy = found[*shadowedBy[i]].descriptor.descriptorPath;
+                plugin.shadowedByRoot = found[*shadowedBy[i]].root;
+            }
+            plugin.hasOverride = plugin.root == PluginRootKind::Engine &&
+                                 overrides.status == PluginOverridesStatus::Ok &&
+                                 overrides.enabled.contains(plugin.descriptor.name);
+            plugin.effectiveEnabled = effectiveEnabled(plugin.root, plugin.descriptor.name,
+                                                       plugin.descriptor.enabled, &overrides);
+        }
+        return found;
+    }
+
+    std::vector<DiscoveredPlugin> PluginManager::discoverPlugins() const
+    {
+        return discover(readOverrides(), nullptr);
+    }
+
+    std::filesystem::path PluginManager::getPluginDataRoot() const
+    {
+        if (!loadConfig.dataRoot.empty())
+            return loadConfig.dataRoot;
+        if (!pluginsDirectory.empty())
+            return pluginsDirectory / "data";
+        return {};
+    }
+
+    std::string PluginManager::setPluginEnabled(const DiscoveredPlugin& plugin, bool enabled)
+    {
+        const std::string& name = plugin.descriptor.name;
+        if (plugin.shadowed)
+            return "'" + name + "' is shadowed by the plugin at " + pathToUtf8(plugin.shadowedBy) +
+                   " and never loads";
+
+        try
+        {
+            if (plugin.root == PluginRootKind::Engine && usesEnabledOverrides())
+            {
+                const fs::path& file = loadConfig.overridesFile;
+                PluginOverrides overrides = readOverrides();
+                if (!overrides.writable())
+                    return pathToUtf8(file) + ": " + overrides.problem + ". Fix or delete it to change shipped plugins.";
+
+                overrides.enabled[name] = enabled;
+                std::error_code ec;
+                fs::create_directories(file.parent_path(), ec);
+                if (ec)
+                    return "cannot create " + pathToUtf8(file.parent_path()) + ": " + ec.message();
+                return replaceFileContents(file, serializePluginOverrides(overrides.enabled));
+            }
+
+            const fs::path& file = plugin.descriptor.descriptorPath;
+            std::string original;
+            if (readWholeFile(file, original) != ReadOutcome::Ok)
+                return "cannot read " + pathToUtf8(file);
+            const std::optional<std::string> edited = gameExport::descriptorTextWithEnabled(original, enabled);
+            if (!edited)
+                return pathToUtf8(file) + " is not a JSON object";
+            if (*edited == original)
+                return {};
+            return replaceFileContents(file, *edited);
+        }
+        catch (const std::exception& e)
+        {
+            return std::string("cannot change '") + name + "': " + e.what();
+        }
+    }
+
+    std::string PluginManager::resetPluginEnabled(const std::string& name)
+    {
+        if (!usesEnabledOverrides())
+            return {};
+
+        try
+        {
+            const fs::path& file = loadConfig.overridesFile;
+            PluginOverrides overrides = readOverrides();
+            if (overrides.status == PluginOverridesStatus::Absent)
+                return {};
+            if (!overrides.writable())
+                return pathToUtf8(file) + ": " + overrides.problem + ". Fix or delete it to change shipped plugins.";
+            if (overrides.enabled.erase(name) == 0)
+                return {};
+            return replaceFileContents(file, serializePluginOverrides(overrides.enabled));
+        }
+        catch (const std::exception& e)
+        {
+            return std::string("cannot reset '") + name + "': " + e.what();
+        }
     }
 
     std::vector<PluginDescriptor> PluginManager::resolveLoadOrder(std::vector<PluginDescriptor>& descriptors)

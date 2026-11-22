@@ -15,6 +15,12 @@
 //         of a crash; the process may stay alive behind the crash message box).
 // message UTF-8 text for a person; never parse it.
 // pid     the editor's process id.
+// crashDir (VK-1732, optional, last) the absolute folder the editor writes its crash reports into
+//         (crash_YYYYMMDD_HHMMSS_<pid>.txt/.dmp, CrashHandler.hpp): ~/.vertexforge/editor/crashes for an
+//         installed engine, <working directory>/crashes in the dev tree. Absent from editors older than
+//         VK-1732 (a launcher then looks in <working directory>/crashes), and when the editor set none.
+//
+//   {"state":"loading","code":0,"message":"...","pid":1234,"crashDir":"C:\\Users\\me\\.vertexforge\\editor\\crashes"}
 //
 // Every write replaces the whole file atomically (sibling temp file, flush, MoveFileExW), so a
 // reader sees either the previous or the new complete line. Once "failed" is written nothing
@@ -43,14 +49,18 @@ namespace launch
 
     // Longest message kept, in input bytes; longer messages are cut on a UTF-8 boundary.
     inline constexpr std::size_t maxLaunchStatusMessageBytes = 1024;
-    // Fits the longest message even when every byte is escaped as \u00XX.
-    inline constexpr std::size_t launchStatusBufferSize = 8192;
+    // Longest crash folder (VK-1732), in UTF-8 bytes; LaunchStatusFile::setCrashDirectory refuses a longer one.
+    inline constexpr std::size_t maxLaunchStatusCrashDirBytes = 1024;
+    // Fits the longest message and the longest crash folder even when every byte is escaped as \u00XX.
+    inline constexpr std::size_t launchStatusBufferSize = 16384;
 
     // Formats the status line (with a trailing '\n') into `out`, NUL-terminated. Never allocates.
     // `"`, `\` and control characters are escaped; bytes that are not valid UTF-8 become '?'.
-    // Returns the length without the NUL, or 0 when `capacity` is too small.
+    // An empty `crashDirUtf8` leaves the crashDir member out. Returns the length without the NUL, or 0
+    // when `capacity` is too small.
     std::size_t formatLaunchStatus(char* out, std::size_t capacity, LaunchState state, int code,
-                                   std::string_view messageUtf8, unsigned long pid) noexcept;
+                                   std::string_view messageUtf8, unsigned long pid,
+                                   std::string_view crashDirUtf8 = {}) noexcept;
 
     class LaunchStatusFile
     {
@@ -64,6 +74,13 @@ namespace launch
         bool open(const std::filesystem::path& path);
         bool isOpen() const noexcept;
         const std::filesystem::path& path() const noexcept;
+
+        // VK-1732: every line written from now on carries `folderUtf8` as crashDir. Once, after open()
+        // and before the first write; refused (false) otherwise, and for an empty folder, one that is not
+        // valid UTF-8 or one longer than maxLaunchStatusCrashDirBytes.
+        bool setCrashDirectory(std::string_view folderUtf8) noexcept;
+        // The folder setCrashDirectory took; empty when none.
+        std::string_view crashDirectory() const noexcept;
 
         // Main-thread writes. Returns false when not open, when "failed" was already written (or a
         // crash is being written), or when the file could not be replaced within about a second.
@@ -83,6 +100,12 @@ namespace launch
         // Set by the first "failed" write (normal or crash); no write follows it.
         std::atomic<bool> terminal{false};
         std::atomic<int> writersInFlight{0};
+        // Set by the first write (normal or crash): setCrashDirectory comes before it.
+        std::atomic<bool> wroteAny{false};
+        // The crash folder, set once before any write and read by every write (the crash path too).
+        std::atomic<bool> crashDirSet{false};
+        std::size_t crashDirLength = 0;
+        char crashDir[maxLaunchStatusCrashDirBytes + 1] = {};
         // Only the one writer that wins `terminal` formats into it, so the crash path needs no stack.
         char crashBuffer[launchStatusBufferSize] = {};
     };

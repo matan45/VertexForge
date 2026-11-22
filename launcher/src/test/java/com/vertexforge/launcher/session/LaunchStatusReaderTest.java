@@ -80,6 +80,57 @@ class LaunchStatusReaderTest {
                         "{\"state\":\"ready\",\"code\":0,\"message\":\"ok\",\"pid\":7,\"future\":true}")));
     }
 
+    /** VK-1732: the exact shape the editor writes (LaunchStatusFile.cpp formatLaunchStatus), the folder after pid. */
+    @Test
+    void readsTheCrashFolder() throws IOException {
+        Path folder = Path.of("C:\\Users\\me\\.vertexforge\\editor\\crashes");
+
+        LaunchStatus status = LaunchStatusReader.read(write("{\"state\":\"loading\",\"code\":0,\"message\":\"Loading\","
+                + "\"pid\":1234,\"crashDir\":\"C:\\\\Users\\\\me\\\\.vertexforge\\\\editor\\\\crashes\"}\n"))
+                .orElseThrow();
+
+        assertEquals(new LaunchStatus(LaunchStatus.State.LOADING, 0, "Loading", 1234, Optional.of(folder)), status);
+    }
+
+    @Test
+    void aLineWithoutACrashFolderNamesNone() throws IOException {
+        LaunchStatus status = LaunchStatusReader.read(write(
+                "{\"state\":\"ready\",\"code\":0,\"message\":\"ok\",\"pid\":7}")).orElseThrow();
+
+        assertEquals(Optional.empty(), status.crashDir());
+    }
+
+    /** The other four members decide whether a line is readable; a bad folder only falls back. */
+    private void assertCrashFolderIgnored(String crashDirJson) throws IOException {
+        Optional<LaunchStatus> status = LaunchStatusReader.read(write(
+                "{\"state\":\"ready\",\"code\":0,\"message\":\"ok\",\"pid\":7,\"crashDir\":" + crashDirJson + "}"));
+
+        assertEquals(Optional.of(new LaunchStatus(LaunchStatus.State.READY, 0, "ok", 7, Optional.empty())), status,
+                crashDirJson);
+    }
+
+    @Test
+    void aRelativeCrashFolderIsIgnoredButTheLineIsKept() throws IOException {
+        assertCrashFolderIgnored("\"crashes\"");
+        assertCrashFolderIgnored("\"\"");
+        assertCrashFolderIgnored("\"\\\\Users\\\\me\\\\crashes\"");
+        assertCrashFolderIgnored("\"C:crashes\"");
+    }
+
+    @Test
+    void aCrashFolderThatIsNotAStringIsIgnoredButTheLineIsKept() throws IOException {
+        assertCrashFolderIgnored("42");
+        assertCrashFolderIgnored("null");
+        assertCrashFolderIgnored("true");
+        assertCrashFolderIgnored("[\"C:\\\\crashes\"]");
+        assertCrashFolderIgnored("{\"path\":\"C:\\\\crashes\"}");
+    }
+
+    @Test
+    void aCrashFolderThatIsNoPathIsIgnoredButTheLineIsKept() throws IOException {
+        assertCrashFolderIgnored("\"C:\\\\Users\\\\me\\\\cra\\u0000shes\"");
+    }
+
     @Test
     void invalidUtf8IsNoNews() throws IOException {
         Path file = tempDir.resolve("status.json");

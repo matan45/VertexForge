@@ -34,6 +34,7 @@
 #include "events/scene/SceneSettingsEvents.hpp"
 #include "Import.hpp"
 #include "core/PluginManager.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "launch/Utf8Path.hpp"
 #include "resource/PathResolver.hpp"
 #include "time/Timer.hpp"
@@ -106,7 +107,18 @@ namespace handlers
             std::string(plugin::capability::navmesh),
             std::string(plugin::capability::vfx)
         });
-        pluginManager->loadAll(plugin::PluginManager::resolvePluginsDirectory());
+        // VK-1732: an installed editor also loads the user's own plugins and keeps plugin data and the
+        // Plugin Manager's choices for shipped plugins per user (the MSI deletes the engine's folder on
+        // every upgrade). The dev tree: the shipped root only, exactly as before.
+        plugin::PluginLoadConfig pluginConfig;
+        pluginConfig.engineRoot = plugin::PluginManager::resolvePluginsDirectory();
+        if (const launch::UserStateLocation& userState = launch::processUserState(); userState.isUser())
+        {
+            pluginConfig.userRoot = userState.userPluginsDir;
+            pluginConfig.dataRoot = userState.pluginDataDir;
+            pluginConfig.overridesFile = userState.pluginOverridesFile;
+        }
+        pluginManager->loadAll(pluginConfig);
         pluginManager->initializeAll();
 
         for (auto& stage : pluginManager->takeAllImportStages()) {

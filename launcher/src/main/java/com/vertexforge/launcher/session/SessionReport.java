@@ -18,6 +18,8 @@ import java.util.Optional;
  * @param crashReport      the crash report it wrote, when it wrote one during the session
  * @param log              the per-launch log
  * @param workingDirectory the folder the editor ran in
+ * @param crashFolder      the editor's crash folder: the one its status line named (VK-1732), else
+ *                         {@code <working directory>/crashes} ({@link CrashReports#folder})
  * @param exitedAt         when the launcher saw it exit
  */
 public record SessionReport(
@@ -28,6 +30,7 @@ public record SessionReport(
         Optional<CrashReport> crashReport,
         Path log,
         Path workingDirectory,
+        Path crashFolder,
         Instant exitedAt
 ) {
     public SessionReport {
@@ -37,11 +40,7 @@ public record SessionReport(
         Objects.requireNonNull(crashReport, "crashReport");
         Objects.requireNonNull(log, "log");
         Objects.requireNonNull(workingDirectory, "workingDirectory");
+        Objects.requireNonNull(crashFolder, "crashFolder");
         Objects.requireNonNull(exitedAt, "exitedAt");
-    }
-
-    /** The editor's crash folder ({@code <working directory>/crashes}). */
-    public Path crashFolder() {
-        return CrashReports.folder(workingDirectory);
     }
 }

@@ -27,10 +27,12 @@ namespace services
 
     SaveService::SaveService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                              IScriptingProvider* scriptingProvider,
-                             std::filesystem::path stateFolder)
+                             std::filesystem::path stateFolder,
+                             std::filesystem::path noProjectFolder)
         : sceneGraph(sceneGraph)
         , scriptingProvider(scriptingProvider)
         , stateFolder(std::move(stateFolder))
+        , noProjectFolder(std::move(noProjectFolder))
     {
     }
 
@@ -337,6 +339,11 @@ namespace services
                 folder /= stateFolder;
             }
             return (folder / "saves").string();
+        }
+        // No project: the per-user folder an installed editor gave (VK-1732), else the working directory's.
+        if (!noProjectFolder.empty())
+        {
+            return noProjectFolder.string();
         }
         return "saves";
     }

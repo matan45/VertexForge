@@ -17,6 +17,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -83,7 +84,20 @@ public final class LaunchStatusReader {
                 || code.get() < Integer.MIN_VALUE || code.get() > Integer.MAX_VALUE || pid.get() < 0) {
             return Optional.empty();
         }
-        return Optional.of(new LaunchStatus(state.get(), code.get().intValue(), message.get(), pid.get()));
+        // VK-1732: optional, and read leniently; a bad value never costs the line (the folder falls back).
+        Optional<Path> crashDir = string(root.get("crashDir")).flatMap(LaunchStatusReader::absolutePath);
+        return Optional.of(new LaunchStatus(state.get(), code.get().intValue(), message.get(), pid.get(), crashDir));
+    }
+
+    /** {@code text} as a path when it is one and it is absolute; empty otherwise. */
+    private static Optional<Path> absolutePath(String text) {
+        Path path;
+        try {
+            path = Path.of(text);
+        } catch (InvalidPathException e) {
+            return Optional.empty();
+        }
+        return path.isAbsolute() ? Optional.of(path) : Optional.empty();
     }
 
     private static Optional<String> string(JsonElement element) {

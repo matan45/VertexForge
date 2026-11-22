@@ -91,6 +91,17 @@ class EditorSessionTest {
                 + "\",\"pid\":" + pid + "}\n");
     }
 
+    /** A VK-1732 line: the crash folder after pid, JSON-escaped. */
+    private void writeStatus(String state, int code, String message, Path crashDir) throws IOException {
+        Files.writeString(status, "{\"state\":\"" + state + "\",\"code\":" + code + ",\"message\":\"" + message
+                + "\",\"pid\":" + PID + ",\"crashDir\":\"" + crashDir.toString().replace("\\", "\\\\") + "\"}\n");
+    }
+
+    /** The per-user crash folder of a VK-1732 editor, outside its working directory. */
+    private Path userCrashes() throws IOException {
+        return Files.createDirectories(tempDir.resolve("profile/.vertexforge/editor/crashes"));
+    }
+
     private void exit(int code) {
         process.exit(code);
         scheduler.runDue();
@@ -183,6 +194,65 @@ class EditorSessionTest {
         assertEquals(List.of("phase READY", "crash " + 0xC0000005, "exited Crashed"), events);
         SessionReport report = reports.getFirst();
         assertEquals("VertexForge crash report", report.crashReport().orElseThrow().content());
+        // An editor older than VK-1732 names no folder: its working directory's.
+        assertEquals(workingDirectory.resolve("crashes"), report.crashFolder());
+    }
+
+    /** VK-1732: a folder named in a status line polled earlier still counts when the last read finds nothing. */
+    @Test
+    void theCrashFolderComesFromTheStatusLine() throws IOException {
+        Path userCrashes = userCrashes();
+        begun();
+        writeStatus("ready", 0, "Editor ready", userCrashes);
+        scheduler.advance(POLL);
+        writeStatus("failed", 0xC0000005, "Editor crashed: ACCESS_VIOLATION", userCrashes);
+        scheduler.advance(POLL);
+        Files.delete(status);
+        Path mine = Files.writeString(userCrashes.resolve("crash_20260102_030500_" + PID + ".txt"),
+                "VertexForge crash report");
+        Files.writeString(userCrashes.resolve("crash_20260102_030501_" + (PID + 1) + ".txt"), "another editor's");
+        Path oldFolder = Files.createDirectories(workingDirectory.resolve("crashes"));
+        Files.writeString(oldFolder.resolve("crash_20260102_030502.txt"), "not where this editor writes");
+
+        exit(0xC0000005);
+
+        assertEquals(List.of("phase READY", "crash " + 0xC0000005, "exited Crashed"), events);
+        SessionReport report = reports.getFirst();
+        assertEquals(userCrashes, report.crashFolder());
+        assertEquals(mine, report.crashReport().orElseThrow().text());
+        assertEquals("VertexForge crash report", report.crashReport().orElseThrow().content());
+    }
+
+    /** VK-1732: the read after the exit can be the first to name the folder. */
+    @Test
+    void theLastLineAloneCanNameTheCrashFolder() throws IOException {
+        Path userCrashes = userCrashes();
+        begun();
+        writeStatus("failed", 0xC0000005, "Editor crashed: ACCESS_VIOLATION", userCrashes);
+        Path mine = Files.writeString(userCrashes.resolve("crash_20260102_030500_" + PID + ".txt"),
+                "VertexForge crash report");
+
+        exit(0xC0000005);
+
+        assertEquals(List.of("exited Crashed"), events);
+        SessionReport report = reports.getFirst();
+        assertEquals(userCrashes, report.crashFolder());
+        assertEquals(mine, report.crashReport().orElseThrow().text());
+    }
+
+    /** Another editor's report in a shared folder is never the session's, even when it is the only one. */
+    @Test
+    void anotherEditorsCrashReportIsNotTheSessions() throws IOException {
+        Path userCrashes = userCrashes();
+        begun();
+        writeStatus("failed", 0xC0000005, "Editor crashed: ACCESS_VIOLATION", userCrashes);
+        Files.writeString(userCrashes.resolve("crash_20260102_030500_" + (PID + 1) + ".txt"), "another editor's");
+
+        exit(0xC0000005);
+
+        SessionReport report = reports.getFirst();
+        assertEquals(userCrashes, report.crashFolder());
+        assertEquals(Optional.empty(), report.crashReport());
     }
 
     @Test

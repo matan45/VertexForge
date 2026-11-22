@@ -2,6 +2,7 @@
 #include "ExportHandler.hpp"
 #include "../graph/ShaderGraphCompiler.hpp"
 #include "api/PluginVersion.hpp"
+#include "core/PluginManager.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "events/scripting/ScriptingEvents.hpp"
 #include "export/GameExporter.hpp"
@@ -80,6 +81,26 @@ namespace handlers
 		// The editor links Plugin; the GameExport DLL must not, so the expected
 		// API version travels through the config.
 		config.expectedPluginApiVersion = plugin::VF_PLUGIN_API_VERSION;
+
+		// VK-1733: the exporter ships what the editor loads: both plugin roots
+		// (shadowed plugins left out) and each plugin's effective enabled state,
+		// a shipped plugin's per-user override included. Also for MCP exports,
+		// which send no overrides of their own.
+		if (const auto* pluginManager = plugin::PluginManager::getActive())
+		{
+			for (const auto& discovered : pluginManager->discoverPlugins())
+			{
+				if (discovered.shadowed)
+				{
+					continue;
+				}
+				gameExport::ExportPluginSource source;
+				source.descriptorPath = discovered.descriptor.descriptorPath;
+				source.enabled = discovered.effectiveEnabled;
+				config.pluginSources.push_back(std::move(source));
+			}
+			config.pluginSourcesFromHost = true;
+		}
 
 		if (projectPathOpt)
 		{

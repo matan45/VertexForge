@@ -102,6 +102,29 @@ TEST_SUITE("SavePaths")
         CHECK(saves.listSlots() == std::vector<std::string>{"slot1"});
     }
 
+    TEST_CASE("without a project the save slots live in the folder the editor gave")
+    {
+        // VK-1732: an installed editor passes ~/.vertexforge/editor/saves, so a slot made with no project open
+        // never lands in the install folder (its working directory).
+        DispatcherScope dispatcherScope;
+        events::EventDispatcher::instance().registerQueryHandler<events::project::GetProjectPathQuery>(
+            [](const events::project::GetProjectPathQuery&) -> std::optional<std::string> { return std::nullopt; });
+
+        const fs::path root = fs::temp_directory_path() / (L"VertexForge_SavePaths_NoProject_" + kHebrewWide);
+        std::error_code ec;
+        fs::remove_all(root, ec);
+        const fs::path folder = root / L"saves";
+
+        services::SaveService saves(nullptr, nullptr, fs::path(L".vertexforge"), folder);
+        REQUIRE(saves.createSlot("slot1"));
+        CHECK(fs::is_directory(folder / L"slot1"));
+        CHECK(saves.listSlots() == std::vector<std::string>{"slot1"});
+        REQUIRE(saves.deleteSlot("slot1"));
+        CHECK_FALSE(fs::exists(folder / L"slot1"));
+
+        fs::remove_all(root, ec);
+    }
+
     TEST_CASE("the editor's config.json lives in the project's .vertexforge folder")
     {
         DispatcherScope dispatcherScope;

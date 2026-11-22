@@ -156,7 +156,8 @@ namespace launch
             return length;
         }
 
-        void putEscaped(Sink& sink, std::string_view message) noexcept
+        // The JSON string body of `message`, cut on a UTF-8 boundary after `maxBytes` input bytes.
+        void putEscaped(Sink& sink, std::string_view message, std::size_t maxBytes) noexcept
         {
             static constexpr char hexDigits[] = "0123456789abcdef";
 
@@ -165,7 +166,7 @@ namespace launch
             {
                 const std::size_t sequence = validSequenceLength(message, i);
                 const std::size_t consumed = sequence == 0 ? 1 : sequence;
-                if (i + consumed > maxLaunchStatusMessageBytes)
+                if (i + consumed > maxBytes)
                 {
                     break;
                 }
@@ -259,7 +260,8 @@ namespace launch
     }
 
     std::size_t formatLaunchStatus(char* out, std::size_t capacity, LaunchState state, int code,
-                                   std::string_view messageUtf8, unsigned long pid) noexcept
+                                   std::string_view messageUtf8, unsigned long pid,
+                                   std::string_view crashDirUtf8) noexcept
     {
         Sink sink(out, capacity);
         sink.put(std::string_view("{\"state\":\""));
@@ -267,9 +269,16 @@ namespace launch
         sink.put(std::string_view("\",\"code\":"));
         sink.putNumber(code);
         sink.put(std::string_view(",\"message\":\""));
-        putEscaped(sink, messageUtf8);
+        putEscaped(sink, messageUtf8, maxLaunchStatusMessageBytes);
         sink.put(std::string_view("\",\"pid\":"));
         sink.putNumber(pid);
+        if (!crashDirUtf8.empty())
+        {
+            // VK-1732: after pid, so a line without it is byte for byte the VK-1682 format.
+            sink.put(std::string_view(",\"crashDir\":\""));
+            putEscaped(sink, crashDirUtf8, maxLaunchStatusCrashDirBytes);
+            sink.put('"');
+        }
         sink.put(std::string_view("}\n"));
         return sink.finish();
     }
@@ -322,12 +331,41 @@ namespace launch
         return finalPath;
     }
 
+    bool LaunchStatusFile::setCrashDirectory(std::string_view folderUtf8) noexcept
+    {
+        if (!opened.load() || crashDirSet.load() || wroteAny.load() || folderUtf8.empty() ||
+            folderUtf8.size() > maxLaunchStatusCrashDirBytes)
+        {
+            return false;
+        }
+        for (std::size_t i = 0; i < folderUtf8.size();)
+        {
+            const std::size_t sequence = validSequenceLength(folderUtf8, i);
+            if (sequence == 0)
+            {
+                return false;
+            }
+            i += sequence;
+        }
+        folderUtf8.copy(crashDir, folderUtf8.size());
+        crashDir[folderUtf8.size()] = '\0';
+        crashDirLength = folderUtf8.size();
+        crashDirSet.store(true);  // seq_cst: a writer that sees the flag sees the folder
+        return true;
+    }
+
+    std::string_view LaunchStatusFile::crashDirectory() const noexcept
+    {
+        return crashDirSet.load() ? std::string_view(crashDir, crashDirLength) : std::string_view();
+    }
+
     bool LaunchStatusFile::write(LaunchState state, int code, std::string_view messageUtf8) noexcept
     {
         if (!opened.load())
         {
             return false;
         }
+        wroteAny.store(true);
 
         // Announce the write BEFORE checking `terminal` (both seq_cst): either this write sees the
         // crash's flag and backs off, or the crash sees this write in flight and waits for it.
@@ -337,7 +375,7 @@ namespace launch
         {
             char buffer[launchStatusBufferSize];
             const std::size_t length = formatLaunchStatus(buffer, sizeof(buffer), state, code, messageUtf8,
-                                                          GetCurrentProcessId());
+                                                          GetCurrentProcessId(), crashDirectory());
             written = length != 0 && writeAndReplace(tempPath.c_str(), finalPath.c_str(), buffer, length);
             if (!written && state == LaunchState::Failed)
             {
@@ -355,6 +393,7 @@ namespace launch
         {
             return false;
         }
+        wroteAny.store(true);
         // The first failure wins: a crash after the editor already reported why it gave up (or a
         // second thread crashing at the same time) keeps the earlier line.
         if (terminal.exchange(true))
@@ -371,7 +410,7 @@ namespace launch
 
         const std::string_view message = messageUtf8 ? std::string_view(messageUtf8) : std::string_view();
         const std::size_t length = formatLaunchStatus(crashBuffer, sizeof(crashBuffer), LaunchState::Failed,
-                                                      code, message, GetCurrentProcessId());
+                                                      code, message, GetCurrentProcessId(), crashDirectory());
         return length != 0 && writeAndReplace(crashTempPath.c_str(), finalPath.c_str(), crashBuffer, length);
     }
 

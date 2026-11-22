@@ -21,6 +21,7 @@ namespace services
         std::shared_ptr<scene::SceneGraphSystem> sceneGraph;
         IScriptingProvider* scriptingProvider;
         std::filesystem::path stateFolder;
+        std::filesystem::path noProjectFolder;
 
         // Pending load state (deferred until scene loads)
         std::string pendingLoadSlotName;
@@ -33,9 +34,13 @@ namespace services
         // .vfproj's folder; an empty stateFolder means the project folder itself. The editor passes
         // ".vertexforge" (launch::editorStateDirName), so Play-mode saves stay out of the content
         // browser and of exported games; the Runtime keeps them beside its game's .vfproj.
+        // Without a project the slots live in `noProjectFolder` (VK-1732: an installed editor passes
+        // ~/.vertexforge/editor/saves, launch::UserStateLocation::savesFallbackDir); an empty one means
+        // "saves" under the working directory, as before.
         SaveService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
                     IScriptingProvider* scriptingProvider,
-                    std::filesystem::path stateFolder);
+                    std::filesystem::path stateFolder,
+                    std::filesystem::path noProjectFolder = {});
         ~SaveService();
 
         void registerEventHandlers(::events::EventDispatcher& dispatcher);

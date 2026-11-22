@@ -1,5 +1,6 @@
 #pragma once
 #include "GameExportExport.hpp"
+#include "ExportConfig.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -25,6 +26,13 @@ namespace gameExport
 
 	VF_GAMEEXPORT_API std::optional<ParsedPluginDescriptor>
 	parsePluginDescriptor(const std::filesystem::path& descriptorPath);
+
+	// VK-1733: the descriptors of the plugins the editor found, in the given
+	// order, each with `enabled` = the editor's state for it (not the file's
+	// flag). Empty paths are skipped; a descriptor that cannot be read or parsed
+	// is left out with a warning (the plugin does not ship).
+	VF_GAMEEXPORT_API std::vector<ParsedPluginDescriptor> descriptorsFromHost(
+		const std::vector<ExportPluginSource>& sources, std::vector<std::string>& warnings);
 
 	// Decides whether a file inside a plugin folder ships with the exported game.
 	// relativePath is relative to the plugin's own folder (plugins/<Name>/).
@@ -52,6 +60,10 @@ namespace gameExport
 	//   that re-includes a disabled plugin); an unknown dependency is an error
 	// - a shipped plugin whose apiVersion differs from expectedApiVersion is an
 	//   error (skipped when expectedApiVersion is 0 — version unknown)
+	// - VK-1733: two shipped plugins whose descriptors sit in folders of the same
+	//   name (ignoring case, as Windows does) are an error: both would be copied
+	//   into the game's plugins/<Folder>. Descriptors without a path are not
+	//   checked.
 	VF_GAMEEXPORT_API PluginExportPlan planPluginExport(
 		const std::vector<ParsedPluginDescriptor>& descriptors,
 		const std::map<std::string, bool>& overrides,

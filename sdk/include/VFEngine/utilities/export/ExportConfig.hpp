@@ -8,6 +8,15 @@
 
 namespace gameExport
 {
+	// VK-1733: a plugin the editor discovered (shipped, or the user's own in an
+	// installed engine), with the enabled state the editor loads it with (a
+	// shipped plugin's per-user override applied).
+	struct ExportPluginSource
+	{
+		std::filesystem::path descriptorPath;
+		bool enabled = true;
+	};
+
 	struct ExportConfig
 	{
 		std::string gameName;
@@ -42,6 +51,14 @@ namespace gameExport
 		// Plugin name -> ship?, on top of each descriptor's global "enabled"
 		// flag. Descriptor dependencies are still pulled in transitively.
 		std::map<std::string, bool> pluginOverrides;
+
+		// VK-1733: the plugins to choose from, as the editor found them (both
+		// plugin roots, shadowed plugins left out, `enabled` = the state the
+		// editor loads them with). Used when pluginSourcesFromHost is true;
+		// otherwise the exporter scans plugins/ beside the working directory,
+		// as before. Every shipped plugin's own descriptor says "enabled": true.
+		std::vector<ExportPluginSource> pluginSources;
+		bool pluginSourcesFromHost = false;
 
 		// The editor's plugin::VF_PLUGIN_API_VERSION (GameExport must not link
 		// the Plugin module). Shipped plugins built against a different API

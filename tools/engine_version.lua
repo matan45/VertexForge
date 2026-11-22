@@ -12,6 +12,8 @@
 --     release: tools/package_release.lua rewrites it for dist/VertexForge (vfWriteEngineManifest)
 --   Every path in it is relative to the manifest's own folder, except the projectCacheDirs entries: those are
 --   relative to a project's working directory (VK-1695).
+--   stateLocation (VK-1732) tells the EDITOR where to keep its user's state: "engine" in the dev tree, "user" in the
+--   release package (see stateLocations below).
 --
 -- This file is loaded two ways: include()d by the root premake5.lua, and standalone (--file) by the
 -- Editor postbuild. Premake changes into a script's folder while loading it and the postbuild runs
@@ -49,6 +51,14 @@ end
 -- <Output Directory="compiled" />. The launcher's ProjectContent.COMPILED_SCRIPTS holds the same text, and a
 -- launcher test pins the two together.
 local projectCacheDirs = { "scripts/compiled" }
+
+-- Where the editor keeps the state its user makes: logs, crash reports, imgui.ini, plugin data and Plugin Manager
+-- choices, plugins created with New Plugin (VK-1732; read by launch::processUserState in
+-- VFEngine/utilities/launch/UserStateLocation.hpp, whose stateLocationEngine/stateLocationUser hold the same text).
+--   engine  beside the engine, as before VK-1732: the dev tree (the engine-manifest action)
+--   user    %USERPROFILE%\.vertexforge\editor and Documents\VertexForge\Plugins: the release package
+--           (tools/package_release.lua), because the MSI deletes the whole install folder on every upgrade
+local stateLocations = { engine = true, user = true }
 
 -- A copy of projectCacheDirs (tools/package_release.lua compares its manifests with it), so no caller can change
 -- the list the manifest is written from.
@@ -214,10 +224,14 @@ end
 --   m.contentRoot   folder holding assets/ (absolute)
 --   m.configuration Debug | Development | Release
 --   m.gitCommit     40-hex commit or nil (written as null)
+--   m.stateLocation "engine" | "user" (VK-1732, see stateLocations)
 -- Field order is fixed; paths are relative to exeDir with forward slashes (projectCacheDirs: to a project's working
 -- directory, VK-1695); UTF-8, no BOM, LF.
 -- Paths are written even when the folder does not exist yet: consumers check.
 function vfWriteEngineManifest(m)
+   if type(m.stateLocation) ~= "string" or not stateLocations[m.stateLocation] then
+      error("engine_version.lua: stateLocation must be \"engine\" or \"user\", got " .. tostring(m.stateLocation), 0)
+   end
    local exeDir = path.getabsolute(m.exeDir)
    local function relative(target)
       local rel = path.getrelative(exeDir, path.getabsolute(target))
@@ -238,7 +252,8 @@ function vfWriteEngineManifest(m)
       { "gitCommit",            m.gitCommit and jsonString(m.gitCommit) or "null" },
       { "editorExe",            jsonString("Editor.exe") },
       { "workingDirectory",     jsonString(relative(m.workingDir)) },
-      { "templatesDir",         jsonString(relative(path.join(m.contentRoot, templatesRel))) },
+      { "stateLocation",        jsonString(m.stateLocation) },
+      { "templatesDir",        jsonString(relative(path.join(m.contentRoot, templatesRel))) },
       { "scriptLibDir",         jsonString(relative(path.join(m.contentRoot, scriptLibRel))) },
       { "examplesDir",          jsonString(relative(path.join(m.contentRoot, examplesRel))) },
       { "vfxLibraryDir",        jsonString(relative(path.join(m.contentRoot, vfxLibraryRel))) },
@@ -289,7 +304,8 @@ newaction {
          workingDir = path.join(repoRoot, "VFEngine/editor"),
          contentRoot = repoRoot,
          configuration = configuration,
-         gitCommit = vfGitCommit()
+         gitCommit = vfGitCommit(),
+         stateLocation = "engine"
       }
    end
 }

@@ -4,6 +4,7 @@
 #include "config/Config.hpp"
 #include "config/ProjectConfig.hpp"
 #include "launch/EditorArguments.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "serialization/ProjectSerialization.hpp"
 
 #include <nlohmann/json.hpp>
@@ -292,12 +293,12 @@ TEST_SUITE("EngineVersion")
                          << " if it is stale)");
 
         // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, examplesDir and
-        // vfxLibraryDir by VK-1689, projectCacheDirs by VK-1695, still manifestVersion 1: the launcher ignores
-        // members it does not know).
+        // vfxLibraryDir by VK-1689, projectCacheDirs by VK-1695, stateLocation by VK-1732, still manifestVersion 1:
+        // the launcher ignores members it does not know).
         const char* keys[] = {"manifestVersion", "engineVersion", "assetFormatVersion", "projectSchemaVersion",
                               "pluginApiVersion", "launchContract", "configuration", "gitCommit", "editorExe",
-                              "workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir",
-                              "projectCacheDirs"};
+                              "workingDirectory", "stateLocation", "templatesDir", "scriptLibDir", "examplesDir",
+                              "vfxLibraryDir", "projectCacheDirs"};
         CHECK(manifest.size() == std::size(keys));
         for (const char* key : keys)
         {
@@ -320,6 +321,9 @@ TEST_SUITE("EngineVersion")
         REQUIRE(manifest["launchContract"].is_number_unsigned());
         CHECK(manifest["launchContract"].get<int>() == launch::editorLaunchContract);
         CHECK(stringField(manifest, "configuration") == std::string(thisConfiguration()));
+        // VK-1732: the dev tree keeps the editor's state beside the engine; only the release package says "user".
+        CHECK(stringField(manifest, std::string(launch::stateLocationManifestKey).c_str()) ==
+              std::string(launch::stateLocationEngine));
 
         REQUIRE(manifest.contains("gitCommit"));
         const json& gitCommit = manifest["gitCommit"];
@@ -391,5 +395,29 @@ TEST_SUITE("EngineVersion")
             }
             CHECK_FALSE(equalsIgnoreAsciiCase(parts.front(), ".vertexforge"));
         }
+    }
+
+    TEST_CASE("the manifest writers spell the stateLocation values the editor reads")
+    {
+        // VK-1732: launch::processUserState reads stateLocation from the engine.json beside Editor.exe. The dev
+        // manifest (the engine-manifest action) must say "engine" and the release package "user", in exactly the
+        // text UserStateLocation.hpp compares with.
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+
+        CHECK(std::string(launch::stateLocationManifestKey) == "stateLocation");
+        const std::string writer = repo_scan::readFile(*root / "tools" / "engine_version.lua");
+        CHECK(writer.find("{ \"stateLocation\",") != std::string::npos);
+        CHECK(writer.find("jsonString(m.stateLocation)") != std::string::npos);
+        CHECK(writer.find("stateLocation = \"" + std::string(launch::stateLocationEngine) + "\"") != std::string::npos);
+        CHECK(writer.find("local stateLocations = { " + std::string(launch::stateLocationEngine) + " = true, " +
+                          std::string(launch::stateLocationUser) + " = true }") != std::string::npos);
+
+        const std::string package = repo_scan::readFile(*root / "tools" / "package_release.lua");
+        CHECK(package.find("stateLocation = \"" + std::string(launch::stateLocationUser) + "\"") != std::string::npos);
+        CHECK(package.find("stagedManifest.stateLocation ~= \"" + std::string(launch::stateLocationUser) + "\"") !=
+              std::string::npos);
+        CHECK(package.find("buildManifest.stateLocation ~= \"" + std::string(launch::stateLocationEngine) + "\"") !=
+              std::string::npos);
     }
 }
