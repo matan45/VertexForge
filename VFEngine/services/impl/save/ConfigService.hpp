@@ -14,14 +14,22 @@ namespace services
         mutable std::mutex configMutex;
         mutable bool loaded = false;
         std::filesystem::path stateFolder;
+        bool handlersRegistered = false;
 
     public:
-        // The config lives in <project folder>/<stateFolder>/config.json, the project folder being the
-        // .vfproj's folder; an empty stateFolder means the project folder itself. The editor passes
-        // ".vertexforge" (launch::editorStateDirName), so Play-mode config stays out of the content
-        // browser and of exported games; the Runtime keeps it beside its game's .vfproj.
+        // The config lives in <stateFolder>/config.json.
+        // - An absolute stateFolder is used as it is, with or without a project (VK-1726: the Runtime passes
+        //   its per-user %LOCALAPPDATA%\<Publisher>\<Game>, or the game's own folder for a portable build;
+        //   see launch/GameStateLocation.hpp).
+        // - A relative one is under the project folder, the .vfproj's folder; empty means the project folder
+        //   itself. The editor passes ".vertexforge" (launch::editorStateDirName), so Play-mode config stays
+        //   out of the content browser and of exported games (VK-1684). Without a project nothing is stored.
         explicit ConfigService(std::filesystem::path stateFolder);
-        ~ConfigService() = default;
+        // Unregisters the handlers when this instance registered them (they capture `this`).
+        ~ConfigService();
+
+        ConfigService(const ConfigService&) = delete;
+        ConfigService& operator=(const ConfigService&) = delete;
 
         void registerEventHandlers(::events::EventDispatcher& dispatcher);
 

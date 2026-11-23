@@ -6,6 +6,7 @@
 #include "PluginExportPlanner.hpp"
 #include "ShaderCompiler.hpp"
 #include "ShaderPermutationManifest.hpp"
+#include "ShippedProjectConfig.hpp"
 #include "../asset/AssetDatabase.hpp"
 #include "../config/Config.hpp"
 #include "../serialization/ProjectSerialization.hpp"
@@ -1141,20 +1142,7 @@ namespace gameExport
 
 	bool GameExporter::generateProjectConfig(const ExportConfig& config, ExportResult& result)
 	{
-		config::ProjectConfig projConfig;
-		projConfig.projectName = config.gameName;
-		projConfig.version = config.gameVersion;
-		projConfig.workingDirectory = "Assets";
-		projConfig.startupScene = config.startupScene;
-		projConfig.fontFallbackChain = config.fontFallbackChain;
-		// VK-1687: an icon outside the project is kept absolute in the editor's .vfproj; the shipped
-		// game never gets the developer's absolute path, only the file name (as it did before).
-		const fs::path iconPath(config.iconPath);
-		projConfig.exeIconPath = iconPath.is_absolute() ? iconPath.filename().string() : config.iconPath;
-		if (config.expectedPluginApiVersion != 0)
-		{
-			projConfig.pluginApiVersion = config.expectedPluginApiVersion;
-		}
+		const config::ProjectConfig projConfig = shippedProjectConfig(config);
 
 		fs::path projPath = config.outputDirectory / (config.gameName + ".vfproj");
 

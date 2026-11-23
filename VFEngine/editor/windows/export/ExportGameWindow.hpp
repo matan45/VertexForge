@@ -20,6 +20,7 @@ namespace windows
 		bool verifyIntegrity = true;
 		bool buildScripts = true;
 		bool stripUnreferencedAssets = false;
+		bool portableBuild = false; // VK-1726
 		std::string alwaysIncludeText; // one glob per line, parsed on export
 
 		std::string gameName;

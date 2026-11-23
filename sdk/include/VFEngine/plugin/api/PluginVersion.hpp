@@ -76,6 +76,10 @@ namespace plugin {
     // VK-1690 (no bump): config::ProjectConfig is unchanged. New: ProjectSerialization::stampEngineVersions
     //      (ProjectStamp / ProjectStampStatus), AssetFormatVersion::toString() and a private ProjectServiceImpl
     //      member; saveProject also writes the .vfproj assetFormatVersion.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
+    // v26: VK-1726 per-user game state. config::ProjectConfig gains `publisher` and `stateLocation`
+    //      (it crosses the boundary by value through GetCurrentProjectQuery / UpdateProjectConfigCommand),
+    //      ExportSettings (EditorPreferences, GetEditorSettingsQuery) gains `portableBuild`, and
+    //      ExportGameCommand gains `portableBuild`. Every plugin rebuilds.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 26;
 
 }

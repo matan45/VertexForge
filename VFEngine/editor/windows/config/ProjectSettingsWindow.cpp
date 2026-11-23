@@ -3,7 +3,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "../details/FontSlotWidget.hpp"
+#include "launch/GameStateLocation.hpp"
 #include "launch/ProjectPathRules.hpp"
+#include "launch/Utf8Path.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cstddef>
@@ -30,6 +32,7 @@ namespace windows
             hasProject = true;
             projectName = projectOpt->projectName;
             version = projectOpt->version;
+            publisher = projectOpt->publisher;
             workingDirectory = projectOpt->workingDirectory;
             startupScene = projectOpt->startupScene;
             exeIconPath = projectOpt->exeIconPath;
@@ -45,6 +48,7 @@ namespace windows
             hasProject = false;
             projectName.clear();
             version.clear();
+            publisher.clear();
             workingDirectory.clear();
             startupScene.clear();
             exeIconPath.clear();
@@ -72,6 +76,7 @@ namespace windows
         config::ProjectConfig updatedConfig = *projectOpt;
         updatedConfig.projectName = projectName;
         updatedConfig.version = version;
+        updatedConfig.publisher = publisher;
         updatedConfig.startupScene = startupScene;
         updatedConfig.exeIconPath = exeIconPath;
         updatedConfig.fontFallbackChain.clear();
@@ -187,6 +192,32 @@ namespace windows
         if (version.empty())
         {
             ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Version is required");
+        }
+
+        ImGui::Spacing();
+
+        // VK-1726: a shipped game keeps its settings, saves, logs and crash reports in
+        // %LOCALAPPDATA%\<Publisher>\<Project Name> (a portable export: beside the game instead).
+        ImGui::Text("Publisher (optional)");
+        ImGui::PushItemWidth(-1);
+        char publisherBuffer[256];
+        std::strncpy(publisherBuffer, publisher.c_str(), sizeof(publisherBuffer) - 1);
+        publisherBuffer[sizeof(publisherBuffer) - 1] = '\0';
+        if (ImGui::InputText("##Publisher", publisherBuffer, sizeof(publisherBuffer)))
+        {
+            publisher = publisherBuffer;
+            isDirty = true;
+        }
+        ImGui::PopItemWidth();
+        {
+            const launch::GameFolderName folder = launch::gameStateFolderName(projectName, publisher);
+            const std::string preview = "%LOCALAPPDATA%\\" + launch::pathToUtf8(folder.relative);
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Shipped game state: %s", preview.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Where an exported game keeps its settings, saves, logs and crash reports.\n"
+                                  "A portable build (Export window) keeps them beside the game instead.");
+            }
         }
 
         ImGui::Spacing();

@@ -373,6 +373,7 @@ TEST_SUITE("MCP export tools")
             CHECK(fixture.lastCommand->verifyIntegrity);
             CHECK(fixture.lastCommand->buildScripts);
             CHECK_FALSE(fixture.lastCommand->stripUnreferencedAssets);
+            CHECK_FALSE(fixture.lastCommand->portableBuild);
             CHECK(fixture.lastCommand->alwaysIncludePatterns.empty());
 
             CHECK(fixture.status()["state"] == "preparing");
@@ -385,6 +386,7 @@ TEST_SUITE("MCP export tools")
                 {"verifyIntegrity", false},
                 {"buildScripts", false},
                 {"stripUnreferencedAssets", true},
+                {"portableBuild", true},
                 {"alwaysIncludePatterns", {"textures/ui/**", "*.vfFont"}}
             });
             REQUIRE_FALSE(result.isError);
@@ -394,6 +396,7 @@ TEST_SUITE("MCP export tools")
             CHECK_FALSE(fixture.lastCommand->verifyIntegrity);
             CHECK_FALSE(fixture.lastCommand->buildScripts);
             CHECK(fixture.lastCommand->stripUnreferencedAssets);
+            CHECK(fixture.lastCommand->portableBuild);
             CHECK(fixture.lastCommand->alwaysIncludePatterns == std::vector<std::string>{"textures/ui/**", "*.vfFont"});
         }
     }

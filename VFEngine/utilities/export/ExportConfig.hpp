@@ -27,6 +27,10 @@ namespace gameExport
 		std::string startupScene;
 		std::vector<std::string> fontFallbackChain;
 		std::string iconPath;    // .ico file path for exe icon embedding
+		// VK-1726: the shipped .vfproj's "publisher" and "stateLocation" ("portable" when true, else
+		// "user"): where the game keeps its config, saves, logs and crash reports (launch/GameStateLocation.hpp).
+		std::string publisher;
+		bool portableBuild = false;
 		bool cleanBuild = false;
 		bool verifyIntegrity = true;
 

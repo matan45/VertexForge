@@ -82,6 +82,7 @@ namespace windows
 		verifyIntegrity = prefs.exportSettings.verifyIntegrity;
 		buildScripts = prefs.exportSettings.buildScripts;
 		stripUnreferencedAssets = prefs.exportSettings.stripUnreferencedAssets;
+		portableBuild = prefs.exportSettings.portableBuild;
 
 		alwaysIncludeText.clear();
 		for (const auto& pattern : prefs.exportSettings.alwaysIncludePatterns)
@@ -99,6 +100,7 @@ namespace windows
 		prefs.exportSettings.verifyIntegrity = verifyIntegrity;
 		prefs.exportSettings.buildScripts = buildScripts;
 		prefs.exportSettings.stripUnreferencedAssets = stripUnreferencedAssets;
+		prefs.exportSettings.portableBuild = portableBuild;
 		prefs.exportSettings.alwaysIncludePatterns = parsePatternLines(alwaysIncludeText);
 
 		events::editor::SetEditorSettingsCommand setCmd;
@@ -117,6 +119,7 @@ namespace windows
 		cmd.verifyIntegrity = verifyIntegrity;
 		cmd.buildScripts = buildScripts;
 		cmd.stripUnreferencedAssets = stripUnreferencedAssets;
+		cmd.portableBuild = portableBuild;
 		cmd.alwaysIncludePatterns = parsePatternLines(alwaysIncludeText);
 		for (const auto& row : plugins)
 		{
@@ -172,6 +175,11 @@ namespace windows
 
 			ImGui::Checkbox("Verify archive integrity", &verifyIntegrity);
 			ImGui::SetItemTooltip("After packing, re-read every archive entry and check its content hash.");
+
+			ImGui::Checkbox("Portable build", &portableBuild);
+			ImGui::SetItemTooltip("Keep the game's settings, saves, logs and crash reports beside the game.\n"
+								  "Off: they go to %%LOCALAPPDATA%%\\<Publisher>\\<Game>, so the game also runs\n"
+								  "from a folder the player cannot write to (Program Files).");
 
 			ImGui::Spacing();
 			ImGui::SeparatorText("Asset Packing");

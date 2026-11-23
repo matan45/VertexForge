@@ -13,6 +13,7 @@ namespace windows
 
         std::string projectName;
         std::string version;
+        std::string publisher;  // VK-1726: names the shipped game's per-user state folder
         std::string workingDirectory;
         std::string startupScene;
         std::string exeIconPath;

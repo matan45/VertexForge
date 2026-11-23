@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -42,39 +43,116 @@ namespace strutil
         return out.substr(start, end - start + 1);
     }
 
-    // The Win32 reserved device names. Matched case-insensitively against the text BEFORE the
-    // first period, which is how the Win32 layer itself matches them - so "CON.txt" opens the
-    // console device, not a file called CON.txt.
+    namespace detail
+    {
+        // The length of the Win32 reserved device name `stem` starts with, 0 when it starts with
+        // none. Win32 matches the text BEFORE the first period, without its trailing spaces and
+        // ignoring case - so "CON.txt" and "nul .tar.gz" are devices, not files. The set is the
+        // launcher's twin (ProjectNameRules.java): CON, PRN, AUX, NUL, CONIN$, CONOUT$, and COM/LPT
+        // followed by 0-9 or a superscript 1-3 (UTF-8 C2 B9, C2 B2, C2 B3).
+        [[nodiscard]] inline std::size_t reservedDeviceNameLength(std::string_view stem) noexcept
+        {
+            if (const std::size_t dot = stem.find('.'); dot != std::string_view::npos)
+                stem = stem.substr(0, dot);
+            while (!stem.empty() && stem.back() == ' ')
+                stem.remove_suffix(1);
+
+            // The longest is CONOUT$ (7 bytes); COM followed by a superscript digit is 5.
+            if (stem.size() < 3 || stem.size() > 7)
+                return 0;
+
+            // ASCII upper case only, whatever the C locale says: the superscripts have no case.
+            char upper[7] = {};
+            for (std::size_t i = 0; i < stem.size(); ++i)
+            {
+                const char c = stem[i];
+                upper[i] = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+            }
+            const std::string_view s(upper, stem.size());
+
+            if (s == "CON" || s == "PRN" || s == "AUX" || s == "NUL" || s == "CONIN$" || s == "CONOUT$")
+                return stem.size();
+            const std::string_view prefix = s.substr(0, 3);
+            if (prefix == "COM" || prefix == "LPT")
+            {
+                const std::string_view digit = s.substr(3);
+                if ((digit.size() == 1 && digit[0] >= '0' && digit[0] <= '9') ||
+                    digit == "\xC2\xB9" || digit == "\xC2\xB2" || digit == "\xC2\xB3")
+                    return stem.size();
+            }
+            return 0;
+        }
+
+        // Escapes a reserved device name by putting '_' right after it ("CON" -> "CON_",
+        // "NUL.txt" -> "NUL_.txt"), the only place where it changes what Win32 matches.
+        inline void escapeReservedDeviceName(std::string& stem)
+        {
+            if (const std::size_t length = reservedDeviceNameLength(stem); length != 0)
+                stem.insert(length, 1, '_');
+        }
+    }
+
+    // The Win32 reserved device names (see detail::reservedDeviceNameLength for the matching rule).
     [[nodiscard]] inline bool isReservedDeviceName(std::string_view stem) noexcept
     {
-        if (const size_t dot = stem.find('.'); dot != std::string_view::npos)
-            stem = stem.substr(0, dot);
-
-        if (stem.size() < 3 || stem.size() > 4)
-            return false;
-
-        char upper[5] = {};
-        for (size_t i = 0; i < stem.size(); ++i)
-            upper[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(stem[i])));
-        const std::string_view s(upper, stem.size());
-
-        if (s == "CON" || s == "PRN" || s == "AUX" || s == "NUL")
-            return true;
-        if (s.size() == 4 && (s.substr(0, 3) == "COM" || s.substr(0, 3) == "LPT"))
-            return s[3] >= '1' && s[3] <= '9';
-        return false;
+        return detail::reservedDeviceNameLength(stem) != 0;
     }
 
     // sanitizeFileStem, plus a guarantee that the result addresses a real, creatable file:
-    // `fallback` when nothing usable survives, and a trailing '_' on a reserved device name.
+    // `fallback` when nothing usable survives, and a '_' after a reserved device name.
     [[nodiscard]] inline std::string toSafeFileStem(std::string_view name,
                                                     std::string_view fallback = "unnamed")
     {
         std::string stem = sanitizeFileStem(name);
         if (stem.empty())
             stem = std::string(fallback);
-        if (isReservedDeviceName(stem))
-            stem += '_';
+        detail::escapeReservedDeviceName(stem);
         return stem;
+    }
+
+    // toSafeFileStem for a folder name that has to fit a path budget (VK-1726: a shipped game's
+    // %LOCALAPPDATA%\<Publisher>\<Game>): at most `maxUtf16Units` UTF-16 units, a four-byte UTF-8
+    // sequence counting two. The cut falls on a code point boundary and is trimmed again, as Win32
+    // would drop a trailing dot or space. Returns `fallback` (unchecked) when nothing usable is
+    // left, also when a budget below 8 units cuts a name down to a device name.
+    [[nodiscard]] inline std::string toSafeFolderName(std::string_view name, std::size_t maxUtf16Units,
+                                                      std::string_view fallback = "unnamed")
+    {
+        std::string folder = sanitizeFileStem(name);
+        detail::escapeReservedDeviceName(folder);
+
+        std::size_t units = 0;
+        std::size_t cut = 0;
+        while (cut < folder.size())
+        {
+            const auto lead = static_cast<unsigned char>(folder[cut]);
+            std::size_t sequenceBytes = 1;  // ASCII, a stray continuation byte, an invalid lead byte
+            std::size_t sequenceUnits = 1;
+            if (lead >= 0xF0 && lead <= 0xF4)
+            {
+                sequenceBytes = 4;
+                sequenceUnits = 2;  // a surrogate pair
+            }
+            else if (lead >= 0xE0 && lead <= 0xEF)
+            {
+                sequenceBytes = 3;
+            }
+            else if (lead >= 0xC2 && lead <= 0xDF)
+            {
+                sequenceBytes = 2;
+            }
+            if (sequenceBytes > folder.size() - cut)
+                sequenceBytes = folder.size() - cut;  // a sequence cut short by the end of the text
+            if (units + sequenceUnits > maxUtf16Units)
+                break;
+            units += sequenceUnits;
+            cut += sequenceBytes;
+        }
+        folder.resize(cut);
+
+        folder = sanitizeFileStem(folder);  // trims what the cut left at the end
+        if (folder.empty() || isReservedDeviceName(folder))
+            return std::string(fallback);
+        return folder;
     }
 }

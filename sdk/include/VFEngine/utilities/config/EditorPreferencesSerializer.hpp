@@ -97,6 +97,7 @@ namespace config
             {"verifyIntegrity", s.verifyIntegrity},
             {"buildScripts", s.buildScripts},
             {"stripUnreferencedAssets", s.stripUnreferencedAssets},
+            {"portableBuild", s.portableBuild},
             {"alwaysIncludePatterns", s.alwaysIncludePatterns}
         };
     }
@@ -109,6 +110,7 @@ namespace config
         s.verifyIntegrity = j.value("verifyIntegrity", defaults.verifyIntegrity);
         s.buildScripts = j.value("buildScripts", defaults.buildScripts);
         s.stripUnreferencedAssets = j.value("stripUnreferencedAssets", defaults.stripUnreferencedAssets);
+        s.portableBuild = j.value("portableBuild", defaults.portableBuild);
         if (j.contains("alwaysIncludePatterns") && j["alwaysIncludePatterns"].is_array())
         {
             s.alwaysIncludePatterns.clear();

@@ -101,8 +101,9 @@ namespace util {
 	// (vfLogScript*) reach this file.
 	//
 	// `folder` (VK-1732): the editor passes launch::processUserState().logsDir, the per-user
-	// ~/.vertexforge/editor/logs in an installed engine; the default "logs" is relative to the
-	// working directory, as the Runtime keeps it.
+	// ~/.vertexforge/editor/logs in an installed engine; the Runtime (VK-1726) passes
+	// launch::processGameState().logsDir, %LOCALAPPDATA%\<Publisher>\<Game>\logs for a shipped game.
+	// The default "logs" is relative to the working directory.
 	inline void initLogFile(const std::string& appName,
 	                        const std::filesystem::path& folder = std::filesystem::path("logs")) {
 		try {

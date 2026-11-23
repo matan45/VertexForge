@@ -35,6 +35,7 @@
 #include "impl/input/RuntimePickerServiceImpl.hpp"
 #include "impl/time/TimeServiceImpl.hpp"
 #include "impl/save/ConfigService.hpp"
+#include "impl/save/SaveService.hpp"
 #include "impl/vfx/VFXPlayModeHandler.hpp"
 #include "impl/vfx/VFXRuntimeServiceImpl.hpp"
 #include "impl/vfx/VFXSequencePlayModeHandler.hpp"
@@ -105,8 +106,9 @@ namespace {
     }
 }
 
-    RuntimeHandler::RuntimeHandler()
-        : bootstrap(std::make_unique<core::RuntimeBootstrap>()) {}
+    RuntimeHandler::RuntimeHandler(std::filesystem::path gameStateRoot)
+        : bootstrap(std::make_unique<core::RuntimeBootstrap>())
+        , gameStateRoot(std::move(gameStateRoot)) {}
 
     RuntimeHandler::~RuntimeHandler() = default;
 
@@ -208,6 +210,9 @@ namespace {
         audioSceneUpdater.reset();
         audioService.reset();
         scriptingService.reset();
+        // After the Play->Edit publish above (an onDestroy autosave still saves), before bootstrap->cleanUp()
+        // (which destroys the scripting provider SaveService holds).
+        saveService.reset();
         configService.reset();
         pluginTextureService.reset();
         renderTextureService.reset();
@@ -446,11 +451,15 @@ namespace {
         // the engineTime::Timer statics — no provider/adapter needed.
         timeService = std::make_shared<services::TimeServiceImpl>();
 
-        // VK-1534: JSON key/value store (config.json next to saves/). Editor-only until
-        // now, so the Config/Save script natives were silently no-ops in shipped games;
-        // wiring it here fixes that and backs the persisted gfx.* graphics settings.
-        // An empty state folder: config.json beside the game's .vfproj (VK-1684).
-        configService = std::make_unique<services::ConfigService>(std::filesystem::path{});
+        // VK-1534: JSON key/value store for the Config script natives and the persisted gfx.* graphics
+        // settings. VK-1726: config.json and the save slots go in the game's state folder (per-user, or the
+        // game's own folder for a portable build), never into an install folder a player cannot write.
+        configService = std::make_unique<services::ConfigService>(gameStateRoot);
+        saveService = std::make_unique<services::SaveService>(
+            bootstrap->getSceneGraphSystem(),
+            bootstrap->getScriptingProvider(),
+            gameStateRoot
+        );
 
         if (auto* btProvider = bootstrap->getBehaviorTreeProvider())
         {
@@ -531,6 +540,7 @@ namespace {
         pluginTextureService->registerEventHandlers();
         timeService->registerEventHandlers();
         configService->registerEventHandlers(events::EventDispatcher::instance());
+        saveService->registerEventHandlers(events::EventDispatcher::instance());
         if (ikComponentService)
         {
             ikComponentService->registerEventHandlers();

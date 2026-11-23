@@ -1,4 +1,5 @@
 #pragma once
+#include <filesystem>
 #include <memory>
 
 #include "interfaces/project/ISceneService.hpp"
@@ -55,6 +56,7 @@ namespace services {
     class VFXSequenceRuntimeServiceImpl;
     class VFXSequencePlayModeHandler;
     class ConfigService;
+    class SaveService;
 }
 
 namespace handlers {
@@ -101,10 +103,17 @@ namespace handlers {
         std::shared_ptr<services::IPluginTextureService> pluginTextureService;
         std::shared_ptr<services::IWeatherService> weatherService;
         std::shared_ptr<services::ITimeService> timeService;
-        // VK-1534: per-user graphics settings store (config.json next to saves/). Wired
-        // into the Runtime so the Config/Save script natives function in shipped games
-        // and the persisted gfx.* preset/display override can be re-applied on scene load.
+        // VK-1726: the game's state folder (launch::GameStateLocation::stateRoot, worked out in main):
+        // %LOCALAPPDATA%\<Publisher>\<Game>, or the game's own folder for a portable build. config.json
+        // and saves/ live in it. Empty only when main could not work it out: both services then keep
+        // their files beside the .vfproj, as before.
+        std::filesystem::path gameStateRoot;
+        // VK-1534: the player's settings store (config.json); the Config script natives and the
+        // persisted gfx.* preset/display override (re-applied on scene load) use it.
         std::unique_ptr<services::ConfigService> configService;
+        // VK-1726: save slots for the Save script natives (it was editor-only, so they threw in
+        // shipped games). Reset before the bootstrap: it holds the bootstrap's scripting provider.
+        std::unique_ptr<services::SaveService> saveService;
 
         std::unique_ptr<plugin::PluginManager> pluginManager;
 
@@ -117,7 +126,7 @@ namespace handlers {
         events::SubscriptionToken sceneLoadedSubscription;
 
     public:
-        explicit RuntimeHandler();
+        explicit RuntimeHandler(std::filesystem::path gameStateRoot);
         ~RuntimeHandler();
 
         RuntimeHandler(const RuntimeHandler&) = delete;

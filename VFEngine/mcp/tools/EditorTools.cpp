@@ -39,6 +39,7 @@ namespace mcp::tools
             nlohmann::json out{
                 {"name", project.projectName},
                 {"version", project.version},
+                {"publisher", project.publisher},
                 {"workingDirectory", project.workingDirectory},
                 {"startupScene", project.startupScene},
                 {"fontFallbackChain", project.fontFallbackChain},

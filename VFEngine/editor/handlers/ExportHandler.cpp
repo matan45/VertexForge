@@ -73,6 +73,8 @@ namespace handlers
 		config.startupScene = projectOpt->startupScene;
 		config.fontFallbackChain = projectOpt->fontFallbackChain;
 		config.iconPath = projectOpt->exeIconPath;
+		config.publisher = projectOpt->publisher;
+		config.portableBuild = cmd.portableBuild;
 		config.cleanBuild = cmd.cleanBuild;
 		config.verifyIntegrity = cmd.verifyIntegrity;
 		config.stripUnreferencedAssets = cmd.stripUnreferencedAssets;

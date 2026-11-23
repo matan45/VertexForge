@@ -59,6 +59,10 @@ namespace resource
 
 		std::unique_ptr<archive::VFPakReader> archive;
 		bool archiveMode = false;
+		// VK-1726: the absolute folder that holds the open .vfpak (its canonical form, then its spelling when that
+		// differs), so an absolute path inside it finds its archive key (ArchivePathKey.hpp). Guarded by vfsMutex,
+		// like `archive`; empty outside archive mode.
+		std::vector<std::filesystem::path> archiveRoots;
 		mutable std::shared_mutex vfsMutex;
 
 		std::filesystem::path findVfpakFile() const;

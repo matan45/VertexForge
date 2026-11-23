@@ -103,6 +103,42 @@ namespace launch
         return detail::matchLeadingComponents(root, candidate, below);
     }
 
+    // `path` relative to `root` when it is `root` itself (".") or lies beneath it, compared component by
+    // component and ignoring case; nullopt when it lies outside, or either path is empty. Unlike
+    // relativeInside it never touches the file system: both paths are only lexically normalised, so pass
+    // a `root` that is already absolute and canonical. Cheap enough for every archive lookup
+    // (resource::archiveKeyFor, VK-1726).
+    inline std::optional<std::filesystem::path> lexicallyRelativeInside(const std::filesystem::path& root,
+                                                                        const std::filesystem::path& path)
+    {
+        if (root.empty() || path.empty())
+        {
+            return std::nullopt;
+        }
+        const std::filesystem::path normalRoot = root.lexically_normal();
+        const std::filesystem::path normalPath = path.lexically_normal();
+
+        std::filesystem::path::const_iterator below;
+        if (!detail::matchLeadingComponents(normalRoot, normalPath, below))
+        {
+            return std::nullopt;
+        }
+
+        std::filesystem::path relative;
+        for (; below != normalPath.end(); ++below)
+        {
+            if (!below->empty())
+            {
+                relative /= *below;
+            }
+        }
+        if (relative.empty())
+        {
+            relative = ".";
+        }
+        return relative;
+    }
+
     // `path` relative to `root` when it is `root` itself (".") or lies beneath it; nullopt when it
     // lies outside, or either path is empty or cannot be made absolute. Both may be relative (to
     // the current directory) and need not exist. Store the result with generic_string(). Never

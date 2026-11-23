@@ -20,8 +20,28 @@ namespace services
         configData = json::object();
     }
 
+    ConfigService::~ConfigService()
+    {
+        // The dispatcher keys handlers by type: an instance that never registered must not remove another one's.
+        if (!handlersRegistered)
+        {
+            return;
+        }
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigIntCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigIntQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigFloatCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigFloatQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigStringCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigStringQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigBoolCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigBoolQuery>();
+    }
+
     void ConfigService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
+        handlersRegistered = true;
+
         dispatcher.registerCommandHandler<::events::save::SetConfigIntCommand>(
             [this](const ::events::save::SetConfigIntCommand& cmd)
             {
@@ -186,6 +206,11 @@ namespace services
             std::ofstream file(path);
             file << configData.dump(2);
             file.close();
+            if (!file)
+            {
+                // Before VK-1726 a game installed under Program Files lost every setting here, silently.
+                vfLogError("[ConfigService] Failed to write {}", path);
+            }
         }
         catch (const std::exception& e)
         {
@@ -195,6 +220,12 @@ namespace services
 
     std::string ConfigService::getConfigPath() const
     {
+        // VK-1726: an absolute state folder (the Runtime's) holds config.json whether a project is open or not.
+        if (stateFolder.is_absolute())
+        {
+            return (stateFolder / "config.json").string();
+        }
+
         auto& dispatcher = ::events::EventDispatcher::instance();
         ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);

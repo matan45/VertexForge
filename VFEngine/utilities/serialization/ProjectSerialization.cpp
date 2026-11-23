@@ -3,6 +3,7 @@
 #include "../config/Config.hpp"
 #include "SerializationFileAccess.hpp"
 #include "../resource/AtomicFileReplace.hpp"
+#include "../launch/GameStateLocation.hpp"
 #include <fstream>
 #include <algorithm>
 #include <array>
@@ -226,6 +227,33 @@ namespace serialization
                 project.pluginApiVersion = projectJson["pluginApiVersion"].get<uint32_t>();
             }
 
+            // VK-1726: the publisher (Project Settings) and, in a shipped .vfproj, where the game keeps its
+            // state. The Runtime reads both again before its log opens (launch::readGameIdentity, same keys).
+            if (const auto it = projectJson.find(std::string(launch::projectPublisherKey)); it != projectJson.end())
+            {
+                if (it->is_string())
+                {
+                    project.publisher = it->get<std::string>();
+                }
+                else
+                {
+                    inspection.warnings.push_back("Ignoring invalid 'publisher' in project file: expected a string");
+                }
+            }
+
+            if (const auto it = projectJson.find(std::string(launch::projectStateLocationKey)); it != projectJson.end())
+            {
+                if (it->is_string())
+                {
+                    project.stateLocation = it->get<std::string>();
+                }
+                else
+                {
+                    inspection.warnings.push_back(
+                        "Ignoring invalid 'stateLocation' in project file: expected a string");
+                }
+            }
+
             if (projectJson.contains("fontFallbackChain"))
             {
                 const auto& fallbackJson = projectJson["fontFallbackChain"];
@@ -322,6 +350,16 @@ namespace serialization
             if (project.pluginApiVersion.has_value())
             {
                 projectJson["pluginApiVersion"] = *project.pluginApiVersion;
+            }
+
+            if (!project.publisher.empty())
+            {
+                projectJson[std::string(launch::projectPublisherKey)] = project.publisher;
+            }
+
+            if (project.stateLocation.has_value())
+            {
+                projectJson[std::string(launch::projectStateLocationKey)] = *project.stateLocation;
             }
 
             if (!project.fontFallbackChain.empty())

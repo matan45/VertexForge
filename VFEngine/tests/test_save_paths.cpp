@@ -2,6 +2,8 @@
 
 #include "events/EventDispatcher.hpp"
 #include "events/project/ProjectEvents.hpp"
+#include "events/save/ConfigEvents.hpp"
+#include "events/save/SaveEvents.hpp"
 #include "impl/save/ConfigService.hpp"
 #include "impl/save/SaveService.hpp"
 
@@ -13,11 +15,11 @@
 #include <vector>
 
 // ============================================================
-// VK-1684: SaveService and ConfigService keep their files beside the .vfproj (the Runtime) or in a
-// state folder under it (the editor: .vertexforge, hidden from the content browser and never
-// exported). GetProjectPathQuery answers the .vfproj FILE path; both services used to append to it
-// ("Game.vfproj/saves"), so nothing could be written. The project folder has a Hebrew name, so the
-// narrow paths run through the UTF-8 code page too.
+// VK-1684: SaveService and ConfigService keep their files in a state folder under the .vfproj's folder
+// (the editor: .vertexforge, hidden from the content browser and never exported). GetProjectPathQuery
+// answers the .vfproj FILE path; both services used to append to it ("Game.vfproj/saves"), so nothing
+// could be written. VK-1726: an absolute state folder (the Runtime's per-user or portable folder) is
+// used as it is. The folders have Hebrew names, so the narrow paths run through the UTF-8 code page too.
 // ============================================================
 
 namespace
@@ -90,16 +92,35 @@ TEST_SUITE("SavePaths")
         CHECK(saves.listSlots().empty());
     }
 
-    TEST_CASE("without a state folder the save slots live beside the .vfproj")
+    TEST_CASE("an absolute state folder holds the save slots, with or without a project")
     {
+        // VK-1726: the Runtime passes its per-user %LOCALAPPDATA%\<Publisher>\<Game> (or, for a portable
+        // build, the game's own folder) and never depends on GetProjectPathQuery.
         DispatcherScope dispatcherScope;
-        TempProjectFolder project(L"RuntimeSlots");
+        const fs::path root = fs::temp_directory_path() / (L"VertexForge_SavePaths_GameState_" + kHebrewWide);
+        std::error_code ec;
+        fs::remove_all(root, ec);
 
-        services::SaveService saves(nullptr, nullptr, fs::path{});
-        REQUIRE(saves.createSlot("slot1"));
+        {
+            // No GetProjectPathQuery handler at all (it would throw if asked).
+            services::SaveService saves(nullptr, nullptr, root);
+            REQUIRE(saves.createSlot("slot1"));
+            CHECK(fs::is_directory(root / L"saves" / L"slot1", ec));
+            CHECK(saves.listSlots() == std::vector<std::string>{"slot1"});
+        }
 
-        CHECK(fs::is_directory(project.folder / L"saves" / L"slot1"));
-        CHECK(saves.listSlots() == std::vector<std::string>{"slot1"});
+        {
+            // A project is open: the slots still go in the state folder, nothing beside the .vfproj.
+            TempProjectFolder project(L"GameStateSlots");
+            services::SaveService saves(nullptr, nullptr, root);
+            REQUIRE(saves.createSlot("slot2"));
+            CHECK(fs::is_directory(root / L"saves" / L"slot2", ec));
+            CHECK_FALSE(fs::exists(project.folder / L"saves", ec));
+            REQUIRE(saves.deleteSlot("slot1"));
+            CHECK(saves.listSlots() == std::vector<std::string>{"slot2"});
+        }
+
+        fs::remove_all(root, ec);
     }
 
     TEST_CASE("without a project the save slots live in the folder the editor gave")
@@ -142,19 +163,67 @@ TEST_SUITE("SavePaths")
         CHECK(reloaded.getInt("answer", 0) == 42);
     }
 
-    TEST_CASE("without a state folder config.json lives beside the .vfproj")
+    TEST_CASE("an absolute state folder holds config.json, with or without a project")
     {
         DispatcherScope dispatcherScope;
-        TempProjectFolder project(L"RuntimeConfig");
+        const fs::path root = fs::temp_directory_path() / (L"VertexForge_SavePaths_GameConfig_" + kHebrewWide);
+        std::error_code ec;
+        fs::remove_all(root, ec);
 
         {
-            services::ConfigService config{fs::path{}};
+            // No GetProjectPathQuery handler: the folder is created on the first write.
+            services::ConfigService config{root};
             config.setString("player", kHebrewUtf8);
         }
+        CHECK(fs::is_regular_file(root / L"config.json", ec));
 
-        CHECK(fs::is_regular_file(project.folder / L"config.json"));
+        {
+            TempProjectFolder project(L"GameStateConfig");
+            services::ConfigService reloaded{root};
+            CHECK(reloaded.getString("player", "") == kHebrewUtf8);
+            reloaded.setInt("answer", 42);
+            CHECK_FALSE(fs::exists(project.folder / L"config.json", ec));
+        }
 
-        services::ConfigService reloaded{fs::path{}};
-        CHECK(reloaded.getString("player", "") == kHebrewUtf8);
+        services::ConfigService again{root};
+        CHECK(again.getInt("answer", 0) == 42);
+
+        fs::remove_all(root, ec);
+    }
+
+    TEST_CASE("a service unregisters its handlers on destruction, only when it registered them")
+    {
+        // VK-1726: the handlers capture `this`; the dispatcher keys them by type, so an instance that never
+        // registered must leave the registered one's in place.
+        DispatcherScope dispatcherScope;
+        auto& dispatcher = events::EventDispatcher::instance();
+        const fs::path root = fs::temp_directory_path() / (L"VertexForge_SavePaths_Unregister_" + kHebrewWide);
+        std::error_code ec;
+        fs::remove_all(root, ec);
+
+        events::save::GetConfigIntQuery configQuery;
+        configQuery.key = "missing";
+        configQuery.defaultValue = 7;
+        {
+            services::ConfigService registered{root};
+            registered.registerEventHandlers(dispatcher);
+            {
+                services::ConfigService bystander{root};
+            }
+            CHECK(dispatcher.query(configQuery) == 7);
+        }
+        CHECK_THROWS(dispatcher.query(configQuery));
+
+        {
+            services::SaveService registered(nullptr, nullptr, root);
+            registered.registerEventHandlers(dispatcher);
+            {
+                services::SaveService bystander(nullptr, nullptr, root);
+            }
+            CHECK(dispatcher.query(events::save::ListSaveSlotsQuery{}).empty());
+        }
+        CHECK_THROWS(dispatcher.query(events::save::ListSaveSlotsQuery{}));
+
+        fs::remove_all(root, ec);
     }
 }

@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace launch
 {
@@ -12,5 +13,12 @@ namespace launch
     {
         const std::u8string utf8 = path.u8string();
         return std::string(utf8.begin(), utf8.end());
+    }
+
+    // The other way (VK-1726): UTF-8 text (a .vfproj member, an argument) as a path, whatever the process code
+    // page. Throws std::system_error for bytes that are not valid UTF-8.
+    inline std::filesystem::path utf8ToPath(std::string_view utf8)
+    {
+        return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
     }
 }

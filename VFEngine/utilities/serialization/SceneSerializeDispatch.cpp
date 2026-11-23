@@ -266,6 +266,22 @@ namespace serialization
             {
                 return relativePath.generic_string();
             }
+
+            // VK-1726: no relative form. That happens for a path relative to the working directory that does
+            // not exist on disk (a shipped game's "Assets/..." lives in its .vfpak) next to an absolute scene,
+            // e.g. a save slot under %LOCALAPPDATA%, and across drives. resolveSettingsRefPath reads a relative
+            // value back against the SCENE's folder, so a relative path is written absolute unless that folder
+            // is the working directory itself.
+            const std::filesystem::path sceneFolder = scenePath.parent_path().lexically_normal();
+            if (settingsPath.is_relative() && !sceneFolder.empty() && sceneFolder != std::filesystem::path("."))
+            {
+                std::error_code absoluteEc;
+                const std::filesystem::path absolutePath = std::filesystem::absolute(settingsPath, absoluteEc);
+                if (!absoluteEc && !absolutePath.empty())
+                {
+                    return absolutePath.lexically_normal().generic_string();
+                }
+            }
         }
 
         return settingsPath.generic_string();
