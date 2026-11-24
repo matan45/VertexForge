@@ -18,6 +18,8 @@
 --   dist/VertexForge/
 --     VertexForge Launcher.exe        the Java launcher (jpackage app image, own jlink runtime) — entry point
 --     app/, runtime/                  the launcher's module + .cfg, and its runtime
+--     Uninstall VertexForge.cmd       (with the MSI, VK-1696) runs bin/Uninstall.ps1: msiexec /x of the MSI installed
+--                                     in this folder, found by the permanent upgrade code; refused anywhere else
 --     bin/Editor/Release/x64/         Editor.exe + all DLLs + engine.json (VK-1680 manifest)
 --     bin/Editor/resources/           editor/, shaders/, ibl/   (../../resources/ target for Editor.exe)
 --     bin/Runtime/Release/x64/        Runtime.exe + all DLLs
@@ -106,8 +108,9 @@
 --   * Files are signed in batches (one signtool process per batch: a hardware token asks for its PIN once per
 --     process), re-inspected, and what is still unsigned or not timestamped is retried twice. Then every PE file must
 --     be Valid with an embedded signature, everything this run signed must carry one signer and a timestamp, and
---     `signtool verify /pa` must pass for each. The MSI must hold every staged PE file at its staged size (so jpackage
---     packed the signed bytes), and is then signed and verified the same way.
+--     `signtool verify /pa` must pass for each. The uninstaller script (bin/Uninstall.ps1, with the MSI) is signed
+--     and verified the same way. The MSI must hold every staged PE file at its staged size (so jpackage packed the
+--     signed bytes), and is then signed and verified the same way.
 --   * The exes' version resources (VersionInfo.rc2 for Editor, Runtime and Tests; jpackage --vendor/--app-version for
 --     the launcher) must say VERSION and VertexForge, signed or not: the preflight reads the Release exes.
 --   * An exported game's exe is a copy of Runtime.exe: GameExport strips the engine's signature from it and writes
@@ -204,6 +207,12 @@ local vfSignDescription = "VertexForge"
 local vfSignTimestampSha1 = "http://timestamp.digicert.com"
 local vfSignTimestampDlib = "http://timestamp.acs.microsoft.com"
 local vfSignDlibMinimumSigntool = "10.0.22621.755"
+-- VK-1696: the uninstaller the installed folder carries (only with the MSI): the double-click wrapper at the bundle
+-- root and the script it runs (signed with the package, as PowerShell scripts can be).
+local vfUninstallCmd = path.join(_SCRIPT_DIR, "installer/Uninstall VertexForge.cmd")
+local vfUninstallScript = path.join(_SCRIPT_DIR, "installer/Uninstall.ps1")
+local vfUninstallCmdName = "Uninstall VertexForge.cmd"
+local vfUninstallScriptRel = "bin/Uninstall.ps1"
 
 function vfPackageRelease()
    local dist = "dist/VertexForge"
@@ -1002,7 +1011,7 @@ function vfPackageRelease()
          failInstaller("VERSION " .. engineVersion .. " is not a Windows Installer product version " ..
             "(MAJOR and MINOR at most 255, PATCH at most 65535)")
       end
-      for _, required in ipairs({ vfMsiInspectScript, powershell, launcherIcon }) do
+      for _, required in ipairs({ vfMsiInspectScript, powershell, launcherIcon, vfUninstallCmd, vfUninstallScript }) do
          if not os.isfile(required) then
             failInstaller("the installer needs " .. required .. ", which is missing")
          end
@@ -1358,6 +1367,16 @@ function vfPackageRelease()
       section("launcher (bundle root)", stats, launcherExeName .. ", app/, runtime/")
    end
 
+   -- The uninstaller (VK-1696), only in a package that becomes an MSI: an installed folder uninstalls itself through
+   -- Windows Installer (msiexec /x), so Windows' record of the install goes with it.
+   if buildMsi then
+      section("uninstaller", {
+         files = 2,
+         bytes = copyFile(vfUninstallCmd, path.join(staging, vfUninstallCmdName)) +
+            copyFile(vfUninstallScript, path.join(staging, vfUninstallScriptRel))
+      }, vfUninstallCmdName .. ", " .. vfUninstallScriptRel)
+   end
+
    -- 5. Verify the copies against their sources, and the staged manifest against the copies.
    print("  Verifying ...")
    for _, tree in ipairs(contentTrees) do
@@ -1389,6 +1408,10 @@ function vfPackageRelease()
       for _, sub in ipairs({ "app", "runtime" }) do
          verifyTree(path.join(launcherImage, sub), path.join(staging, sub))
       end
+   end
+   if buildMsi then
+      verifyFile(vfUninstallCmd, path.join(staging, vfUninstallCmdName))
+      verifyFile(vfUninstallScript, path.join(staging, vfUninstallScriptRel))
    end
 
    local stagedManifestPath = path.join(stagedExeDir, "engine.json")
@@ -1474,6 +1497,14 @@ function vfPackageRelease()
       end
       print("  Verifying the signatures (signtool verify /pa) ...")
       verifySignatures(staging, pePaths)
+      -- The uninstaller script gets this run's signature too: a PowerShell script can carry one, and an unsigned
+      -- script that starts msiexec is what antivirus heuristics distrust.
+      if buildMsi then
+         signAndCheck(staging, { vfUninstallScriptRel }, vfSignDescription, function()
+            return { [vfUninstallScriptRel] = inspectFile(path.join(staging, vfUninstallScriptRel)) }
+         end)
+         verifySignatures(staging, { vfUninstallScriptRel })
+      end
    else
       warn("UNSIGNED package: " .. #toSign .. " of its " .. #pePaths .. " PE files carry no signature and the " ..
          "installer will carry none (pass --sign-sha1=<thumbprint>, or --sign-dlib=<dll> --sign-dmdf=<json>)")
@@ -1796,7 +1827,8 @@ function vfPackageRelease()
    local kept = vendorCount > 0 and (vendorCount .. " signed by their vendors, kept: " .. table.concat(vendorList, ", "))
       or "none signed by a vendor"
    if signing then
-      print(string.format("  %-32s %s", "signatures", #toSign .. " PE files signed by " .. signing.label ..
+      print(string.format("  %-32s %s", "signatures", #toSign .. " PE files" ..
+         (buildMsi and (" and " .. vfUninstallScriptRel) or "") .. " signed by " .. signing.label ..
          ", timestamped by " .. signing.timestamp .. "; " .. kept))
    else
       print(string.format("  %-32s %s", "signatures", "UNSIGNED: " .. #toSign .. " PE files carry no signature; " ..
