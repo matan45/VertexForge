@@ -8,7 +8,7 @@ import java.util.Optional;
  * release folder the launcher's own jpackage app image (VK-1693), because {@code jpackage --type msi} installs an app
  * image as the install folder and needs its launcher at the root:
  * <pre>
- * VertexForge/                                    dist/VertexForge, or %LOCALAPPDATA%\Programs\VertexForge
+ * VertexForge/                                    dist/VertexForge, or %LOCALAPPDATA%\VertexForge Engine
  *   VertexForge Launcher.exe                      jpackage.app-path (app/ and runtime/ beside it)
  *   bin/Editor/Release/x64/Editor.exe             + engine.json
  * </pre>

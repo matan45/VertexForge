@@ -63,7 +63,7 @@
 -- for byte against the repo, and the staged manifest must resolve to the copies.
 --
 -- Installer (VK-1693): jpackage --type msi --app-image <the verified staging folder>, before the swap.
---   * It installs per user (no UAC) into %LOCALAPPDATA%\Programs\VertexForge, adds the Start menu entry
+--   * It installs per user (no UAC) into %LOCALAPPDATA%\VertexForge Engine, adds the Start menu entry
 --     VertexForge > VertexForge Launcher, and opens .vfproj files in the launcher ("%1": the launcher adds the
 --     project and opens it, or hands it to the launcher already running, VK-1685). The upgrade code and the install
 --     folder are PERMANENT (vfMsiUpgradeCode, vfMsiInstallDir): a newer MSI replaces an older one in place only
@@ -183,7 +183,14 @@ newoption {
 -- The installer's identity (VK-1693). PERMANENT: every VertexForge MSI ever shipped must carry this upgrade code and
 -- install folder, or a newer MSI no longer replaces an older one in place. Never change either.
 local vfMsiUpgradeCode = "4e0f9be5-20f3-4617-bafd-1e0a49993c67"
-local vfMsiInstallDir = "Programs\\VertexForge"   -- relative to %LOCALAPPDATA%: a per-user install
+-- The install folder, relative to %LOCALAPPDATA% (a per-user install). ONE folder, never a path: jpackage writes the
+-- RemoveFolder entries a per-user MSI needs only for INSTALLDIR and below (WixAppImageFragmentBuilder.addRootBranch
+-- adds none for the folders above it), so with "Programs\VertexForge" WiX 3's light.exe stopped at ICE64 ("the
+-- directory ... is in the user profile but is not listed in the RemoveFile table", LGHT0204; VK-1696's first real
+-- WiX run, before any MSI had shipped). Not "VertexForge": the MSI deletes its whole install folder on every upgrade
+-- and uninstall, and a shipped game keeps its saves in %LOCALAPPDATA%\<publisher>\<game> (VK-1726), so a game
+-- published as "VertexForge" would have lost them.
+local vfMsiInstallDir = "VertexForge Engine"
 -- The launcher image's main launcher (jpackage --name in launcher/pom.xml): JDK-8372994 keeps the .vfproj association
 -- only when the MSI's --name is that name. It is also the product name Apps & features shows.
 local vfMsiName = "VertexForge Launcher"

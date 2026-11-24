@@ -42,7 +42,9 @@ namespace gameExport
 		// removedOut = false and the image unchanged when there is none. Refuses, leaving the image
 		// unchanged, a table that is not 8-byte aligned, starts inside the headers or a section's raw
 		// data, or does not end exactly at the end of the image. An entry with a size of 0 is zeroed.
-		// The PE checksum is left alone: Windows only checks it for drivers and boot files.
+		// Removing a table also zeroes the PE checksum, which signtool computed over the signed file:
+		// 0 is the linker's "no checksum" (Windows checks it only for drivers and boot files), so an
+		// exe signed by signtool comes back byte for byte.
 		static bool stripSignature(std::vector<uint8_t>& image, bool& removedOut, std::string& errorOut);
 
 		// The same on a file. stripSignatureFile rewrites the file only when it removed a table.

@@ -9,7 +9,7 @@
 // VK-1732: where the editor keeps the state a user makes while working (logs, crash reports, the window
 // layout, plugin config data, Plugin Manager choices, plugins the user scaffolded).
 //
-// An installed engine lives in %LOCALAPPDATA%\Programs\VertexForge, and the VK-1693 MSI deletes that
+// An installed engine lives in %LOCALAPPDATA%\VertexForge Engine, and the VK-1693 MSI deletes that
 // whole folder on every upgrade and uninstall. So the release package writes
 //
 //   "stateLocation": "user"
