@@ -2,6 +2,8 @@
 #include "GameExporter.hpp"
 #include "AssetClosureResolver.hpp"
 #include "ExeIconEmbedder.hpp"
+#include "ExeVersionInfo.hpp"
+#include "PeAuthenticode.hpp"
 #include "PluginDescriptorEdit.hpp"
 #include "PluginExportPlanner.hpp"
 #include "ShaderCompiler.hpp"
@@ -75,6 +77,7 @@ namespace gameExport
 
 		report(0.10f, "Copying runtime executable...");
 		if (!copyRuntimeExecutable(config, result)) return result;
+		if (!prepareGameExecutable(config.outputDirectory / (config.gameName + ".exe"), config, result)) return result;
 
 		report(0.15f, "Copying runtime dependencies...");
 		if (!copyRuntimeDependencies(config, result)) return result;
@@ -233,6 +236,47 @@ namespace gameExport
 			return false;
 		}
 
+		return true;
+	}
+
+	bool GameExporter::prepareGameExecutable(const std::filesystem::path& exePath,
+											 const ExportConfig& config,
+											 ExportResult& result)
+	{
+		const std::string exeName = exePath.filename().string();
+		std::string error;
+		bool removed = false;
+		if (!PeAuthenticode::stripSignatureFile(exePath, removed, error))
+		{
+			result.errorMessage = "Failed to remove the engine's signature from " + exeName + ": " + error;
+			return false;
+		}
+		PeSecurityDirectory directory;
+		if (!PeAuthenticode::readSecurityDirectoryFile(exePath, directory, error))
+		{
+			result.errorMessage = "Failed to check the signature of " + exeName + ": " + error;
+			return false;
+		}
+		if (directory.present())
+		{
+			result.errorMessage = "Failed to remove the engine's signature from " + exeName +
+								  ": the certificate table is still there";
+			return false;
+		}
+		if (removed)
+		{
+			vfLogInfo("Removed the engine's Authenticode signature from {} (sign the game with your own certificate)",
+					  exeName);
+		}
+
+		const ExeVersionFields fields = ExeVersionInfo::gameFields(config, result.warnings);
+		std::vector<uint8_t> resource;
+		if (!ExeVersionInfo::buildResource(fields, resource, error) ||
+			!ExeVersionInfo::writeResource(exePath, resource, error))
+		{
+			result.errorMessage = "Failed to write the version resource of " + exeName + ": " + error;
+			return false;
+		}
 		return true;
 	}
 

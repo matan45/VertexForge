@@ -41,3 +41,7 @@ jpackage of the same JDK (jpackage packages only images its own version built). 
 bundled editor at bin/Editor/Release/x64/Editor.exe below its own folder (BundledEngine).
 
 jpackage 25 leaves the generated exe read-only; the pom's clean plugin (3.5.0, force) still deletes it.
+
+Signing (VK-1696) is not done here: mt.exe rewrites the exe after jpackage, and no credential belongs in the pom.
+tools/package_release.lua signs its staged copy of the exe (and every unsigned DLL of runtime/) with
+--sign-sha1 or --sign-dlib, after checking the exe's version resource (CompanyName VertexForge = --vendor, VERSION).

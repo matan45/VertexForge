@@ -1,0 +1,49 @@
+// VK-1696: the version resource of every engine executable (Editor.exe, Runtime.exe, Tests.exe).
+// Included, never compiled on its own: each executable's .rc defines
+//   VF_RC_FILE_DESCRIPTION   (Task Manager shows it, e.g. "VertexForge Editor")
+//   VF_RC_INTERNAL_NAME      (e.g. "Editor")
+//   VF_RC_ORIGINAL_FILENAME  (e.g. "Editor.exe")
+// and then includes this file through the VFEngine/utilities include directory, which premake hands to
+// rc.exe with the project's includedirs. The numbers and the version text come from the repo-root
+// VERSION file (EngineVersion.generated.hpp, written by every premake run; each part is at most 65535,
+// tools/engine_version.lua). Never put a manifest here: link.exe embeds Utf8CodePage.manifest as
+// RT_MANIFEST #1, and a second one fails the link (CVT1100).
+// GameExport rewrites this resource in an exported game's copy of Runtime.exe with the game's own name,
+// version and publisher (ExeVersionInfo, GameExporter::prepareGameExecutable).
+
+#include <winresrc.h>
+#include "config/EngineVersion.generated.hpp"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION VF_ENGINE_VERSION_MAJOR,VF_ENGINE_VERSION_MINOR,VF_ENGINE_VERSION_PATCH,0
+ PRODUCTVERSION VF_ENGINE_VERSION_MAJOR,VF_ENGINE_VERSION_MINOR,VF_ENGINE_VERSION_PATCH,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+#ifdef DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "VertexForge"
+            VALUE "FileDescription", VF_RC_FILE_DESCRIPTION
+            VALUE "FileVersion", VF_ENGINE_VERSION_STRING
+            VALUE "InternalName", VF_RC_INTERNAL_NAME
+            VALUE "OriginalFilename", VF_RC_ORIGINAL_FILENAME
+            VALUE "ProductName", "VertexForge"
+            VALUE "ProductVersion", VF_ENGINE_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

@@ -200,6 +200,11 @@ jobs:
               $info.FileBuildPart -ne [int]$parts[2] -or $info.FilePrivatePart -ne 0) {
             $errors.Add("the exe's fixed file version is $($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)")
           }
+          # VK-1696: the publisher (jpackage --vendor); tools/package_release.lua checks the same before it signs.
+          "exe CompanyName $($info.CompanyName), ProductName $($info.ProductName), FileDescription $($info.FileDescription)"
+          if ($info.CompanyName -ne 'VertexForge') {
+            $errors.Add("the exe says CompanyName '$($info.CompanyName)', not 'VertexForge' (jpackage --vendor)")
+          }
 
           # The size budget (VK-1692): at most 70 MiB on disk.
           $bytes = (Get-ChildItem $image -Recurse -File -Force | Measure-Object Length -Sum).Sum

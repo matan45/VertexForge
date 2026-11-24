@@ -91,6 +91,10 @@ Any failure exits non-zero. The package is assembled and verified in `dist/.Vert
     premake5 package-release --skip-msi
     # or, without a JDK (ships no launcher, so no installer either):
     premake5 package-release --skip-launcher
+    # signed (see "Signing" below), with a certificate from the Windows certificate store:
+    premake5 package-release --sign-sha1=<thumbprint>
+    # or with Azure Artifact Signing:
+    premake5 package-release --sign-dlib=<path>\Azure.CodeSigning.Dlib.dll --sign-dmdf=<path>\metadata.json
     ```
 
 This writes everything under `dist/VertexForge/`, and the installer beside it. The folder is the launcher's own app image, so its root holds the launcher next to the engine:
@@ -128,10 +132,34 @@ Run `dist/VertexForge/VertexForge Launcher.exe` to start the launcher, which in 
 - **Uninstalling and upgrading keep your data:** `~/.vertexforge` (launcher settings, recent projects, editor preferences, layouts and launch logs), `Documents\VertexForge\Plugins` and every project folder outside the install folder stay.
 - **Uninstalling AND upgrading delete the whole install folder**, so the installed editor keeps nothing of yours there (VK-1732). Its logs, crash reports (`crashes/`, which the launcher shows after a crash), window layout (`imgui.ini`), plugin data (`plugin-data/<Plugin>/`) and Plugin Manager choices (`plugin-overrides.json`, on top of the shipped plugins' defaults) are in `%USERPROFILE%\.vertexforge\editor`; a plugin created with *Plugin Manager > New Plugin…* goes in `Documents\VertexForge\Plugins\<Name>`, which the editor also loads plugins from (build it with premake5 and Visual Studio: the dialog lists the steps). The first upgrade *from* a version older than VK-1732 still loses what that version had written into its install folder.
 - Close the launcher and every editor before installing, upgrading or uninstalling; files in use make Windows ask for a restart.
-- The installer is not signed yet, so Windows SmartScreen may warn about a downloaded copy.
+- An installer built without signing options is unsigned, and Windows SmartScreen warns about a downloaded copy ("Unknown publisher"). A signed one names its publisher, but SmartScreen may still warn until the certificate has built up reputation: since 2024 that applies to EV certificates too.
 - The installed launcher and one started from `dist/VertexForge/` share the same `~/.vertexforge`, so a double-click goes to whichever of them is running.
 
 Before the package is swapped in, `tools/msi_inspect.ps1` reads the MSI's own tables, and `package-release` checks the version, the upgrade code, the per-user marking, the install folder, every installed file, the Start menu entry and the `.vfproj` association. You can run it on any MSI: `powershell -ExecutionPolicy Bypass -File tools\msi_inspect.ps1 -Msi <file.msi> -Out <facts.json>`.
+
+### Signing
+
+`--sign-sha1=<thumbprint>` signs every exe and DLL of the package, then the installer, with a certificate from `Cert:\CurrentUser\My` (`--sign-machine-store` for `Cert:\LocalMachine\My`): an OV or EV certificate on its hardware token or behind its vendor's cloud key provider. `--sign-dlib=<x64 Azure.CodeSigning.Dlib.dll> --sign-dmdf=<metadata.json>` signs with Azure Artifact Signing instead (its `metadata.json` names `Endpoint`, `CodeSigningAccountName` and `CertificateProfileName`). Every signature is SHA-256 with an RFC 3161 timestamp, from `http://timestamp.digicert.com` (or `http://timestamp.acs.microsoft.com` with Artifact Signing) unless `--sign-timestamp=<url>` names another. `signtool` comes from the newest Windows SDK, or `--signtool=<path>`.
+
+- The checks run before anything is written: the certificate must be present with its private key, allow code signing, be valid now and chain to a trusted root.
+- Only the staged copies are signed, after they were verified, so the build output in `bin/` stays unsigned.
+- Files that already carry a valid signature of their own (NVIDIA's DLSS/Streamline DLLs, LunarG's shaderc, Microsoft's and Oracle's runtime DLLs) are left exactly as they are: Streamline refuses a re-signed plugin.
+- Afterwards `signtool verify /pa` must pass for every exe, DLL and the installer, and the installer must contain the signed files.
+- The exes' version resources (product, company and version from `VERSION`) are checked too, signed or not.
+- `tools/authenticode_inspect.ps1 -Root <folder>` (or `-File <file>`, `-Certificate <thumbprint>`) prints the same facts as JSON.
+
+To try signing without a real certificate, make a test one and trust it for your account only:
+
+```powershell
+$c = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=VertexForge Test Signing" -CertStoreLocation Cert:\CurrentUser\My -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256
+Export-Certificate -Cert $c -FilePath $env:TEMP\vf-test.cer
+Import-Certificate -FilePath $env:TEMP\vf-test.cer -CertStoreLocation Cert:\CurrentUser\Root   # Windows asks to confirm
+premake5 package-release --sign-sha1=$($c.Thumbprint)
+```
+
+Remove it again with `Remove-Item Cert:\CurrentUser\Root\<thumbprint>` and `Remove-Item Cert:\CurrentUser\My\<thumbprint>`, and never hand out a package signed with it: on other machines its signatures do not verify.
+
+An exported game's exe is a copy of `Runtime.exe`: the exporter removes the engine's signature from it and gives it the game's own name, version and publisher, so the game's developer signs it with their own certificate. The engine DLLs shipped with the game keep their signatures.
 
 ## Features
 - **Modular Engine Architecture**: Split into `Core`, `Graphics`, `Runtime`, and `Utilities` projects for flexible development.

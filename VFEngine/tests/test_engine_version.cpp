@@ -43,7 +43,8 @@ namespace
 
     // The rules of vfReadEngineVersion() in tools/engine_version.lua: a UTF-8 BOM and
     // surrounding whitespace are ignored; the rest must be MAJOR.MINOR.PATCH, decimal,
-    // without leading zeros, each part fitting in 32 bits.
+    // without leading zeros, each part at most 65535 (VK-1696: a VERSIONINFO FILEVERSION
+    // part is 16 bits).
     std::optional<ParsedVersion> parseVersionText(std::string content)
     {
         if (content.compare(0, 3, "\xEF\xBB\xBF") == 0)
@@ -70,7 +71,7 @@ namespace
             while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9')
             {
                 value = value * 10 + static_cast<uint64_t>(text[pos] - '0');
-                if (value > 0xFFFFFFFFull)
+                if (value > 0xFFFFull)
                     return std::nullopt;
                 ++pos;
             }
@@ -179,7 +180,7 @@ TEST_SUITE("EngineVersion")
         CHECK(decorated->patch == 3u);
         CHECK(decorated->text == "2.10.3");
 
-        CHECK(parseVersionText("4294967295.0.0").has_value());
+        CHECK(parseVersionText("65535.65535.65535").has_value());
 
         CHECK_FALSE(parseVersionText("").has_value());
         CHECK_FALSE(parseVersionText("1.0").has_value());
@@ -188,7 +189,8 @@ TEST_SUITE("EngineVersion")
         CHECK_FALSE(parseVersionText("1.0.0-beta").has_value());
         CHECK_FALSE(parseVersionText("v1.0.0").has_value());
         CHECK_FALSE(parseVersionText("1. 0.0").has_value());
-        CHECK_FALSE(parseVersionText("4294967296.0.0").has_value());
+        CHECK_FALSE(parseVersionText("65536.0.0").has_value());
+        CHECK_FALSE(parseVersionText("1.0.65536").has_value());
     }
 
     TEST_CASE("Version matches the repo-root VERSION file")

@@ -1,0 +1,7 @@
+// VK-1696: Runtime.exe's version resource (config/VersionInfo.rc2). No icon here: GameExport gives each
+// exported game its own icon (ExeIconEmbedder writes RT_ICON 1..N + RT_GROUP_ICON 1, language neutral) and
+// its own version resource; an icon in this file would keep showing instead of the game's.
+#define VF_RC_FILE_DESCRIPTION "VertexForge Runtime"
+#define VF_RC_INTERNAL_NAME "Runtime"
+#define VF_RC_ORIGINAL_FILENAME "Runtime.exe"
+#include "config/VersionInfo.rc2"

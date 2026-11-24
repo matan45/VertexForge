@@ -9,6 +9,8 @@
 #   wordCount      the summary information Word Count (PID 15); bit 8 = "elevated privileges are not required"
 #   installDir     INSTALLDIR's folder chain below TARGETDIR, "/"-joined (standard folders by their Id)
 #   files          every installed file relative to INSTALLDIR, "/"-joined and sorted; outsideFiles: the others
+#   fileSizes      { relative path -> the File table's FileSize } for the files in `files` (VK-1696: package-release
+#                  compares each staged PE file's size with it, so the MSI holds the signed bytes)
 #   launcherFileKey the File key of "VertexForge Launcher.exe" directly in INSTALLDIR (null when absent)
 #   shortcuts      { folder, name, target, condition } per Shortcut row (folder = the chain below TARGETDIR)
 #   associations   { extension, progId, command, label, icon, contentType } per extension registered in the classes
@@ -172,10 +174,11 @@ try {
     }
 
     $files = New-Object System.Collections.ArrayList
+    $fileSizes = [ordered]@{}
     $outsideFiles = New-Object System.Collections.ArrayList
     $launcherFileKey = $null
     if ($tables.ContainsKey('File')) {
-        foreach ($row in (Read-Rows $database 'SELECT `File`, `Component_`, `FileName` FROM `File`' 3)) {
+        foreach ($row in (Read-Rows $database 'SELECT `File`, `Component_`, `FileName`, `FileSize` FROM `File`' 4)) {
             $name = Get-LongName $row[2]
             $component = $components[$row[1]]
             $folder = $null
@@ -192,6 +195,7 @@ try {
                 $relative = $folder + '/' + $name
             }
             [void]$files.Add($relative)
+            $fileSizes[$relative] = [int64]$row[3]
             if ($relative -eq 'VertexForge Launcher.exe') {
                 $launcherFileKey = $row[0]
             }
@@ -295,6 +299,7 @@ try {
         wordCount = $wordCount
         installDir = $installDir
         files = $sortedFiles
+        fileSizes = $fileSizes
         outsideFiles = @($outsideFiles)
         launcherFileKey = $launcherFileKey
         shortcuts = @($shortcuts)

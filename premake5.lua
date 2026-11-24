@@ -65,6 +65,11 @@ end
 -- (ExeIconEmbedder keeps existing resources). Never put a manifest in an .rc file (a second
 -- RT_MANIFEST #1, CVT1100). A new executable project must list it too (test_unicode_paths checks the
 -- built Editor.exe and Runtime.exe).
+-- VK-1696: the version resource comes from VFEngine/utilities/config/VersionInfo.rc2 (numbers from
+-- VERSION), included by each executable's own app.rc, which defines its FileDescription, InternalName and
+-- OriginalFilename. rc.exe gets the project's includedirs and defines, so the .rc files include it as
+-- "config/VersionInfo.rc2". A new executable project lists its own app.rc too (test_exe_version_info
+-- checks the built Editor.exe, Runtime.exe and Tests.exe; package-release checks the Release ones).
 local vfUtf8CodePageManifest = "VFEngine/utilities/launch/Utf8CodePage.manifest"
 
 -- Group for Engine Projects
@@ -399,7 +404,7 @@ project "Runtime"
    location "VFEngine/runtime"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp", vfUtf8CodePageManifest }
+   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp", "VFEngine/runtime/app.rc", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/spdlog/include",
@@ -1281,7 +1286,7 @@ project "Tests"
    location "VFEngine/tests"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp", vfUtf8CodePageManifest }
+   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp", "VFEngine/tests/app.rc", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/doctest/doctest",

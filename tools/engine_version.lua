@@ -114,8 +114,10 @@ function vfReadEngineVersion()
       if #part > 1 and part:sub(1, 1) == "0" then
          error("VERSION must not have leading zeros, got '" .. text .. "'", 0)
       end
-      if #part > 10 or tonumber(part) > 4294967295 then
-         error("VERSION numbers must fit in 32 bits, got '" .. text .. "'", 0)
+      -- VK-1696: at most 65535, the limit of a VERSIONINFO FILEVERSION part (Editor.exe, Runtime.exe and
+      -- Tests.exe get theirs from VersionInfo.rc2; the launcher pom refuses a larger part too).
+      if #part > 5 or tonumber(part) > 65535 then
+         error("VERSION numbers must be at most 65535 (the exe version resource), got '" .. text .. "'", 0)
       end
    end
    return { major = major, minor = minor, patch = patch, text = text }

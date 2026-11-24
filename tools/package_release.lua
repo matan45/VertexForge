@@ -1,4 +1,6 @@
 -- premake5 package-release [--skip-launcher] [--skip-msi]
+--                          [--sign-sha1=<thumbprint> [--sign-machine-store] | --sign-dlib=<dll> --sign-dmdf=<json>]
+--                          [--sign-timestamp=<url>] [--signtool=<exe>]
 -- Assembles a single, ready-to-ship VertexForge engine/editor distribution into
 -- dist/VertexForge/, and its per-user installer dist/VertexForge-<VERSION>.msi. This is the *engine* package (Editor +
 -- Runtime + SDK + resources + Tests + plugins + engine content + Java launcher) — NOT a game export
@@ -80,6 +82,39 @@
 --   * After the swap the MSI is moved to dist/VertexForge-<VERSION>.msi, replacing one of the same version; the
 --     installers of other versions are left alone.
 --
+-- Signing (VK-1696): with --sign-sha1 or --sign-dlib every PE file of the package (Editor.exe, Runtime.exe,
+-- Tests.exe, the launcher exe, every DLL, whatever its extension: tools/authenticode_inspect.ps1 finds them by their
+-- "MZ"/"PE\0\0" headers) and then the MSI get an Authenticode signature (SHA-256, RFC 3161 timestamp), so
+-- `signtool verify /pa` passes for each and SmartScreen names the publisher. Without either the package is built
+-- unsigned, with a warning.
+--   * Two routes, both through the Windows SDK's signtool (the newest x64 one, or --signtool):
+--     --sign-sha1=<thumbprint>: a certificate in Cert:\CurrentUser\My (Cert:\LocalMachine\My with
+--       --sign-machine-store): an OV/EV certificate on a hardware token or behind a cloud-HSM KSP, or a self-signed
+--       test certificate that is also in Cert:\CurrentUser\Root. The preflight checks it is there, has its private
+--       key, allows Code Signing, is valid now and chains to a trusted root (without a revocation check).
+--     --sign-dlib=<x64 Azure.CodeSigning.Dlib.dll> --sign-dmdf=<metadata.json>: Azure Artifact Signing (signtool
+--       10.0.22621.755 or newer; metadata.json names Endpoint, CodeSigningAccountName, CertificateProfileName).
+--     The timestamp server is --sign-timestamp, else http://timestamp.digicert.com (sha1) or
+--     http://timestamp.acs.microsoft.com (dlib, whose certificates live three days: every signature needs a
+--     timestamp).
+--   * The staged copies are signed after step 5 verified them byte for byte, so the build output in bin/ stays
+--     unsigned, and before the installer packs them. Files that already carry a valid EMBEDDED signature (NVIDIA's
+--     Streamline/DLSS DLLs, LunarG's shaderc, Oracle's and Microsoft's JDK DLLs) are never touched: Streamline loads
+--     a plugin only with NVIDIA's signature plus exactly one nested NVIDIA signature (sl_security.h), so re-signing,
+--     or appending with /as, would disable DLSS. A file that is valid only through this machine's catalog counts as
+--     unsigned; any other status (a broken vendor signature) fails the package.
+--   * Files are signed in batches (one signtool process per batch: a hardware token asks for its PIN once per
+--     process), re-inspected, and what is still unsigned or not timestamped is retried twice. Then every PE file must
+--     be Valid with an embedded signature, everything this run signed must carry one signer and a timestamp, and
+--     `signtool verify /pa` must pass for each. The MSI must hold every staged PE file at its staged size (so jpackage
+--     packed the signed bytes), and is then signed and verified the same way.
+--   * The exes' version resources (VersionInfo.rc2 for Editor, Runtime and Tests; jpackage --vendor/--app-version for
+--     the launcher) must say VERSION and VertexForge, signed or not: the preflight reads the Release exes.
+--   * An exported game's exe is a copy of Runtime.exe: GameExport strips the engine's signature from it and writes
+--     the game's own version resource (GameExporter::prepareGameExecutable); the game's developer signs the game.
+--   * Verification needs the certificate chain and, for revocation, usually the network: on an offline machine
+--     Windows may report a signature as not yet trusted.
+--
 -- Failures: every check ends in error(), so premake prints "Error: package-release: ..."
 -- and exits 1, and dist/VertexForge only ever changes once a new package is complete.
 -- The Release build's own engine.json must match the sources (version, asset format, project
@@ -106,6 +141,45 @@ newoption {
    description = "package-release: do not build the MSI installer (no WiX needed)"
 }
 
+-- VK-1696: Authenticode signing (see "Signing" above).
+newoption {
+   trigger = "sign-sha1",
+   value = "THUMBPRINT",
+   description = "package-release: sign with the certificate of this SHA-1 thumbprint in Cert:\\CurrentUser\\My " ..
+      "(an OV/EV token, a cloud-HSM KSP or a test certificate)"
+}
+
+newoption {
+   trigger = "sign-machine-store",
+   description = "package-release: find the --sign-sha1 certificate in Cert:\\LocalMachine\\My instead"
+}
+
+newoption {
+   trigger = "sign-dlib",
+   value = "DLL",
+   description = "package-release: sign with Azure Artifact Signing through this x64 Azure.CodeSigning.Dlib.dll " ..
+      "(with --sign-dmdf)"
+}
+
+newoption {
+   trigger = "sign-dmdf",
+   value = "JSON",
+   description = "package-release: the Artifact Signing metadata.json for --sign-dlib"
+}
+
+newoption {
+   trigger = "sign-timestamp",
+   value = "URL",
+   description = "package-release: the RFC 3161 timestamp server (default http://timestamp.digicert.com, " ..
+      "http://timestamp.acs.microsoft.com with --sign-dlib)"
+}
+
+newoption {
+   trigger = "signtool",
+   value = "EXE",
+   description = "package-release: the signtool.exe to sign with (default: the newest x64 one of the Windows SDK)"
+}
+
 -- The installer's identity (VK-1693). PERMANENT: every VertexForge MSI ever shipped must carry this upgrade code and
 -- install folder, or a newer MSI no longer replaces an older one in place. Never change either.
 local vfMsiUpgradeCode = "4e0f9be5-20f3-4617-bafd-1e0a49993c67"
@@ -117,6 +191,12 @@ local vfMsiVendor = "VertexForge"
 local vfMsiMenuGroup = "VertexForge"
 local vfMsiDescription = "VertexForge game engine: editor, runtime and launcher"
 local vfMsiInspectScript = path.join(_SCRIPT_DIR, "msi_inspect.ps1")
+-- VK-1696: signing.
+local vfAuthenticodeInspectScript = path.join(_SCRIPT_DIR, "authenticode_inspect.ps1")
+local vfSignDescription = "VertexForge"
+local vfSignTimestampSha1 = "http://timestamp.digicert.com"
+local vfSignTimestampDlib = "http://timestamp.acs.microsoft.com"
+local vfSignDlibMinimumSigntool = "10.0.22621.755"
 
 function vfPackageRelease()
    local dist = "dist/VertexForge"
@@ -133,6 +213,8 @@ function vfPackageRelease()
    local content = vfEngineContentPaths()
    local warnings = {}
    local distUnchanged = true
+   -- Windows PowerShell 5.1: tools/msi_inspect.ps1 and tools/authenticode_inspect.ps1 run in it.
+   local powershell = path.join(os.getenv("SystemRoot") or "C:/Windows", "System32/WindowsPowerShell/v1.0/powershell.exe")
 
    local function fail(msg)
       if distUnchanged then
@@ -627,6 +709,200 @@ function vfPackageRelease()
       return plugins
    end
 
+   -- VK-1696: the facts tools/authenticode_inspect.ps1 prints for these (already quoted) arguments, or fail; `what`
+   -- names its subject for the error. It only reads, so the preflight may run it.
+   local function inspectAuthenticode(arguments, what)
+      local output, ok = runCaptured(cmdQuote(winPath(powershell)) ..
+         " -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " .. cmdQuote(winPath(vfAuthenticodeInspectScript)) ..
+         " " .. arguments)
+      local decodedOk, decoded = false, nil
+      if ok then
+         decodedOk, decoded = pcall(json.decode, output)
+      end
+      if not decodedOk or type(decoded) ~= "table" then
+         fail("tools/authenticode_inspect.ps1 could not read " .. what .. ": " .. reason(output))
+      end
+      return decoded
+   end
+
+   -- Every PE file below dir, whatever its extension: { ["relative/path"] = entry } and the sorted paths.
+   local function inspectTree(dir)
+      local facts = inspectAuthenticode("-Root " .. cmdQuote(winPath(dir)), dir)
+      local entries, paths = {}, {}
+      for _, entry in ipairs(type(facts.files) == "table" and facts.files or {}) do
+         if type(entry) == "table" and type(entry.path) == "string" then
+            entries[entry.path] = entry
+            table.insert(paths, entry.path)
+         end
+      end
+      table.sort(paths)
+      return entries, paths
+   end
+
+   -- The entry of one file (an exe, signtool, the MSI).
+   local function inspectFile(file)
+      local facts = inspectAuthenticode("-File " .. cmdQuote(winPath(file)), file)
+      local entry = type(facts.files) == "table" and facts.files[1] or nil
+      if type(entry) ~= "table" then
+         fail("tools/authenticode_inspect.ps1 printed nothing about " .. file)
+      end
+      return entry
+   end
+
+   -- "NVIDIA Corporation" from "CN=NVIDIA Corporation, OU=2008B9F, O=NVIDIA Corporation, ...".
+   local function commonName(subject)
+      if type(subject) ~= "string" then
+         return "an unknown signer"
+      end
+      return subject:match('^CN="([^"]*)"') or subject:match("^CN=([^,]+)") or subject:match(",%s*CN=([^,]+)") or subject
+   end
+
+   -- The "1.0.0.0" fixed FILEVERSION of an inspected exe's version facts.
+   local function fixedVersionOf(facts)
+      local parts = {}
+      for _, part in ipairs({ "fileMajor", "fileMinor", "fileBuild", "filePrivate" }) do
+         local n = tonumber(facts[part])
+         table.insert(parts, n and tostring(math.tointeger(n) or n) or "?")
+      end
+      return table.concat(parts, ".")
+   end
+
+   -- An exe's version resource must hold the fixed FILEVERSION <version>.0 and every string of expected
+   -- (companyName, productName, productVersion, fileVersion, fileDescription, internalName, originalFilename).
+   local function checkExeVersion(file, entry, version, expected, hint)
+      local facts = type(entry) == "table" and entry.version or nil
+      if type(facts) ~= "table" then
+         fail(file .. " has no version resource. " .. hint)
+      end
+      local problems = {}
+      local fixed = fixedVersionOf(facts)
+      if fixed ~= version .. ".0" then
+         table.insert(problems, "FILEVERSION " .. fixed)
+      end
+      for _, key in ipairs({ "companyName", "productName", "productVersion", "fileVersion", "fileDescription",
+            "internalName", "originalFilename" }) do
+         if expected[key] ~= nil and facts[key] ~= expected[key] then
+            table.insert(problems, key .. " " .. (facts[key] == nil and "(none)" or ('"' .. tostring(facts[key]) .. '"')))
+         end
+      end
+      if #problems > 0 then
+         fail(file .. "'s version resource says " .. table.concat(problems, ", ") .. " (VERSION is " .. version ..
+            "). " .. hint)
+      end
+   end
+
+   -- The signing route the preflight picked (nil: the package stays unsigned):
+   -- { mode = "sha1" | "dlib", thumbprint, machineStore, dlib, dmdf, timestamp, signtool, signtoolVersion, label,
+   --   subject }. subject is the certificate's (sha1) or, with Artifact Signing, whose certificate is renewed every few
+   -- days, that of the first file this run signed: every file this run signs must carry it.
+   local signing
+
+   -- The signtool options that pick the signing key.
+   local function signerArguments()
+      if signing.mode == "sha1" then
+         return "/sha1 " .. signing.thumbprint .. (signing.machineStore and " /sm" or "")
+      end
+      return "/dlib " .. cmdQuote(winPath(signing.dlib)) .. " /dmdf " .. cmdQuote(winPath(signing.dmdf))
+   end
+
+   -- Runs `signtool <command> <files...>` from inside base (files are relative to it, "/"-separated), in batches that
+   -- keep each command line well under cmd's 8191 characters. Returns the output of every batch that failed.
+   local function runSigntool(base, command, files)
+      local prefix = "cd /d " .. cmdQuote(winPath(base)) .. " && " .. cmdQuote(winPath(signing.signtool)) .. " " ..
+         command
+      local failures, batch, length = {}, {}, #prefix
+      local function flush()
+         if #batch > 0 then
+            local output, ok = runCaptured(prefix .. " " .. table.concat(batch, " "))
+            if not ok then
+               table.insert(failures, reason(output))
+            end
+            batch, length = {}, #prefix
+         end
+      end
+      for _, rel in ipairs(files) do
+         local quoted = cmdQuote(path.translate(rel, "\\"))
+         if #batch > 0 and length + 1 + #quoted > 7500 then
+            flush()
+         end
+         table.insert(batch, quoted)
+         length = length + 1 + #quoted
+      end
+      flush()
+      return failures
+   end
+
+   -- Whether an inspected entry carries this run's signature.
+   local function isOurs(entry)
+      if signing.mode == "sha1" then
+         return type(entry.signerThumbprint) == "string" and entry.signerThumbprint:upper() == signing.thumbprint
+      end
+      if signing.subject == nil then
+         signing.subject = entry.signerSubject
+      end
+      return type(entry.signerSubject) == "string" and entry.signerSubject == signing.subject
+   end
+
+   -- Signs files (relative to base, none of them carrying an embedded signature) and checks them; inspect() returns
+   -- { [rel] = entry } for at least those files. Up to three rounds: a file still without an embedded signature is
+   -- signed again, one this run signed but whose timestamp failed gets one with `signtool timestamp`; a file that
+   -- carries an embedded signature is never passed to `signtool sign` again, and /as is never used (a second
+   -- signature would make Streamline refuse NVIDIA's DLLs, and a nested one is never what a vendor shipped). Fails
+   -- unless every file ends Valid, embedded, this run's and timestamped. Returns the last inspection.
+   local function signAndCheck(base, files, description, inspect)
+      local signArgs = "sign /fd sha256 /tr " .. cmdQuote(signing.timestamp) .. " /td sha256 /d " ..
+         cmdQuote(description) .. " " .. signerArguments()
+      local stampArgs = "timestamp /tr " .. cmdQuote(signing.timestamp) .. " /td sha256"
+      local toSign, toStamp, failures = files, {}, {}
+      for round = 1, 3 do
+         failures = runSigntool(base, signArgs, toSign)
+         for _, f in ipairs(runSigntool(base, stampArgs, toStamp)) do
+            table.insert(failures, f)
+         end
+         local now = inspect()
+         toSign, toStamp = {}, {}
+         for _, rel in ipairs(files) do
+            local entry = now[rel]
+            local where = path.join(base, rel)
+            if entry == nil then
+               fail(where .. " disappeared while it was being signed")
+            elseif entry.signatureType ~= "Authenticode" then
+               table.insert(toSign, rel)
+            elseif entry.status ~= "Valid" then
+               fail(where .. " is " .. tostring(entry.status) .. " after signing: " .. reason(entry.statusMessage))
+            elseif not isOurs(entry) then
+               fail(where .. " is signed by " .. tostring(entry.signerSubject) .. ", not by " .. signing.label)
+            elseif entry.timestamped ~= true then
+               table.insert(toStamp, rel)
+            end
+         end
+         if #toSign == 0 and #toStamp == 0 then
+            return now
+         end
+         if round < 3 then
+            print("    " .. (#toSign + #toStamp) .. " file(s) not signed or not timestamped yet; trying again ...")
+         end
+      end
+      local left = {}
+      for _, rel in ipairs(toSign) do
+         table.insert(left, rel .. " (unsigned)")
+      end
+      for _, rel in ipairs(toStamp) do
+         table.insert(left, rel .. " (no timestamp from " .. signing.timestamp .. ")")
+      end
+      fail("signing failed three times for " .. table.concat(left, ", ", 1, math.min(#left, 5)) ..
+         (#left > 5 and (" and " .. (#left - 5) .. " more") or "") ..
+         (failures[1] and (". signtool said: " .. failures[1]) or ""))
+   end
+
+   -- `signtool verify /pa` (the Default Authenticode policy) for each file: VK-1696's acceptance check.
+   local function verifySignatures(base, files)
+      local failures = runSigntool(base, "verify /pa", files)
+      if #failures > 0 then
+         fail("signtool verify /pa failed in " .. base .. ":\n" .. failures[1]:sub(1, 3000))
+      end
+   end
+
    print("Packaging VertexForge release into " .. dist .. "/ ...")
 
    -- 1. Preflight — nothing is written before every check has passed.
@@ -712,7 +988,6 @@ function vfPackageRelease()
 
    -- The installer (VK-1693): its version, tools and JDK, all before anything is built or written.
    local msiTarget = "dist/VertexForge-" .. engineVersion .. ".msi"
-   local powershell = path.join(os.getenv("SystemRoot") or "C:/Windows", "System32/WindowsPowerShell/v1.0/powershell.exe")
    local jdk, wix
    if buildMsi then
       if tonumber(engineVersionParts.major) > 255 or tonumber(engineVersionParts.minor) > 255 or
@@ -753,6 +1028,144 @@ function vfPackageRelease()
       if os.isfile(msiTarget) then
          warn(msiTarget .. " is from an earlier run: it does not install the package this run makes")
       end
+   end
+
+   -- Signing (VK-1696): the route, signtool and the certificate, before anything is written. The inspection that
+   -- finds the files to sign runs on every package, so PowerShell is needed signed or not.
+   for _, required in ipairs({ powershell, vfAuthenticodeInspectScript }) do
+      if not os.isfile(required) then
+         fail("package-release needs " .. required .. ", which is missing")
+      end
+   end
+   local signSha1, signDlib, signDmdf = _OPTIONS["sign-sha1"], _OPTIONS["sign-dlib"], _OPTIONS["sign-dmdf"]
+   local signMachineStore = _OPTIONS["sign-machine-store"] ~= nil
+   local signTimestamp, signtoolOption = _OPTIONS["sign-timestamp"], _OPTIONS["signtool"]
+   if signSha1 and signDlib then
+      fail("pass --sign-sha1 (a certificate in the Windows store) or --sign-dlib (Azure Artifact Signing), not both")
+   end
+   if (signDlib ~= nil) ~= (signDmdf ~= nil) then
+      fail("--sign-dlib and --sign-dmdf go together: the Artifact Signing dlib and its metadata.json")
+   end
+   if signMachineStore and not signSha1 then
+      fail("--sign-machine-store applies only to --sign-sha1")
+   end
+   if not signSha1 and not signDlib and (signTimestamp or signtoolOption) then
+      fail("--sign-timestamp and --signtool apply only with --sign-sha1 or --sign-dlib")
+   end
+   if signSha1 or signDlib then
+      signing = { mode = signSha1 and "sha1" or "dlib" }
+      signing.timestamp = signTimestamp or (signSha1 and vfSignTimestampSha1 or vfSignTimestampDlib)
+      if not signing.timestamp:match("^https?://%S+$") then
+         fail("--sign-timestamp must be an http:// or https:// URL of an RFC 3161 timestamp server, got '" ..
+            signing.timestamp .. "'")
+      end
+      cmdQuote(signing.timestamp)
+      if signing.mode == "sha1" then
+         -- A thumbprint copied from the certificate dialog may start with an invisible U+200E (or U+200F) mark.
+         local thumbprint = signSha1:gsub("%s", ""):gsub("\226\128[\142\143]", ""):gsub("\239\187\191", ""):upper()
+         if #thumbprint ~= 40 or not thumbprint:match("^%x+$") then
+            fail("--sign-sha1 must be the certificate's SHA-1 thumbprint, 40 hexadecimal digits, got '" .. signSha1 ..
+               "' (one copied from the certificate dialog may carry an invisible character: copy it from " ..
+               "Get-ChildItem Cert:\\CurrentUser\\My instead)")
+         end
+         signing.thumbprint = thumbprint
+         signing.machineStore = signMachineStore
+      else
+         for _, file in ipairs({ signDlib, signDmdf }) do
+            if file == "" or not os.isfile(file) then
+               fail("--sign-dlib/--sign-dmdf: " .. file .. " does not exist")
+            end
+            cmdQuote(winPath(file))
+         end
+         local metadata = readJson(signDmdf)
+         if not metadata or type(metadata.Endpoint) ~= "string" or type(metadata.CertificateProfileName) ~= "string" then
+            fail(signDmdf .. " is not an Artifact Signing metadata.json: it needs Endpoint, CodeSigningAccountName " ..
+               "and CertificateProfileName")
+         end
+         signing.dlib, signing.dmdf = signDlib, signDmdf
+         signing.label = "Artifact Signing profile " .. metadata.CertificateProfileName
+      end
+
+      -- signtool: --signtool, else the newest x64 one of the Windows 10/11 SDK, compared as numbers.
+      local signtool = signtoolOption
+      if signtool then
+         if not os.isfile(signtool) then
+            fail("--signtool " .. signtool .. " does not exist")
+         end
+      else
+         local kits = path.join(path.translate(os.getenv("ProgramFiles(x86)") or "C:/Program Files (x86)", "/"),
+            "Windows Kits/10/bin")
+         local newest
+         for _, dir in ipairs(os.matchdirs(path.join(kits, "10.*"))) do
+            local name = path.getname(dir)
+            if os.isfile(path.join(dir, "x64/signtool.exe")) and (newest == nil or not versionAtLeast(newest, name)) then
+               newest = name
+            end
+         end
+         if not newest then
+            fail("signing needs signtool.exe, but there is no " .. kits .. "/10.*/x64/signtool.exe: install the " ..
+               "Windows SDK's signing tools, or pass --signtool=<path>")
+         end
+         signtool = path.join(kits, newest, "x64/signtool.exe")
+      end
+      cmdQuote(winPath(signtool))
+      local tool = inspectFile(signtool)
+      signing.signtool = signtool
+      signing.signtoolVersion = type(tool.version) == "table" and fixedVersionOf(tool.version) or "unknown"
+      if signing.mode == "dlib" and not versionAtLeast(signing.signtoolVersion, vfSignDlibMinimumSigntool) then
+         fail(signtool .. " is version " .. signing.signtoolVersion .. "; Artifact Signing needs signtool " ..
+            vfSignDlibMinimumSigntool .. " or newer (pass --signtool=<path>)")
+      end
+
+      -- The certificate (sha1): signtool would fail on each of these only after the whole package was staged.
+      if signing.mode == "sha1" then
+         local cert = inspectAuthenticode("-Certificate " .. signing.thumbprint ..
+            (signing.machineStore and " -MachineStore" or ""), "the certificate " .. signing.thumbprint)
+         local store = "Cert:\\" .. tostring(cert.store)
+         local named = "the certificate " .. signing.thumbprint .. " (" .. tostring(cert.subject) .. ")"
+         if cert.found ~= true then
+            fail("no certificate with the thumbprint " .. signing.thumbprint .. " is in " .. store ..
+               (signing.machineStore and "" or " (pass --sign-machine-store for Cert:\\LocalMachine\\My)"))
+         end
+         if cert.hasPrivateKey ~= true then
+            fail(named .. " has no private key on this machine: plug in its token, or import it with its key")
+         end
+         if cert.codeSigning ~= true then
+            fail(named .. " is not a code signing certificate (its Enhanced Key Usage lacks Code Signing, " ..
+               "1.3.6.1.5.5.7.3.3)")
+         end
+         if cert.valid ~= true then
+            fail(named .. " is valid from " .. tostring(cert.notBefore) .. " to " .. tostring(cert.notAfter) ..
+               " only")
+         end
+         if cert.chainTrusted ~= true then
+            local status = type(cert.chainStatus) == "table" and table.concat(cert.chainStatus, ", ") or ""
+            fail(named .. " does not chain to a trusted root (" .. status .. "), so `signtool verify /pa` would " ..
+               "fail. A self-signed test certificate must also be in Cert:\\CurrentUser\\Root")
+         end
+         signing.subject = cert.subject
+         signing.label = commonName(cert.subject) .. " (" .. signing.thumbprint .. ")"
+      end
+      print("  Signing: " .. signing.label .. ", signtool " .. signing.signtoolVersion .. ", timestamps from " ..
+         signing.timestamp)
+   else
+      print("  Signing: none (the package will be UNSIGNED: pass --sign-sha1=<thumbprint>, or --sign-dlib=<dll> " ..
+         "--sign-dmdf=<json>)")
+   end
+
+   -- The exes' version resources (VK-1696, VersionInfo.rc2) must say this VERSION: a Release build from before
+   -- VK-1696, or one built before premake last read VERSION, has none or another.
+   for _, app in ipairs({ "Editor", "Runtime", "Tests" }) do
+      local exe = "bin/" .. app .. "/Release/x64/" .. app .. ".exe"
+      checkExeVersion(exe, inspectFile(exe), engineVersion, {
+         companyName = "VertexForge",
+         productName = "VertexForge",
+         productVersion = engineVersion,
+         fileVersion = engineVersion,
+         fileDescription = "VertexForge " .. app,
+         internalName = app,
+         originalFilename = app .. ".exe",
+      }, "Re-run premake5 vs2022 and rebuild Release")
    end
 
    -- A run whose swap failed half-way can leave the only copy of the previous package here.
@@ -824,6 +1237,12 @@ function vfPackageRelease()
                tostring(mainLauncher) .. ", but the installer needs a windows image whose main launcher is " .. vfMsiName)
          end
       end
+      -- VK-1696: jpackage writes the exe's version resource from --vendor and --app-version (launcher/pom.xml).
+      checkExeVersion(launcherExe, inspectFile(launcherExe), engineVersion, {
+         companyName = vfMsiVendor,
+         productVersion = engineVersion,
+         fileVersion = engineVersion,
+      }, "launcher/pom.xml passes jpackage --vendor " .. vfMsiVendor .. " and --app-version from VERSION")
    end
 
    -- 3. SDK — refresh lib/Release/imgui.lib from this Release build (copied in step 4).
@@ -991,6 +1410,66 @@ function vfPackageRelease()
    -- VK-1732: the installed editor must keep its user's state out of the install folder.
    if stagedManifest.stateLocation ~= "user" then
       fail(stagedManifestPath .. " stateLocation = " .. tostring(stagedManifest.stateLocation) .. ", not \"user\"")
+   end
+
+   -- 5b. Signatures (VK-1696), on the verified copies: every PE file of the package, found by its headers. A file
+   --     whose embedded signature verifies is a vendor's and is kept as it is; one valid only through this machine's
+   --     catalog travels unsigned, so it counts as unsigned.
+   print("  Checking signatures ...")
+   local peEntries, pePaths = inspectTree(staging)
+   local toSign, broken, vendorSigners, vendorCount = {}, {}, {}, 0
+   for _, rel in ipairs(pePaths) do
+      local entry = peEntries[rel]
+      if entry.status == "NotSigned" or (entry.status == "Valid" and entry.signatureType ~= "Authenticode") then
+         table.insert(toSign, rel)
+      elseif entry.status == "Valid" then
+         local signer = commonName(entry.signerSubject)
+         vendorSigners[signer] = (vendorSigners[signer] or 0) + 1
+         vendorCount = vendorCount + 1
+      else
+         table.insert(broken, rel .. " (" .. tostring(entry.status) .. ")")
+      end
+   end
+   if #broken > 0 then
+      local message = #broken .. " file(s) of the package carry a signature that does not verify: " ..
+         table.concat(broken, ", ", 1, math.min(#broken, 5)) .. (#broken > 5 and ", ..." or "") ..
+         ". Replace them with good copies from their vendor"
+      if signing then
+         fail(message)
+      end
+      warn(message)
+   end
+   if signing then
+      print("  Signing " .. #toSign .. " of the " .. #pePaths .. " PE files (" .. signing.label .. ") ...")
+      local final = signAndCheck(staging, toSign, vfSignDescription, function()
+         return (inspectTree(staging))
+      end)
+      local finalCount = 0
+      for rel, entry in pairs(final) do
+         finalCount = finalCount + 1
+         if entry.status ~= "Valid" or entry.signatureType ~= "Authenticode" then
+            fail(path.join(staging, rel) .. " is " .. tostring(entry.status) .. " (" .. tostring(entry.signatureType) ..
+               ") after signing")
+         end
+      end
+      for _, rel in ipairs(pePaths) do
+         local before, after = peEntries[rel], final[rel]
+         if after == nil then
+            fail(path.join(staging, rel) .. " disappeared while the package was being signed")
+         end
+         if before.signatureType == "Authenticode" and before.status == "Valid" and
+               after.signerThumbprint ~= before.signerThumbprint then
+            fail(path.join(staging, rel) .. " lost its vendor's signature (" .. tostring(before.signerSubject) .. ")")
+         end
+      end
+      if finalCount ~= #pePaths then
+         fail(staging .. " held " .. #pePaths .. " PE files before signing and " .. finalCount .. " after")
+      end
+      print("  Verifying the signatures (signtool verify /pa) ...")
+      verifySignatures(staging, pePaths)
+   else
+      warn("UNSIGNED package: " .. #toSign .. " of its " .. #pePaths .. " PE files carry no signature and the " ..
+         "installer will carry none (pass --sign-sha1=<thumbprint>, or --sign-dlib=<dll> --sign-dmdf=<json>)")
    end
 
    -- 6. The installer (VK-1693), from the verified staging folder, before anything in dist/ changes.
@@ -1193,6 +1672,37 @@ function vfPackageRelease()
             "install beside them instead of upgrading them")
       end
 
+      -- VK-1696: the MSI must hold every staged PE file as it is now (signed, when this run signs): a File table size
+      -- that differs means jpackage packed other bytes than the ones checked above.
+      local msiSizes = {}
+      for rel, size in pairs(type(facts.fileSizes) == "table" and facts.fileSizes or {}) do
+         msiSizes[tostring(rel):lower()] = tonumber(size)
+      end
+      for _, rel in ipairs(pePaths) do
+         local stat = os.stat(path.join(staging, rel))
+         local stagedSize = stat and stat.size or -1
+         local msiSize = msiSizes[rel:lower()]
+         if msiSize ~= stagedSize then
+            badMsi("holds " .. rel .. " with " .. tostring(msiSize) .. " bytes, but the staged file has " ..
+               stagedSize .. ": the installer would not install the package's " .. (signing and "signed " or "") ..
+               "bytes")
+         end
+      end
+
+      -- The installer gets this run's signature too, after every check of its tables.
+      if signing then
+         print("  Signing the installer ...")
+         local ok, err = os.chmod(builtMsi, "666")
+         if not ok then
+            failInstaller("cannot make " .. builtMsi .. " writable: " .. reason(err))
+         end
+         local msiName, msiDir = path.getname(builtMsi), path.getdirectory(builtMsi)
+         signAndCheck(msiDir, { msiName }, vfSignDescription .. " " .. engineVersion, function()
+            return { [msiName] = inspectFile(builtMsi) }
+         end)
+         verifySignatures(msiDir, { msiName })
+      end
+
       -- The installer of this version from an earlier run must be replaceable before the package is swapped.
       if os.isfile(msiTarget) then
          os.chmod(msiTarget, "666")
@@ -1271,9 +1781,23 @@ function vfPackageRelease()
       end
       print(string.format("  %-32s %s", s.label, text))
    end
+   local vendorList = {}
+   for signer, count in pairs(vendorSigners) do
+      table.insert(vendorList, count > 1 and string.format("%s (%d)", signer, count) or signer)
+   end
+   table.sort(vendorList)
+   local kept = vendorCount > 0 and (vendorCount .. " signed by their vendors, kept: " .. table.concat(vendorList, ", "))
+      or "none signed by a vendor"
+   if signing then
+      print(string.format("  %-32s %s", "signatures", #toSign .. " PE files signed by " .. signing.label ..
+         ", timestamped by " .. signing.timestamp .. "; " .. kept))
+   else
+      print(string.format("  %-32s %s", "signatures", "UNSIGNED: " .. #toSign .. " PE files carry no signature; " ..
+         kept))
+   end
    if buildMsi then
-      print(string.format("  %-32s %s  jpackage %s, WiX %s", path.getname(msiTarget), describeBytes(msiBytes),
-         jdk.version, wix.version))
+      print(string.format("  %-32s %s  jpackage %s, WiX %s, %s", path.getname(msiTarget), describeBytes(msiBytes),
+         jdk.version, wix.version, signing and "signed" or "UNSIGNED"))
       print("    Installs for the current user only (no UAC) into %LOCALAPPDATA%\\" .. vfMsiInstallDir ..
          ", adds the Start menu entry " .. vfMsiMenuGroup .. " > " .. vfMsiName .. ", and opens .vfproj files in the launcher.")
       print("    Uninstalling AND upgrading delete the whole install folder. The installed editor writes nothing there")
