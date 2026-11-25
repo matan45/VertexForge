@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  VK-1693: the UTF-8 active code page for the launcher exe, merged by the image profile (pom.xml) into the manifest
+  jpackage gives "VertexForge Launcher.exe" (mt.exe from the Windows SDK). jpackage's native launcher passes the JVM
+  its runtime folder, its options (-Djpackage.app-path, the module path) and main's arguments in the process's code
+  page, so without this a launcher installed in, or opening a project from, a folder that the system's ANSI code page
+  cannot spell fails ("could not find java.dll", or a path full of "?"). The Editor, Runtime and Tests carry the same
+  element (VFEngine/utilities/launch/Utf8CodePage.manifest, VK-1684). Windows 10 version 1903 or later.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>

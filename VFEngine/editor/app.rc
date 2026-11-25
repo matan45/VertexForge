@@ -1,1 +1,7 @@
 IDI_ICON1 ICON "../../resources/editor/vf-icon.ico"
+
+// VK-1696: Editor.exe's version resource (config/VersionInfo.rc2).
+#define VF_RC_FILE_DESCRIPTION "VertexForge Editor"
+#define VF_RC_INTERNAL_NAME "Editor"
+#define VF_RC_ORIGINAL_FILENAME "Editor.exe"
+#include "config/VersionInfo.rc2"

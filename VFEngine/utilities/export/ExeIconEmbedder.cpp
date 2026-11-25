@@ -1,4 +1,5 @@
 #include "ExeIconEmbedder.hpp"
+#include "PeAuthenticode.hpp"
 #include "../print/Log.hpp"
 
 #ifdef _WIN32
@@ -163,6 +164,18 @@ namespace gameExport
 		if (!std::filesystem::exists(exePath))
 		{
 			errorOut = "Executable not found: " + exePath.string();
+			return false;
+		}
+
+		// VK-1696: editing the resources of a signed exe breaks the signature and leaves a
+		// certificate table that signtool refuses to sign over (GameExporter::prepareGameExecutable
+		// strips the engine's signature from a game's exe first).
+		PeSecurityDirectory signature;
+		if (!PeAuthenticode::readSecurityDirectoryFile(exePath, signature, errorOut))
+			return false;
+		if (signature.present())
+		{
+			errorOut = exePath.filename().string() + " carries an Authenticode signature: strip it first";
 			return false;
 		}
 

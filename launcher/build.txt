@@ -1,2 +1,47 @@
-mvn clean package 
-mvn jpackage:jpackage
+Build (from launcher/, with JDK 25 on PATH or in JAVA_HOME; the wrapper downloads Maven itself; the image also needs
+the Windows SDK's mt.exe, which Visual Studio's C++ workload installs):
+mvnw.cmd verify                  (compile the module, run the unit tests; no download, no image)
+mvnw.cmd verify -Pimage          (also the app image in target/dist/VertexForge Launcher/)
+mvnw.cmd compile javafx:run      (run the launcher from target/classes, JavaFX from the Maven jars)
+
+The app image (VK-1692) is a jlink runtime plus the launcher module:
+- runtime/ is linked from the JDK's jmods (or, on a JDK without them, its run-time image), the Gluon JavaFX jmods and
+  the Gson jar. On first use the image profile downloads the JavaFX jmods zip, checks its SHA-256 (pom.xml) and keeps
+  it in ~/.m2/repository/.cache/vertexforge; a zip put there by hand is used when its checksum matches.
+- app/mods/VertexForgeLauncher.jar is the shipped jar, built by the jar tool from target/classes with the repo's
+  VERSION as its module version (target/VertexForgeLauncher.jar is only Maven's own artifact).
+- The exe's version resource and jpackage.app-version are the repo-root VERSION: MAJOR.MINOR.PATCH, each part at most
+  65535 (the exe's version resource cannot hold more).
+- CI fails an image above 70 MiB, with build output in it, or with other runtime modules than module-info.java needs.
+  A new `requires` therefore also goes into the pom's jlink --add-modules and launcher.yml's MODULES list
+  (LauncherModuleTest pins module-info.java).
+
+Note: the launcher carries no project templates. New projects are made from the selected engine's own templates and
+script library, the folders its engine.json names (VK-1689). The unit tests read the repo's assets/ and VERSION
+(RealEngineContentTest, LauncherModuleTest), so run them from the full repo checkout.
+
+Self-test (CI runs this on the packaged image; exit code 0 = pass, 1 = fail):
+"target/dist/VertexForge Launcher/VertexForge Launcher.exe" --self-test --self-test-packaged --self-test-report=self-test.txt
+The packaged exe has no console, so read the report file; without --self-test-report it shows nothing.
+--self-test-packaged adds the checks only the image passes: its own exe, the module it runs as (name, version,
+exports and opens, native access, JavaFX and Gson linked into the runtime, JavaFX's natives in runtime/bin/javafx),
+and the UTF-8 code page.
+
+UTF-8 code page (VK-1693): jpackage's Windows launcher hands the JVM its runtime folder, its options and main's
+arguments in the process's ANSI code page, so the image profile merges src/jpackage/utf8-code-page.manifest
+(activeCodePage UTF-8) into the exe with the Windows SDK's mt.exe (the newest under Windows Kits\10\bin, or
+-Dvf.mt=<path>) and fails when the merged manifest lacks it. Without it the launcher cannot start from a folder the
+system's code page cannot spell ("could not find java.dll"), and a .vfproj double-clicked in one arrives full of "?".
+The launcher's own native.encoding is then UTF-8, so the code page older editors run in is read from the registry
+(env/WindowsCodePage).
+
+Release (VK-1693): tools/package_release.lua makes the image's contents (the exe, app/, runtime/) the root of
+dist/VertexForge, beside bin/, sdk/, plugins/ and assets/, and builds the per-user MSI from that folder with the
+jpackage of the same JDK (jpackage packages only images its own version built). The launcher therefore finds its
+bundled editor at bin/Editor/Release/x64/Editor.exe below its own folder (BundledEngine).
+
+jpackage 25 leaves the generated exe read-only; the pom's clean plugin (3.5.0, force) still deletes it.
+
+Signing (VK-1696) is not done here: mt.exe rewrites the exe after jpackage, and no credential belongs in the pom.
+tools/package_release.lua signs its staged copy of the exe (and every unsigned DLL of runtime/) with
+--sign-sha1 or --sign-dlib, after checking the exe's version resource (CompanyName VertexForge = --vendor, VERSION).

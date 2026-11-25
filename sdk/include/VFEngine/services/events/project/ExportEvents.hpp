@@ -16,6 +16,7 @@ namespace events::gameExport
 		bool verifyIntegrity = true;
 		bool buildScripts = true;
 		bool stripUnreferencedAssets = false;
+		bool portableBuild = false; // VK-1726: the shipped .vfproj says "stateLocation": "portable"
 		std::vector<std::string> alwaysIncludePatterns;
 		std::map<std::string, bool> pluginOverrides; // plugin name -> ship?
 

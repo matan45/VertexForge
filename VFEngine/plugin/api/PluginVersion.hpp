@@ -66,6 +66,20 @@ namespace plugin {
     //      PluginContext::getEventDispatcher() (ApplyPostProcessSettingsCommand, GetPostProcessSettingsQuery,
     //      and RenderSettings::postProcess in Get/SetRenderSettings), so a plugin built against v24 would lay it
     //      out at the wrong size. No in-tree plugin uses these types, but every plugin rebuilds.
-    constexpr uint32_t VF_PLUGIN_API_VERSION = 25;
+    // VK-1680 (no bump): Config.hpp's `Version` now comes from the repo-root VERSION file (generated
+    //      EngineVersion.generated.hpp) and binary assets carry the new AssetFormatVersion. FileVersion
+    //      keeps its 12-byte layout. Importers (e.g. PSDImport) must stamp AssetFormatVersion, never
+    //      Version, or their files are rejected after the next VERSION bump.
+    // VK-1687 (no bump): config::ProjectConfig is unchanged (GetCurrentProjectQuery still reports the
+    //      resolved workingDirectory); ProjectServiceImpl keeps the authored value in private members.
+    //      New types only: events::scene::QueueStartupSceneCommand / StartupSceneResult.
+    // VK-1690 (no bump): config::ProjectConfig is unchanged. New: ProjectSerialization::stampEngineVersions
+    //      (ProjectStamp / ProjectStampStatus), AssetFormatVersion::toString() and a private ProjectServiceImpl
+    //      member; saveProject also writes the .vfproj assetFormatVersion.
+    // v26: VK-1726 per-user game state. config::ProjectConfig gains `publisher` and `stateLocation`
+    //      (it crosses the boundary by value through GetCurrentProjectQuery / UpdateProjectConfigCommand),
+    //      ExportSettings (EditorPreferences, GetEditorSettingsQuery) gains `portableBuild`, and
+    //      ExportGameCommand gains `portableBuild`. Every plugin rebuilds.
+    constexpr uint32_t VF_PLUGIN_API_VERSION = 26;
 
 }

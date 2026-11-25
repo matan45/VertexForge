@@ -85,6 +85,9 @@ namespace mcp::tools
                 {"verifyIntegrity", schema::boolean("Verify the written archives after packing (default true)")},
                 {"buildScripts", schema::boolean("Build the project scripts before exporting (default true)")},
                 {"stripUnreferencedAssets", schema::boolean("Ship only assets reachable from the scenes (default false)")},
+                {"portableBuild", schema::boolean("The game keeps its config, saves, logs and crash reports beside "
+                                                  "itself instead of in %LOCALAPPDATA%\\<publisher>\\<game> "
+                                                  "(default false)")},
                 {"alwaysIncludePatterns", schema::array(schema::string("Glob pattern relative to the asset root"),
                                                         "Assets to ship even when stripUnreferencedAssets drops them")}
             }, {"outputDirectory"});
@@ -122,6 +125,7 @@ namespace mcp::tools
                 command.verifyIntegrity = reader.optBool("verifyIntegrity", true);
                 command.buildScripts = reader.optBool("buildScripts", true);
                 command.stripUnreferencedAssets = reader.optBool("stripUnreferencedAssets", false);
+                command.portableBuild = reader.optBool("portableBuild", false);
                 if (reader.has("alwaysIncludePatterns"))
                 {
                     command.alwaysIncludePatterns = reader.requireStringArray("alwaysIncludePatterns");

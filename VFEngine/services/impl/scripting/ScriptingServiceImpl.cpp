@@ -512,6 +512,19 @@ namespace services
                     entry.instanceId = info->instanceId;
                     entry.playbackState = ScriptPlaybackState::Playing;
                     scriptingProvider->setInstancePriority(entry.instanceId, entry.inputPriority);
+
+                    // VK-1726: a loaded save slot restores this instance's @Saveable fields here (SaveService),
+                    // before playVFX runs its onStart.
+                    events::scripting::ScriptInstanceCreatedNotification created;
+                    created.instanceId = entry.instanceId;
+                    created.entity = toHandle(entity);
+                    if (registry.all_of<components::UUIDComponent>(entity))
+                    {
+                        created.entityUUID = registry.get<components::UUIDComponent>(entity).id.getValue();
+                    }
+                    created.className = scriptingProvider->getInstanceClassName(entry.instanceId);
+                    dispatcher.publish(created);
+
                     scriptingProvider->playVFX(entry.instanceId);
                 }
                 else
@@ -590,6 +603,9 @@ namespace services
         util::setCrashLogContext("script coroutines tick");
         scriptingProvider->tickCoroutines(deltaTime);
         util::setCrashLogContext("");
+
+        // VK-1726: every enabled script on an active entity has its instance now (a pending LoadGame finishes here).
+        dispatcher.publish(events::scripting::ScriptUpdatePassCompletedNotification{});
     }
 
     void ScriptingServiceImpl::fixedUpdateScripts(float fixedDeltaTime)

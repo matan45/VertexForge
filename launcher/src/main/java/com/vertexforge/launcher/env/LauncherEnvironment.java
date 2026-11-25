@@ -1,0 +1,170 @@
+package com.vertexforge.launcher.env;
+
+import java.nio.charset.Charset;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Clock;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.function.UnaryOperator;
+
+/**
+ * Everything the launcher reads from the machine it runs on, gathered in one place so that the logic can run
+ * against temp folders, a fixed clock and fake processes (VK-1677).
+ *
+ * @param clock              the time source for every timestamp the launcher writes
+ * @param configDir          the launcher's settings folder ({@code ~/.vertexforge}); the editor keeps its own files
+ *                           there too, so the launcher only ever touches its own files in it
+ * @param launcherExecutable the packaged launcher's own exe ({@code jpackage.app-path}), from which the bundled
+ *                           engine is found (VK-1681); empty when the launcher runs outside the app image (the unit
+ *                           tests, {@code mvn javafx:run}). The working directory ({@code user.dir}) is only read by
+ *                           {@link #systemWorkingDirectory()}, to resolve relative command-line paths (VK-1685).
+ * @param env                environment-variable lookup; returns {@code null} for an unset variable
+ * @param processStarter     starts the editor process
+ * @param nativeCharset      the system's ANSI code page: an editor older than VK-1684 only receives paths this charset
+ *                           can encode, and parts of its output are in it. Read from the registry on Windows
+ *                           ({@link #systemAnsiCharset()}), because the packaged launcher itself runs in UTF-8 (VK-1693)
+ * @param driveTypes         tells fixed drives from network, removable and other ones (VK-1679, VK-1695)
+ * @param recycleBin         moves a project folder to the Recycle Bin, and never deletes one permanently (VK-1695)
+ * @param knownFolders       the user's profile, Desktop, Documents and Downloads, which a project folder delete must
+ *                           never take (VK-1695)
+ */
+public record LauncherEnvironment(
+        Clock clock,
+        Path configDir,
+        Optional<Path> launcherExecutable,
+        UnaryOperator<String> env,
+        ProcessStarter processStarter,
+        Charset nativeCharset,
+        DriveTypes driveTypes,
+        RecycleBin recycleBin,
+        KnownFolders knownFolders
+) {
+    public static final String CONFIG_DIR_NAME = ".vertexforge";
+    /** Set by jpackage's native launcher to the full path of its exe; absent outside the app image. */
+    public static final String APP_PATH_PROPERTY = "jpackage.app-path";
+    /** Set by jpackage's native launcher to the image's {@code --app-version}, the repo's VERSION (VK-1692). */
+    public static final String APP_VERSION_PROPERTY = "jpackage.app-version";
+
+    public LauncherEnvironment {
+        Objects.requireNonNull(clock, "clock");
+        Objects.requireNonNull(configDir, "configDir");
+        Objects.requireNonNull(launcherExecutable, "launcherExecutable");
+        Objects.requireNonNull(env, "env");
+        Objects.requireNonNull(processStarter, "processStarter");
+        Objects.requireNonNull(nativeCharset, "nativeCharset");
+        Objects.requireNonNull(driveTypes, "driveTypes");
+        Objects.requireNonNull(recycleBin, "recycleBin");
+        Objects.requireNonNull(knownFolders, "knownFolders");
+    }
+
+    /**
+     * An environment without a Recycle Bin ({@link RecycleBin#unavailable()}) and without known folders: the hermetic
+     * self-test and the unit tests, which must never move anything to the user's Recycle Bin.
+     */
+    public LauncherEnvironment(Clock clock, Path configDir, Optional<Path> launcherExecutable,
+                               UnaryOperator<String> env, ProcessStarter processStarter, Charset nativeCharset,
+                               DriveTypes driveTypes) {
+        this(clock, configDir, launcherExecutable, env, processStarter, nativeCharset, driveTypes,
+                RecycleBin.unavailable(), KnownFolders.none());
+    }
+
+    /**
+     * The real machine. This is the only place in the launcher that reads {@code user.home},
+     * {@code jpackage.app-path}, {@code jpackage.app-version}, {@code java.home}, {@code native.encoding},
+     * {@code sun.jnu.encoding}, the system code page or the process environment; {@code user.dir} is read only by
+     * {@link #systemWorkingDirectory()}.
+     */
+    public static LauncherEnvironment system() {
+        return new LauncherEnvironment(
+                Clock.systemDefaultZone(),
+                Paths.get(System.getProperty("user.home"), CONFIG_DIR_NAME),
+                systemLauncherExecutable(),
+                System::getenv,
+                ProcessStarter.system(),
+                systemAnsiCharset(),
+                DriveTypes.system(),
+                RecycleBin.system(),
+                KnownFolders.system());
+    }
+
+    /**
+     * The system's ANSI code page, the one an editor older than VK-1684 runs in. On Windows it is read from the
+     * registry ({@link WindowsCodePage}): the packaged launcher's exe asks for the UTF-8 code page (VK-1693), so its
+     * own {@code native.encoding} says UTF-8. Elsewhere, or when the registry cannot be read, {@code native.encoding}.
+     */
+    public static Charset systemAnsiCharset() {
+        boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
+        if (windows) {
+            OptionalInt codePage = WindowsCodePage.systemAnsiCodePage();
+            if (codePage.isPresent()) {
+                Optional<Charset> charset = WindowsCodePage.charsetFor(codePage.getAsInt());
+                if (charset.isPresent()) {
+                    return charset.get();
+                }
+            }
+        }
+        return nativeCharset(System.getProperty("native.encoding"));
+    }
+
+    /**
+     * The encoding this JVM converts file names, arguments and its options with ({@code sun.jnu.encoding}): the
+     * process's own code page. The packaged launcher's is UTF-8 (VK-1693, checked by the packaged self-test).
+     */
+    public static String systemPathEncoding() {
+        return System.getProperty("sun.jnu.encoding", "");
+    }
+
+    /** This process's launcher exe, from {@link #APP_PATH_PROPERTY}; see {@link #launcherExecutable(String)}. */
+    public static Optional<Path> systemLauncherExecutable() {
+        return launcherExecutable(System.getProperty(APP_PATH_PROPERTY));
+    }
+
+    /** The app image's version ({@link #APP_VERSION_PROPERTY}); empty outside the app image or when blank. */
+    public static Optional<String> systemAppVersion() {
+        String value = System.getProperty(APP_VERSION_PROPERTY);
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
+    }
+
+    /** The runtime this process runs on ({@code java.home}); in the app image, its {@code runtime} folder. */
+    public static Path systemJavaHome() {
+        return Path.of(System.getProperty("java.home"));
+    }
+
+    /**
+     * This process's working directory, as an absolute path: relative paths on the command line are resolved against
+     * it before they are handed to a launcher that may run in another folder (VK-1685). The only reader of
+     * {@code user.dir}.
+     */
+    public static Path systemWorkingDirectory() {
+        return Path.of("").toAbsolutePath();
+    }
+
+    /** The launcher exe named by {@code value}; empty when it is missing, blank, not a valid path or relative. */
+    static Optional<Path> launcherExecutable(String value) {
+        if (value == null || value.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            Path path = Path.of(value);
+            return path.isAbsolute() ? Optional.of(path.normalize()) : Optional.empty();
+        } catch (InvalidPathException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** The charset named by {@code native.encoding}; the default charset when it is missing or unknown. */
+    static Charset nativeCharset(String name) {
+        if (name == null || name.isBlank()) {
+            return Charset.defaultCharset();
+        }
+        try {
+            return Charset.forName(name);
+        } catch (IllegalArgumentException e) {
+            return Charset.defaultCharset();
+        }
+    }
+}

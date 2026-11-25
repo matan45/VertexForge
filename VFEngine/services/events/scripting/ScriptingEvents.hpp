@@ -108,4 +108,24 @@ namespace events::scripting {
         std::string_view getName() const override { return "IsScriptDebuggerActive"; }
     };
 
+    // === Instance lifecycle (VK-1726) ===
+    // Published by ScriptingServiceImpl::updateScripts right after it creates a script instance and BEFORE
+    // that instance's onStart (IScriptingProvider::playVFX calls it). SaveService applies a loaded save
+    // slot's @Saveable state here, so onStart already sees the restored fields.
+    struct ScriptInstanceCreatedNotification : INotification {
+        uint64_t instanceId = 0;
+        services::EntityHandle entity;
+        uint64_t entityUUID = 0;  // 0: the entity has no UUIDComponent
+        std::string className;    // IScriptingProvider::getInstanceClassName
+
+        std::string_view getName() const override { return "ScriptInstanceCreated"; }
+    };
+
+    // Published at the end of every ScriptingServiceImpl::updateScripts pass: every enabled script on an
+    // active entity has its instance by then. SaveService reports a load as finished on the first pass
+    // after the slot's scene loaded. Nobody subscribes in between, so the publish is only a lookup.
+    struct ScriptUpdatePassCompletedNotification : INotification {
+        std::string_view getName() const override { return "ScriptUpdatePassCompleted"; }
+    };
+
 }

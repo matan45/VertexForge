@@ -1,43 +1,49 @@
 package com.vertexforge.launcher.util;
 
 import javafx.application.Platform;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.TextArea;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
+import javafx.stage.Stage;
+import javafx.stage.Window;
 
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 
 public final class GlobalExceptionHandler {
 
-    private static final String LOG_FILE_NAME = "launcher-error.log";
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** Shows an error to the user (the launcher's themed error dialog, VK-1694). FX thread. */
+    @FunctionalInterface
+    public interface ErrorPresenter {
+        /**
+         * @param owner the window to show it over, or {@code null} for none
+         */
+        void show(Window owner, String title, String header, Throwable throwable);
+    }
+
+    private static volatile LauncherLog log;
+    private static volatile ErrorPresenter presenter;
 
     private GlobalExceptionHandler() {
         // Utility class - prevent instantiation
     }
 
 
-    public static void install() {
+    /**
+     * Logs every uncaught exception to {@code launcherLog} and shows it with {@code errorPresenter}, over the main
+     * window ({@code mainWindow} returns {@code null} until the window exists).
+     */
+    public static void install(LauncherLog launcherLog, Supplier<Window> mainWindow, ErrorPresenter errorPresenter) {
+        log = Objects.requireNonNull(launcherLog, "launcherLog");
+        presenter = Objects.requireNonNull(errorPresenter, "errorPresenter");
+        Objects.requireNonNull(mainWindow, "mainWindow");
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             logException(throwable);
 
-            // Show error dialog on JavaFX Application Thread
+            // Show error dialog on JavaFX Application Thread (the owner is read there too)
             if (Platform.isFxApplicationThread()) {
-                showErrorDialog("Unexpected Error", "An unexpected error occurred.", throwable);
+                showErrorDialog(mainWindow.get(), "Unexpected Error", "An unexpected error occurred.", throwable);
             } else {
                 Platform.runLater(() ->
-                        showErrorDialog("Unexpected Error", "An unexpected error occurred.", throwable)
+                        showErrorDialog(mainWindow.get(), "Unexpected Error", "An unexpected error occurred.", throwable)
                 );
             }
         });
@@ -45,69 +51,32 @@ public final class GlobalExceptionHandler {
 
 
     public static void logException(Throwable throwable) {
-        Path logPath = getLogFilePath();
-
-        try (PrintWriter writer = new PrintWriter(new FileWriter(logPath.toFile(), true))) {
-            writer.println("=".repeat(80));
-            writer.println("Timestamp: " + LocalDateTime.now().format(DATE_FORMAT));
-            writer.println("Thread: " + Thread.currentThread().getName());
-            writer.println("-".repeat(80));
-            throwable.printStackTrace(writer);
-            writer.println();
-        } catch (IOException e) {
-            System.err.println("Failed to write to error log: " + e.getMessage());
+        LauncherLog current = log;
+        if (current != null) {
+            current.error(throwable);
+        } else {
+            // Not installed (e.g. a failure before init): the console is all there is.
             throwable.printStackTrace();
         }
     }
 
-    public static void showErrorDialog(String title, String header, Throwable throwable) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle(title);
-        alert.setHeaderText(header);
-        alert.setContentText(throwable.getMessage());
-
-        // Create expandable content with stack trace
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        throwable.printStackTrace(pw);
-        String stackTrace = sw.toString();
-
-        TextArea textArea = new TextArea(stackTrace);
-        textArea.setEditable(false);
-        textArea.setWrapText(false);
-        textArea.setMaxWidth(Double.MAX_VALUE);
-        textArea.setMaxHeight(Double.MAX_VALUE);
-        GridPane.setVgrow(textArea, Priority.ALWAYS);
-        GridPane.setHgrow(textArea, Priority.ALWAYS);
-
-        GridPane expContent = new GridPane();
-        expContent.setMaxWidth(Double.MAX_VALUE);
-        expContent.add(textArea, 0, 0);
-
-        alert.getDialogPane().setExpandableContent(expContent);
-
-        // Add copy to clipboard button
-        ButtonType copyButton = new ButtonType("Copy to Clipboard");
-        alert.getButtonTypes().add(copyButton);
-
-        alert.showAndWait().ifPresent(response -> {
-            if (response == copyButton) {
-                javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
-                javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-                content.putString(stackTrace);
-                clipboard.setContent(content);
-            }
-        });
+    /**
+     * Shows {@code throwable} in an error dialog. {@code owner} is the main window, or {@code null} before it
+     * exists; a hidden or minimized owner is skipped, since a dialog owned by a minimized window can stay out of
+     * sight (the launcher minimizes itself after opening the editor). Before {@link #install} nothing is shown: the
+     * error has been logged, and there is no dialog to show it with yet.
+     */
+    public static void showErrorDialog(Window owner, String title, String header, Throwable throwable) {
+        ErrorPresenter current = presenter;
+        if (current != null) {
+            current.show(isUsableOwner(owner) ? owner : null, title, header, throwable);
+        }
     }
 
-    private static Path getLogFilePath() {
-        String userHome = System.getProperty("user.home");
-        Path logDir = Paths.get(userHome, ".vertexforge");
-        try {
-            Files.createDirectories(logDir);
-        } catch (IOException e) {
-            System.err.println("Failed to create log directory: " + e.getMessage());
+    private static boolean isUsableOwner(Window owner) {
+        if (owner == null || !owner.isShowing()) {
+            return false;
         }
-        return logDir.resolve(LOG_FILE_NAME);
+        return !(owner instanceof Stage stage && stage.isIconified());
     }
 }

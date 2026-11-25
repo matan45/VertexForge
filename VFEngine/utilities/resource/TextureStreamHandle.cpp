@@ -92,11 +92,11 @@ namespace resource
         uint32_t minorVersion = endian::readLE<uint32_t>(file);
         uint32_t patchVersion = endian::readLE<uint32_t>(file);
 
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (!AssetFormatVersion::matches(majorVersion, minorVersion, patchVersion))
         {
             vfLogError("TextureStreamHandle: Incompatible file version: {}.{}.{}, expected {}.{}.{}. path: {}",
                        majorVersion, minorVersion, patchVersion,
-                       Version::major, Version::minor, Version::patch, filePath);
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch, filePath);
             return false;
         }
 

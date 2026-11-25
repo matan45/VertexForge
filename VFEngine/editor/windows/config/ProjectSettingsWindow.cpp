@@ -3,6 +3,9 @@
 #include "events/EventDispatcher.hpp"
 #include "events/project/ProjectEvents.hpp"
 #include "../details/FontSlotWidget.hpp"
+#include "launch/GameStateLocation.hpp"
+#include "launch/ProjectPathRules.hpp"
+#include "launch/Utf8Path.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <cstddef>
@@ -22,12 +25,14 @@ namespace windows
     {
         auto& dispatcher = events::EventDispatcher::instance();
         auto projectOpt = dispatcher.query(events::project::GetCurrentProjectQuery{});
+        startupSceneError.clear();
 
         if (projectOpt)
         {
             hasProject = true;
             projectName = projectOpt->projectName;
             version = projectOpt->version;
+            publisher = projectOpt->publisher;
             workingDirectory = projectOpt->workingDirectory;
             startupScene = projectOpt->startupScene;
             exeIconPath = projectOpt->exeIconPath;
@@ -43,6 +48,7 @@ namespace windows
             hasProject = false;
             projectName.clear();
             version.clear();
+            publisher.clear();
             workingDirectory.clear();
             startupScene.clear();
             exeIconPath.clear();
@@ -70,6 +76,7 @@ namespace windows
         config::ProjectConfig updatedConfig = *projectOpt;
         updatedConfig.projectName = projectName;
         updatedConfig.version = version;
+        updatedConfig.publisher = publisher;
         updatedConfig.startupScene = startupScene;
         updatedConfig.exeIconPath = exeIconPath;
         updatedConfig.fontFallbackChain.clear();
@@ -188,6 +195,32 @@ namespace windows
         }
 
         ImGui::Spacing();
+
+        // VK-1726: a shipped game keeps its settings, saves, logs and crash reports in
+        // %LOCALAPPDATA%\<Publisher>\<Project Name> (a portable export: beside the game instead).
+        ImGui::Text("Publisher (optional)");
+        ImGui::PushItemWidth(-1);
+        char publisherBuffer[256];
+        std::strncpy(publisherBuffer, publisher.c_str(), sizeof(publisherBuffer) - 1);
+        publisherBuffer[sizeof(publisherBuffer) - 1] = '\0';
+        if (ImGui::InputText("##Publisher", publisherBuffer, sizeof(publisherBuffer)))
+        {
+            publisher = publisherBuffer;
+            isDirty = true;
+        }
+        ImGui::PopItemWidth();
+        {
+            const launch::GameFolderName folder = launch::gameStateFolderName(projectName, publisher);
+            const std::string preview = "%LOCALAPPDATA%\\" + launch::pathToUtf8(folder.relative);
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Shipped game state: %s", preview.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("Where an exported game keeps its settings, saves, logs and crash reports.\n"
+                                  "A portable build (Export window) keeps them beside the game instead.");
+            }
+        }
+
+        ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
@@ -229,18 +262,21 @@ namespace windows
                 std::string path = fileDialog.openFileDialog(filters);
                 if (!path.empty())
                 {
-                    fs::path selectedPath(path);
-                    fs::path workDir(workingDirectory);
-
-                    if (selectedPath.string().find(workDir.string()) == 0)
+                    // VK-1687: the startup scene is stored relative to the working directory, so
+                    // the project still finds it after a move, and the exporter packs it as
+                    // "Assets/<startupScene>". A scene outside the working directory is refused.
+                    const fs::path selectedPath(path);
+                    if (const std::optional<fs::path> relative =
+                            launch::relativeInside(fs::path(workingDirectory), selectedPath))
                     {
-                        startupScene = fs::relative(selectedPath, workDir).string();
+                        startupScene = relative->generic_string();
+                        startupSceneError.clear();
+                        isDirty = true;
                     }
                     else
                     {
-                        startupScene = selectedPath.filename().string();
+                        startupSceneError = "The startup scene must be inside the project's working directory";
                     }
-                    isDirty = true;
                 }
             }
 
@@ -248,11 +284,16 @@ namespace windows
             if (ImGui::Button("Clear", ImVec2(55, 0)))
             {
                 startupScene.clear();
+                startupSceneError.clear();
                 isDirty = true;
             }
         }
         ImGui::PopID();
 
+        if (!startupSceneError.empty())
+        {
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", startupSceneError.c_str());
+        }
         if (!validateStartupScene())
         {
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Scene file not found");
@@ -283,16 +324,17 @@ namespace windows
                 std::string path = fileDialog.openFileDialog(filters);
                 if (!path.empty())
                 {
-                    fs::path selectedPath(path);
-                    fs::path workDir(workingDirectory);
-
-                    if (selectedPath.string().find(workDir.string()) == 0)
+                    // VK-1687: inside the working directory the icon is stored relative to it;
+                    // outside it keeps its absolute path (the exporter reads either).
+                    const fs::path selectedPath(path);
+                    if (const std::optional<fs::path> relative =
+                            launch::relativeInside(fs::path(workingDirectory), selectedPath))
                     {
-                        exeIconPath = fs::relative(selectedPath, workDir).string();
+                        exeIconPath = relative->generic_string();
                     }
                     else
                     {
-                        exeIconPath = selectedPath.filename().string();
+                        exeIconPath = selectedPath.string();
                     }
                     isDirty = true;
                 }

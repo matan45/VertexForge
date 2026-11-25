@@ -1,0 +1,243 @@
+package com.vertexforge.launcher.selftest;
+
+import com.vertexforge.launcher.TestSupport;
+import com.vertexforge.launcher.env.RecycleBin;
+import com.vertexforge.launcher.env.RecycleCheck;
+import com.vertexforge.launcher.env.RecycleResult;
+import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.selftest.SelfTest.CheckFailure;
+import com.vertexforge.launcher.selftest.SelfTest.Reporter;
+import com.vertexforge.launcher.service.ProjectHub;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.BooleanSupplier;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** The self-test's UI part needs the JavaFX toolkit, so it only runs in the packaged image (CI). */
+class SelfTestTest {
+
+    @TempDir
+    Path tempDir;
+
+    @Test
+    void theCoreChecksPassAndStayInsideTheWorkFolder() throws CheckFailure {
+        ProjectHub hub = SelfTest.runCoreChecks(tempDir);
+        try {
+            List<RecentEntry> projects = hub.listProjects().entries();
+            assertEquals(1, projects.size());
+            assertTrue(projects.getFirst().engineId() != null, "the project is bound to the engine it was created from");
+            // Created projects are listed by real path; the CI temp folder is an 8.3 short path.
+            assertTrue(projects.getFirst().path().startsWith(TestSupport.real(tempDir)), projects.toString());
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/recent-projects.json.lock")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("config/engines.json")),
+                    "the engine registry check writes its file inside the work folder");
+            assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream().noneMatch(n -> n.endsWith(".tmp")));
+            assertTrue(Files.isRegularFile(tempDir.resolve("store/recent-projects.json")),
+                    "the store round trip runs inside the work folder too");
+            // The self-test never takes part in the single-instance check (VK-1685).
+            assertTrue(TestSupport.fileNames(tempDir.resolve("config")).stream()
+                    .noneMatch(n -> n.startsWith("launcher.") || n.startsWith("launcher-dev.")),
+                    () -> TestSupport.fileNames(tempDir.resolve("config")).toString());
+        } finally {
+            hub.close();
+        }
+    }
+
+    @Test
+    void theStoreRoundTripPassesOnItsOwn() throws Exception {
+        Path dir = tempDir.resolve("store");
+        TestSupport.CapturedLog log = TestSupport.log(tempDir.resolve("logs"));
+
+        SelfTest.checkStoreRoundTrip(dir, TestSupport.fixedClock(), log.log);
+
+        assertEquals("", log.console(), "a clean round trip logs nothing");
+    }
+
+    @Test
+    void theHermeticEnvironmentNeverStartsAProcessOrReadsTheRealEnvironment() {
+        var environment = SelfTest.hermeticEnvironment(tempDir);
+
+        assertEquals(null, environment.env().apply("PATH"));
+        assertEquals(tempDir.resolve("config"), environment.configDir());
+        assertThrows(IOException.class, () -> environment.processStarter().start(new ProcessBuilder("cmd")));
+    }
+
+    @Test
+    void theHermeticEnvironmentIsNotPackaged() {
+        assertEquals(Optional.empty(), SelfTest.hermeticEnvironment(tempDir).launcherExecutable());
+    }
+
+    @Test
+    void thePackagedCheckIsOptIn() {
+        assertTrue(SelfTest.isPackagedRequested(new String[]{"--self-test", "--self-test-packaged"}));
+        assertFalse(SelfTest.isPackagedRequested(new String[]{"--self-test"}));
+    }
+
+    @Test
+    void theLauncherLocationCheckWantsAnExeAtTheRootOfItsAppImage() throws IOException {
+        Path launcher = TestSupport.packagedLauncher(tempDir.resolve("VertexForge"));
+        SelfTest.checkLauncherLocation(Optional.of(launcher));
+
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkLauncherLocation(Optional.empty()));
+        assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkLauncherLocation(Optional.of(tempDir.resolve("missing.exe"))));
+        Path loose = Files.writeString(tempDir.resolve("Loose.exe"), "fake");
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkLauncherLocation(Optional.of(loose)));
+    }
+
+    @Test
+    void theCodePageCheckWantsUtf8() {
+        SelfTest.checkCodePage("UTF-8");
+
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkCodePage("Cp1252"));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkCodePage(""));
+    }
+
+    @Test
+    void theModuleLayoutCheckRefusesTheClasspath() {
+        // The unit tests run from the classpath, where the launcher is in the unnamed module: exactly what the app
+        // image must never do (VK-1692).
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkModuleLayout(SelfTest.class.getModule(), ModuleLayer.boot(), Optional.of("1.0.0"),
+                        Path.of(System.getProperty("java.home")), Optional.empty()));
+
+        assertTrue(failure.getMessage().contains("classpath"), failure.getMessage());
+    }
+
+    @Test
+    void theFlagIsRecognisedAnywhereInTheArguments() {
+        assertTrue(SelfTest.isRequested(new String[]{"--self-test"}));
+        assertTrue(SelfTest.isRequested(new String[]{"--self-test-report=r.txt", "--self-test"}));
+        assertFalse(SelfTest.isRequested(new String[]{}));
+        assertFalse(SelfTest.isRequested(new String[]{"Game.vfproj"}));
+    }
+
+    @Test
+    void theReportPathIsOptional() {
+        assertEquals(Optional.of(Path.of("out/report.txt")),
+                SelfTest.reportPath(new String[]{"--self-test", "--self-test-report=out/report.txt"}));
+        assertEquals(Optional.empty(), SelfTest.reportPath(new String[]{"--self-test"}));
+        assertEquals(Optional.empty(), SelfTest.reportPath(new String[]{"--self-test", "--self-test-report="}));
+    }
+
+    @Test
+    void aFailingCheckNamesItsStep() {
+        IllegalStateException cause = new IllegalStateException("missing resource /css/styles.css");
+
+        CheckFailure failure = assertThrows(CheckFailure.class, () -> SelfTest.check("resources", () -> {
+            throw cause;
+        }));
+
+        assertEquals("resources", failure.step);
+        assertSame(cause, failure.getCause());
+    }
+
+    @Test
+    void aMissingClassAlsoFailsTheCheck() {
+        CheckFailure failure = assertThrows(CheckFailure.class, () -> SelfTest.check("main.fxml", () -> {
+            throw new NoClassDefFoundError("javafx/fxml/FXMLLoader");
+        }));
+
+        assertEquals("main.fxml", failure.step);
+    }
+
+    @Test
+    void passGoesToStdoutAndTheReport() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        Path report = tempDir.resolve("reports/self-test.txt");
+        Reporter reporter = new Reporter(report, print(out), print(err));
+
+        assertEquals(0, reporter.pass());
+
+        assertEquals("SELF-TEST PASS" + System.lineSeparator(), out.toString(StandardCharsets.UTF_8));
+        assertEquals("", err.toString(StandardCharsets.UTF_8));
+        assertEquals("SELF-TEST PASS" + System.lineSeparator(), Files.readString(report));
+    }
+
+    @Test
+    void failGoesToStderrAndTheReportWithTheWholeCauseChain() throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        Path report = tempDir.resolve("self-test.txt");
+        Reporter reporter = new Reporter(report, print(out), print(err));
+        Exception cause = new IOException("load failed", new IllegalStateException("Error resolving onAction='#x'"));
+
+        assertEquals(1, reporter.fail("main.fxml", cause));
+
+        String text = Files.readString(report);
+        assertTrue(text.startsWith("SELF-TEST FAIL: main.fxml: java.io.IOException: load failed"
+                + " | caused by java.lang.IllegalStateException: Error resolving onAction='#x'"), text);
+        assertTrue(text.contains("Caused by: java.lang.IllegalStateException"), text);
+        assertEquals(text, err.toString(StandardCharsets.UTF_8));
+        assertEquals("", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void onlyTheFirstOutcomeCounts() {
+        Reporter reporter = new Reporter(null, print(new ByteArrayOutputStream()), print(new ByteArrayOutputStream()));
+
+        assertFalse(reporter.isDone());
+        assertEquals(0, reporter.pass());
+        assertEquals(0, reporter.fail("watchdog", new IllegalStateException("late")));
+        assertEquals(0, reporter.exitCode());
+    }
+
+    private static PrintStream print(ByteArrayOutputStream bytes) {
+        return new PrintStream(bytes, true, StandardCharsets.UTF_8);
+    }
+
+    /** A Recycle Bin whose dry run answers {@code answer} (VK-1695's packaged check, without Windows). */
+    private static RecycleBin answering(RecycleCheck answer) {
+        return new RecycleBin() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public RecycleCheck check(Path folder, BooleanSupplier cancelRequested) {
+                return answer;
+            }
+
+            @Override
+            public RecycleResult recycle(Path folder) {
+                throw new AssertionError("the self-test never recycles");
+            }
+        };
+    }
+
+    @Test
+    void theRecycleBinCheckPassesOnlyWhenWindowsWasReached() throws Exception {
+        Path folder = TestSupport.real(tempDir).resolve("probe");
+
+        SelfTest.checkRecycleBin(answering(new RecycleCheck.Recyclable()), folder);
+        SelfTest.checkRecycleBin(answering(new RecycleCheck.NotRecyclable("no bin")), folder);
+        assertThrows(IllegalStateException.class,
+                () -> SelfTest.checkRecycleBin(answering(new RecycleCheck.Unknown("COM failed")), folder));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkRecycleBin(RecycleBin.unavailable(), folder));
+        assertEquals("probe", Files.readString(folder.resolve("probe.txt")));
+    }
+
+    @Test
+    void theKnownFoldersCheckWantsAbsolutePaths() {
+        SelfTest.checkKnownFolders(() -> List.of(TestSupport.real(tempDir)));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkKnownFolders(List::of));
+        assertThrows(IllegalStateException.class, () -> SelfTest.checkKnownFolders(() -> List.of(Path.of("relative"))));
+    }
+}

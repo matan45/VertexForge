@@ -29,6 +29,11 @@
 #include "../../events/project/ProjectEvents.hpp"
 #include "../../events/input/ActionMappingEvents.hpp"
 #include "../../events/ui/UIAuthoringEvents.hpp"
+#include "asset/AssetMetadataSerializer.hpp"
+#include "atmosphere/AtmosphereSettings.hpp"
+#include "atmosphere/SunEntitySync.hpp"
+#include "launch/ProjectPathRules.hpp"
+#include "launch/Utf8Path.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <functional>
@@ -123,6 +128,15 @@ namespace services
             executeVolumetricNav(events::volumetric::LoadSceneVolumetricVolumesCommand{},
                                  "the scene's volumetric navigation volumes were not loaded");
         }
+
+        // VK-1687: the .vfSettings sidecar SceneSerialization::saveScene writes beside a scene (the
+        // same rule as its private getSettingsPathForScene).
+        std::filesystem::path starterSceneSettingsPath(const std::filesystem::path& scenePath)
+        {
+            std::filesystem::path settingsPath = scenePath;
+            settingsPath.replace_extension(".vfSettings");
+            return settingsPath;
+        }
     }
 
     ScenePersistenceService::ScenePersistenceService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
@@ -153,6 +167,12 @@ namespace services
             [this](const events::scene::LoadSceneCommand& cmd)
             {
                 return loadScene(cmd.filePath);
+            });
+
+        dispatcher.registerCommandHandler<events::scene::QueueStartupSceneCommand>(
+            [this](const events::scene::QueueStartupSceneCommand&)
+            {
+                return queueStartupScene();
             });
 
         dispatcher.registerCommandHandler<events::scene::SavePrefabCommand>(
@@ -466,6 +486,11 @@ namespace services
 
         sceneGraph->clearScene();
 
+        // VK-1687: clearScene keeps the root entity, so without this a new scene saved to disk would
+        // carry the root uuid of the scene loaded before it. The registry's update hook moves the
+        // uuid lookup entry.
+        sceneGraph->GetRoot().addOrReplaceComponent<components::UUIDComponent>();
+
         sceneGraph->setPhysicsSettings(types::PhysicsSettings::createDefault());
         events::physics::ApplyPhysicsSettingsCommand physicsCmd;
         physicsCmd.settings = sceneGraph->getPhysicsSettings();
@@ -508,6 +533,184 @@ namespace services
         scene::EntityRegistry::setSceneTransitioning(false);
 
         return true;
+    }
+
+    events::scene::StartupSceneResult ScenePersistenceService::queueStartupScene()
+    {
+        events::scene::StartupSceneResult result;
+        try
+        {
+            auto& dispatcher = events::EventDispatcher::instance();
+            const auto project = dispatcher.query(events::project::GetCurrentProjectQuery{});
+            const auto projectFile = dispatcher.query(events::project::GetProjectPathQuery{});
+            if (!project.has_value() || project->startupScene.empty() || !projectFile.has_value() ||
+                projectFile->empty())
+            {
+                return result;
+            }
+
+            // Project paths are narrow strings (the process code page: UTF-8 under the VK-1684
+            // manifest), joined the way EditorHandler and the Runtime have always joined them.
+            const std::filesystem::path scenePath =
+                (std::filesystem::path(project->workingDirectory) / project->startupScene).lexically_normal();
+            result.scenePath = scenePath.string();
+            const std::string sceneText = launch::pathToUtf8(scenePath);
+
+            std::error_code ec;
+            const bool sceneExists = std::filesystem::exists(scenePath, ec);
+            if (ec)
+            {
+                // Unknown is not missing: never write over a file that could not be checked.
+                result.warning = "its startup scene " + sceneText + " could not be checked (" + ec.message() + ")";
+                vfLogWarning("Startup scene could not be checked: {}: {}", result.scenePath, ec.message());
+                return result;
+            }
+            if (!sceneExists)
+            {
+                // Only a .vfScene inside the project's own folder is ever created: a stale absolute
+                // working directory (a moved project) must not write into the folder it names.
+                std::error_code absoluteError;
+                const std::filesystem::path absoluteProjectFile =
+                    std::filesystem::absolute(std::filesystem::path(*projectFile), absoluteError);
+                if (absoluteError || !launch::starterSceneAllowed(absoluteProjectFile.parent_path(), scenePath))
+                {
+                    result.warning = "its startup scene " + sceneText +
+                                     " was not found (it is not a .vfScene inside the project folder, so none was created)";
+                    vfLogWarning("Startup scene not found and not created (outside the project): {}", result.scenePath);
+                    return result;
+                }
+
+                // The settings sidecar a deleted scene left behind holds the user's tuned settings;
+                // a new scene would overwrite it with defaults, so it is kept and nothing is created.
+                const std::filesystem::path settingsPath = starterSceneSettingsPath(scenePath);
+                const bool settingsExist = std::filesystem::exists(settingsPath, ec);
+                if (settingsExist || ec)
+                {
+                    result.warning = "its startup scene " + sceneText + " is missing, but its settings file " +
+                                     launch::pathToUtf8(settingsPath.filename()) +
+                                     " is still there, so no new scene was created (move that file away to get one)";
+                    vfLogWarning("Startup scene missing; not created because its settings file exists: {}",
+                                 settingsPath.string());
+                    return result;
+                }
+
+                if (!createStarterScene(result.scenePath))
+                {
+                    result.warning = "its startup scene " + sceneText + " was missing and could not be created";
+                    vfLogWarning("Startup scene could not be created: {}", result.scenePath);
+                    return result;
+                }
+                result.created = true;
+                vfLogInfo("Startup scene created: {}", result.scenePath);
+            }
+
+            result.queued = loadScene(result.scenePath);
+            if (!result.queued)
+            {
+                result.warning = "its startup scene " + sceneText + " could not be queued";
+                vfLogWarning("Startup scene could not be queued: {}", result.scenePath);
+            }
+        }
+        catch (const std::exception& e)
+        {
+            // Never throws: a broken startup scene must not fail the project load (VK-1682 exit 3).
+            result.warning = std::string("its startup scene could not be prepared: ") + e.what();
+            vfLogError("Startup scene could not be prepared: {}", e.what());
+        }
+        return result;
+    }
+
+    bool ScenePersistenceService::createStarterScene(const std::string& filePath)
+    {
+        if (!sceneGraph)
+        {
+            vfLogError("SceneGraph is null, cannot create a starter scene.");
+            return false;
+        }
+
+        const std::filesystem::path scenePath(filePath);
+        const std::filesystem::path settingsPath = starterSceneSettingsPath(scenePath);
+        const std::filesystem::path settingsMetaPath = asset::AssetMetadataSerializer::getMetaPath(settingsPath);
+
+        // A failed build removes only the files it wrote itself.
+        const auto existedBefore = [](const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            const bool exists = std::filesystem::exists(path, ec);
+            return exists || ec;
+        };
+        const bool sceneExisted = existedBefore(scenePath);
+        const bool settingsExisted = existedBefore(settingsPath);
+        const bool settingsMetaExisted = existedBefore(settingsMetaPath);
+
+        bool saved = false;
+        try
+        {
+            // Default settings, no entities and a fresh root uuid.
+            if (newScene())
+            {
+                scene::Entity& root = sceneGraph->GetRoot();
+
+                // The sun points where the default sky draws it (azimuth 0, elevation 45), so turning
+                // the atmosphere on later lines the two up; that also keeps the editor from adding
+                // its own auto-Sun (it only does so when no directional light exists).
+                const ::render::atmosphere::AtmosphereSettings sky{};
+                scene::Entity sun("Sun");
+                sceneGraph->addChild(root, sun);
+                sun.getComponent<components::TransformComponent>().rotation =
+                    ::render::atmosphere::directionalLightEulerForSun(sky.sunAzimuth, sky.sunElevation);
+                sun.addComponent<components::DirectionalLightComponent>();
+
+                // 12 m behind the origin, 3 m up, looking along +Z at it.
+                scene::Entity camera("Main Camera");
+                sceneGraph->addChild(root, camera);
+                auto& cameraTransform = camera.getComponent<components::TransformComponent>();
+                cameraTransform.position = {0.0f, 3.0f, -12.0f};
+                cameraTransform.rotation = {0.0f, 180.0f, 0.0f};
+                camera.addComponent<components::CameraComponent>().isPrimary = true;
+
+                // Written in the current format: the settings go to the .vfSettings sidecar beside
+                // the scene (saveScene creates the folder). The caller then loads the file like any
+                // other scene, which adds the billboards and wires the lights and the camera.
+                saved = saveScene(filePath);
+            }
+        }
+        catch (const std::exception& e)
+        {
+            vfLogError("Starter scene {} could not be built: {}", filePath, e.what());
+            saved = false;
+        }
+
+        if (!saved)
+        {
+            // Leave neither a half-written scene nor its sidecar behind (a sidecar left here would
+            // block the next try, see queueStartupScene), and no unsaved, never-loaded starter
+            // entities in the editor.
+            std::error_code ec;
+            if (!sceneExisted)
+            {
+                std::filesystem::remove(scenePath, ec);
+            }
+            if (!settingsExisted)
+            {
+                std::filesystem::remove(settingsPath, ec);
+            }
+            if (!settingsMetaExisted)
+            {
+                std::filesystem::remove(settingsMetaPath, ec);
+            }
+            try
+            {
+                newScene();
+            }
+            catch (const std::exception& e)
+            {
+                vfLogError("The scene could not be cleared after a failed starter scene: {}", e.what());
+            }
+            // newScene() raises the transition flag and clears it only when it returns normally.
+            scene::EntityRegistry::setSceneTransitioning(false);
+        }
+        return saved;
     }
 
     bool ScenePersistenceService::saveScene(const std::string& filePath)

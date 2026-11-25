@@ -2,9 +2,11 @@
 #include <memory>
 #include <string>
 #include <atomic>
+#include <functional>
 #include "WindowImguiHandler.hpp"
 #include "../mcp/EditorMcpHost.hpp"
 #include "events/EventDispatcher.hpp"
+#include "impl/project/ProjectServiceImpl.hpp"
 
 #include "interfaces/project/ISceneService.hpp"
 #include "interfaces/render/IEditorRenderService.hpp"
@@ -112,7 +114,26 @@ namespace handlers {
 
 	class EditorHandler
 	{
+	public:
+		// VK-1682: what EditorHandler::loadProject did.
+		struct ProjectLoadResult
+		{
+			bool loaded = false;       // the .vfproj is the open project now
+			bool sceneQueued = false;  // its startup scene load was queued; it runs in the first frame
+			std::string warning;       // UTF-8: why the startup scene was not queued; empty otherwise
+		};
+
+		// VK-1682: how the startup finished, once the queued scene load is no longer pending.
+		struct StartupOutcome
+		{
+			bool sceneLoaded = false;  // a scene finished loading while the watch was armed
+			std::string message;       // UTF-8, for the launch status file
+		};
+		using StartupCallback = std::function<void(const StartupOutcome&)>;
+
 	private:
+		struct StartupWatch;
+
 		std::unique_ptr<core::EditorBootstrap> bootstrap;
 
 		std::unique_ptr<WindowImguiHandler> windowImguiHandler;
@@ -221,6 +242,11 @@ namespace handlers {
 		// are not catchable here and still route to the crash handler.
 		std::atomic<bool> playFatalErrorRequested{false};
 
+		// VK-1682: handed to the ProjectServiceImpl in initializeServices(); moves the editor lock.
+		services::ProjectServiceImpl::OpenGuard projectOpenGuard;
+		// VK-1682: armed by watchStartup(), polled after each frame's task graph, then cleared.
+		std::unique_ptr<StartupWatch> startupWatch;
+
 		// VK-1650: MCP server for AI agent control. Declared LAST so it is destroyed
 		// first; cleanUp() also shuts it down before any service it dispatches to.
 		editor::McpLaunchOptions mcpLaunchOptions;
@@ -234,12 +260,22 @@ namespace handlers {
 		void run() const;
 		void cleanUp();
 
-		bool loadProject(const std::string& projectPath);
+		// Loads the project and queues its startup scene (the load itself runs in the first frame).
+		ProjectLoadResult loadProject(const std::string& projectPath);
+
+		// VK-1682: calls `onDone` on the main thread after the first frame in which no scene load is
+		// pending, i.e. once the startup scene queued by loadProject has loaded, failed or was never
+		// queued. `warning` is loadProject's warning. The splash is closed first.
+		void watchStartup(std::string warning, StartupCallback onDone);
 
 		// Command-line MCP flags (--mcp, --mcp-port, --mcp-token). Call before init().
 		void setMcpLaunchOptions(const editor::McpLaunchOptions& options) { mcpLaunchOptions = options; }
 
+		// VK-1682: asked before any project becomes the open one (see ProjectServiceImpl). Call before init().
+		void setProjectOpenGuard(services::ProjectServiceImpl::OpenGuard guard) { projectOpenGuard = std::move(guard); }
+
 	private:
+		void pollStartupWatch();
 		void initializeServices();
 		void createCoreServices();
 		void createMediaServices();

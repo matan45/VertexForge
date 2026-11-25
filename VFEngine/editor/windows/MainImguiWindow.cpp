@@ -196,8 +196,8 @@ namespace windows
             // Apply the default layout BEFORE DockSpace() runs. DockSpace()
             // instantiates the dock node immediately, so this check must come
             // first — otherwise DockBuilderGetNode() is never null and the
-            // default never loads. On a fresh start (no imgui.ini next to the
-            // exe) the node is absent, so we seed it from
+            // default never loads. On a fresh start (no imgui.ini where
+            // launch::processUserState() puts it) the node is absent, so we seed it from
             // resources/editor/default_layout.ini.
             static bool layoutChecked = false;
             if (!layoutChecked)

@@ -16,6 +16,14 @@
 //       var health: int = 100;
 //       var level: int = 1;
 //   }
+//
+// Loading restores each saved script's fields when its instance is created, BEFORE its onStart, so
+// onStart already sees the loaded values: initialise @Saveable fields where they are declared, not in
+// onStart (an assignment there would overwrite what was loaded). A script is matched by its entity's
+// UUID and its class name. The load is finished once the loaded scene's scripts have started.
+//
+// A shipped game keeps its slots in %LOCALAPPDATA%\<Publisher>\<Game>\saves (beside the game for a
+// portable export); Play mode in the editor keeps them in <project>/.vertexforge/saves.
 
 public class Save {
     public constructor() {

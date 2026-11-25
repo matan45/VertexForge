@@ -47,9 +47,9 @@ namespace
 
         // --- Mesh header (mirrors MeshStreamHandle::parseHeader) ---
         resource::endian::writeLE<uint8_t>(f, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(f, Version::major);
-        resource::endian::writeLE<uint32_t>(f, Version::minor);
-        resource::endian::writeLE<uint32_t>(f, Version::patch);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::major);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::minor);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::patch);
         resource::endian::writeLE<uint32_t>(f, 0u); // numSubmeshes
         resource::endian::writeLE<uint32_t>(f, 0u); // compressionFlags
 
@@ -97,9 +97,9 @@ namespace
         REQUIRE(f.is_open());
 
         resource::endian::writeLE<uint8_t>(f, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(f, Version::major);
-        resource::endian::writeLE<uint32_t>(f, Version::minor);
-        resource::endian::writeLE<uint32_t>(f, Version::patch);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::major);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::minor);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::patch);
         resource::endian::writeLE<uint32_t>(f, 0u); // numSubmeshes
         resource::endian::writeLE<uint32_t>(f, 0u); // compressionFlags
         resource::endian::writeLE<uint8_t>(f, 0u);  // hasSkinning = 0 (static)
@@ -133,9 +133,9 @@ namespace
         REQUIRE(f.is_open());
 
         resource::endian::writeLE<uint8_t>(f, static_cast<uint8_t>(resource::FileType::MESH));
-        resource::endian::writeLE<uint32_t>(f, Version::major);
-        resource::endian::writeLE<uint32_t>(f, Version::minor);
-        resource::endian::writeLE<uint32_t>(f, Version::patch);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::major);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::minor);
+        resource::endian::writeLE<uint32_t>(f, AssetFormatVersion::patch);
         resource::endian::writeLE<uint32_t>(f, 0u); // numSubmeshes
         resource::endian::writeLE<uint32_t>(f, 0u); // compressionFlags
 

@@ -6,11 +6,14 @@
 #include "events/EventDispatcher.hpp"
 #include "events/lifecycle/AssetLifecycleEvents.hpp"
 #include "events/memory/CpuMemoryEvents.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "print/Log.hpp"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <vector>
 #include <string>
 #include <cstdio>
@@ -25,6 +28,19 @@ namespace
 {
     constexpr float MB = 1024.0f * 1024.0f;
     constexpr float GB = 1024.0f * 1024.0f * 1024.0f;
+
+    // VK-1732: where an export goes. The dev tree keeps the bare file name (the working directory, as
+    // before); an installed editor writes into ~/.vertexforge/editor/diagnostics, never into its install
+    // folder, which the MSI deletes on every upgrade.
+    std::string exportPath(const std::string& fileName)
+    {
+        const std::filesystem::path& folder = launch::processUserState().diagnosticsDir;
+        if (folder.empty())
+            return fileName;
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        return (folder / fileName).string();
+    }
 
     float toMB(uint64_t bytes) { return static_cast<float>(bytes) / MB; }
 
@@ -561,7 +577,7 @@ namespace windows
 
     void MemoryDiagnosticsWindow::exportSnapshotToCsv()
     {
-        const char* path = "gpu_memory_snapshot.csv";
+        const std::string path = exportPath("gpu_memory_snapshot.csv");
         std::ofstream out(path, std::ios::trunc);
         if (!out)
         {
@@ -1075,7 +1091,7 @@ namespace windows
         // Prefix with the session-unique capture index so two captures sharing a label (e.g.
         // both defaulted to "snapshot") export to distinct files instead of truncating each other.
         const std::string path =
-            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".csv";
+            exportPath("memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".csv");
         std::ofstream out(path, std::ios::trunc);
         if (!out)
         {
@@ -1121,7 +1137,7 @@ namespace windows
                                        {"bytes", a.bytes}});
 
         const std::string path =
-            "memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".json";
+            exportPath("memory_capture_" + std::to_string(index) + "_" + sanitizeLabel(cap.label) + ".json");
         std::ofstream out(path, std::ios::trunc);
         if (!out)
         {

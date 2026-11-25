@@ -1,4 +1,5 @@
 #include "AssetReferenceScanner.hpp"
+#include "../launch/EditorStateDirectory.hpp"
 #include "../print/Log.hpp"
 #include "../terrain/TerrainSerializer.hpp"
 #include "../threading/JobSystem.hpp"
@@ -35,12 +36,21 @@ namespace asset
         }
 
         std::error_code ec;
-        for (const auto& entry : fs::recursive_directory_iterator(
-                 searchRoot, fs::directory_options::skip_permission_denied, ec))
+        for (auto it = fs::recursive_directory_iterator(searchRoot, fs::directory_options::skip_permission_denied, ec);
+             it != fs::recursive_directory_iterator(); ++it)
         {
+            const auto& entry = *it;
             if (ec)
             {
                 ec.clear();
+                continue;
+            }
+
+            // The editor's own state (.vertexforge: the lock, Play-mode saves) holds no assets
+            // (VK-1682, VK-1684).
+            if (entry.is_directory() && launch::isEditorStateDirectory(entry.path()))
+            {
+                it.disable_recursion_pending();
                 continue;
             }
 

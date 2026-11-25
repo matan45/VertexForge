@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "id": "empty",
+  "name": "Empty",
+  "description": "The engine's script library and one Main script. The editor builds the startup scene (a sun and a camera) the first time the project opens.",
+  "minimumEngineVersion": "1.0.0",
+  "workingDirectory": "assets",
+  "startupScene": "scenes/Main.vfScene",
+  "scriptLibrary": "assets/scripts/lib",
+  "options": [
+    {
+      "id": "examples",
+      "name": "Include examples",
+      "description": "The engine's example scripts, in assets/scripts/game/examples. The MCP primer quotes them; HitEffect and WaterSplash also need the VFX library.",
+      "default": false,
+      "target": "assets/scripts/game/examples"
+    },
+    {
+      "id": "vfxLibrary",
+      "name": "Include VFX library",
+      "description": "Ready-made particle effects and combos, in assets/vfx/library.",
+      "default": false,
+      "target": "assets/vfx/library"
+    }
+  ]
+}

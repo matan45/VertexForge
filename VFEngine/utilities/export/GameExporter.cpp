@@ -2,9 +2,13 @@
 #include "GameExporter.hpp"
 #include "AssetClosureResolver.hpp"
 #include "ExeIconEmbedder.hpp"
+#include "ExeVersionInfo.hpp"
+#include "PeAuthenticode.hpp"
+#include "PluginDescriptorEdit.hpp"
 #include "PluginExportPlanner.hpp"
 #include "ShaderCompiler.hpp"
 #include "ShaderPermutationManifest.hpp"
+#include "ShippedProjectConfig.hpp"
 #include "../asset/AssetDatabase.hpp"
 #include "../config/Config.hpp"
 #include "../serialization/ProjectSerialization.hpp"
@@ -16,12 +20,15 @@
 #include "../material/PipelineWarmupManifest.hpp"
 #include "../archive/VFPakWriter.hpp"
 #include "../archive/VFPakReader.hpp"
+#include "../launch/EditorStateDirectory.hpp"
 #include "../serialization/BinarySceneSerialization.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <iterator>
 #include <memory>
+#include <optional>
 #include <cstdlib>
 #include <chrono>
 #include <unordered_map>
@@ -50,8 +57,7 @@ namespace gameExport
 		newManifest = ExportManifest{};
 		newManifest.gameName = config.gameName;
 		newManifest.gameVersion = config.gameVersion;
-		newManifest.engineVersion = "VertexForge " + std::to_string(Version::major) + "." +
-			std::to_string(Version::minor) + "." + std::to_string(Version::patch);
+		newManifest.engineVersion = Version::displayName;
 		newManifest.pluginApiVersion = config.expectedPluginApiVersion;
 
 		if (!config.cleanBuild && fs::exists(manifestPath))
@@ -71,6 +77,7 @@ namespace gameExport
 
 		report(0.10f, "Copying runtime executable...");
 		if (!copyRuntimeExecutable(config, result)) return result;
+		if (!prepareGameExecutable(config.outputDirectory / (config.gameName + ".exe"), config, result)) return result;
 
 		report(0.15f, "Copying runtime dependencies...");
 		if (!copyRuntimeDependencies(config, result)) return result;
@@ -229,6 +236,47 @@ namespace gameExport
 			return false;
 		}
 
+		return true;
+	}
+
+	bool GameExporter::prepareGameExecutable(const std::filesystem::path& exePath,
+											 const ExportConfig& config,
+											 ExportResult& result)
+	{
+		const std::string exeName = exePath.filename().string();
+		std::string error;
+		bool removed = false;
+		if (!PeAuthenticode::stripSignatureFile(exePath, removed, error))
+		{
+			result.errorMessage = "Failed to remove the engine's signature from " + exeName + ": " + error;
+			return false;
+		}
+		PeSecurityDirectory directory;
+		if (!PeAuthenticode::readSecurityDirectoryFile(exePath, directory, error))
+		{
+			result.errorMessage = "Failed to check the signature of " + exeName + ": " + error;
+			return false;
+		}
+		if (directory.present())
+		{
+			result.errorMessage = "Failed to remove the engine's signature from " + exeName +
+								  ": the certificate table is still there";
+			return false;
+		}
+		if (removed)
+		{
+			vfLogInfo("Removed the engine's Authenticode signature from {} (sign the game with your own certificate)",
+					  exeName);
+		}
+
+		const ExeVersionFields fields = ExeVersionInfo::gameFields(config, result.warnings);
+		std::vector<uint8_t> resource;
+		if (!ExeVersionInfo::buildResource(fields, resource, error) ||
+			!ExeVersionInfo::writeResource(exePath, resource, error))
+		{
+			result.errorMessage = "Failed to write the version resource of " + exeName + ": " + error;
+			return false;
+		}
 		return true;
 	}
 
@@ -681,6 +729,13 @@ namespace gameExport
 		{
 			const auto& entry = *it;
 
+			// VK-1682: the editor's own state (.vertexforge/editor.lock) never ships.
+			if (entry.is_directory() && launch::isEditorStateDirectory(entry.path()))
+			{
+				it.disable_recursion_pending();
+				continue;
+			}
+
 			// Skip export output directory
 			if (entry.is_directory() && !excludeAbsolute.empty())
 			{
@@ -907,39 +962,48 @@ namespace gameExport
 
 	bool GameExporter::copyPlugins(const ExportConfig& config, ExportResult& result)
 	{
-		// Locate plugins using the same heuristic as Editor/Runtime plugin loading.
-		// This runs inside the Editor process, so current_path() matches where plugins were loaded from.
-		fs::path cwd = fs::current_path();
-		fs::path pluginsDir = cwd / "plugins";
-		if (!fs::exists(pluginsDir))
-		{
-			pluginsDir = cwd / "../../plugins";
-		}
-
-		if (!fs::exists(pluginsDir) || !fs::is_directory(pluginsDir))
-		{
-			return true;
-		}
-
 		// Collect descriptors, then let the planner decide what ships (global
 		// enabled flags + export overrides + transitive dependencies + API
 		// version validation).
 		std::vector<ParsedPluginDescriptor> descriptors;
-		std::error_code ec;
-		for (const auto& pluginEntry : fs::directory_iterator(pluginsDir, ec))
+		if (config.pluginSourcesFromHost)
 		{
-			if (!pluginEntry.is_directory()) continue;
-
-			std::error_code scanEc;
-			for (const auto& file : fs::directory_iterator(pluginEntry.path(), scanEc))
+			// VK-1733: the editor's own view: both plugin roots, shadowed plugins
+			// left out, each with the enabled state the editor loads it with.
+			descriptors = descriptorsFromHost(config.pluginSources, result.warnings);
+		}
+		else
+		{
+			// Locate plugins using the same heuristic as Editor/Runtime plugin loading.
+			// This runs inside the Editor process, so current_path() matches where plugins were loaded from.
+			fs::path cwd = fs::current_path();
+			fs::path pluginsDir = cwd / "plugins";
+			if (!fs::exists(pluginsDir))
 			{
-				if (file.is_regular_file() && file.path().extension() == ".vfplugin")
+				pluginsDir = cwd / "../../plugins";
+			}
+
+			if (!fs::exists(pluginsDir) || !fs::is_directory(pluginsDir))
+			{
+				return true;
+			}
+
+			std::error_code ec;
+			for (const auto& pluginEntry : fs::directory_iterator(pluginsDir, ec))
+			{
+				if (!pluginEntry.is_directory()) continue;
+
+				std::error_code scanEc;
+				for (const auto& file : fs::directory_iterator(pluginEntry.path(), scanEc))
 				{
-					if (auto descriptor = parsePluginDescriptor(file.path()))
+					if (file.is_regular_file() && file.path().extension() == ".vfplugin")
 					{
-						descriptors.push_back(std::move(*descriptor));
+						if (auto descriptor = parsePluginDescriptor(file.path()))
+						{
+							descriptors.push_back(std::move(*descriptor));
+						}
+						break;
 					}
-					break;
 				}
 			}
 		}
@@ -1000,6 +1064,91 @@ namespace gameExport
 				src.contentHash = hashFile(it->path());
 
 				fs::path destPath = pluginDst / relativePath;
+
+				// VK-1733: the plugin's own descriptor ships saying "enabled": true. The game
+				// loads exactly what was exported, whatever the descriptor says in the engine
+				// (a shipped plugin the user turned on keeps "enabled": false there). Written
+				// only when the bytes differ; the manifest records the shipped bytes, which
+				// the integrity check hashes. The unchanged-source skip below never applies:
+				// the shipped text does not follow from the source's hash alone.
+				if (relativePath == descriptor.descriptorPath.filename())
+				{
+					std::string sourceText;
+					{
+						std::ifstream in(it->path(), std::ios::binary);
+						if (!in.is_open())
+						{
+							result.errorMessage = "Plugin '" + descriptor.name +
+								"': cannot read its descriptor " + it->path().string();
+							return false;
+						}
+						sourceText.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+						if (in.bad())
+						{
+							result.errorMessage = "Plugin '" + descriptor.name +
+								"': cannot read its descriptor " + it->path().string();
+							return false;
+						}
+					}
+					const std::optional<std::string> shipped = descriptorTextWithEnabled(sourceText, true);
+					if (!shipped)
+					{
+						result.errorMessage = "Plugin '" + descriptor.name + "': its descriptor " +
+							it->path().string() + " is not a JSON object";
+						return false;
+					}
+
+					bool upToDate = false;
+					std::error_code existsEc;
+					if (fs::exists(destPath, existsEc))
+					{
+						std::ifstream existing(destPath, std::ios::binary);
+						if (existing.is_open())
+						{
+							const std::string existingText((std::istreambuf_iterator<char>(existing)),
+														   std::istreambuf_iterator<char>());
+							upToDate = !existing.bad() && existingText == *shipped;
+						}
+					}
+
+					if (upToDate)
+					{
+						skippedCount++;
+					}
+					else
+					{
+						std::error_code dirEc;
+						fs::create_directories(destPath.parent_path(), dirEc);
+						bool written = false;
+						{
+							std::ofstream out(destPath, std::ios::binary | std::ios::trunc);
+							if (out.is_open())
+							{
+								out.write(shipped->data(), static_cast<std::streamsize>(shipped->size()));
+								out.close();
+								written = !out.fail();
+							}
+						}
+						if (!written)
+						{
+							result.warnings.push_back("Warning while writing " + destPath.string() +
+								": the descriptor could not be written");
+							continue;
+						}
+						copiedCount++;
+					}
+
+					ManifestEntry manifestEntry;
+					manifestEntry.archivePath = manifestKey;
+					manifestEntry.contentHash = archive::hashBytes(
+						reinterpret_cast<const uint8_t*>(shipped->data()), shipped->size());
+					manifestEntry.uncompressedSize = static_cast<uint64_t>(shipped->size());
+					manifestEntry.sourceType = "plugin";
+					manifestEntry.sources = {src};
+					newManifest.addEntry(std::move(manifestEntry));
+					continue;
+				}
+
 				if (!previousManifest.hasSourceChanged(manifestKey, {src}) && fs::exists(destPath))
 				{
 					skippedCount++;
@@ -1037,17 +1186,7 @@ namespace gameExport
 
 	bool GameExporter::generateProjectConfig(const ExportConfig& config, ExportResult& result)
 	{
-		config::ProjectConfig projConfig;
-		projConfig.projectName = config.gameName;
-		projConfig.version = config.gameVersion;
-		projConfig.workingDirectory = "Assets";
-		projConfig.startupScene = config.startupScene;
-		projConfig.fontFallbackChain = config.fontFallbackChain;
-		projConfig.exeIconPath = config.iconPath;
-		if (config.expectedPluginApiVersion != 0)
-		{
-			projConfig.pluginApiVersion = config.expectedPluginApiVersion;
-		}
+		const config::ProjectConfig projConfig = shippedProjectConfig(config);
 
 		fs::path projPath = config.outputDirectory / (config.gameName + ".vfproj");
 
@@ -1308,6 +1447,13 @@ namespace gameExport
 		for (auto it = fs::recursive_directory_iterator(src, ec); it != fs::recursive_directory_iterator(); ++it)
 		{
 			const auto& entry = *it;
+
+			// VK-1682: the editor's own state (.vertexforge/editor.lock) never ships.
+			if (entry.is_directory() && launch::isEditorStateDirectory(entry.path()))
+			{
+				it.disable_recursion_pending();
+				continue;
+			}
 
 			// Skip the export output directory to prevent infinite recursion
 			if (entry.is_directory() && !excludeAbsolute.empty())

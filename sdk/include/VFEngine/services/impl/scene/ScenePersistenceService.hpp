@@ -21,6 +21,11 @@ namespace events
     class EventDispatcher;
 }
 
+namespace events::scene
+{
+    struct StartupSceneResult;
+}
+
 namespace serialization
 {
     struct IncrementalLoadState;
@@ -96,6 +101,9 @@ namespace services
         bool newScene();
         bool saveScene(const std::string& filePath);
         bool loadScene(const std::string& filePath);
+
+        // VK-1687: QueueStartupSceneCommand (declared with its result in ScenePersistenceEvents.hpp).
+        events::scene::StartupSceneResult queueStartupScene();
         bool savePrefab(EntityHandle entity, const std::string& filePath);
         std::optional<EntityHandle> loadPrefab(const std::string& filePath,
                                                std::optional<EntityHandle> parent = std::nullopt);
@@ -127,6 +135,10 @@ namespace services
         bool setRenderSettings(const types::RenderSettings& settings);
 
     private:
+        // VK-1687: replaces the current scene with newScene() plus a "Sun" directional light and a
+        // primary "Main Camera", then saves it to filePath (and its .vfSettings sidecar). On failure
+        // it removes the files it wrote and leaves an empty new scene.
+        bool createStarterScene(const std::string& filePath);
         void performDeferredLoad(const std::string& filePath);
         // Deferred Play/Stop snapshot restore (Phase 3). Runs the same prologue as
         // performDeferredLoad, deserializes the in-memory snapshot, then calls

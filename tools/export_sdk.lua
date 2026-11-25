@@ -17,13 +17,9 @@ function vfExportPluginSDK()
       local sdk = "sdk"
 
       -- Template .vfplugin must carry the engine's current API version or the
-      -- loader rejects it — read it from the single source of truth.
-      local apiVersion = "9"
-      local versionHeader = io.readfile("VFEngine/plugin/api/PluginVersion.hpp")
-      if versionHeader then
-         local v = versionHeader:match("VF_PLUGIN_API_VERSION%s*=%s*(%d+)")
-         if v then apiVersion = v end
-      end
+      -- loader rejects it — read it from the single source of truth. Errors out
+      -- (tools/engine_version.lua) instead of silently stamping a stale version.
+      local apiVersion = vfReadPluginApiVersion()
 
       local function copyTree(srcBase, pattern, dstBase)
          local files = os.matchfiles(path.join(srcBase, pattern))
@@ -193,10 +189,22 @@ time (same idea as Godot's GDExtension function table).
    `.vfplugin` into the engine's `plugins/<Name>/` — start the editor and the
    PluginManager picks it up.
 
+An INSTALLED engine (`%LOCALAPPDATA%\VertexForge Engine`) is different: its
+installer deletes that whole folder on every upgrade and uninstall, so never
+deploy into its `plugins/`. Use the editor's Plugin Manager > New Plugin...
+instead: it scaffolds a ready-to-build project (premake5.lua pointing at this
+SDK, the .cpp and the .vfplugin) into `Documents\VertexForge\Plugins\<Name>`,
+where the build puts the DLL beside the .vfplugin and the installed editor
+loads it from (VK-1732). Build the configuration the dialog names (Release).
+
 ## ABI requirements (must match the engine build)
 - MSVC toolset v145 (VS2026), x64, C++20, /MD runtime, `/utf-8`
 - `apiVersion` in the `.vfplugin` must equal the engine's
   `VF_PLUGIN_API_VERSION` (`include/VFEngine/plugin/api/PluginVersion.hpp`)
+- Asset importers that write engine binary assets (`.vfImage`, `.vfMesh`, ...)
+  must stamp `AssetFormatVersion` (`include/VFEngine/utilities/config/Config.hpp`),
+  never `Version`: `Version` is the engine (product) version, and files stamped
+  with it are rejected after the next engine version bump.
 - Plugins must NOT call Vulkan directly (no dispatcher in plugin DLLs) — use
   the custom render pipeline API (`createCustomPipeline`/`uploadCustomMesh`/
   `drawCustomMesh`) instead.

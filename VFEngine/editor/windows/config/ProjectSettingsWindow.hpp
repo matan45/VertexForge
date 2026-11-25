@@ -13,10 +13,13 @@ namespace windows
 
         std::string projectName;
         std::string version;
+        std::string publisher;  // VK-1726: names the shipped game's per-user state folder
         std::string workingDirectory;
         std::string startupScene;
         std::string exeIconPath;
         std::vector<std::string> fontFallbackChain;
+        // VK-1687: why the last Browse for a startup scene was refused (it lay outside the project).
+        std::string startupSceneError;
 
         bool isDirty = false;
         bool hasProject = false;

@@ -39,11 +39,11 @@ namespace resource
         uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
         uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (!AssetFormatVersion::matches(majorVersion, minorVersion, patchVersion))
         {
             vfLogError("Incompatible texture file version: {}.{}.{}, expected {}.{}.{}. Re-import required. path: {}",
                        majorVersion, minorVersion, patchVersion,
-                       Version::major, Version::minor, Version::patch, path);
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch, path);
             return {};
         }
 
@@ -141,11 +141,11 @@ namespace resource
         uint32_t minorVersion = endian::readLE<uint32_t>(inFile);
         uint32_t patchVersion = endian::readLE<uint32_t>(inFile);
 
-        if (majorVersion != Version::major || minorVersion != Version::minor || patchVersion != Version::patch)
+        if (!AssetFormatVersion::matches(majorVersion, minorVersion, patchVersion))
         {
             vfLogError("Incompatible HDR file version: {}.{}.{}, expected {}.{}.{}. Re-import required.",
                        majorVersion, minorVersion, patchVersion,
-                       Version::major, Version::minor, Version::patch);
+                       AssetFormatVersion::major, AssetFormatVersion::minor, AssetFormatVersion::patch);
             return {};
         }
 

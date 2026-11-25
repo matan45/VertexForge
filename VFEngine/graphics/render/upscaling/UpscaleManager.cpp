@@ -2,6 +2,7 @@
 #include "TemporalUpscaleMath.hpp"
 #include "../../core/Device.hpp"
 #include "../../../utilities/print/Log.hpp"
+#include "../../../utilities/config/Config.hpp"
 
 #include <array>
 
@@ -115,7 +116,8 @@ namespace render::upscaling
         prefs.featuresToLoad = featuresToLoad;
         prefs.numFeaturesToLoad = static_cast<uint32_t>(std::size(featuresToLoad));
         prefs.engine = sl::EngineType::eCustom;
-        prefs.engineVersion = "1.0.0";
+        // The repo-root VERSION (VK-1680); ::Version because Streamline declares sl::Version.
+        prefs.engineVersion = ::Version::text;
         // NGX requires application identity. We have no NVIDIA-issued applicationId, so we
         // supply a stable projectId GUID + engine + engineVersion instead (the supported path
         // for custom engines — see sl::Preferences::projectId). DLSS SR / Frame Gen tolerate a

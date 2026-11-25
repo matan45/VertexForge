@@ -1,3 +1,9 @@
+-- Engine identity (VK-1680): VERSION -> VFEngine/utilities/config/EngineVersion.generated.hpp
+-- (struct Version in Config.hpp) and the engine.json manifest. Generated before anything else so the
+-- header exists when vfExportPluginSDK() copies the utilities headers into sdk/ below.
+include "tools/engine_version.lua"
+vfWriteEngineVersionHeader()
+
 workspace "VertexForge"
    configurations { "Debug", "Development", "Release" }
    platforms { "x64" }
@@ -51,6 +57,21 @@ function vfStandardConfigs(extraDebugDefines)
    filter {}
 end
 
+-- VK-1684: every executable runs in the UTF-8 active code page (GetACP() == 65001 on Windows 10
+-- 1903 or later; older Windows ignores it): argv, getenv, the CRT's narrow file functions, narrow
+-- std::filesystem paths and every -A Win32 call then take UTF-8. A .manifest in files {} becomes
+-- <AdditionalManifestFiles>, which link.exe merges with its default (asInvoker) manifest into the one
+-- RT_MANIFEST #1 it embeds. Embedded, it survives GameExport's copy of Runtime.exe and the icon swap
+-- (ExeIconEmbedder keeps existing resources). Never put a manifest in an .rc file (a second
+-- RT_MANIFEST #1, CVT1100). A new executable project must list it too (test_unicode_paths checks the
+-- built Editor.exe and Runtime.exe).
+-- VK-1696: the version resource comes from VFEngine/utilities/config/VersionInfo.rc2 (numbers from
+-- VERSION), included by each executable's own app.rc, which defines its FileDescription, InternalName and
+-- OriginalFilename. rc.exe gets the project's includedirs and defines, so the .rc files include it as
+-- "config/VersionInfo.rc2". A new executable project lists its own app.rc too (test_exe_version_info
+-- checks the built Editor.exe, Runtime.exe and Tests.exe; package-release checks the Release ones).
+local vfUtf8CodePageManifest = "VFEngine/utilities/launch/Utf8CodePage.manifest"
+
 -- Group for Engine Projects
 group "Engine"
 
@@ -63,7 +84,8 @@ project "Editor"
    location "VFEngine/editor"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage" }
+   files { "VFEngine/editor/**.hpp", "VFEngine/editor/**.cpp", "VFEngine/editor/app.rc", "resources/editor/**.vfImage",
+           vfUtf8CodePageManifest }
 
    includedirs {
 	  "dependencies/imgui",
@@ -163,6 +185,14 @@ project "Editor"
          "{COPY} ../../dependencies/streamline/bin/x64/development/NvLowLatencyVk.dll ../../bin/Editor/%{cfg.buildcfg}/x64/"
       }
    filter {}
+
+   -- engine.json beside Editor.exe (VK-1680, tools/engine_version.lua): the dev-tree manifest the
+   -- launcher reads to identify this build. Declared last so it runs after the copies; a build event
+   -- only reports its final exit code, and `|| exit /b 1` fails the build when the manifest cannot be
+   -- written (e.g. VERSION edited without re-running premake).
+   postbuildcommands {
+      '"' .. path.translate(_PREMAKE_COMMAND, "\\") .. '" --file=../../tools/engine_version.lua --vfconfig=%{cfg.buildcfg} engine-manifest || exit /b 1'
+   }
 
 -- Project 2: Core
 project "Core"
@@ -374,7 +404,7 @@ project "Runtime"
    location "VFEngine/runtime"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp" }
+   files { "VFEngine/runtime/**.hpp", "VFEngine/runtime/**.cpp", "VFEngine/runtime/app.rc", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/spdlog/include",
@@ -1256,7 +1286,7 @@ project "Tests"
    location "VFEngine/tests"
    targetdir "bin/%{prj.name}/%{cfg.buildcfg}/%{cfg.platform}"
 
-   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp" }
+   files { "VFEngine/tests/**.hpp", "VFEngine/tests/**.cpp", "VFEngine/tests/app.rc", vfUtf8CodePageManifest }
 
    includedirs {
       "dependencies/doctest/doctest",

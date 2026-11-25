@@ -1,0 +1,413 @@
+package com.vertexforge.launcher.model;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class RecentProjectsTest {
+
+    private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
+
+    @TempDir
+    Path tempDir;
+
+    private Path path(String name) {
+        return tempDir.resolve(name + ".vfproj");
+    }
+
+    private RecentEntry entry(String name, int minutesAfterT0) {
+        return RecentEntry.create(UUID.randomUUID(), path(name), name, T0.plusSeconds(60L * minutesAfterT0));
+    }
+
+    private static List<String> names(List<RecentEntry> entries) {
+        return entries.stream().map(RecentEntry::displayName).toList();
+    }
+
+    @Test
+    void displayOrderIsNewestFirstWithUnknownTimesLast() {
+        RecentEntry noTime = RecentEntry.fromJson(UUID.randomUUID(),
+                JsonParser.parseString("{\"name\": \"NoTime\", \"path\": \"/x/NoTime.vfproj\"}").getAsJsonObject());
+        RecentProjects projects = new RecentProjects(List.of(entry("Old", 1), noTime, entry("Newest", 3),
+                entry("Middle", 2)));
+
+        assertEquals(List.of("Newest", "Middle", "Old", "NoTime"), names(projects.displayOrder()));
+        assertEquals(List.of("Old", "NoTime", "Newest", "Middle"), names(projects.entries()), "file order is kept");
+    }
+
+    @Test
+    void addingANewPathAppendsAnEntryWithTheGivenId() {
+        UUID id = UUID.randomUUID();
+
+        RecentProjects.Added added = RecentProjects.empty().add(path("Game"), "Game", T0, id);
+
+        assertEquals(id, added.id());
+        assertEquals(1, added.projects().size());
+        assertEquals(path("Game"), added.projects().entries().getFirst().path());
+    }
+
+    @Test
+    void addingAListedPathKeepsItsIdAndExtrasAndUpdatesNameAndTime() {
+        JsonObject raw = new JsonObject();
+        raw.addProperty("name", "Game");
+        raw.addProperty("path", path("Game").toString());
+        raw.addProperty("lastOpened", T0.toString());
+        raw.addProperty("custom", 1);
+        RecentEntry stored = RecentEntry.fromJson(UUID.randomUUID(), raw);
+        RecentProjects projects = new RecentProjects(List.of(stored));
+
+        RecentProjects.Added added = projects.add(path("Game"), "Renamed", T0.plusSeconds(600), UUID.randomUUID());
+
+        RecentEntry updated = added.projects().entries().getFirst();
+        assertEquals(stored.id(), added.id());
+        assertEquals(stored.id(), updated.id());
+        assertEquals("Renamed", updated.name());
+        assertEquals(T0.plusSeconds(600), updated.lastOpened());
+        assertEquals(1, updated.raw().get("custom").getAsInt());
+        assertEquals(1, added.projects().size());
+    }
+
+    @Test
+    void touchMovesTheProjectToTheFrontOfTheDisplayOrder() {
+        RecentEntry old = entry("Old", 1);
+        RecentProjects projects = new RecentProjects(List.of(old, entry("New", 2)));
+
+        RecentProjects touched = projects.touch(old.id(), T0.plusSeconds(3600));
+
+        assertEquals(List.of("Old", "New"), names(touched.displayOrder()));
+        assertEquals(T0.plusSeconds(3600), touched.displayOrder().getFirst().lastOpened());
+    }
+
+    @Test
+    void touchAndRemoveOfAnUnknownIdChangeNothing() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        assertSame(projects, projects.touch(UUID.randomUUID(), T0.plusSeconds(3600)));
+        assertSame(projects, projects.remove(UUID.randomUUID()));
+    }
+
+    @Test
+    void removeDeletesOnlyThatEntry() {
+        RecentEntry drop = entry("Drop", 2);
+        RecentProjects projects = new RecentProjects(List.of(entry("Keep", 1), drop));
+
+        assertEquals(List.of("Keep"), names(projects.remove(drop.id()).entries()));
+    }
+
+    @Test
+    void trimDropsTheOldestFirst() {
+        RecentProjects projects = new RecentProjects(List.of(entry("A", 5), entry("B", 1), entry("C", 3),
+                entry("D", 4)));
+
+        assertEquals(List.of("A", "D", "C"), names(projects.trim(3, null).displayOrder()));
+    }
+
+    @Test
+    void trimNeverDropsAPinnedEntryOrTheOneJustAdded() {
+        RecentEntry pinned = entry("Pinned", 0).withPinned(true);
+        RecentEntry justAdded = entry("JustAdded", -10);
+        RecentProjects projects = new RecentProjects(List.of(pinned, justAdded, entry("Old", 1), entry("New", 2)));
+
+        RecentProjects trimmed = projects.trim(2, justAdded.id());
+
+        assertEquals(List.of("Pinned", "JustAdded"), names(trimmed.entries()));
+        // With only protected entries left, the list may stay above the limit.
+        assertEquals(2, projects.trim(1, justAdded.id()).size());
+    }
+
+    /** VK-1694: Pin to Top / Unpin. */
+    @Test
+    void setPinnedPinsAndUnpinsOnlyThatEntry() {
+        RecentEntry game = entry("Game", 1);
+        RecentEntry demo = entry("Demo", 2);
+        RecentProjects projects = new RecentProjects(List.of(game, demo));
+
+        RecentProjects pinned = projects.setPinned(game.id(), true);
+
+        assertTrue(pinned.entries().getFirst().pinned());
+        assertFalse(pinned.entries().get(1).pinned());
+        assertFalse(pinned.setPinned(game.id(), false).entries().getFirst().pinned());
+        assertEquals(names(projects.entries()), names(pinned.entries()), "the file order is kept");
+    }
+
+    @Test
+    void setPinnedChangesNothingWhenTheEntryIsGoneOrAlreadySo() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        assertSame(projects, projects.setPinned(UUID.randomUUID(), true));
+        assertSame(projects, projects.setPinned(projects.entries().getFirst().id(), false));
+    }
+
+    /** VK-1694: Settings trims a lowered cap at once, with nothing just added. */
+    @Test
+    void trimWithoutAnEntryToKeepStillKeepsThePinnedOnes() {
+        RecentEntry pinnedOld = entry("PinnedOld", 0).withPinned(true);
+        RecentProjects projects = new RecentProjects(List.of(pinnedOld, entry("A", 1), entry("B", 2),
+                entry("C", 3)));
+
+        assertEquals(List.of("C", "PinnedOld"), names(projects.trim(2, null).displayOrder()));
+        assertEquals(List.of("PinnedOld"), names(projects.trim(1, null).entries()));
+    }
+
+    @Test
+    void theDefaultLimitComfortablyHoldsFiftyProjects() {
+        List<RecentEntry> fiftyOne = new ArrayList<>();
+        for (int i = 0; i < 51; i++) {
+            fiftyOne.add(entry("P" + i, i));
+        }
+
+        RecentProjects trimmed = new RecentProjects(fiftyOne).trim(50, null);
+
+        assertEquals(50, trimmed.size());
+        assertTrue(names(trimmed.entries()).stream().noneMatch("P0"::equals), "the oldest entry must be dropped");
+    }
+
+    @Test
+    void aLimitBelowOneIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> RecentProjects.empty().trim(0, null));
+    }
+
+    @Test
+    void nothingHereTouchesTheFileSystem() {
+        // Entries whose files do not exist are kept by every operation.
+        RecentEntry missing = entry("Missing", 1);
+        RecentProjects projects = new RecentProjects(List.of(missing))
+                .add(path("Other"), "Other", T0, UUID.randomUUID()).projects()
+                .touch(missing.id(), T0.plusSeconds(5))
+                .trim(50, null);
+
+        assertEquals(2, projects.size());
+    }
+
+    @Test
+    void bindingAnEngineSetsOnlyThatEntrysEngineIdAndKeepsUnknownMembers() {
+        RecentEntry game = RecentEntry.fromJson(UUID.randomUUID(), JsonParser.parseString(
+                "{\"name\": \"Game\", \"path\": \"/x/Game.vfproj\", \"future\": 1}").getAsJsonObject());
+        RecentEntry other = entry("Other", 1);
+        RecentProjects projects = new RecentProjects(List.of(game, other));
+        String engineId = "5b0c9d1e-7f0a-4d3b-9a51-2f6f1c0e8a42";
+
+        RecentProjects bound = projects.bindEngine(game.id(), engineId);
+
+        RecentEntry boundGame = bound.find(game.id()).orElseThrow();
+        assertEquals(engineId, boundGame.engineId());
+        assertEquals(1, boundGame.raw().get("future").getAsInt());
+        assertNull(bound.find(other.id()).orElseThrow().engineId());
+
+        RecentEntry unbound = bound.bindEngine(game.id(), null).find(game.id()).orElseThrow();
+        assertNull(unbound.engineId());
+        assertTrue(unbound.raw().get(RecentEntry.ENGINE_ID).isJsonNull());
+    }
+
+    @Test
+    void bindingAGoneOrAlreadyBoundEntryChangesNothing() {
+        RecentEntry game = entry("Game", 1).withEngineId("e");
+        RecentProjects projects = new RecentProjects(List.of(game));
+
+        assertSame(projects, projects.bindEngine(UUID.randomUUID(), "x"));
+        assertSame(projects, projects.bindEngine(game.id(), "e"));
+        assertSame(game, game.withEngineId("e"));
+    }
+
+    // --- addExisting (VK-1685) ---------------------------------------------------------------------------------------
+
+    @Test
+    void addingAnExistingProjectAppendsItWithTheGivenIdNameAndTime() {
+        UUID id = UUID.randomUUID();
+
+        RecentProjects.Added added = RecentProjects.empty().addExisting(path("Game"), "My Game", T0, id);
+
+        assertEquals(id, added.id());
+        assertFalse(added.existed());
+        RecentEntry entry = added.projects().entries().getFirst();
+        assertEquals(path("Game"), entry.path());
+        assertEquals("My Game", entry.name());
+        assertEquals(T0, entry.lastOpened());
+    }
+
+    @Test
+    void addingAListedProjectAgainOnlyRefreshesItsName() {
+        JsonObject raw = new JsonObject();
+        raw.addProperty("name", "Old Name");
+        raw.addProperty("path", path("Game").toString());
+        raw.addProperty("lastOpened", T0.toString());
+        raw.addProperty("pinned", true);
+        raw.addProperty("engineId", "engine-1");
+        raw.addProperty("custom", 1);
+        RecentEntry stored = RecentEntry.fromJson(UUID.randomUUID(), raw);
+        RecentProjects projects = new RecentProjects(List.of(stored, entry("Other", 5)));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "New Name", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertEquals(stored.id(), added.id());
+        assertEquals(2, added.projects().size());
+        RecentEntry updated = added.projects().find(stored.id()).orElseThrow();
+        assertEquals("New Name", updated.name());
+        assertEquals(stored.rawPath(), updated.rawPath(), "the stored path is kept");
+        assertEquals(T0, updated.lastOpened(), "adding is not opening: the time is kept");
+        assertTrue(updated.pinned());
+        assertEquals("engine-1", updated.engineId());
+        assertEquals(1, updated.raw().get("custom").getAsInt());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void anEntryStoredInAnotherLetterCaseIsTheSameProject() {
+        RecentEntry stored = RecentEntry.create(UUID.randomUUID(),
+                Path.of(path("Game").toString().toUpperCase(Locale.ROOT)), "Game", T0);
+        RecentProjects projects = new RecentProjects(List.of(stored));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "Game", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertEquals(stored.id(), added.id());
+        assertSame(projects, added.projects(), "nothing changed");
+    }
+
+    @Test
+    void addingAListedProjectUnderItsOwnNameChangesNothing() {
+        RecentProjects projects = new RecentProjects(List.of(entry("Game", 1)));
+
+        RecentProjects.Added added = projects.addExisting(path("Game"), "Game", T0.plusSeconds(600),
+                UUID.randomUUID());
+
+        assertTrue(added.existed());
+        assertSame(projects, added.projects());
+    }
+
+    @Test
+    void addReportsWhetherThePathWasListed() {
+        RecentProjects.Added first = RecentProjects.empty().add(path("Game"), "Game", T0, UUID.randomUUID());
+        RecentProjects.Added again = first.projects().add(path("Game"), "Game", T0, UUID.randomUUID());
+
+        assertFalse(first.existed());
+        assertTrue(again.existed());
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Undo of a removal and Locate… (VK-1686)
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /** An entry with every member Locate… and Undo must keep: a pin, an engine binding, MCP and an unknown member. */
+    private RecentEntry richEntry(String name) {
+        JsonObject raw = RecentEntry.create(UUID.randomUUID(), path(name), name, T0).raw();
+        raw.addProperty(RecentEntry.PINNED, true);
+        raw.addProperty(RecentEntry.ENGINE_ID, "5b0c9d1e-7f0a-4d3b-9a51-2f6f1c0e8a42");
+        raw.add(RecentEntry.MCP, JsonParser.parseString("{\"enabled\": true, \"port\": 7900}"));
+        raw.addProperty("futureMember", "kept");
+        return RecentEntry.fromJson(UUID.fromString(raw.get(RecentEntry.ID).getAsString()), raw);
+    }
+
+    @Test
+    void indexOfIsTheFilePosition() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry b = entry("B", 2);
+        RecentProjects projects = new RecentProjects(List.of(a, b));
+
+        assertEquals(0, projects.indexOf(a.id()));
+        assertEquals(1, projects.indexOf(b.id()));
+        assertEquals(-1, projects.indexOf(UUID.randomUUID()));
+    }
+
+    @Test
+    void aRestoredEntryComesBackWhereItWasWithEverything() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry rich = richEntry("Rich");
+        RecentEntry c = entry("C", 3);
+        RecentProjects removed = new RecentProjects(List.of(a, rich, c)).remove(rich.id());
+
+        RecentProjects restored = removed.restore(rich, 1);
+
+        assertEquals(List.of(a, rich, c), restored.entries());
+        assertEquals(rich.raw(), restored.entries().get(1).raw());
+    }
+
+    @Test
+    void aRestoreIntoAShorterListGoesToTheEnd() {
+        RecentEntry a = entry("A", 1);
+        RecentEntry gone = entry("Gone", 2);
+
+        RecentProjects restored = new RecentProjects(List.of(a)).restore(gone, 5);
+
+        assertEquals(List.of(a, gone), restored.entries());
+    }
+
+    @Test
+    void aRestoreDoesNothingWhenTheEntryOrItsProjectIsListedAgain() {
+        RecentEntry game = entry("Game", 1);
+        RecentProjects sameId = new RecentProjects(List.of(game));
+        RecentProjects samePath = new RecentProjects(List.of(
+                RecentEntry.create(UUID.randomUUID(), path("Game"), "Game again", T0)));
+
+        assertSame(sameId, sameId.restore(game, 0));
+        assertSame(samePath, samePath.restore(game, 0));
+    }
+
+    @Test
+    void aRelinkPointsTheEntryAtTheNewFileAndKeepsItsHistory() {
+        RecentEntry rich = richEntry("Rich");
+        RecentEntry other = entry("Other", 2);
+        RecentProjects projects = new RecentProjects(List.of(rich, other));
+        Path moved = tempDir.resolve("Moved").resolve("Rich.vfproj");
+
+        RecentProjects.Relinked relinked = projects.relink(rich.id(), moved, "Rich Renamed");
+
+        assertEquals(RecentProjects.Relink.RELINKED, relinked.outcome());
+        RecentEntry after = relinked.projects().entries().getFirst();
+        assertEquals(rich.id(), after.id());
+        assertEquals(moved, after.path());
+        assertEquals("Rich Renamed", after.name());
+        assertEquals(rich.lastOpened(), after.lastOpened());
+        assertTrue(after.pinned());
+        assertEquals(rich.engineId(), after.engineId());
+        assertEquals(rich.mcp(), after.mcp());
+        assertEquals("kept", after.raw().get("futureMember").getAsString());
+        assertEquals(other, relinked.projects().entries().get(1));
+    }
+
+    @Test
+    void aRelinkToAFileAnotherEntryListsChangesNothing() {
+        RecentEntry lost = entry("Lost", 1);
+        RecentEntry listed = entry("Listed", 2);
+        RecentProjects projects = new RecentProjects(List.of(lost, listed));
+
+        RecentProjects.Relinked relinked = projects.relink(lost.id(), path("Listed"), "Listed");
+
+        assertEquals(RecentProjects.Relink.ALREADY_LISTED, relinked.outcome());
+        assertSame(projects, relinked.projects());
+        assertEquals(listed, relinked.conflict());
+    }
+
+    @Test
+    void aRelinkOfAGoneEntryOrToTheSameFileChangesNothing() {
+        RecentEntry game = entry("Game", 1);
+        RecentProjects projects = new RecentProjects(List.of(game));
+
+        RecentProjects.Relinked gone = projects.relink(UUID.randomUUID(), path("Other"), "Other");
+        RecentProjects.Relinked same = projects.relink(game.id(), path("Game"), "Game");
+
+        assertEquals(RecentProjects.Relink.GONE, gone.outcome());
+        assertSame(projects, gone.projects());
+        assertEquals(RecentProjects.Relink.UNCHANGED, same.outcome());
+        assertSame(projects, same.projects());
+    }
+}

@@ -65,6 +65,14 @@ namespace config
         // differs from its own plugin::VF_PLUGIN_API_VERSION (plugin DLLs built
         // against another engine build would be rejected at load time).
         std::optional<uint32_t> pluginApiVersion;
+        // VK-1726: who publishes the game (Project Settings; empty = none). A shipped game keeps its
+        // config, saves, logs and crash reports in %LOCALAPPDATA%\<publisher>\<projectName>
+        // (launch/GameStateLocation.hpp).
+        std::string publisher;
+        // VK-1726: where a shipped game keeps that state: "user" (the per-user folder above) or
+        // "portable" (beside its .vfproj). Written by the exporter into the shipped .vfproj only;
+        // the editor never reads it (its Play mode uses <project>/.vertexforge).
+        std::optional<std::string> stateLocation;
 
         ProjectFileVersion schemaVersion;
 

@@ -85,6 +85,8 @@
 #include "resource/PathResolver.hpp"
 #include "impl/save/SaveService.hpp"
 #include "impl/save/ConfigService.hpp"
+#include "launch/EditorStateDirectory.hpp"
+#include "launch/UserStateLocation.hpp"
 #include "impl/editor/EditorSettingsService.hpp"
 #include "events/editor/EditorSettingsEvents.hpp"
 #include "events/editor/UndoRedoEvents.hpp"
@@ -142,7 +144,14 @@ namespace handlers
         editorModeService = std::make_shared<services::EditorModeServiceImpl>(bootstrap->getSceneGraphSystem());
         undoRedoService = std::make_shared<services::UndoRedoServiceImpl>();
         fileOperationsService = std::make_shared<services::FileOperationsServiceImpl>(undoRedoService);
-        projectService = std::make_shared<services::ProjectServiceImpl>();
+        {
+            auto projectServiceImpl = std::make_shared<services::ProjectServiceImpl>();
+            // VK-1682: the editor lock follows every project switch (startup, MCP project_open).
+            projectServiceImpl->setOpenGuard(projectOpenGuard);
+            // VK-1690: editor only (startup, MCP project_open); the Runtime's ProjectServiceImpl never stamps.
+            projectServiceImpl->setStampEngineVersionOnOpen(true);
+            projectService = std::move(projectServiceImpl);
+        }
         assetDatabaseService = std::make_shared<services::AssetDatabaseServiceImpl>();
         renderTextureService = std::make_shared<services::RenderTextureServiceImpl>(
             bootstrap->getRenderTextureProvider()
@@ -207,11 +216,16 @@ namespace handlers
                             audioSceneUpdater->setMaxDopplerSpeed(n.maxDopplerSpeed);
                     }));
 
+        // Play-mode saves and config live in the project's .vertexforge folder (VK-1684): hidden from
+        // the content browser and never exported, unlike files beside the .vfproj. Without a project an
+        // installed editor keeps them in its per-user folder (VK-1732; empty in the dev tree: "saves").
         saveService = std::make_unique<services::SaveService>(
             bootstrap->getSceneGraphSystem(),
-            bootstrap->getScriptingProvider()
+            bootstrap->getScriptingProvider(),
+            std::filesystem::path(launch::editorStateDirName),
+            launch::processUserState().savesFallbackDir
         );
-        configService = std::make_unique<services::ConfigService>();
+        configService = std::make_unique<services::ConfigService>(std::filesystem::path(launch::editorStateDirName));
         editorSettingsService = std::make_unique<services::EditorSettingsService>();
         editorKeybindingService = std::make_shared<services::EditorKeybindingServiceImpl>();
     }

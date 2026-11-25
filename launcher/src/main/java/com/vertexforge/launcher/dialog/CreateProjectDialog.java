@@ -1,76 +1,141 @@
 package com.vertexforge.launcher.dialog;
 
+import com.vertexforge.launcher.template.TemplateCatalog;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.collections.ListChangeListener;
+import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Window;
+import javafx.stage.WindowEvent;
+import javafx.util.Callback;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.regex.Pattern;
+import java.util.function.Function;
 
+/**
+ * The Create Project dialog (VK-1679). It only shows {@link CreateProjectForm}, which holds all of its behaviour:
+ * nothing here touches the file system on the FX thread, so an unreachable folder can never freeze it.
+ * <p>
+ * The project is made from the chosen engine's template and script library (VK-1689): Engine, Template and the
+ * template's options sit below the name and location.
+ * <p>
+ * Create does not close the dialog: the project is created while it stays open, a failure is shown in it, and Cancel
+ * (or the close button) stops a creation in progress before the dialog closes.
+ */
 public class CreateProjectDialog {
 
-    private static final Pattern INVALID_NAME_CHARS = Pattern.compile("[\\\\/:*?\"<>|]");
+    /** {@link CreateProjectForm.Timer}s on the FX thread's animation clock. */
+    static final CreateProjectForm.Timers FX_TIMERS = (delay, action) -> {
+        PauseTransition pause = new PauseTransition(javafx.util.Duration.millis(delay.toMillis()));
+        pause.setOnFinished(event -> action.run());
+        return new CreateProjectForm.Timer() {
+            @Override
+            public void restart() {
+                pause.playFromStart();
+            }
 
-    private final Dialog<ProjectCreationParams> dialog;
+            @Override
+            public void stop() {
+                pause.stop();
+            }
+        };
+    };
+
+    private final Dialog<CreateProjectForm.Result> dialog;
+    private final CreateProjectForm form;
     private final TextField projectNameField;
     private final TextField projectLocationField;
+    private final ComboBox<EngineChoice> engineBox;
+    private final ComboBox<TemplateCatalog.Template> templateBox;
+    private final Label templateDescriptionLabel;
+    private final VBox optionsBox;
+    private final Label noteLabel;
+    private final CheckBox openAfterCreateBox;
     private final Label validationLabel;
-    private final Button createButton;
-    private final Window owner;
+    private final Label warningLabel;
+    private final Label statusLabel;
+    private final ProgressBar progressBar;
 
-    public record ProjectCreationParams(String name, Path location) {
-    }
-
-    public CreateProjectDialog(Window owner) {
-        this.owner = owner;
-        this.dialog = new Dialog<>();
+    public CreateProjectDialog(Window owner, CreateProjectForm.Services services) {
+        this.form = new CreateProjectForm(services, FX_TIMERS, Platform::runLater);
+        this.dialog = DialogFactory.dialog(owner, "Create New Project");
         this.projectNameField = new TextField();
         this.projectLocationField = new TextField();
+        this.engineBox = new ComboBox<>();
+        this.templateBox = new ComboBox<>();
+        this.templateDescriptionLabel = new Label();
+        this.optionsBox = new VBox(6);
+        this.noteLabel = new Label();
+        this.openAfterCreateBox = new CheckBox("Open in the editor after creating");
         this.validationLabel = new Label();
+        this.warningLabel = new Label();
+        this.statusLabel = new Label();
+        this.progressBar = new ProgressBar();
 
         configureDialog();
         DialogPane dialogPane = createDialogPane();
         dialog.setDialogPane(dialogPane);
 
-        // Get the Create button
-        this.createButton = (Button) dialogPane.lookupButton(ButtonType.OK);
+        Button createButton = (Button) dialogPane.lookupButton(ButtonType.OK);
         createButton.setText("Create");
-        createButton.setDisable(true);
-
-        setupValidation();
-        setupResultConverter();
+        Button cancelButton = (Button) dialogPane.lookupButton(ButtonType.CANCEL);
+        bindToForm(createButton, cancelButton);
 
         // Focus on project name field when dialog opens
-        Platform.runLater(() -> projectNameField.requestFocus());
+        Platform.runLater(projectNameField::requestFocus);
     }
 
-    public static Optional<ProjectCreationParams> show(Window owner) {
-        CreateProjectDialog dialog = new CreateProjectDialog(owner);
+    /**
+     * Shows the dialog and waits until it closes.
+     *
+     * @return how it ended; empty only if it closed without going through the form
+     */
+    public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services) {
+        return show(owner, services, Optional.empty());
+    }
+
+    /**
+     * As {@link #show(Window, CreateProjectForm.Services)}, starting in {@code initialLocation} (the Settings dialog's
+     * default location, VK-1694). The form checks it like a typed location, so a folder that is gone is reported.
+     */
+    public static Optional<CreateProjectForm.Result> show(Window owner, CreateProjectForm.Services services,
+                                                          Optional<Path> initialLocation) {
+        CreateProjectDialog dialog = new CreateProjectDialog(owner, services);
+        initialLocation.ifPresent(location -> dialog.form.locationProperty().set(location.toString()));
         return dialog.showAndWait();
     }
 
-    public Optional<ProjectCreationParams> showAndWait() {
+    public Optional<CreateProjectForm.Result> showAndWait() {
         return dialog.showAndWait();
     }
 
     private void configureDialog() {
-        dialog.setTitle("Create New Project");
         dialog.setHeaderText("Create a new VertexForge project");
-        dialog.initOwner(owner);
         dialog.setResizable(false);
     }
 
     private DialogPane createDialogPane() {
-        DialogPane dialogPane = new DialogPane();
+        DialogPane dialogPane = DialogFactory.pane();
         dialogPane.getStyleClass().add("create-project-dialog");
         dialogPane.setContent(createFormGrid());
         dialogPane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -80,9 +145,9 @@ public class CreateProjectDialog {
     private GridPane createFormGrid() {
         GridPane grid = new GridPane();
         grid.setHgap(10);
-        grid.setVgap(15);
+        grid.setVgap(12);
         grid.setPadding(new Insets(20));
-        grid.setPrefWidth(500);
+        grid.setPrefWidth(520);
 
         // Project Name
         Label nameLabel = new Label("Project Name:");
@@ -101,34 +166,187 @@ public class CreateProjectDialog {
         Button browseButton = new Button("Browse...");
         browseButton.getStyleClass().add("browse-button");
         browseButton.setOnAction(e -> onBrowse());
+        browseButton.disableProperty().bind(form.inputsEnabledProperty().not());
 
         HBox locationBox = new HBox(10, projectLocationField, browseButton);
         HBox.setHgrow(projectLocationField, Priority.ALWAYS);
         grid.add(locationLabel, 0, 1);
         grid.add(locationBox, 1, 1);
 
-        // Validation message
+        // Engine and template (VK-1689): the project starts with the chosen engine's template and script library.
+        Label engineLabel = new Label("Engine:");
+        engineLabel.getStyleClass().add("form-label");
+        engineBox.setMaxWidth(Double.MAX_VALUE);
+        configureCells(engineBox, choice -> choice.label() + "  —  " + choice.path());
+        grid.add(engineLabel, 0, 2);
+        grid.add(engineBox, 1, 2);
+
+        Label templateLabel = new Label("Template:");
+        templateLabel.getStyleClass().add("form-label");
+        templateBox.setMaxWidth(Double.MAX_VALUE);
+        configureCells(templateBox, template -> template.manifest().name());
+        templateDescriptionLabel.getStyleClass().add("creation-status");
+        noteLabel.getStyleClass().add("validation-warning");
+        VBox templateDetails = new VBox(8, templateBox, templateDescriptionLabel, optionsBox, noteLabel);
+        grid.add(templateLabel, 0, 3);
+        grid.add(templateDetails, 1, 3);
+        for (Label label : new Label[]{templateDescriptionLabel, noteLabel}) {
+            label.setWrapText(true);
+            label.setMaxWidth(380);
+            label.visibleProperty().bind(label.textProperty().isNotEmpty());
+            label.managedProperty().bind(label.visibleProperty());
+        }
+        optionsBox.visibleProperty().bind(Bindings.isNotEmpty(optionsBox.getChildren()));
+        optionsBox.managedProperty().bind(optionsBox.visibleProperty());
+
+        grid.add(openAfterCreateBox, 1, 4);
+
+        // Messages: an error blocks Create, warnings never do, the status says what is going on.
         validationLabel.getStyleClass().add("validation-error");
-        validationLabel.setWrapText(true);
-        validationLabel.setMaxWidth(400);
-        grid.add(validationLabel, 0, 2, 2, 1);
+        warningLabel.getStyleClass().add("validation-warning");
+        statusLabel.getStyleClass().add("creation-status");
+        progressBar.getStyleClass().add("creation-progress");
+        progressBar.setMaxWidth(Double.MAX_VALUE);
+        VBox messages = new VBox(8, validationLabel, warningLabel, progressBar, statusLabel);
+        for (Label label : new Label[]{validationLabel, warningLabel, statusLabel}) {
+            label.setWrapText(true);
+            label.setMaxWidth(480);
+            label.visibleProperty().bind(label.textProperty().isNotEmpty());
+            label.managedProperty().bind(label.visibleProperty());
+        }
+        progressBar.visibleProperty().bind(form.busyProperty());
+        progressBar.managedProperty().bind(progressBar.visibleProperty());
+        grid.add(messages, 0, 5, 2, 1);
 
         return grid;
     }
 
-    private void setupValidation() {
-        projectNameField.textProperty().addListener((obs, old, newVal) -> validateInputs());
-        projectLocationField.textProperty().addListener((obs, old, newVal) -> validateInputs());
+    /** Shows each item, and the selected one, as {@code text} gives it. */
+    private static <T> void configureCells(ComboBox<T> box, Function<T, String> text) {
+        Callback<javafx.scene.control.ListView<T>, ListCell<T>> cells = list -> new ListCell<>() {
+            @Override
+            protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : text.apply(item));
+            }
+        };
+        box.setCellFactory(cells);
+        // The button cell shows the prompt text while nothing is selected, as ComboBox's own button cell does.
+        box.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? box.getPromptText() : text.apply(item));
+            }
+        });
+        box.promptTextProperty().addListener((observable, was, now) -> {
+            if (box.getValue() == null) {
+                box.getButtonCell().setText(now);
+            }
+        });
     }
 
-    private void setupResultConverter() {
-        dialog.setResultConverter(buttonType -> {
-            if (buttonType == ButtonType.OK) {
-                String name = projectNameField.getText().trim();
-                Path location = Paths.get(projectLocationField.getText().trim());
-                return new ProjectCreationParams(name, location);
+    /** One checkbox per option the template offers; an option the engine can't provide is disabled, with why. */
+    private void rebuildOptions() {
+        optionsBox.getChildren().clear();
+        for (OptionChoice option : form.options()) {
+            CheckBox box = new CheckBox(option.name());
+            box.selectedProperty().bindBidirectional(option.selectedProperty());
+            if (option.available()) {
+                box.disableProperty().bind(form.inputsEnabledProperty().not());
+                if (!option.description().isEmpty()) {
+                    box.setTooltip(new Tooltip(option.description()));
+                }
+            } else {
+                box.setDisable(true);
             }
-            return null;
+            optionsBox.getChildren().add(box);
+            // A disabled control shows no tooltip, so the reason is a line of its own.
+            option.unavailableReason().ifPresent(reason -> {
+                Label why = new Label("Not available: " + reason);
+                why.getStyleClass().add("creation-status");
+                why.setWrapText(true);
+                why.setMaxWidth(380);
+                optionsBox.getChildren().add(why);
+            });
+        }
+    }
+
+    private void bindToForm(Button createButton, Button cancelButton) {
+        projectNameField.textProperty().bindBidirectional(form.nameProperty());
+        projectLocationField.textProperty().bindBidirectional(form.locationProperty());
+        openAfterCreateBox.selectedProperty().bindBidirectional(form.openAfterCreateProperty());
+
+        engineBox.setItems(form.engines());
+        engineBox.valueProperty().bindBidirectional(form.engineProperty());
+        engineBox.promptTextProperty().bind(form.enginePromptProperty());
+        templateBox.setItems(form.templates());
+        templateBox.valueProperty().bindBidirectional(form.templateProperty());
+        templateBox.promptTextProperty().bind(form.templatePromptProperty());
+        templateDescriptionLabel.textProperty().bind(form.templateDescriptionProperty());
+        noteLabel.textProperty().bind(form.noteProperty());
+        form.options().addListener((ListChangeListener<OptionChoice>) change -> rebuildOptions());
+        rebuildOptions();
+
+        projectNameField.disableProperty().bind(form.inputsEnabledProperty().not());
+        projectLocationField.disableProperty().bind(form.inputsEnabledProperty().not());
+        engineBox.disableProperty().bind(form.inputsEnabledProperty().not());
+        templateBox.disableProperty().bind(form.inputsEnabledProperty().not());
+        openAfterCreateBox.disableProperty().bind(form.openAfterCreateEnabledProperty().not());
+        createButton.disableProperty().bind(form.createEnabledProperty().not());
+        cancelButton.disableProperty().bind(form.cancelEnabledProperty().not());
+
+        validationLabel.textProperty().bind(form.errorProperty());
+        warningLabel.textProperty().bind(form.warningsProperty());
+        statusLabel.textProperty().bind(form.statusProperty());
+        progressBar.progressProperty().bind(form.progressProperty());
+
+        // Create starts the creation instead of closing the dialog; Cancel goes through the form, which waits for a
+        // creation in progress to clean up. Consuming the event in a filter stops the dialog's own close handler.
+        createButton.addEventFilter(ActionEvent.ACTION, event -> {
+            event.consume();
+            form.create();
+        });
+        cancelButton.addEventFilter(ActionEvent.ACTION, event -> {
+            event.consume();
+            form.cancel();
+        });
+        // The window's close button and Alt+F4 ask too. They arrive as a window close request, which the dialog's
+        // own handler never consumes once it may close: the window would then hide in the middle of a creation. A
+        // filter runs before that handler, so the form decides; the dialog only closes once the form has.
+        dialog.setOnShowing(event -> dialog.getDialogPane().getScene().getWindow()
+                .addEventFilter(WindowEvent.WINDOW_CLOSE_REQUEST, closeRequest -> {
+                    if (form.getState() != CreateProjectForm.State.CLOSED) {
+                        closeRequest.consume();
+                        form.cancel();
+                    }
+                }));
+        // Any other close (Dialog.close) goes through the form the same way.
+        dialog.setOnCloseRequest(event -> {
+            if (form.getState() != CreateProjectForm.State.CLOSED) {
+                event.consume();
+                form.cancel();
+            }
+        });
+        // Until the form closes the converter returns null, and a null result never closes a dialog.
+        dialog.setResultConverter(buttonType -> form.result());
+        form.setOnClosed(result -> dialog.close());
+
+        // Messages come and go; let the window follow its content's height.
+        validationLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        warningLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        statusLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        progressBar.visibleProperty().addListener((observable, was, now) -> resizeToContent());
+        templateDescriptionLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        noteLabel.textProperty().addListener((observable, was, now) -> resizeToContent());
+        optionsBox.getChildren().addListener((ListChangeListener<javafx.scene.Node>) change -> resizeToContent());
+    }
+
+    private void resizeToContent() {
+        Platform.runLater(() -> {
+            if (dialog.getDialogPane().getScene() != null && dialog.getDialogPane().getScene().getWindow() != null) {
+                dialog.getDialogPane().getScene().getWindow().sizeToScene();
+            }
         });
     }
 
@@ -136,86 +354,12 @@ public class CreateProjectDialog {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Select Project Location");
 
-        // Set initial directory if current path is valid
-        String currentPath = projectLocationField.getText().trim();
-        if (!currentPath.isEmpty()) {
-            File currentDir = new File(currentPath);
-            if (currentDir.isDirectory()) {
-                chooser.setInitialDirectory(currentDir);
-            }
-        }
+        // Only a folder the background check has just found: looking at the typed one here could block the window.
+        form.readyLocation().map(Path::toFile).ifPresent(chooser::setInitialDirectory);
 
-        File selectedDir = chooser.showDialog(owner);
+        File selectedDir = chooser.showDialog(dialog.getDialogPane().getScene().getWindow());
         if (selectedDir != null) {
             projectLocationField.setText(selectedDir.getAbsolutePath());
-        }
-    }
-
-    private void validateInputs() {
-        ValidationResult result = validate();
-
-        if (result.valid()) {
-            validationLabel.setText("");
-            createButton.setDisable(false);
-        } else {
-            validationLabel.setText(result.message());
-            createButton.setDisable(true);
-        }
-    }
-
-    private ValidationResult validate() {
-        String name = projectNameField.getText().trim();
-        String location = projectLocationField.getText().trim();
-
-        // Check project name
-        if (name.isEmpty()) {
-            return ValidationResult.failure("Project name is required");
-        }
-
-        if (INVALID_NAME_CHARS.matcher(name).find()) {
-            return ValidationResult.failure("Project name contains invalid characters: \\ / : * ? \" < > |");
-        }
-
-        // Check location
-        if (location.isEmpty()) {
-            return ValidationResult.failure("Project location is required");
-        }
-
-        Path locationPath;
-        try {
-            locationPath = Paths.get(location);
-        } catch (Exception e) {
-            return ValidationResult.failure("Invalid location path");
-        }
-
-        if (!Files.exists(locationPath)) {
-            return ValidationResult.failure("Selected location does not exist");
-        }
-
-        if (!Files.isDirectory(locationPath)) {
-            return ValidationResult.failure("Selected location is not a directory");
-        }
-
-        if (!Files.isWritable(locationPath)) {
-            return ValidationResult.failure("Cannot write to selected location");
-        }
-
-        // Check if project already exists
-        Path projectPath = locationPath.resolve(name);
-        if (Files.exists(projectPath)) {
-            return ValidationResult.failure("A project with this name already exists at this location");
-        }
-
-        return ValidationResult.success();
-    }
-
-    private record ValidationResult(boolean valid, String message) {
-        static ValidationResult success() {
-            return new ValidationResult(true, null);
-        }
-
-        static ValidationResult failure(String message) {
-            return new ValidationResult(false, message);
         }
     }
 }

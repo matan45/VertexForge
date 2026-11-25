@@ -5,6 +5,14 @@
 #include <fstream>
 #include <map>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
 namespace gameExport
 {
 	namespace fs = std::filesystem;
@@ -17,6 +25,42 @@ namespace gameExport
 						   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 			return value;
 		}
+
+		// Folder names compare as NTFS compares them: ordinal, ignoring case (also beyond ASCII).
+		bool sameFolderName(const std::wstring& a, const std::wstring& b)
+		{
+			return CompareStringOrdinal(a.c_str(), static_cast<int>(a.size()),
+										b.c_str(), static_cast<int>(b.size()), TRUE) == CSTR_EQUAL;
+		}
+
+		std::string utf8(const fs::path& path)
+		{
+			const std::u8string text = path.u8string();
+			return std::string(text.begin(), text.end());
+		}
+	}
+
+	std::vector<ParsedPluginDescriptor> descriptorsFromHost(const std::vector<ExportPluginSource>& sources,
+															std::vector<std::string>& warnings)
+	{
+		std::vector<ParsedPluginDescriptor> descriptors;
+		for (const auto& source : sources)
+		{
+			if (source.descriptorPath.empty())
+			{
+				continue;
+			}
+			std::optional<ParsedPluginDescriptor> descriptor = parsePluginDescriptor(source.descriptorPath);
+			if (!descriptor)
+			{
+				warnings.push_back("Plugin descriptor " + utf8(source.descriptorPath) +
+					" could not be read: that plugin is not shipped");
+				continue;
+			}
+			descriptor->enabled = source.enabled;
+			descriptors.push_back(std::move(*descriptor));
+		}
+		return descriptors;
 	}
 
 	std::optional<ParsedPluginDescriptor> parsePluginDescriptor(const fs::path& descriptorPath)
@@ -137,6 +181,32 @@ namespace gameExport
 			}
 
 			plan.pluginsToShip.push_back(descriptor);
+		}
+
+		// VK-1733: the game gets plugins/<descriptor's folder name>/ per plugin, so two shipped plugins
+		// from folders of one name (a shipped plugin and a user's own, say) would overwrite each other.
+		std::vector<std::pair<std::wstring, const ParsedPluginDescriptor*>> folders;
+		for (const auto& descriptor : plan.pluginsToShip)
+		{
+			if (descriptor.descriptorPath.empty())
+			{
+				continue;
+			}
+			const fs::path folder = descriptor.descriptorPath.parent_path().filename();
+			const std::wstring folderName = folder.wstring();
+			const auto clash = std::find_if(folders.begin(), folders.end(), [&folderName](const auto& seen)
+			{
+				return sameFolderName(seen.first, folderName);
+			});
+			if (clash != folders.end())
+			{
+				const ParsedPluginDescriptor& first = *clash->second;
+				plan.errors.push_back("Plugins '" + first.name + "' (" + utf8(first.descriptorPath) + ") and '" +
+					descriptor.name + "' (" + utf8(descriptor.descriptorPath) + ") would both ship as plugins/" +
+					utf8(folder) + " — rename one plugin's folder");
+				continue;
+			}
+			folders.emplace_back(folderName, &descriptor);
 		}
 
 		return plan;

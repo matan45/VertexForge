@@ -6,18 +6,42 @@
 #include "resource/VFSHelpers.hpp"
 #include <fstream>
 #include <filesystem>
+#include <system_error>
+#include <utility>
 
 namespace services
 {
     using json = nlohmann::json;
+    namespace fs = std::filesystem;
 
-    ConfigService::ConfigService()
+    ConfigService::ConfigService(std::filesystem::path stateFolder)
+        : stateFolder(std::move(stateFolder))
     {
         configData = json::object();
     }
 
+    ConfigService::~ConfigService()
+    {
+        // The dispatcher keys handlers by type: an instance that never registered must not remove another one's.
+        if (!handlersRegistered)
+        {
+            return;
+        }
+        auto& dispatcher = ::events::EventDispatcher::instance();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigIntCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigIntQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigFloatCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigFloatQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigStringCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigStringQuery>();
+        dispatcher.unregisterCommandHandler<::events::save::SetConfigBoolCommand>();
+        dispatcher.unregisterQueryHandler<::events::save::GetConfigBoolQuery>();
+    }
+
     void ConfigService::registerEventHandlers(::events::EventDispatcher& dispatcher)
     {
+        handlersRegistered = true;
+
         dispatcher.registerCommandHandler<::events::save::SetConfigIntCommand>(
             [this](const ::events::save::SetConfigIntCommand& cmd)
             {
@@ -175,9 +199,18 @@ namespace services
 
         try
         {
+            // The editor's state folder may not exist yet; a failure shows in the write below.
+            std::error_code ec;
+            fs::create_directories(fs::path(path).parent_path(), ec);
+
             std::ofstream file(path);
             file << configData.dump(2);
             file.close();
+            if (!file)
+            {
+                // Before VK-1726 a game installed under Program Files lost every setting here, silently.
+                vfLogError("[ConfigService] Failed to write {}", path);
+            }
         }
         catch (const std::exception& e)
         {
@@ -187,13 +220,26 @@ namespace services
 
     std::string ConfigService::getConfigPath() const
     {
+        // VK-1726: an absolute state folder (the Runtime's) holds config.json whether a project is open or not.
+        if (stateFolder.is_absolute())
+        {
+            return (stateFolder / "config.json").string();
+        }
+
         auto& dispatcher = ::events::EventDispatcher::instance();
         ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
-        if (projectPath.has_value())
+        if (projectPath.has_value() && !projectPath->empty())
         {
-            return projectPath.value() + "/config.json";
+            // The query answers the .vfproj FILE path (as AssetDatabase reads it): config.json lives
+            // in its folder, under stateFolder.
+            fs::path folder = fs::path(*projectPath).parent_path();
+            if (!stateFolder.empty())
+            {
+                folder /= stateFolder;
+            }
+            return (folder / "config.json").string();
         }
         return "";
     }

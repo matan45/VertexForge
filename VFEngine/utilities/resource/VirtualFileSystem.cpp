@@ -1,19 +1,52 @@
 #include "VirtualFileSystem.hpp"
+#include "ArchivePathKey.hpp"
 #include "../archive/VFPakReader.hpp"
+#include "../launch/ProjectPathRules.hpp"
 #include "../print/Log.hpp"
+
+#include <system_error>
 
 namespace resource
 {
 	namespace
 	{
-		std::string normalizeArchivePath(const std::string& path)
+		namespace fs = std::filesystem;
+
+		// "C:\Game\" -> "C:\Game"; a drive root keeps its separator.
+		fs::path withoutTrailingSeparator(const fs::path& folder)
 		{
-			std::string normalized = path;
-			for (char& c : normalized)
+			if (!folder.has_filename() && folder.has_relative_path())
 			{
-				if (c == '\\') c = '/';
+				return folder.parent_path();
 			}
-			return normalized;
+			return folder;
+		}
+
+		// The folder that holds the .vfpak (found in the working directory), as archiveKeyFor compares it: its
+		// canonical form (what fs::relative measures from, junctions and short names resolved), then its
+		// absolute spelling when that differs (what fs::absolute builds on, VK-1726). Empty when the folder
+		// cannot be made absolute: absolute paths then simply miss the archive, as before.
+		std::vector<fs::path> archiveRootsFor(const fs::path& pakPath)
+		{
+			std::vector<fs::path> roots;
+			std::error_code ec;
+			const fs::path absoluteFolder = fs::absolute(pakPath.parent_path(), ec);
+			if (ec || absoluteFolder.empty())
+			{
+				return roots;
+			}
+			const fs::path spelled = withoutTrailingSeparator(absoluteFolder.lexically_normal());
+
+			const fs::path canonical = fs::weakly_canonical(absoluteFolder, ec);
+			if (!ec && !canonical.empty())
+			{
+				roots.push_back(withoutTrailingSeparator(canonical.lexically_normal()));
+			}
+			if (roots.empty() || !launch::componentEquals(roots.front(), spelled))
+			{
+				roots.push_back(spelled);
+			}
+			return roots;
 		}
 	}
 
@@ -30,6 +63,7 @@ namespace resource
 		if (pakPath.empty())
 		{
 			archiveMode = false;
+			archiveRoots.clear();
 			return;
 		}
 
@@ -37,12 +71,14 @@ namespace resource
 		if (archive->open(pakPath))
 		{
 			archiveMode = true;
+			archiveRoots = archiveRootsFor(pakPath);
 			vfLogInfo("VFS: Archive mode enabled with {} entries", archive->getEntryCount());
 		}
 		else
 		{
 			archive.reset();
 			archiveMode = false;
+			archiveRoots.clear();
 			vfLogWarning("VFS: Failed to open archive, falling back to filesystem");
 		}
 	}
@@ -56,6 +92,7 @@ namespace resource
 			archive.reset();
 		}
 		archiveMode = false;
+		archiveRoots.clear();
 	}
 
 	bool VirtualFileSystem::isArchiveMode() const
@@ -69,7 +106,7 @@ namespace resource
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			const std::string normalized = normalizeArchivePath(path);
+			const std::string normalized = archiveKeyFor(path, archiveRoots);
 
 			if (archive->contains(normalized))
 			{
@@ -98,7 +135,7 @@ namespace resource
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			const std::string normalized = normalizeArchivePath(path);
+			const std::string normalized = archiveKeyFor(path, archiveRoots);
 
 			auto location = archive->getEntryLocation(normalized);
 			if (location)
@@ -138,7 +175,7 @@ namespace resource
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			const std::string normalized = normalizeArchivePath(path);
+			const std::string normalized = archiveKeyFor(path, archiveRoots);
 			if (archive->contains(normalized))
 			{
 				auto location = archive->getEntryLocation(normalized);
@@ -168,7 +205,7 @@ namespace resource
 		std::shared_lock lock(vfsMutex);
 		if (archiveMode && archive)
 		{
-			const std::string normalized = normalizeArchivePath(path);
+			const std::string normalized = archiveKeyFor(path, archiveRoots);
 
 			if (archive->contains(normalized))
 			{

@@ -281,6 +281,8 @@ namespace plugin {
 
         // === Plugin Data Directory ===
         // Returns a persistent directory path for this plugin's data storage.
+        // An installed engine keeps it per user, in
+        // %USERPROFILE%\.vertexforge\editor\plugin-data\<Name>; the dev tree in plugins/data/<Name>.
         virtual std::string getPluginDataPath() const = 0;
 
         // === Plugin Config Persistence ===

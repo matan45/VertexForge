@@ -260,9 +260,9 @@ namespace types
 
         resource::VfAudioHeader header;
         header.fileType = static_cast<uint8_t>(audioData.headerFileType);
-        header.versionMajor = Version::major;
-        header.versionMinor = Version::minor;
-        header.versionPatch = Version::patch;
+        header.versionMajor = AssetFormatVersion::major;
+        header.versionMinor = AssetFormatVersion::minor;
+        header.versionPatch = AssetFormatVersion::patch;
         header.compressionFormat = static_cast<uint8_t>(audioData.compressionFormat);
         header.loadType = static_cast<uint8_t>(audioData.loadType);
         header.sampleRate = audioData.sampleRate;

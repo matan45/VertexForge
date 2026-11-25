@@ -11,8 +11,10 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace repo_scan
 {
@@ -39,8 +41,10 @@ namespace repo_scan
             return std::nullopt;
         };
 
-        char buf[MAX_PATH]{};
-        if (GetModuleFileNameA(nullptr, buf, MAX_PATH) > 0)
+        // Wide (VK-1684): a narrow MAX_PATH byte buffer would cut a UTF-8 path short.
+        wchar_t buf[MAX_PATH]{};
+        const DWORD length = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (length > 0 && length < MAX_PATH)
         {
             if (auto root = walkUp(fs::path(buf).parent_path())) return root;
         }
@@ -53,6 +57,19 @@ namespace repo_scan
         }
 
         return std::nullopt;
+    }
+
+    // This Tests build's configuration, from the defines vfStandardConfigs() sets: the
+    // bin/<App>/<Config>/x64 folder whose Editor.exe / Runtime.exe the binary checks read.
+    constexpr const char* thisConfiguration()
+    {
+#if defined(DEBUG)
+        return "Debug";
+#elif defined(VF_DEVELOPMENT)
+        return "Development";
+#else
+        return "Release";
+#endif
     }
 
     inline std::string readFile(const fs::path& path)
@@ -116,5 +133,52 @@ namespace repo_scan
         }
 
         return out;
+    }
+
+    // Whether mType's import resolver finds `target`, imported by `importingFile`, in the scripts project whose
+    // .mtproj lies in `projectFolder` (dependencies/mType/mType/services/ImportManager_Resolution.cpp): an
+    // absolute path as it is, else the importing file's folder, then the project folder, then each search path
+    // of the .mtproj (relative to the project folder). Moved here from test_script_lib_imports (VK-1689).
+    inline bool importResolves(const fs::path& projectFolder, const fs::path& importingFile, const std::string& target,
+                               const std::vector<std::string>& searchPaths = {"lib"})
+    {
+        const fs::path relative(target);
+        if (relative.is_absolute())
+            return fs::exists(relative);
+
+        if (fs::exists(importingFile.parent_path() / relative) || fs::exists(projectFolder / relative))
+            return true;
+        for (const std::string& searchPath : searchPaths)
+        {
+            if (fs::exists(projectFolder / searchPath / relative))
+                return true;
+        }
+        return false;
+    }
+
+    // Every `import ... from "<target>"` (comments ignored) in the .mt files under `folder` that importResolves
+    // rejects, as "<file relative to projectFolder> -> <target>".
+    inline std::vector<std::string> unresolvedImports(const fs::path& projectFolder, const fs::path& folder,
+                                                      const std::vector<std::string>& searchPaths = {"lib"})
+    {
+        static const std::regex importPattern(R"(import\s+[^;"]*?from\s+"([^"]+)\")");
+
+        std::vector<std::string> failures;
+        for (const auto& entry : fs::recursive_directory_iterator(folder))
+        {
+            if (!entry.is_regular_file() || entry.path().extension() != ".mt")
+                continue;
+
+            const std::string code = stripComments(readFile(entry.path()));
+            for (std::sregex_iterator it(code.begin(), code.end(), importPattern), end; it != end; ++it)
+            {
+                const std::string target = (*it)[1].str();
+                if (!importResolves(projectFolder, entry.path(), target, searchPaths))
+                {
+                    failures.push_back(fs::relative(entry.path(), projectFolder).generic_string() + " -> " + target);
+                }
+            }
+        }
+        return failures;
     }
 }

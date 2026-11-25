@@ -1,0 +1,5 @@
+// VK-1696: Tests.exe's version resource (config/VersionInfo.rc2); package-release ships Tests.exe too.
+#define VF_RC_FILE_DESCRIPTION "VertexForge Tests"
+#define VF_RC_INTERNAL_NAME "Tests"
+#define VF_RC_ORIGINAL_FILENAME "Tests.exe"
+#include "config/VersionInfo.rc2"

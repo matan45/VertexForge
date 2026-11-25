@@ -1,0 +1,425 @@
+#include <doctest.h>
+
+#include "api/PluginVersion.hpp"
+#include "config/Config.hpp"
+#include "config/ProjectConfig.hpp"
+#include "launch/EditorArguments.hpp"
+#include "launch/UserStateLocation.hpp"
+#include "serialization/ProjectSerialization.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <string>
+#include <system_error>
+#include <vector>
+
+#include "test_repo_scan_helpers.hpp" // pulls <windows.h>: keep it last
+
+// ============================================================
+// VK-1680: the repo-root VERSION file is the ONLY engine version source.
+// premake (tools/engine_version.lua) turns it into EngineVersion.generated.hpp,
+// which Config.hpp's `Version` reads, and the Editor postbuild writes engine.json
+// beside Editor.exe from the same sources. These tests catch a stale generation
+// (VERSION edited without re-running premake5 vs2022) and pin the manifest
+// contract that the launcher's engine registry (VK-1681) reads.
+// ============================================================
+
+namespace
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    struct ParsedVersion
+    {
+        uint32_t major = 0;
+        uint32_t minor = 0;
+        uint32_t patch = 0;
+        std::string text;
+    };
+
+    // The rules of vfReadEngineVersion() in tools/engine_version.lua: a UTF-8 BOM and
+    // surrounding whitespace are ignored; the rest must be MAJOR.MINOR.PATCH, decimal,
+    // without leading zeros, each part at most 65535 (VK-1696: a VERSIONINFO FILEVERSION
+    // part is 16 bits).
+    std::optional<ParsedVersion> parseVersionText(std::string content)
+    {
+        if (content.compare(0, 3, "\xEF\xBB\xBF") == 0)
+            content.erase(0, 3);
+
+        auto isBlank = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+        size_t begin = 0;
+        size_t end = content.size();
+        while (begin < end && isBlank(content[begin]))
+            ++begin;
+        while (end > begin && isBlank(content[end - 1]))
+            --end;
+
+        ParsedVersion parsed;
+        parsed.text = content.substr(begin, end - begin);
+        const std::string& text = parsed.text;
+
+        uint32_t* parts[3] = {&parsed.major, &parsed.minor, &parsed.patch};
+        size_t pos = 0;
+        for (int part = 0; part < 3; ++part)
+        {
+            const size_t start = pos;
+            uint64_t value = 0;
+            while (pos < text.size() && text[pos] >= '0' && text[pos] <= '9')
+            {
+                value = value * 10 + static_cast<uint64_t>(text[pos] - '0');
+                if (value > 0xFFFFull)
+                    return std::nullopt;
+                ++pos;
+            }
+            const size_t digits = pos - start;
+            if (digits == 0 || (digits > 1 && text[start] == '0'))
+                return std::nullopt;
+            *parts[part] = static_cast<uint32_t>(value);
+
+            if (part < 2)
+            {
+                if (pos >= text.size() || text[pos] != '.')
+                    return std::nullopt;
+                ++pos;
+            }
+        }
+        if (pos != text.size())
+            return std::nullopt;
+        return parsed;
+    }
+
+    using repo_scan::thisConfiguration;
+
+    std::string stringField(const json& object, const char* key)
+    {
+        const auto it = object.find(key);
+        return (it != object.end() && it->is_string()) ? it->get<std::string>() : std::string{};
+    }
+
+    bool isLowerHex40(const std::string& text)
+    {
+        if (text.size() != 40)
+            return false;
+        for (char c : text)
+        {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+                return false;
+        }
+        return true;
+    }
+
+    // The '/'-separated parts of a manifest path, empty ones included: "a//b/" gives a, "", b, "".
+    std::vector<std::string> slashParts(const std::string& text)
+    {
+        std::vector<std::string> parts;
+        size_t start = 0;
+        while (true)
+        {
+            const size_t slash = text.find('/', start);
+            if (slash == std::string::npos)
+            {
+                parts.push_back(text.substr(start));
+                return parts;
+            }
+            parts.push_back(text.substr(start, slash - start));
+            start = slash + 1;
+        }
+    }
+
+    bool equalsIgnoreAsciiCase(const std::string& a, const std::string& b)
+    {
+        auto lower = [](char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; };
+        if (a.size() != b.size())
+            return false;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            if (lower(a[i]) != lower(b[i]))
+                return false;
+        }
+        return true;
+    }
+
+    struct TempDir
+    {
+        fs::path path;
+
+        explicit TempDir(const char* name) : path(fs::temp_directory_path() / name)
+        {
+            std::error_code ec;
+            fs::remove_all(path, ec);
+            fs::create_directories(path, ec);
+        }
+
+        ~TempDir()
+        {
+            std::error_code ec;
+            fs::remove_all(path, ec);
+        }
+    };
+}
+
+TEST_SUITE("EngineVersion")
+{
+    TEST_CASE("the VERSION parser follows the premake rules")
+    {
+        const auto plain = parseVersionText("1.0.0");
+        REQUIRE(plain.has_value());
+        CHECK(plain->major == 1u);
+        CHECK(plain->minor == 0u);
+        CHECK(plain->patch == 0u);
+        CHECK(plain->text == "1.0.0");
+
+        const auto decorated = parseVersionText("\xEF\xBB\xBF 2.10.3\r\n");
+        REQUIRE(decorated.has_value());
+        CHECK(decorated->major == 2u);
+        CHECK(decorated->minor == 10u);
+        CHECK(decorated->patch == 3u);
+        CHECK(decorated->text == "2.10.3");
+
+        CHECK(parseVersionText("65535.65535.65535").has_value());
+
+        CHECK_FALSE(parseVersionText("").has_value());
+        CHECK_FALSE(parseVersionText("1.0").has_value());
+        CHECK_FALSE(parseVersionText("1.0.0.0").has_value());
+        CHECK_FALSE(parseVersionText("01.0.0").has_value());
+        CHECK_FALSE(parseVersionText("1.0.0-beta").has_value());
+        CHECK_FALSE(parseVersionText("v1.0.0").has_value());
+        CHECK_FALSE(parseVersionText("1. 0.0").has_value());
+        CHECK_FALSE(parseVersionText("65536.0.0").has_value());
+        CHECK_FALSE(parseVersionText("1.0.65536").has_value());
+    }
+
+    TEST_CASE("Version matches the repo-root VERSION file")
+    {
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+        const fs::path versionFile = *root / "VERSION";
+        REQUIRE_MESSAGE(fs::exists(versionFile), "missing " << versionFile.string());
+
+        const auto parsed = parseVersionText(repo_scan::readFile(versionFile));
+        REQUIRE_MESSAGE(parsed.has_value(), "VERSION is not MAJOR.MINOR.PATCH");
+
+        INFO("VERSION says " << parsed->text << " but this build compiled " << Version::text
+                             << ": re-run premake5 vs2022 and rebuild");
+        CHECK(Version::major == parsed->major);
+        CHECK(Version::minor == parsed->minor);
+        CHECK(Version::patch == parsed->patch);
+        CHECK(std::string(Version::text) == parsed->text);
+        CHECK(std::string(Version::displayName) == "VertexForge " + parsed->text);
+    }
+
+    TEST_CASE("Version::text and displayName spell Version's numbers")
+    {
+        const std::string numbers =
+            std::to_string(Version::major) + "." + std::to_string(Version::minor) + "." + std::to_string(Version::patch);
+        CHECK(std::string(Version::text) == numbers);
+        CHECK(std::string(Version::displayName) == "VertexForge " + numbers);
+    }
+
+    // VK-1690: the spelling engine.json and the .vfproj use, which the launcher compares.
+    TEST_CASE("AssetFormatVersion::toString spells AssetFormatVersion's numbers")
+    {
+        const std::string numbers = std::to_string(AssetFormatVersion::major) + "." +
+                                    std::to_string(AssetFormatVersion::minor) + "." +
+                                    std::to_string(AssetFormatVersion::patch);
+        CHECK(AssetFormatVersion::toString() == numbers);
+    }
+
+    TEST_CASE("a saved .vfproj carries the engine version from VERSION")
+    {
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+        const auto parsed = parseVersionText(repo_scan::readFile(*root / "VERSION"));
+        REQUIRE(parsed.has_value());
+
+        TempDir temp("VertexForge_EngineVersion_SaveProject");
+        config::ProjectConfig project;
+        project.projectName = "EngineVersionProject";
+        project.version = "1.0";
+        project.workingDirectory = temp.path.string();
+        project.startupScene = "Startup.vfScene";
+        project.engineVersion = "VertexForge 0.0.1"; // an older engine's record: a save raises it (VK-1690)
+
+        const fs::path projectFile = temp.path / "EngineVersion.vfproj";
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
+
+        std::ifstream file(projectFile);
+        const json saved = json::parse(file, nullptr, false);
+        REQUIRE_FALSE(saved.is_discarded());
+        CHECK(stringField(saved, "engineVersion") == "VertexForge " + parsed->text);
+        CHECK(stringField(saved, "engineVersion") == std::string(Version::displayName));
+    }
+
+    // VK-1690: the launcher compares a project's asset format with the engine's before it opens it.
+    TEST_CASE("a saved .vfproj carries the asset format version")
+    {
+        TempDir temp("VertexForge_EngineVersion_SaveAssetFormat");
+        config::ProjectConfig project;
+        project.projectName = "AssetFormatProject";
+        project.version = "1.0";
+        project.workingDirectory = temp.path.string();
+        project.startupScene = "Startup.vfScene";
+
+        const fs::path projectFile = temp.path / "AssetFormat.vfproj";
+        REQUIRE(serialization::ProjectSerialization::saveProject(project, projectFile.string()));
+
+        std::ifstream file(projectFile);
+        const json saved = json::parse(file, nullptr, false);
+        REQUIRE_FALSE(saved.is_discarded());
+        CHECK(stringField(saved, "assetFormatVersion") == AssetFormatVersion::toString());
+        CHECK(stringField(saved, "engineVersion") == std::string(Version::displayName));
+    }
+
+    TEST_CASE("the dev engine.json beside this configuration's Editor.exe")
+    {
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+
+        const fs::path manifestDir = *root / "bin" / "Editor" / thisConfiguration() / "x64";
+        const fs::path manifestPath = manifestDir / "engine.json";
+        if (!fs::exists(manifestPath))
+        {
+            MESSAGE("skipped: " << manifestPath.string() << " not found (build the Editor in " << thisConfiguration()
+                                << ": its postbuild writes the manifest)");
+            return;
+        }
+
+        const json manifest = json::parse(repo_scan::readFile(manifestPath), nullptr, false);
+        REQUIRE_MESSAGE(!manifest.is_discarded(), manifestPath.string() << " is not valid JSON");
+        REQUIRE(manifest.is_object());
+        INFO("manifest " << manifestPath.string() << " (rebuild the Editor " << thisConfiguration()
+                         << " if it is stale)");
+
+        // The VK-1681 contract: exactly these fields (launchContract added by VK-1683, examplesDir and
+        // vfxLibraryDir by VK-1689, projectCacheDirs by VK-1695, stateLocation by VK-1732, still manifestVersion 1:
+        // the launcher ignores members it does not know).
+        const char* keys[] = {"manifestVersion", "engineVersion", "assetFormatVersion", "projectSchemaVersion",
+                              "pluginApiVersion", "launchContract", "configuration", "gitCommit", "editorExe",
+                              "workingDirectory", "stateLocation", "templatesDir", "scriptLibDir", "examplesDir",
+                              "vfxLibraryDir", "projectCacheDirs"};
+        CHECK(manifest.size() == std::size(keys));
+        for (const char* key : keys)
+        {
+            CAPTURE(key);
+            CHECK(manifest.contains(key));
+        }
+
+        REQUIRE(manifest.contains("manifestVersion"));
+        CHECK(manifest["manifestVersion"].is_number_unsigned());
+        CHECK(manifest["manifestVersion"] == 1);
+
+        CHECK(stringField(manifest, "engineVersion") == std::string(Version::text));
+        CHECK(stringField(manifest, "assetFormatVersion") == AssetFormatVersion::toString());
+        CHECK(stringField(manifest, "projectSchemaVersion") == config::ProjectSchemaVersion::toString());
+        REQUIRE(manifest.contains("pluginApiVersion"));
+        REQUIRE(manifest["pluginApiVersion"].is_number_unsigned());
+        CHECK(manifest["pluginApiVersion"].get<uint32_t>() == plugin::VF_PLUGIN_API_VERSION);
+        // VK-1683: the Editor.exe command-line contract revision the launcher reads before it passes a flag.
+        REQUIRE(manifest.contains("launchContract"));
+        REQUIRE(manifest["launchContract"].is_number_unsigned());
+        CHECK(manifest["launchContract"].get<int>() == launch::editorLaunchContract);
+        CHECK(stringField(manifest, "configuration") == std::string(thisConfiguration()));
+        // VK-1732: the dev tree keeps the editor's state beside the engine; only the release package says "user".
+        CHECK(stringField(manifest, std::string(launch::stateLocationManifestKey).c_str()) ==
+              std::string(launch::stateLocationEngine));
+
+        REQUIRE(manifest.contains("gitCommit"));
+        const json& gitCommit = manifest["gitCommit"];
+        CHECK((gitCommit.is_null() || (gitCommit.is_string() && isLowerHex40(gitCommit.get<std::string>()))));
+
+        const std::string editorExe = stringField(manifest, "editorExe");
+        CHECK(editorExe == "Editor.exe");
+        CHECK(fs::exists(manifestDir / editorExe));
+
+        // Paths are relative to the manifest, with forward slashes.
+        for (const char* key : {"workingDirectory", "templatesDir", "scriptLibDir", "examplesDir", "vfxLibraryDir"})
+        {
+            CAPTURE(key);
+            const std::string value = stringField(manifest, key);
+            CHECK_FALSE(value.empty());
+            CHECK(value.find('\\') == std::string::npos);
+            CHECK(fs::path(value).is_relative());
+        }
+
+        std::error_code ec;
+        const fs::path workingDirectory = fs::weakly_canonical(manifestDir / stringField(manifest, "workingDirectory"), ec);
+        CHECK(fs::equivalent(workingDirectory, *root / "VFEngine" / "editor", ec));
+        // The editor loads engine resources from "../../resources/" relative to its working directory.
+        CHECK(fs::exists(workingDirectory / ".." / ".." / "resources" / "shaders"));
+
+        // The content folders the launcher creates projects from (VK-1689): each resolves to the repo's own.
+        const std::pair<const char*, fs::path> contentFolders[] = {
+            {"scriptLibDir", *root / "assets" / "scripts" / "lib"},
+            {"templatesDir", *root / "assets" / "templates"},
+            {"examplesDir", *root / "assets" / "scripts" / "game" / "examples"},
+            {"vfxLibraryDir", *root / "assets" / "vfx" / "library"},
+        };
+        for (const auto& [key, expected] : contentFolders)
+        {
+            CAPTURE(key);
+            const fs::path folder = fs::weakly_canonical(manifestDir / stringField(manifest, key), ec);
+            CHECK(fs::is_directory(folder, ec));
+            CHECK(fs::equivalent(folder, expected, ec));
+        }
+
+        // VK-1695: the build-output folders inside a project that the editor rebuilds, so the launcher's
+        // "Clean Caches..." may delete them. Unlike the paths above they are relative to a PROJECT's working
+        // directory: today only the compiled mType library (<wd>/scripts/compiled/scripts.mtcLib,
+        // ScriptingAdapter::getLibraryPath), the text the launcher's ProjectContent.COMPILED_SCRIPTS holds.
+        REQUIRE(manifest.contains("projectCacheDirs"));
+        const json& cacheDirs = manifest["projectCacheDirs"];
+        REQUIRE(cacheDirs.is_array());
+        const json expectedCacheDirs = json::array({"scripts/compiled"});
+        CHECK(cacheDirs == expectedCacheDirs);
+        // Every entry, so a folder added later stays one the launcher may delete safely: '/'-separated,
+        // inside the working directory, and never the editor's state folder.
+        for (const json& entry : cacheDirs)
+        {
+            REQUIRE(entry.is_string());
+            const std::string dir = entry.get<std::string>();
+            CAPTURE(dir);
+            CHECK_FALSE(dir.empty());
+            CHECK(dir.find('\\') == std::string::npos);
+            CHECK_FALSE(dir.starts_with('/'));
+            // No drive ("X:", absolute or drive-relative) and no NTFS stream name.
+            CHECK(dir.find(':') == std::string::npos);
+            const std::vector<std::string> parts = slashParts(dir);
+            for (const std::string& part : parts)
+            {
+                CAPTURE(part);
+                CHECK_FALSE(part.empty());
+                CHECK(part != ".");
+                CHECK(part != "..");
+            }
+            CHECK_FALSE(equalsIgnoreAsciiCase(parts.front(), ".vertexforge"));
+        }
+    }
+
+    TEST_CASE("the manifest writers spell the stateLocation values the editor reads")
+    {
+        // VK-1732: launch::processUserState reads stateLocation from the engine.json beside Editor.exe. The dev
+        // manifest (the engine-manifest action) must say "engine" and the release package "user", in exactly the
+        // text UserStateLocation.hpp compares with.
+        const auto root = repo_scan::findRepoRoot();
+        REQUIRE_MESSAGE(root.has_value(), "could not locate the repo root from Tests.exe");
+
+        CHECK(std::string(launch::stateLocationManifestKey) == "stateLocation");
+        const std::string writer = repo_scan::readFile(*root / "tools" / "engine_version.lua");
+        CHECK(writer.find("{ \"stateLocation\",") != std::string::npos);
+        CHECK(writer.find("jsonString(m.stateLocation)") != std::string::npos);
+        CHECK(writer.find("stateLocation = \"" + std::string(launch::stateLocationEngine) + "\"") != std::string::npos);
+        CHECK(writer.find("local stateLocations = { " + std::string(launch::stateLocationEngine) + " = true, " +
+                          std::string(launch::stateLocationUser) + " = true }") != std::string::npos);
+
+        const std::string package = repo_scan::readFile(*root / "tools" / "package_release.lua");
+        CHECK(package.find("stateLocation = \"" + std::string(launch::stateLocationUser) + "\"") != std::string::npos);
+        CHECK(package.find("stagedManifest.stateLocation ~= \"" + std::string(launch::stateLocationUser) + "\"") !=
+              std::string::npos);
+        CHECK(package.find("buildManifest.stateLocation ~= \"" + std::string(launch::stateLocationEngine) + "\"") !=
+              std::string::npos);
+    }
+}

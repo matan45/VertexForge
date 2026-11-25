@@ -1,5 +1,7 @@
 #include "TerrainMaterialEditorWindow.hpp"
 #include "../../graph/ShaderGraphCompiler.hpp"
+#include "../../graph/TerrainCompositeSnippet.hpp"
+#include "launch/UserStateLocation.hpp"
 #include <terrain/TerrainMaterialAsset.hpp>
 #include <resource/ResourceManager.hpp>
 #include "events/EventDispatcher.hpp"
@@ -10,6 +12,8 @@
 #include "imgui.h"
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <string>
 #include <algorithm>
 #include <format>
 #include <cstring>
@@ -79,18 +83,33 @@ namespace windows
             showCompileError = false;
             vfLogInfo("Terrain material compiled successfully: {}", materialData->name);
 
-            std::filesystem::path snippetPath = "../../resources/shaders/material/terrain_material_generated.glsl";
-            std::ofstream file(snippetPath);
-            if (file.is_open())
+            // VK-1732: the generated file depends on no material, so it ships with the engine and only an
+            // emitter change makes it differ. Rewrite it then, in the dev tree only: an installed engine's
+            // resources belong to the MSI (it deletes the install folder on every upgrade).
+            if (!launch::processUserState().isUser())
             {
-                file << "// Generated terrain material shader code\n";
-                file << result.materialSnippet;
-                file.close();
-                vfLogInfo("Terrain material shader written to: {}", snippetPath.string());
-            }
-            else
-            {
-                vfLogError("Failed to write terrain material shader file");
+                const std::filesystem::path snippetPath =
+                    "../../resources/shaders/material/terrain_material_generated.glsl";
+                std::string onDisk;
+                {
+                    std::ifstream in(snippetPath, std::ios::binary);
+                    if (in)
+                        onDisk.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                }
+                if (!editor::graph::terrainMaterialFileIsCurrent(onDisk))
+                {
+                    std::ofstream file(snippetPath);
+                    if (file.is_open())
+                    {
+                        file << editor::graph::buildTerrainMaterialGeneratedFile();
+                        file.close();
+                        vfLogInfo("Terrain material shader written to: {}", snippetPath.string());
+                    }
+                    else
+                    {
+                        vfLogError("Failed to write terrain material shader file");
+                    }
+                }
             }
 
             events::EventDispatcher::instance().publish(

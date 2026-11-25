@@ -18,7 +18,8 @@ namespace services {
     namespace {
 
         // Paths cross the event boundary as UTF-8; go through u8string so non-ASCII
-        // folders survive on Windows (narrow fs::path uses the ANSI code page).
+        // folders survive on Windows (narrow fs::path uses the process code page: UTF-8
+        // under the VK-1684 manifest, the ANSI code page on Windows older than 10 1903).
         std::filesystem::path pathFromUtf8(const std::string& utf8) {
             return std::filesystem::path(std::u8string(utf8.begin(), utf8.end()));
         }

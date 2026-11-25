@@ -216,4 +216,20 @@ TEST_CASE("getOriginalContents and restoreOriginalContents round-trip")
     CHECK(readFile(mat) == before);
 }
 
+// VK-1684: the editor's Play-mode saves live in <project>/.vertexforge/saves; a saved scene there
+// is no project asset, so a rename must neither find nor rewrite it.
+TEST_CASE("findReferencingFiles skips the editor's .vertexforge folder")
+{
+    TempTree tree("vf_refscan_state_folder");
+
+    const std::string target = "textures/wood.vfimage";
+    auto scene = tree.writeFile("scenes/main.vfscene", "{ \"texture\": \"" + target + "\" }");
+    auto saved = tree.writeFile(".vertexforge/saves/slot1/scene.vfscene", "{ \"texture\": \"" + target + "\" }");
+
+    auto result = asset::AssetReferenceScanner::findReferencingFiles(target, tree.root.string());
+    CHECK(contains(result.referencingFiles, scene.string()));
+    CHECK_FALSE(contains(result.referencingFiles, saved.string()));
+    CHECK(result.referencingFiles.size() == 1);
+}
+
 }

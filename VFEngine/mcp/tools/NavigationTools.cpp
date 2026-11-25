@@ -164,8 +164,8 @@ namespace mcp::tools
             catch (const std::exception&)
             {
                 throw ArgError("the navmesh folder '" + pathToUtf8(directory) + "' cannot be written through the "
-                               "engine's file paths; choose a 'directory' without characters outside the system code "
-                               "page");
+                               "engine's file paths; choose a 'directory' without characters outside this process's "
+                               "code page (Unicode paths need Windows 10 version 1903 or later)");
             }
         }
 

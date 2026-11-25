@@ -49,6 +49,9 @@ namespace config
         bool verifyIntegrity = true;
         bool buildScripts = true;
         bool stripUnreferencedAssets = false;
+        // VK-1726: the game keeps its config, saves, logs and crash reports beside its .vfproj instead of
+        // in %LOCALAPPDATA%\<Publisher>\<Game> (the shipped .vfproj's "stateLocation").
+        bool portableBuild = false;
         std::vector<std::string> alwaysIncludePatterns;
     };
 

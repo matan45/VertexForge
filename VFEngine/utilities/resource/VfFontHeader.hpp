@@ -31,9 +31,10 @@
 // All multi-byte fields are little-endian (see EndianUtils.hpp).
 //
 // Note: FontData::version is a FileVersion, whose default member initialisers
-// point at the GLOBAL engine version (Config.hpp). It only carries the font
-// format version on a FontData returned successfully by FontResource::loadFont,
-// which overwrites it from disk.
+// point at the shared binary asset version (AssetFormatVersion, Config.hpp),
+// not the font format version. It only carries the font format version on a
+// FontData returned successfully by FontResource::loadFont, which overwrites it
+// from disk.
 //
 // Version history:
 //   1.0.0 - implicit. Header carried the GLOBAL engine version and had no magic.

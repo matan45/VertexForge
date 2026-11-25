@@ -142,6 +142,15 @@ namespace serialization
         static json serializeVFX(const components::VFXComponent& vfx);
         static void deserializeVFX(const json& j, components::VFXComponent& vfx);
 
+        // How a scene refers to its .vfSettings sidecar and its terrain file ("settingsRefPath",
+        // "terrainRefPath"): relative to the scene's folder when there is a relative form, else absolute
+        // (VK-1726: a save slot outside the game folder), and read back against the scene's folder.
+        // Public for tests.
+        static std::filesystem::path resolveSettingsRefPath(std::string_view sceneFilename,
+                                                            const std::string& settingsRefPath);
+        static std::string makeSettingsRefPath(std::string_view sceneFilename,
+                                               const std::filesystem::path& settingsPath);
+
     private:
         static json serializeRootEntity(scene::Entity& root, std::string_view sourceFilename = {});
         // Shared serializer for serializeEntity (serial children) and serializeRootEntity
@@ -174,10 +183,6 @@ namespace serialization
         static void serializeMiscComponents(scene::Entity& entity, json& out);
 
         static std::filesystem::path getSettingsPathForScene(std::string_view sceneFilename);
-        static std::filesystem::path resolveSettingsRefPath(std::string_view sceneFilename,
-                                                            const std::string& settingsRefPath);
-        static std::string makeSettingsRefPath(std::string_view sceneFilename,
-                                               const std::filesystem::path& settingsPath);
         static json serializeSceneSettings(scene::SceneGraphSystem& sceneGraph);
         static bool saveSceneSettings(scene::SceneGraphSystem& sceneGraph,
                                       const std::filesystem::path& settingsPath);

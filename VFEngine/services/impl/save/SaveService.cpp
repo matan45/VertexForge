@@ -9,6 +9,8 @@
 #include "../../events/save/SaveEvents.hpp"
 #include "../../events/scene/ScenePersistenceEvents.hpp"
 #include "../../events/project/ProjectEvents.hpp"
+#include "../../events/editor/EditorModeEvents.hpp"
+#include "../../events/scripting/ScriptingEvents.hpp"
 #include "../../providers/scripting/IScriptingProvider.hpp"
 #include "print/Log.hpp"
 #include "resource/VFSHelpers.hpp"
@@ -18,6 +20,8 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <system_error>
+#include <utility>
 
 namespace services
 {
@@ -25,17 +29,30 @@ namespace services
     namespace fs = std::filesystem;
 
     SaveService::SaveService(std::shared_ptr<scene::SceneGraphSystem> sceneGraph,
-                             IScriptingProvider* scriptingProvider)
+                             IScriptingProvider* scriptingProvider,
+                             std::filesystem::path stateFolder,
+                             std::filesystem::path noProjectFolder)
         : sceneGraph(sceneGraph)
         , scriptingProvider(scriptingProvider)
+        , stateFolder(std::move(stateFolder))
+        , noProjectFolder(std::move(noProjectFolder))
     {
     }
 
     SaveService::~SaveService()
     {
-        if (sceneLoadToken.isValid())
+        // The subscriptions unsubscribe themselves. The handlers capture `this`: unregister them, but only when this
+        // instance registered them (the dispatcher keys handlers by type, and an instance that never registered must
+        // not remove another one's).
+        if (handlersRegistered)
         {
-            ::events::EventDispatcher::instance().unsubscribe(sceneLoadToken);
+            auto& dispatcher = ::events::EventDispatcher::instance();
+            dispatcher.unregisterCommandHandler<::events::save::CreateSaveSlotCommand>();
+            dispatcher.unregisterCommandHandler<::events::save::SaveGameCommand>();
+            dispatcher.unregisterCommandHandler<::events::save::LoadGameCommand>();
+            dispatcher.unregisterCommandHandler<::events::save::DeleteSaveSlotCommand>();
+            dispatcher.unregisterQueryHandler<::events::save::ListSaveSlotsQuery>();
+            dispatcher.unregisterQueryHandler<::events::save::GetSaveMetadataQuery>();
         }
     }
 
@@ -76,6 +93,50 @@ namespace services
             {
                 return getMetadata(q.slotName);
             });
+
+        handlersRegistered = true;
+        subscribeToRestoreEvents(dispatcher);
+    }
+
+    void SaveService::subscribeToRestoreEvents(::events::EventDispatcher& dispatcher)
+    {
+        loadingStartedSubscription = ::events::ScopedSubscription(
+            dispatcher.subscribe<::events::scene::SceneLoadingStartedNotification>(
+                [this](const ::events::scene::SceneLoadingStartedNotification& n)
+                {
+                    onSceneLoadingStarted(n.scenePath);
+                }));
+
+        sceneClearedSubscription = ::events::ScopedSubscription(
+            dispatcher.subscribe<::events::scene::SceneClearedNotification>(
+                [this](const ::events::scene::SceneClearedNotification&)
+                {
+                    onSceneCleared();
+                }));
+
+        loadingCompletedSubscription = ::events::ScopedSubscription(
+            dispatcher.subscribe<::events::scene::SceneLoadingCompletedNotification>(
+                [this](const ::events::scene::SceneLoadingCompletedNotification& n)
+                {
+                    onSceneLoadingCompleted(n.scenePath, n.success);
+                }));
+
+        instanceCreatedSubscription = ::events::ScopedSubscription(
+            dispatcher.subscribe<::events::scripting::ScriptInstanceCreatedNotification>(
+                [this](const ::events::scripting::ScriptInstanceCreatedNotification& n)
+                {
+                    onScriptInstanceCreated(n.instanceId, n.entityUUID, n.className);
+                }));
+
+        modeChangedSubscription = ::events::ScopedSubscription(
+            dispatcher.subscribe<::events::editor::EditorModeChangedNotification>(
+                [this](const ::events::editor::EditorModeChangedNotification& n)
+                {
+                    if (n.previousMode == EditorMode::Play && n.currentMode != EditorMode::Play)
+                    {
+                        onPlayModeEnded();
+                    }
+                }));
     }
 
     bool SaveService::isValidSlotName(const std::string& slotName)
@@ -163,7 +224,10 @@ namespace services
         }
         dispatcher.publish(notif);
 
-        vfLogInfo("[SaveService] Game saved to slot '{}'", slotName);
+        if (overallSuccess)
+        {
+            vfLogInfo("[SaveService] Game saved to slot '{}'", slotName);
+        }
         return overallSuccess;
     }
 
@@ -178,69 +242,255 @@ namespace services
         std::string slotDir = getSlotDirectory(slotName);
         std::string scenePath = slotDir + "/scene.vfScene";
 
-        if (!fs::exists(scenePath))
+        std::error_code existsError;
+        if (!fs::exists(scenePath, existsError))
         {
             vfLogError("[SaveService] Save slot '{}' does not contain a scene file", slotName);
             return false;
         }
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
-
-        // Store both name and directory for later restoration
-        pendingLoadSlotName = slotName;
-        pendingLoadSlotDir = slotDir;
-        waitingForSceneLoad = true;
-
-        // Subscribe to scene load completion to restore script states
-        if (sceneLoadToken.isValid())
+        // Read the saved script states first: an unreadable scripts.json refuses the load before the current scene
+        // is replaced.
+        PendingRestore restore;
+        restore.slotName = slotName;
+        restore.scenePath = scenePath;
+        if (!readScriptStates(slotDir, restore))
         {
-            dispatcher.unsubscribe(sceneLoadToken);
+            return false;
         }
 
-        sceneLoadToken = dispatcher.subscribe<::events::scene::SceneLoadingCompletedNotification>(
-            [this](const ::events::scene::SceneLoadingCompletedNotification& notif)
-            {
-                if (!waitingForSceneLoad) return;
-                waitingForSceneLoad = false;
+        // A load still in flight is replaced by this one; leftovers of a finished one are dropped.
+        if (pendingRestore && pendingRestore->phase != PendingRestore::Phase::Live)
+        {
+            failPendingRestore("replaced by loading slot '" + slotName + "'");
+        }
+        passCompletedSubscription.unsubscribe();
+        pendingRestore = std::move(restore);
 
-                if (notif.success)
-                {
-                    onSceneLoadCompleted();
-                }
-                else
-                {
-                    auto& disp = ::events::EventDispatcher::instance();
-                    ::events::save::LoadGameCompletedNotification loadNotif;
-                    loadNotif.slotName = pendingLoadSlotName;
-                    loadNotif.success = false;
-                    loadNotif.errorMessage = "Scene load failed";
-                    disp.publish(loadNotif);
-                }
-            });
-
-        // Trigger scene load (deferred — runs on next update() tick, not background-threaded)
+        // Deferred: the scene loads over the next frames (SceneLoadingStarted is published from inside this call,
+        // for this scene's path).
         ::events::scene::LoadSceneCommand loadCmd;
         loadCmd.filePath = scenePath;
-        dispatcher.execute(loadCmd);
-
+        bool accepted = false;
+        try
+        {
+            accepted = ::events::EventDispatcher::instance().execute(loadCmd);
+        }
+        catch (...)
+        {
+            pendingRestore.reset();
+            throw;
+        }
+        if (!accepted)
+        {
+            pendingRestore.reset();
+            vfLogError("[SaveService] The scene of save slot '{}' could not be queued for loading", slotName);
+            return false;
+        }
         return true;
     }
 
-    void SaveService::onSceneLoadCompleted()
+    void SaveService::onSceneLoadingStarted(const std::string& scenePath)
     {
-        bool success = restoreScriptStates(pendingLoadSlotDir);
+        if (!pendingRestore)
+        {
+            return;
+        }
+        switch (pendingRestore->phase)
+        {
+        case PendingRestore::Phase::Queued:
+        case PendingRestore::Phase::Loading:
+            if (scenePath != pendingRestore->scenePath)
+            {
+                failPendingRestore("another scene load ('" + scenePath + "') replaced it");
+            }
+            break;
+        case PendingRestore::Phase::AwaitingScripts:
+            // A new load before the script pass: report what was applied so far.
+            finishPendingRestore(false);
+            break;
+        case PendingRestore::Phase::Live:
+            pendingRestore.reset();
+            break;
+        }
+    }
 
-        auto& dispatcher = ::events::EventDispatcher::instance();
-        ::events::save::LoadGameCompletedNotification notif;
-        notif.slotName = pendingLoadSlotName;
-        notif.success = success;
+    void SaveService::onSceneCleared()
+    {
+        if (!pendingRestore)
+        {
+            return;
+        }
+        switch (pendingRestore->phase)
+        {
+        case PendingRestore::Phase::Queued:
+            // The slot's load cleared the old scene: from here on, a new instance belongs to the slot's scene (an old
+            // instance created before the clear would carry the same entity UUIDs).
+            pendingRestore->phase = PendingRestore::Phase::Loading;
+            break;
+        case PendingRestore::Phase::Loading:
+            break;
+        case PendingRestore::Phase::AwaitingScripts:
+            finishPendingRestore(false);
+            break;
+        case PendingRestore::Phase::Live:
+            pendingRestore.reset();
+            break;
+        }
+    }
+
+    void SaveService::onSceneLoadingCompleted(const std::string& scenePath, bool success)
+    {
+        if (!pendingRestore || scenePath != pendingRestore->scenePath)
+        {
+            return;
+        }
+        const PendingRestore::Phase phase = pendingRestore->phase;
+        if (phase != PendingRestore::Phase::Queued && phase != PendingRestore::Phase::Loading)
+        {
+            return;
+        }
         if (!success)
         {
-            notif.errorMessage = "Failed to restore script states";
+            failPendingRestore("the slot's scene could not be loaded");
+            return;
         }
-        dispatcher.publish(notif);
 
-        vfLogInfo("[SaveService] Game loaded from slot '{}'", pendingLoadSlotName);
+        pendingRestore->phase = PendingRestore::Phase::AwaitingScripts;
+        passCompletedSubscription = ::events::ScopedSubscription(
+            ::events::EventDispatcher::instance().subscribe<::events::scripting::ScriptUpdatePassCompletedNotification>(
+                [this](const ::events::scripting::ScriptUpdatePassCompletedNotification&)
+                {
+                    if (pendingRestore && pendingRestore->phase == PendingRestore::Phase::AwaitingScripts)
+                    {
+                        finishPendingRestore(true);
+                    }
+                }));
+    }
+
+    void SaveService::onScriptInstanceCreated(uint64_t instanceId, uint64_t entityUUID, const std::string& className)
+    {
+        if (!pendingRestore || pendingRestore->phase == PendingRestore::Phase::Queued || !scriptingProvider)
+        {
+            return;
+        }
+
+        auto& states = pendingRestore->states;
+        const auto it = states.find({entityUUID, className});
+        if (it == states.end())
+        {
+            return;
+        }
+
+        const std::string state = std::move(it->second.front());
+        it->second.pop_front();
+        if (it->second.empty())
+        {
+            states.erase(it);
+        }
+
+        if (scriptingProvider->setInstanceState(instanceId, state))
+        {
+            ++pendingRestore->appliedCount;
+        }
+        else
+        {
+            vfLogWarning("[SaveService] Slot '{}': the saved state of {} could not be applied", pendingRestore->slotName,
+                         className);
+        }
+
+        if (pendingRestore->phase == PendingRestore::Phase::Live && states.empty())
+        {
+            pendingRestore.reset();
+        }
+    }
+
+    void SaveService::onPlayModeEnded()
+    {
+        if (!pendingRestore)
+        {
+            return;
+        }
+        if (pendingRestore->phase == PendingRestore::Phase::Live)
+        {
+            pendingRestore.reset();
+            return;
+        }
+        failPendingRestore("Play mode ended before the load finished");
+    }
+
+    void SaveService::failPendingRestore(const std::string& reason)
+    {
+        if (!pendingRestore)
+        {
+            return;
+        }
+        const bool reported = pendingRestore->phase == PendingRestore::Phase::Live;
+        ::events::save::LoadGameCompletedNotification notif;
+        notif.slotName = pendingRestore->slotName;
+        notif.success = false;
+        notif.errorMessage = reason;
+
+        passCompletedSubscription.unsubscribe();
+        pendingRestore.reset();
+
+        if (!reported)
+        {
+            vfLogError("[SaveService] Loading slot '{}' failed: {}", notif.slotName, reason);
+            ::events::EventDispatcher::instance().publish(notif);
+        }
+    }
+
+    void SaveService::finishPendingRestore(bool keepLeftovers)
+    {
+        if (!pendingRestore)
+        {
+            return;
+        }
+
+        std::size_t leftover = 0;
+        for (const auto& [key, states] : pendingRestore->states)
+        {
+            leftover += states.size();
+        }
+        const std::size_t saved = pendingRestore->savedCount;
+        const std::size_t applied = pendingRestore->appliedCount;
+
+        ::events::save::LoadGameCompletedNotification notif;
+        notif.slotName = pendingRestore->slotName;
+        notif.success = saved == 0 || applied > 0;
+        if (!notif.success)
+        {
+            notif.errorMessage = "none of the " + std::to_string(saved) +
+                                 " saved script states matched a script in the loaded scene";
+        }
+
+        passCompletedSubscription.unsubscribe();
+        if (keepLeftovers && leftover > 0)
+        {
+            pendingRestore->phase = PendingRestore::Phase::Live;
+        }
+        else
+        {
+            pendingRestore.reset();
+        }
+
+        if (!notif.success)
+        {
+            vfLogError("[SaveService] Loading slot '{}' failed: {}", notif.slotName, notif.errorMessage);
+        }
+        else
+        {
+            if (leftover > 0)
+            {
+                vfLogWarning("[SaveService] Slot '{}': {} of {} saved script states matched no script yet{}",
+                             notif.slotName, leftover, saved,
+                             keepLeftovers ? " (they go to matching scripts that start later in this scene)" : "");
+            }
+            vfLogInfo("[SaveService] Game loaded from slot '{}'", notif.slotName);
+        }
+        // Last: a subscriber may start another load.
+        ::events::EventDispatcher::instance().publish(notif);
     }
 
     bool SaveService::deleteSlot(const std::string& slotName)
@@ -320,13 +570,31 @@ namespace services
 
     std::string SaveService::getSavesDirectory() const
     {
+        // VK-1726: an absolute state folder (the Runtime's) holds the saves whether a project is open or not.
+        if (stateFolder.is_absolute())
+        {
+            return (stateFolder / "saves").string();
+        }
+
         auto& dispatcher = ::events::EventDispatcher::instance();
         ::events::project::GetProjectPathQuery pathQuery;
         auto projectPath = dispatcher.query(pathQuery);
 
-        if (projectPath.has_value())
+        if (projectPath.has_value() && !projectPath->empty())
         {
-            return projectPath.value() + "/saves";
+            // The query answers the .vfproj FILE path (as AssetDatabase reads it): saves/ lives in
+            // its folder, under stateFolder.
+            fs::path folder = fs::path(*projectPath).parent_path();
+            if (!stateFolder.empty())
+            {
+                folder /= stateFolder;
+            }
+            return (folder / "saves").string();
+        }
+        // No project: the per-user folder an installed editor gave (VK-1732), else the working directory's.
+        if (!noProjectFolder.empty())
+        {
+            return noProjectFolder.string();
         }
         return "saves";
     }
@@ -384,6 +652,11 @@ namespace services
             std::ofstream file(scriptsPath);
             file << scriptStates.dump(2);
             file.close();
+            if (!file)
+            {
+                vfLogError("[SaveService] Failed to write {}", scriptsPath);
+                return false;
+            }
 
             return true;
         }
@@ -394,12 +667,11 @@ namespace services
         }
     }
 
-    bool SaveService::restoreScriptStates(const std::string& slotDir)
+    bool SaveService::readScriptStates(const std::string& slotDir, PendingRestore& restore)
     {
-        if (!scriptingProvider) return false;
-
         std::string scriptsPath = slotDir + "/scripts.json";
-        if (!fs::exists(scriptsPath))
+        std::error_code existsError;
+        if (!fs::exists(scriptsPath, existsError))
         {
             vfLogInfo("[SaveService] No script states to restore");
             return true;
@@ -409,47 +681,31 @@ namespace services
         {
             json scriptStates = resource::readJsonFile(scriptsPath);
 
-            if (!scriptStates.contains("instances") || !scriptStates["instances"].is_array())
+            if (!scriptStates.is_object() || !scriptStates.contains("instances") ||
+                !scriptStates["instances"].is_array())
+            {
                 return true;
-
-            auto& registry = scene::EntityRegistry::getRegistry();
-            auto allIds = scriptingProvider->getAllInstanceIds();
+            }
 
             for (const auto& savedInstance : scriptStates["instances"])
             {
+                if (!savedInstance.is_object()) continue;
+
                 uint64_t savedUUID = savedInstance.value("entityUUID", uint64_t(0));
                 std::string savedClassName = savedInstance.value("className", "");
                 std::string savedState = savedInstance.value("state", "{}");
 
                 if (savedClassName.empty() || savedUUID == 0) continue;
 
-                // Find matching live instance by entityUUID + className
-                for (uint64_t liveId : allIds)
-                {
-                    std::string liveClassName = scriptingProvider->getInstanceClassName(liveId);
-                    if (liveClassName != savedClassName) continue;
-
-                    auto liveEntity = scriptingProvider->getInstanceEntity(liveId);
-                    if (!liveEntity.isValid()) continue;
-
-                    auto enttEntity = internal::fromHandle(liveEntity);
-                    if (!registry.valid(enttEntity)) continue;
-                    if (!registry.all_of<components::UUIDComponent>(enttEntity)) continue;
-
-                    uint64_t liveUUID = registry.get<components::UUIDComponent>(enttEntity).id.getValue();
-                    if (liveUUID == savedUUID)
-                    {
-                        scriptingProvider->setInstanceState(liveId, savedState);
-                        break;
-                    }
-                }
+                restore.states[{savedUUID, std::move(savedClassName)}].push_back(std::move(savedState));
+                ++restore.savedCount;
             }
 
             return true;
         }
         catch (const std::exception& e)
         {
-            vfLogError("[SaveService] Failed to restore script states: {}", e.what());
+            vfLogError("[SaveService] Save slot '{}' has an unreadable {}: {}", restore.slotName, scriptsPath, e.what());
             return false;
         }
     }
@@ -475,6 +731,10 @@ namespace services
             std::ofstream file(metaPath);
             file << metadata.dump(2);
             file.close();
+            if (!file)
+            {
+                vfLogWarning("[SaveService] Failed to write {}", metaPath);
+            }
         }
         catch (const std::exception& e)
         {

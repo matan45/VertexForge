@@ -119,9 +119,9 @@ namespace
             constexpr uint32_t mipLevels = 1;
 
             resource::endian::writeLE<uint8_t>(outFile, fileType);
-            resource::endian::writeLE<uint32_t>(outFile, Version::major);
-            resource::endian::writeLE<uint32_t>(outFile, Version::minor);
-            resource::endian::writeLE<uint32_t>(outFile, Version::patch);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::major);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::minor);
+            resource::endian::writeLE<uint32_t>(outFile, AssetFormatVersion::patch);
             resource::endian::writeLE<uint32_t>(outFile, width);
             resource::endian::writeLE<uint32_t>(outFile, height);
             resource::endian::writeLE<uint32_t>(outFile, channels);

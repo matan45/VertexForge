@@ -1,6 +1,6 @@
 #pragma once
 #include "imguiHandler/ImguiWindow.hpp"
-#include "api/PluginDescriptor.hpp"
+#include "core/PluginRoots.hpp"
 #include <vector>
 #include <string>
 
@@ -25,11 +25,14 @@ namespace windows
 
         struct PluginEntry
         {
-            plugin::PluginDescriptor descriptor;
+            // VK-1732: the descriptor, its root, and the state the loader gives it
+            // (the overrides of shipped plugins applied, shadowing decided).
+            plugin::DiscoveredPlugin plugin;
             bool isLoaded = false;
             bool isInitialized = false;
-            std::string status; // "Loaded", "Disabled", "API Mismatch", etc.
+            std::string status; // "Loaded", "Disabled", "API Mismatch", "Shadowed", etc.
             SceneOverride sceneOverride = SceneOverride::Inherit;
+            std::string error;  // the last failed toggle or reset, shown in red
         };
 
         bool visible = false;
@@ -47,11 +50,14 @@ namespace windows
         bool newPluginComponent = true;
         bool newPluginEditorWindow = false;
         std::string newPluginResult; // error message, or created path after success
+        // VK-1732: the plugin was made as a Standalone project (an installed engine),
+        // built in this configuration.
+        bool newPluginStandalone = false;
+        std::string newPluginConfiguration;
 
         void refresh();
         void drawPluginEntry(PluginEntry& entry);
         void drawSceneOverrideCombo(PluginEntry& entry);
-        void writeEnabledState(PluginEntry& entry, bool enabled);
         void saveToScene();
         void drawNewPluginPopup();
         void resetNewPluginState();

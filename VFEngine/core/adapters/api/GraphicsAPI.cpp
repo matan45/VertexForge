@@ -20,7 +20,8 @@ namespace core::api
 {
     namespace
     {
-        // Persisted config keys (config.json, next to the game's saves/).
+        // Persisted config keys (config.json in the game's state folder, VK-1726: per-user, or beside the
+        // game for a portable export).
         constexpr const char* KEY_PRESET  = "gfx.preset";
         constexpr const char* KEY_PRESENT = "gfx.presentMode";
         constexpr const char* KEY_MSAA    = "gfx.msaa";

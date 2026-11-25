@@ -1,47 +1,263 @@
 package com.vertexforge.launcher.viewmodel;
 
-import com.vertexforge.launcher.model.ProjectInfo;
-import com.vertexforge.launcher.util.ProjectValidator;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.property.StringProperty;
+import com.vertexforge.launcher.engine.EngineLabels;
+import com.vertexforge.launcher.model.ProjectStatus;
+import com.vertexforge.launcher.model.RecentEntry;
+import com.vertexforge.launcher.project.ProjectFileCheck;
+import com.vertexforge.launcher.service.ScriptLibraryStatusService.LibraryState;
+import com.vertexforge.launcher.session.EditorSession;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
+import javafx.beans.binding.ObjectBinding;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.beans.property.ReadOnlyObjectProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringProperty;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.property.SimpleObjectProperty;
 
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import java.util.UUID;
 
-public class ProjectViewModel {
+/**
+ * One row of the projects table (VK-1678). It never touches the file system: its status is set from the background
+ * checks. The FX thread owns it; the properties are plain {@code javafx.beans} ones, so it also works in unit tests
+ * without the JavaFX toolkit.
+ * <p>
+ * A row is reused while its entry keeps its id and path, so a status (or a check still in flight) survives a reload.
+ */
+public final class ProjectViewModel {
 
-    private final ProjectInfo projectInfo;
-    private final StringProperty name;
-    private final StringProperty path;
-    private final BooleanProperty valid;
+    /** Shown for an entry whose stored time is missing or invalid (only a hand-edited file has one). */
+    public static final String UNKNOWN_DATE = "Unknown";
+    /** Shown in the Path column for an entry with no stored path. */
+    public static final String NO_PATH = "(no path)";
 
+    private static final DateTimeFormatter LAST_OPENED_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    public ProjectViewModel(ProjectInfo projectInfo) {
-        this.projectInfo = projectInfo;
-        this.name = new SimpleStringProperty(projectInfo.name());
-        this.path = new SimpleStringProperty(projectInfo.path().toString());
-        this.valid = new SimpleBooleanProperty(ProjectValidator.isValid(projectInfo.path()));
+    private RecentEntry entry;
+    private final ReadOnlyStringWrapper name;
+    private final ReadOnlyStringWrapper pathText;
+    private final ReadOnlyObjectWrapper<Instant> lastOpened;
+    private final ReadOnlyStringWrapper engineText;
+    /** Whether the entry is pinned to the top of the list (VK-1694). */
+    private final ReadOnlyBooleanWrapper pinned;
+    /** The row's place in the list's own order (most recently opened first), the last tiebreak of every sort. */
+    private int displayIndex;
+    private final ObjectProperty<ProjectStatus> status = new SimpleObjectProperty<>(ProjectStatus.CHECKING);
+    /** The phase of this launcher's editor on the project (VK-1683); {@code null} when none runs. */
+    private final ObjectProperty<EditorSession.Phase> sessionPhase = new SimpleObjectProperty<>(null);
+    /** The state of the project's script library (VK-1691). */
+    private final ObjectProperty<LibraryState> library = new SimpleObjectProperty<>(LibraryState.UNKNOWN);
+    private final ObjectBinding<StatusDisplay> statusDisplay;
+    private final BooleanBinding openable;
+    private long probeToken;
+    private long libraryToken;
+    /** The last answer of the file's background check (VK-1686), or {@code null} before the first one. */
+    private ProjectFileCheck fileCheck;
+
+    public ProjectViewModel(RecentEntry entry) {
+        this.entry = Objects.requireNonNull(entry, "entry");
+        this.name = new ReadOnlyStringWrapper(entry.displayName());
+        this.pathText = new ReadOnlyStringWrapper(pathTextOf(entry));
+        this.lastOpened = new ReadOnlyObjectWrapper<>(entry.lastOpened());
+        this.pinned = new ReadOnlyBooleanWrapper(entry.pinned());
+        // Until the engines have been checked (VK-1681); the window then sets the real text.
+        this.engineText = new ReadOnlyStringWrapper(EngineLabels.forProject(entry.engineId(), null));
+        // The path cannot change for this row (see matches), so only the status needs observing.
+        this.openable = Bindings.createBooleanBinding(
+                () -> status.get().isOk() && this.entry.path() != null, status);
+        this.statusDisplay = Bindings.createObjectBinding(
+                () -> new StatusDisplay(status.get(), sessionPhase.get(), library.get()), status, sessionPhase,
+                library);
     }
 
+    /** {@code yyyy-MM-dd HH:mm} in {@code zone}, or {@link #UNKNOWN_DATE}. */
+    public static String formatLastOpened(Instant instant, ZoneId zone) {
+        if (instant == null) {
+            return UNKNOWN_DATE;
+        }
+        return LAST_OPENED_FORMAT.format(instant.atZone(zone));
+    }
+
+    /** Whether this row can show {@code other}: the same id and the same path. */
+    public boolean matches(RecentEntry other) {
+        return entry.id().equals(other.id()) && Objects.equals(entry.path(), other.path());
+    }
+
+    /** Shows a newer version of the same entry (a new name, time or pin); the status is kept. */
+    public void update(RecentEntry newer) {
+        if (!matches(newer)) {
+            throw new IllegalArgumentException("Not the same entry: " + newer.id());
+        }
+        entry = newer;
+        name.set(newer.displayName());
+        pathText.set(pathTextOf(newer));
+        lastOpened.set(newer.lastOpened());
+        pinned.set(newer.pinned());
+    }
+
+    /** Whether the entry is pinned to the top of the list (VK-1694). */
+    public boolean isPinned() {
+        return pinned.get();
+    }
+
+    public ReadOnlyBooleanProperty pinnedProperty() {
+        return pinned.getReadOnlyProperty();
+    }
+
+    /** The row's place in the list's own order (0 = most recently opened), set each time the list is shown. */
+    public int getDisplayIndex() {
+        return displayIndex;
+    }
+
+    public void setDisplayIndex(int index) {
+        displayIndex = index;
+    }
+
+    public RecentEntry getEntry() {
+        return entry;
+    }
+
+    public UUID getId() {
+        return entry.id();
+    }
+
+    /** The project file, or {@code null} when the stored path is not a valid absolute path. */
+    public Path getProjectPath() {
+        return entry.path();
+    }
 
     public String getName() {
         return name.get();
     }
 
+    public ReadOnlyStringProperty nameProperty() {
+        return name.getReadOnlyProperty();
+    }
+
     public String getPath() {
-        return path.get();
+        return pathText.get();
     }
 
-    public boolean isValid() {
-        return valid.get();
+    public ReadOnlyStringProperty pathTextProperty() {
+        return pathText.getReadOnlyProperty();
     }
 
-    public Path getProjectPath() {
-        return projectInfo.path();
+    public Instant getLastOpened() {
+        return lastOpened.get();
     }
 
-    public void refreshValidity() {
-        valid.set(ProjectValidator.isValid(projectInfo.path()));
+    public ReadOnlyObjectProperty<Instant> lastOpenedProperty() {
+        return lastOpened.getReadOnlyProperty();
+    }
+
+    /** The Engine column's text (see {@link EngineLabels}); never blank. */
+    public String getEngineText() {
+        return engineText.get();
+    }
+
+    public void setEngineText(String text) {
+        Objects.requireNonNull(text, "text");
+        engineText.set(text);
+    }
+
+    public ReadOnlyStringProperty engineTextProperty() {
+        return engineText.getReadOnlyProperty();
+    }
+
+    public ProjectStatus getStatus() {
+        return status.get();
+    }
+
+    public void setStatus(ProjectStatus newStatus) {
+        status.set(Objects.requireNonNull(newStatus, "newStatus"));
+    }
+
+    public ObjectProperty<ProjectStatus> statusProperty() {
+        return status;
+    }
+
+    /** The phase of this launcher's editor on the project; {@code null} when none runs (VK-1683). */
+    public EditorSession.Phase getSessionPhase() {
+        return sessionPhase.get();
+    }
+
+    public void setSessionPhase(EditorSession.Phase phase) {
+        sessionPhase.set(phase == EditorSession.Phase.EXITED ? null : phase);
+    }
+
+    public ObjectProperty<EditorSession.Phase> sessionPhaseProperty() {
+        return sessionPhase;
+    }
+
+    /** The state of the project's script library (VK-1691). */
+    public LibraryState getLibrary() {
+        return library.get();
+    }
+
+    public void setLibrary(LibraryState state) {
+        library.set(state == null ? LibraryState.UNKNOWN : state);
+    }
+
+    public ObjectProperty<LibraryState> libraryProperty() {
+        return library;
+    }
+
+    /** Starts a check of the library; only the answer of the latest one may land ({@link #isCurrentLibraryCheck}). */
+    public long startLibraryCheck() {
+        return ++libraryToken;
+    }
+
+    public boolean isCurrentLibraryCheck(long token) {
+        return token == libraryToken;
+    }
+
+    /** The Status column's value: the file's status, or the running editor's phase. */
+    public StatusDisplay getStatusDisplay() {
+        return statusDisplay.get();
+    }
+
+    public ObjectBinding<StatusDisplay> statusDisplayProperty() {
+        return statusDisplay;
+    }
+
+    public boolean isOpenable() {
+        return openable.get();
+    }
+
+    public BooleanBinding openableProperty() {
+        return openable;
+    }
+
+    /**
+     * The last answer of the file's background check, kept so that the status can be worked out again when the engines
+     * answer later or change (VK-1686); {@code null} before the first answer.
+     */
+    public ProjectFileCheck getFileCheck() {
+        return fileCheck;
+    }
+
+    public void setFileCheck(ProjectFileCheck check) {
+        fileCheck = Objects.requireNonNull(check, "check");
+    }
+
+    /** Starts a new status check of this row; only the answer to the latest check is applied. */
+    public long startProbe() {
+        return ++probeToken;
+    }
+
+    public boolean isCurrentProbe(long token) {
+        return token == probeToken;
+    }
+
+    private static String pathTextOf(RecentEntry entry) {
+        return entry.rawPath() != null && !entry.rawPath().isBlank() ? entry.rawPath() : NO_PATH;
     }
 }

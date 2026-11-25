@@ -12,6 +12,16 @@ namespace gameExport
 	public:
 		ExportResult exportGame(const ExportConfig& config, ExportProgressCallback progressCallback = nullptr);
 
+		// VK-1696: turns the game's fresh copy of Runtime.exe into the game's own exe: removes the
+		// engine's Authenticode signature (a release package ships a signed Runtime.exe; the game's
+		// developer signs the game) and replaces "VertexForge Runtime" in its version resource with the
+		// game's name, version and publisher (ExeVersionInfo::gameFields). Runs before any other
+		// resource edit (the icon). False with result.errorMessage set when either step fails; a
+		// version text without a numeric prefix only adds a warning.
+		static bool prepareGameExecutable(const std::filesystem::path& exePath,
+										  const ExportConfig& config,
+										  ExportResult& result);
+
 	private:
 		ExportManifest previousManifest;
 		ExportManifest newManifest;

@@ -3,10 +3,14 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.SplitMenuButton?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.layout.StackPane?>
 
@@ -14,15 +18,24 @@
     Main layout for VertexForge Launcher.
 
     Structure:
-    - Center: Projects list (TableView - VK-154)
-    - Right: Sidebar with action buttons (Create Project, Refresh)
-    - Bottom: Open Project button
+    - Top: Banners (damaged or read-only recent-projects list, failed saves - VK-1678)
+    - Center: Projects list (TableView - VK-154) under a search box (VK-1694), or the empty screen: Add Engine…,
+      Create Project and Add Existing… (VK-1694)
+    - Right: Sidebar with action buttons (Create Project, Add Existing - VK-1685, Refresh, Engines - VK-1681,
+      Settings - VK-1683)
+    - Bottom: the shortcuts (VK-1694) and the Open Project button
+    The whole window is a drop target for project files and folders (VK-1685).
 -->
 <BorderPane xmlns="http://javafx.com/javafx/25"
             xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="com.vertexforge.launcher.controller.MainController"
             fx:id="rootPane"
             styleClass="root-pane">
+
+    <!-- Banners (Top): hidden while empty -->
+    <top>
+        <VBox fx:id="bannerBox" styleClass="banner-box" visible="false" managed="false"/>
+    </top>
 
     <!-- Sidebar (Right) -->
     <right>
@@ -37,12 +50,34 @@
                 <padding>
                     <Insets top="20"/>
                 </padding>
-                <Button text="Create Project"
+                <Button fx:id="createProjectButton"
+                        text="Create Project"
                         onAction="#onCreateProject"
                         styleClass="sidebar-button"
                         maxWidth="Infinity"/>
-                <Button text="Refresh"
+                <SplitMenuButton fx:id="addExistingButton"
+                                 text="Add Existing…"
+                                 onAction="#onAddExisting"
+                                 styleClass="sidebar-split"
+                                 maxWidth="Infinity">
+                    <items>
+                        <MenuItem text="Project File…" onAction="#onAddExisting"/>
+                        <MenuItem text="Project Folder…" onAction="#onAddExistingFolder"/>
+                    </items>
+                </SplitMenuButton>
+                <Button fx:id="refreshButton"
+                        text="Refresh"
                         onAction="#onRefreshProjects"
+                        styleClass="sidebar-button"
+                        maxWidth="Infinity"/>
+                <Button fx:id="enginesButton"
+                        text="Engines…"
+                        onAction="#onManageEngines"
+                        styleClass="sidebar-button"
+                        maxWidth="Infinity"/>
+                <Button fx:id="settingsButton"
+                        text="Settings…"
+                        onAction="#onOpenSettings"
                         styleClass="sidebar-button"
                         maxWidth="Infinity"/>
             </VBox>
@@ -52,24 +87,55 @@
     <!-- Main Content Area (Center) -->
     <center>
         <StackPane fx:id="contentArea" styleClass="content-area">
-            <!-- Empty State (shown when no projects) -->
-            <VBox fx:id="emptyStatePane" alignment="CENTER" spacing="10"
+            <!-- Empty State (shown when no projects): what to do first (VK-1694) -->
+            <VBox fx:id="emptyStatePane" alignment="CENTER" spacing="18" styleClass="empty-state"
                   visible="true" managed="true">
-                <Label text="Projects" styleClass="section-title"/>
-                <Label text="No projects found" styleClass="placeholder-text"/>
-                <Label text="Click 'Create Project' to get started" styleClass="hint-text"/>
+                <!-- No engine can open a project yet -->
+                <VBox fx:id="noEngineBox" styleClass="empty-card" alignment="CENTER" spacing="10"
+                      visible="false" managed="false">
+                    <Label text="Add an engine" styleClass="empty-title"/>
+                    <Label fx:id="noEngineText" styleClass="hint-text" wrapText="true" maxWidth="460"
+                           textAlignment="CENTER"/>
+                    <Button fx:id="addEngineButton" text="Add Engine…" onAction="#onAddEngine"
+                            styleClass="primary-button"/>
+                </VBox>
+                <!-- No projects listed -->
+                <VBox fx:id="noProjectsBox" styleClass="empty-card" alignment="CENTER" spacing="10">
+                    <Label text="No projects yet" styleClass="empty-title"/>
+                    <Label text="Create a project, add one that is already on disk, or drop a project file or folder here."
+                           styleClass="hint-text" wrapText="true" maxWidth="460" textAlignment="CENTER"/>
+                    <HBox alignment="CENTER" spacing="10">
+                        <Button fx:id="emptyCreateButton" text="Create Project" onAction="#onCreateProject"
+                                styleClass="primary-button"/>
+                        <Button fx:id="emptyAddButton" text="Add Existing…" onAction="#onAddExisting"
+                                styleClass="secondary-button"/>
+                    </HBox>
+                    <Label fx:id="readOnlyHint" styleClass="hint-text" wrapText="true" maxWidth="460"
+                           textAlignment="CENTER" visible="false" managed="false"
+                           text="The recent-projects list is read-only right now (see the message above), so no project can be added until it can be written again."/>
+                </VBox>
             </VBox>
 
             <!-- Projects Table (shown when projects exist) -->
             <VBox fx:id="projectsTablePane" spacing="15" visible="false" managed="false">
-                <Label text="Projects" styleClass="section-title"/>
+                <!-- The title and the search box (VK-1694) -->
+                <HBox styleClass="list-header" alignment="CENTER_LEFT" spacing="12">
+                    <Label text="Projects" styleClass="section-title"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <TextField fx:id="searchField" promptText="Search projects" styleClass="search-field"
+                               prefWidth="280"/>
+                </HBox>
                 <TableView fx:id="projectsTable" styleClass="projects-table"
                            VBox.vgrow="ALWAYS">
                     <columns>
                         <TableColumn fx:id="nameColumn" text="Name"
                                      prefWidth="200" minWidth="100"/>
+                        <TableColumn fx:id="statusColumn" text="Status"
+                                     prefWidth="110" minWidth="90"/>
+                        <TableColumn fx:id="engineColumn" text="Engine"
+                                     prefWidth="140" minWidth="90"/>
                         <TableColumn fx:id="pathColumn" text="Path"
-                                     prefWidth="350" minWidth="150"/>
+                                     prefWidth="300" minWidth="150"/>
                         <TableColumn fx:id="lastOpenedColumn" text="Last Opened"
                                      prefWidth="150" minWidth="120"/>
                     </columns>
@@ -80,10 +146,14 @@
 
     <!-- Bottom Bar -->
     <bottom>
-        <HBox styleClass="bottom-bar" alignment="CENTER_RIGHT" spacing="10">
+        <HBox styleClass="bottom-bar" alignment="CENTER_LEFT" spacing="10">
             <padding>
                 <Insets top="15" right="20" bottom="15" left="20"/>
             </padding>
+            <!-- The shortcuts (VK-1694) -->
+            <Label text="Enter open  ·  Ctrl+F search  ·  Ctrl+N new  ·  Ctrl+O add  ·  Del remove  ·  F5 refresh"
+                   styleClass="shortcut-hint" minWidth="0"/>
+            <Region HBox.hgrow="ALWAYS"/>
             <Button fx:id="openProjectButton"
                     text="Open Project"
                     onAction="#onOpenProject"

@@ -99,15 +99,21 @@ namespace util {
 	// Note: the vfLog* engine functions early-return on !engineLogsEnabled
 	// before reaching spdlog, so in Release only errors and the script channel
 	// (vfLogScript*) reach this file.
-	inline void initLogFile(const std::string& appName) {
+	//
+	// `folder` (VK-1732): the editor passes launch::processUserState().logsDir, the per-user
+	// ~/.vertexforge/editor/logs in an installed engine; the Runtime (VK-1726) passes
+	// launch::processGameState().logsDir, %LOCALAPPDATA%\<Publisher>\<Game>\logs for a shipped game.
+	// The default "logs" is relative to the working directory.
+	inline void initLogFile(const std::string& appName,
+	                        const std::filesystem::path& folder = std::filesystem::path("logs")) {
 		try {
 			std::error_code ec;
-			std::filesystem::create_directories("logs", ec);
+			std::filesystem::create_directories(folder, ec);
 
 			constexpr std::size_t maxSize = 5 * 1024 * 1024;  // 5 MB per file
 			constexpr std::size_t maxFiles = 3;
 			auto sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-				"logs/" + appName + ".log", maxSize, maxFiles);
+				(folder / (appName + ".log")).string(), maxSize, maxFiles);
 
 			auto logger = std::make_shared<spdlog::logger>(appName, sink);
 			logger->set_level(spdlog::level::trace);

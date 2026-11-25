@@ -212,8 +212,8 @@ namespace
 
     // loadFont signals EVERY error by returning a default-constructed FontData.
     // Three of its members are traps and must NOT be used as discriminators:
-    //   headerFileType defaults to FileType::FONT, version defaults to the GLOBAL
-    //   engine version, and formatFlags defaults to SDF_ENABLED. Only assert on
+    //   headerFileType defaults to FileType::FONT, version defaults to the shared
+    //   AssetFormatVersion, and formatFlags defaults to SDF_ENABLED. Only assert on
     //   members the fixture makes non-empty.
     void checkRejected(const resource::FontData& font)
     {

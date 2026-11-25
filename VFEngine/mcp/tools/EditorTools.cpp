@@ -39,6 +39,7 @@ namespace mcp::tools
             nlohmann::json out{
                 {"name", project.projectName},
                 {"version", project.version},
+                {"publisher", project.publisher},
                 {"workingDirectory", project.workingDirectory},
                 {"startupScene", project.startupScene},
                 {"fontFallbackChain", project.fontFallbackChain},
@@ -157,10 +158,14 @@ namespace mcp::tools
             tool.title = "Open project";
             tool.description =
                 "Load a .vfproject file and queue its startup scene (same steps as launching Editor.exe with a "
-                "project path). The current scene is replaced and unsaved changes are lost. The scene load is "
+                "project path). A missing startup scene that is a .vfScene inside the project folder is created "
+                "first, with a 'Sun' directional light and a primary 'Main Camera' (startupSceneCreated: true). "
+                "The current scene is replaced and unsaved changes are lost. The scene load is "
                 "deferred to the next frame(s); call scene_get_hierarchy afterwards. Switching projects inside "
                 "a running editor is less exercised than a fresh launch - if anything looks stale, restart the "
-                "editor with the project path instead. Not allowed in Play mode.";
+                "editor with the project path instead. Not allowed in Play mode. Fails, leaving the current "
+                "project open, when another editor has the project's folder open (it holds "
+                ".vertexforge/editor.lock; logs_read names its pid); on success the lock moves to the new project.";
             tool.inputSchema = schema::object({
                 {"path", schema::string("Absolute path to the .vfproject file")}
             }, {"path"});
@@ -180,12 +185,17 @@ namespace mcp::tools
                     return ToolResult::error("Cannot open a project in Play mode; call play_stop first");
                 }
 
-                // `path` is the agent's UTF-8; the engine takes narrow path strings.
-                const std::filesystem::path projectPath = pathFromUtf8(path);
+                // `path` is the agent's UTF-8; the engine takes narrow path strings. Made absolute
+                // like the command-line path (editor/run/Main.cpp), so the project folder is known.
+                std::filesystem::path projectPath = pathFromUtf8(path);
                 std::error_code ec;
                 if (!std::filesystem::is_regular_file(projectPath, ec))
                 {
                     return ToolResult::error("Project file not found: " + path);
+                }
+                if (std::filesystem::path absolutePath = std::filesystem::absolute(projectPath, ec); !ec)
+                {
+                    projectPath = std::move(absolutePath);
                 }
 
                 events::project::LoadProjectCommand loadCommand;
@@ -197,29 +207,25 @@ namespace mcp::tools
 
                 nlohmann::json out{{"opened", true}, {"path", path}};
 
-                // Mirrors EditorHandler::loadProject: queue the startup scene when it exists.
+                // Same step as EditorHandler::loadProject: queue the startup scene, building it first
+                // when it is missing and lies inside the project (VK-1687).
                 auto project = dispatcher.query(events::project::GetCurrentProjectQuery{});
-                out["startupSceneQueued"] = false;
                 if (project.has_value())
                 {
                     out["name"] = project->projectName;
                     out["workingDirectory"] = pathToUtf8(std::filesystem::path(project->workingDirectory));
-                    if (!project->startupScene.empty())
-                    {
-                        std::filesystem::path scenePath =
-                            std::filesystem::path(project->workingDirectory) / project->startupScene;
-                        if (std::filesystem::exists(scenePath, ec))
-                        {
-                            events::scene::LoadSceneCommand sceneCommand;
-                            sceneCommand.filePath = scenePath.string();
-                            out["startupSceneQueued"] = dispatcher.execute(sceneCommand);
-                            out["startupScene"] = pathToUtf8(scenePath);
-                        }
-                        else
-                        {
-                            out["warning"] = "Startup scene not found: " + pathToUtf8(scenePath);
-                        }
-                    }
+                }
+                const events::scene::StartupSceneResult startup =
+                    dispatcher.execute(events::scene::QueueStartupSceneCommand{});
+                out["startupSceneQueued"] = startup.queued;
+                out["startupSceneCreated"] = startup.created;
+                if (!startup.scenePath.empty())
+                {
+                    out["startupScene"] = pathToUtf8(std::filesystem::path(startup.scenePath));
+                }
+                if (!startup.warning.empty())
+                {
+                    out["warning"] = "The project is open, but " + startup.warning;
                 }
                 return ToolResult::ok(std::move(out));
             };

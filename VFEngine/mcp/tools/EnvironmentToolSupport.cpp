@@ -66,7 +66,8 @@ namespace mcp::tools::env
 
         std::string engineFileText(const std::string& enginePath)
         {
-            // Engine paths are narrow (ANSI) strings; report them as UTF-8.
+            // Engine paths are narrow strings in the process code page (UTF-8 under the VK-1684
+            // manifest); report them as UTF-8 whatever it is.
             return pathToUtf8(std::filesystem::path(enginePath));
         }
 
